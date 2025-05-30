@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package codebase_syncer;
+option go_package = "./;codebase_syncer";
+
+// 导入必要的proto包
+import "google/protobuf/empty.proto";
+
+// Token 共享请求（，加密存储）
+// 共享 AccessToken 请求（包含 server_endpoint）
+message ShareAccessTokenRequest {
+    string client_id = 1;        // 客户ID
+    string access_token = 2;     // Token
+    string server_endpoint = 3;  // 云端服务端点
+}
+
+// 共享 Token 响应
+message ShareAccessTokenResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+// 注册项目同步
+message RegisterSyncRequest {
+    string client_id = 1;        // 客户ID
+    string project_path = 2;     // 项目路径
+    string project_name = 3;     // 项目名称
+}
+
+// 注册项目同步响应
+message RegisterSyncResponse {
+    bool success = 1;           // 是否成功
+    string message = 2;         // 消息
+}
+
+// 注销项目同步
+message UnregisterSyncRequest {
+    string client_id = 1;        // 客户ID
+    string project_path = 2;     // 项目路径
+    string project_name = 3;     // 项目名称
+}
+
+// 同步服务定义
+service SyncService {    
+    // 注册项目同步
+    rpc RegisterSync(RegisterSyncRequest) returns (RegisterSyncResponse);
+    
+    // 注销项目同步
+    rpc UnregisterSync(UnregisterSyncRequest) returns (google.protobuf.Empty);
+    
+    // 共享 AccessToken（明文传输，服务端加密存储）
+    rpc ShareAccessToken(ShareAccessTokenRequest) returns (ShareAccessTokenResponse);
+}
