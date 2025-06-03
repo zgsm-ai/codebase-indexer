@@ -1,7 +1,6 @@
 package logger
 
 import (
-	"codebase-syncer/pkg/utils"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,11 +22,11 @@ var logLevelMap = map[string]zapcore.Level{
 
 // 日志接口
 type Logger interface {
-	Debug(format string, args ...interface{})
-	Info(format string, args ...interface{})
-	Warn(format string, args ...interface{})
-	Error(format string, args ...interface{})
-	Fatal(format string, args ...interface{})
+	Debug(format string, args ...any)
+	Info(format string, args ...any)
+	Warn(format string, args ...any)
+	Error(format string, args ...any)
+	Fatal(format string, args ...any)
 }
 
 // 日志实现
@@ -37,17 +36,17 @@ type logger struct {
 }
 
 // 创建新日志实例
-func NewLogger(level string) Logger {
+func NewLogger(logsDir, level string) Logger {
 	// 生成按日期命名的日志文件
 	currentDate := time.Now().Format("20060102")
-	logFileName := filepath.Join(utils.LogsDir, fmt.Sprintf("codebase-syncer-%s.log", currentDate))
+	logFileName := filepath.Join(logsDir, fmt.Sprintf("codebase-syncer-%s.log", currentDate))
 
 	// 设置日志输出到文件和控制台
 	fileWriter := zapcore.AddSync(&lumberjack.Logger{
 		Filename:   logFileName,
 		MaxSize:    100, // megabytes
 		MaxBackups: 0,   //
-		MaxAge:     30,  // days
+		MaxAge:     5,   // days
 		Compress:   true,
 		LocalTime:  true,
 	})
@@ -97,26 +96,26 @@ func NewLogger(level string) Logger {
 }
 
 // 调试级日志
-func (l *logger) Debug(format string, args ...interface{}) {
+func (l *logger) Debug(format string, args ...any) {
 	l.sugar.Debugf(format, args...)
 }
 
 // 信息级日志
-func (l *logger) Info(format string, args ...interface{}) {
+func (l *logger) Info(format string, args ...any) {
 	l.sugar.Infof(format, args...)
 }
 
 // 警告级日志
-func (l *logger) Warn(format string, args ...interface{}) {
+func (l *logger) Warn(format string, args ...any) {
 	l.sugar.Warnf(format, args...)
 }
 
 // 错误级日志
-func (l *logger) Error(format string, args ...interface{}) {
+func (l *logger) Error(format string, args ...any) {
 	l.sugar.Errorf(format, args...)
 }
 
 // 致命错误日志
-func (l *logger) Fatal(format string, args ...interface{}) {
+func (l *logger) Fatal(format string, args ...any) {
 	l.sugar.Fatalf(format, args...)
 }

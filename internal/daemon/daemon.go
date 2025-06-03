@@ -8,31 +8,28 @@ import (
 
 	"codebase-syncer/internal/handler"
 	"codebase-syncer/internal/scheduler"
-	"codebase-syncer/internal/storage"
+	"codebase-syncer/internal/utils"
 	"codebase-syncer/pkg/logger"
-	"codebase-syncer/pkg/utils"
 )
 
 type Daemon struct {
-	scheduler      *scheduler.Scheduler
-	grpcHandler    *handler.GRPCHandler
-	storageManager *storage.ConfigManager
-	logger         logger.Logger
-	ctx            context.Context
-	cancel         context.CancelFunc
-	wg             sync.WaitGroup
+	scheduler   *scheduler.Scheduler
+	grpcHandler *handler.GRPCHandler
+	logger      logger.Logger
+	ctx         context.Context
+	cancel      context.CancelFunc
+	wg          sync.WaitGroup
 }
 
 func NewDaemon(scheduler *scheduler.Scheduler, grpcHandler *handler.GRPCHandler,
-	storageManager *storage.ConfigManager, logger logger.Logger) *Daemon {
+	logger logger.Logger) *Daemon {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Daemon{
-		scheduler:      scheduler,
-		grpcHandler:    grpcHandler,
-		storageManager: storageManager,
-		logger:         logger,
-		ctx:            ctx,
-		cancel:         cancel,
+		scheduler:   scheduler,
+		grpcHandler: grpcHandler,
+		logger:      logger,
+		ctx:         ctx,
+		cancel:      cancel,
 	}
 }
 

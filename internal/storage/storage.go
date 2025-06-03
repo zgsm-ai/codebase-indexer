@@ -4,14 +4,12 @@ package storage
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
 	"codebase-syncer/pkg/logger"
-	"codebase-syncer/pkg/utils"
 )
 
 // 文件状态常量
@@ -21,61 +19,62 @@ const (
 	FILE_STATUS_DELETED  = "delete"
 )
 
-// 项目配置
-type ProjectConfig struct {
+// codebase配置
+type CodebaseConfig struct {
 	ClientID     string            `json:"clientId"`
 	CodebaseName string            `json:"codebaseName"`
 	CodebasePath string            `json:"codebasePath"`
 	CodebaseId   string            `json:"codebaseId"`
 	HashTree     map[string]string `json:"hashTree"`
 	LastSync     time.Time         `json:"lastSync"`
+	RegisterTime time.Time         `json:"registerTime"`
 }
 
 // 同步文件信息
 type SyncFile struct {
-	Path      string `json:"path"`
-	Hash      string `json:"hash"`
-	Status    string `json:"status"`
-	Contents  []byte `json:"-"` // 不序列化文件内容
-	ContentIO io.Reader
+	Path   string `json:"path"`
+	Hash   string `json:"hash"`
+	Status string `json:"status"`
 }
 
 type ConfigManager struct {
-	codebasePath string
-	logger       logger.Logger
-	mutex        sync.RWMutex
-	configs      map[string]*ProjectConfig // 存储所有项目配置
+	codebasePath    string
+	codebaseConfigs map[string]*CodebaseConfig // 存储所有codebase 配置
+	logger          logger.Logger
+	mutex           sync.RWMutex
 }
 
-func NewStorageManager(logger logger.Logger) *ConfigManager {
+// NewStorageManager 创建一个新的配置管理器
+func NewStorageManager(cacheDir string, logger logger.Logger) *ConfigManager {
 	// 确保codebase目录存在
-	codebasePath := filepath.Join(utils.CacheDir, "codebase")
+	codebasePath := filepath.Join(cacheDir, "codebase")
 	if _, err := os.Stat(codebasePath); os.IsNotExist(err) {
 		if err := os.MkdirAll(codebasePath, 0755); err != nil {
 			logger.Fatal("无法创建codebase目录: %v", err)
 		}
 	}
 
-	// 初始化 configs map
+	// 初始化 codebaseConfigs map
 	sm := &ConfigManager{
-		codebasePath: codebasePath,
-		logger:       logger,
-		configs:      make(map[string]*ProjectConfig),
+		codebasePath:    codebasePath,
+		logger:          logger,
+		codebaseConfigs: make(map[string]*CodebaseConfig),
 	}
 
 	sm.loadAllConfigs()
 	return sm
 }
 
-func (cm *ConfigManager) GetConfigs() map[string]*ProjectConfig {
-	return cm.configs
+// GetConfigs 获取所有项目配置
+func (cm *ConfigManager) GetCodebaseConfigs() map[string]*CodebaseConfig {
+	return cm.codebaseConfigs
 }
 
-// 加载codebase 配置文件
-// GetProjectConfig 优先从内存配置中查找，找不到再从文件系统加载
-func (cm *ConfigManager) GetProjectConfig(codebaseId string) (*ProjectConfig, error) {
+// GetCodebaseConfig 加载codebase 配置
+// 优先从内存配置中查找，找不到再从文件系统加载
+func (cm *ConfigManager) GetCodebaseConfig(codebaseId string) (*CodebaseConfig, error) {
 	cm.mutex.RLock()
-	config, exists := cm.configs[codebaseId]
+	config, exists := cm.codebaseConfigs[codebaseId]
 	cm.mutex.RUnlock()
 
 	if exists {
@@ -83,18 +82,19 @@ func (cm *ConfigManager) GetProjectConfig(codebaseId string) (*ProjectConfig, er
 	}
 
 	// 内存中没有查到，尝试从文件加载
-	config, err := cm.LoadProjectConfig(codebaseId)
+	config, err := cm.loadCodebaseConfig(codebaseId)
 	if err != nil {
 		return nil, err
 	}
 
 	cm.mutex.Lock()
-	cm.configs[codebaseId] = config
+	cm.codebaseConfigs[codebaseId] = config
 	cm.mutex.Unlock()
 
 	return config, nil
 }
 
+// 加载所有codebase 配置文件
 func (cm *ConfigManager) loadAllConfigs() {
 	files, err := os.ReadDir(cm.codebasePath)
 	if err != nil {
@@ -109,16 +109,17 @@ func (cm *ConfigManager) loadAllConfigs() {
 			continue
 		}
 
-		config, err := cm.LoadProjectConfig(file.Name())
+		config, err := cm.loadCodebaseConfig(file.Name())
 		if err != nil {
 			cm.logger.Error("加载codebase文件 %s 失败: %v", file.Name(), err)
 			continue
 		}
-		cm.configs[file.Name()] = config
+		cm.codebaseConfigs[file.Name()] = config
 	}
 }
 
-func (cm *ConfigManager) LoadProjectConfig(codebaseId string) (*ProjectConfig, error) {
+// loadCodebaseConfig 加载codebase 配置文件
+func (cm *ConfigManager) loadCodebaseConfig(codebaseId string) (*CodebaseConfig, error) {
 	cm.logger.Info("加载codebase文件内容: %s", codebaseId)
 
 	cm.mutex.RLock()
@@ -134,7 +135,7 @@ func (cm *ConfigManager) LoadProjectConfig(codebaseId string) (*ProjectConfig, e
 		return nil, fmt.Errorf("读取codebase文件失败: %v", err)
 	}
 
-	var config ProjectConfig
+	var config CodebaseConfig
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("解析codebase文件失败: %v", err)
 	}
@@ -150,8 +151,8 @@ func (cm *ConfigManager) LoadProjectConfig(codebaseId string) (*ProjectConfig, e
 	return &config, nil
 }
 
-// 保存项目配置
-func (cm *ConfigManager) SaveProjectConfig(config *ProjectConfig) error {
+// SaveCodebaseConfig 保存项目配置
+func (cm *ConfigManager) SaveCodebaseConfig(config *CodebaseConfig) error {
 	cm.logger.Info("保存项目配置: %s", config.CodebasePath)
 
 	cm.mutex.Lock()
@@ -168,13 +169,13 @@ func (cm *ConfigManager) SaveProjectConfig(config *ProjectConfig) error {
 	}
 
 	// 原子性更新内存配置
-	cm.configs[config.CodebaseId] = config
+	cm.codebaseConfigs[config.CodebaseId] = config
 	cm.logger.Info("项目配置保存成功, path: %s, codebaseId: %s", filePath, config.CodebaseId)
 	return nil
 }
 
-// 删除codebase 配置
-func (cm *ConfigManager) DeleteProjectConfig(codebaseId string) error {
+// DeleteCodebaseConfig 删除codebase 配置
+func (cm *ConfigManager) DeleteCodebaseConfig(codebaseId string) error {
 	cm.logger.Info("删除codebase配置: %s", codebaseId)
 
 	filePath := filepath.Join(cm.codebasePath, codebaseId)
@@ -182,11 +183,11 @@ func (cm *ConfigManager) DeleteProjectConfig(codebaseId string) error {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 
-	exists := cm.configs[codebaseId] != nil
+	exists := cm.codebaseConfigs[codebaseId] != nil
 
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		if exists {
-			delete(cm.configs, codebaseId)
+			delete(cm.codebaseConfigs, codebaseId)
 			cm.logger.Info("仅内存中的codebase配置已删除: %s", codebaseId)
 		}
 		return nil
@@ -198,7 +199,7 @@ func (cm *ConfigManager) DeleteProjectConfig(codebaseId string) error {
 
 	// 文件删除成功后才删除内存中的配置
 	if exists {
-		delete(cm.configs, codebaseId)
+		delete(cm.codebaseConfigs, codebaseId)
 		cm.logger.Info("codebase配置已删除: %s (文件+内存)", filePath)
 	} else {
 		cm.logger.Info("codebase文件已删除: %s (仅文件)", filePath)

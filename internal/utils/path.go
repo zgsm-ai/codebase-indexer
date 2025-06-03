@@ -78,6 +78,7 @@ func GetRootDir(appName string) (string, error) {
 	return rootDir, nil
 }
 
+// GetLogDir 获取日志目录
 func GetLogDir(rootPath string) (string, error) {
 	if _, err := os.Stat(rootPath); os.IsNotExist(err) {
 		return "", fmt.Errorf("root path %s does not exist", rootPath)
@@ -94,6 +95,7 @@ func GetLogDir(rootPath string) (string, error) {
 	return logPath, nil
 }
 
+// GetCacheDir 获取缓存目录
 func GetCacheDir(rootPath string) (string, error) {
 	if _, err := os.Stat(rootPath); os.IsNotExist(err) {
 		return "", fmt.Errorf("root path %s does not exist", rootPath)
@@ -110,6 +112,7 @@ func GetCacheDir(rootPath string) (string, error) {
 	return cachePath, nil
 }
 
+// GetUploadTmpDir 获取上传临时目录
 func GetUploadTmpDir(rootPath string) (string, error) {
 	if _, err := os.Stat(rootPath); os.IsNotExist(err) {
 		return "", fmt.Errorf("root path %s does not exist", rootPath)
@@ -126,12 +129,13 @@ func GetUploadTmpDir(rootPath string) (string, error) {
 	return tmpPath, nil
 }
 
+// CleanUploadTmpDir 清空上传临时目录
 func CleanUploadTmpDir() error {
 	return os.RemoveAll(UploadTmpDir)
 }
 
 // 将Windows路径转为Unix路径
-func WindowsPathToUnix(path string) string {
+func WindowsAbsolutePathToUnix(path string) string {
 	// 转换路径分隔符
 	unixPath := filepath.ToSlash(path)
 	// 处理Windows盘符(D:\)转换为Unix风格(/d/)
@@ -142,7 +146,7 @@ func WindowsPathToUnix(path string) string {
 	return unixPath
 }
 
-func UnixPathToWindows(path string) string {
+func UnixAbsolutePathToWindows(path string) string {
 	// 处理Unix风格路径(/d/)转换为Windows盘符(D:\)
 	if len(path) > 1 && path[0] == '/' {
 		drive := string(path[1])

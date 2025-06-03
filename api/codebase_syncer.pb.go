@@ -137,12 +137,12 @@ func (x *ShareAccessTokenResponse) GetMessage() string {
 	return ""
 }
 
-// 注册项目同步
+// 注册工作区同步
 type RegisterSyncRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`          // 客户ID
-	ProjectPath   string                 `protobuf:"bytes,2,opt,name=project_path,json=projectPath,proto3" json:"project_path,omitempty"` // 项目路径
-	ProjectName   string                 `protobuf:"bytes,3,opt,name=project_name,json=projectName,proto3" json:"project_name,omitempty"` // 项目名称
+	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`                // 客户ID
+	WorkspacePath string                 `protobuf:"bytes,2,opt,name=workspace_path,json=workspacePath,proto3" json:"workspace_path,omitempty"` // 工作区路径
+	WorkspaceName string                 `protobuf:"bytes,3,opt,name=workspace_name,json=workspaceName,proto3" json:"workspace_name,omitempty"` // 工作区名称
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -184,21 +184,21 @@ func (x *RegisterSyncRequest) GetClientId() string {
 	return ""
 }
 
-func (x *RegisterSyncRequest) GetProjectPath() string {
+func (x *RegisterSyncRequest) GetWorkspacePath() string {
 	if x != nil {
-		return x.ProjectPath
+		return x.WorkspacePath
 	}
 	return ""
 }
 
-func (x *RegisterSyncRequest) GetProjectName() string {
+func (x *RegisterSyncRequest) GetWorkspaceName() string {
 	if x != nil {
-		return x.ProjectName
+		return x.WorkspaceName
 	}
 	return ""
 }
 
-// 注册项目同步响应
+// 注册工作区同步响应
 type RegisterSyncResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"` // 是否成功
@@ -251,12 +251,12 @@ func (x *RegisterSyncResponse) GetMessage() string {
 	return ""
 }
 
-// 注销项目同步
+// 注销工作区同步
 type UnregisterSyncRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`          // 客户ID
-	ProjectPath   string                 `protobuf:"bytes,2,opt,name=project_path,json=projectPath,proto3" json:"project_path,omitempty"` // 项目路径
-	ProjectName   string                 `protobuf:"bytes,3,opt,name=project_name,json=projectName,proto3" json:"project_name,omitempty"` // 项目名称
+	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`                // 客户ID
+	WorkspacePath string                 `protobuf:"bytes,2,opt,name=workspace_path,json=workspacePath,proto3" json:"workspace_path,omitempty"` // 工作区路径
+	WorkspaceName string                 `protobuf:"bytes,3,opt,name=workspace_name,json=workspaceName,proto3" json:"workspace_name,omitempty"` // 工作区名称
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -298,16 +298,16 @@ func (x *UnregisterSyncRequest) GetClientId() string {
 	return ""
 }
 
-func (x *UnregisterSyncRequest) GetProjectPath() string {
+func (x *UnregisterSyncRequest) GetWorkspacePath() string {
 	if x != nil {
-		return x.ProjectPath
+		return x.WorkspacePath
 	}
 	return ""
 }
 
-func (x *UnregisterSyncRequest) GetProjectName() string {
+func (x *UnregisterSyncRequest) GetWorkspaceName() string {
 	if x != nil {
-		return x.ProjectName
+		return x.WorkspaceName
 	}
 	return ""
 }
@@ -323,18 +323,18 @@ const file_codebase_syncer_proto_rawDesc = "" +
 	"\x0fserver_endpoint\x18\x03 \x01(\tR\x0eserverEndpoint\"N\n" +
 	"\x18ShareAccessTokenResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"x\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x80\x01\n" +
 	"\x13RegisterSyncRequest\x12\x1b\n" +
-	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12!\n" +
-	"\fproject_path\x18\x02 \x01(\tR\vprojectPath\x12!\n" +
-	"\fproject_name\x18\x03 \x01(\tR\vprojectName\"J\n" +
+	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12%\n" +
+	"\x0eworkspace_path\x18\x02 \x01(\tR\rworkspacePath\x12%\n" +
+	"\x0eworkspace_name\x18\x03 \x01(\tR\rworkspaceName\"J\n" +
 	"\x14RegisterSyncResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"z\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x82\x01\n" +
 	"\x15UnregisterSyncRequest\x12\x1b\n" +
-	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12!\n" +
-	"\fproject_path\x18\x02 \x01(\tR\vprojectPath\x12!\n" +
-	"\fproject_name\x18\x03 \x01(\tR\vprojectName2\xa5\x02\n" +
+	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12%\n" +
+	"\x0eworkspace_path\x18\x02 \x01(\tR\rworkspacePath\x12%\n" +
+	"\x0eworkspace_name\x18\x03 \x01(\tR\rworkspaceName2\xa5\x02\n" +
 	"\vSyncService\x12[\n" +
 	"\fRegisterSync\x12$.codebase_syncer.RegisterSyncRequest\x1a%.codebase_syncer.RegisterSyncResponse\x12P\n" +
 	"\x0eUnregisterSync\x12&.codebase_syncer.UnregisterSyncRequest\x1a\x16.google.protobuf.Empty\x12g\n" +

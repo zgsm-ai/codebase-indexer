@@ -22,7 +22,6 @@ import (
 // 服务端API路径
 const (
 	API_UPLOAD_FILE   = "/codebase-indexer/api/v1/files/upload"
-	API_UPLOAD_ZIP    = "/codebase-indexer/api/v1/files/upload-zip"
 	API_GET_HASH_TREE = "/codebase-indexer/api/v1/comparison"
 )
 
@@ -147,6 +146,7 @@ func (hs *HTTPSync) UploadFile(syncFile *storage.SyncFile, uploadReq *UploadReq)
 	writer := multipart.NewWriter(body)
 	part, _ := writer.CreateFormFile("file", syncFile.Path)
 	io.Copy(part, file)
+	writer.WriteField("project", uploadReq.CodebaseName) // TODO: 测试，后续删除
 	writer.WriteField("clientId", uploadReq.ClientId)
 	writer.WriteField("codebasePath", uploadReq.CodebasePath)
 	writer.WriteField("codebaseName", uploadReq.CodebaseName)
@@ -175,19 +175,11 @@ func (hs *HTTPSync) UploadFile(syncFile *storage.SyncFile, uploadReq *UploadReq)
 
 	// 处理响应
 	if resp.StatusCode() != fasthttp.StatusOK {
-		return fmt.Errorf("上传文件失败，状态码: %d，响应: %s",
-			resp.StatusCode(), string(resp.Body()))
+		return fmt.Errorf("上传文件失败，状态码: %d，响应: %s", resp.StatusCode(), string(resp.Body()))
 	}
 
 	hs.logger.Info("文件上传成功: %s", syncFile.Path)
 	return nil
-}
-
-type UploadZipReq struct {
-	ClientId     string `json:"clientId"`
-	CodebasePath string `json:"codebasePath"`
-	ProjectName  string `json:"codebaseName"`
-	ZipFile      []byte `json:"file"`
 }
 
 // UploadZipFile 上传zip文件到服务器
@@ -222,7 +214,7 @@ func (hs *HTTPSync) UploadZipFile(zipPath string, uploadReq *UploadReq) error {
 		return fmt.Errorf("关闭写入器失败: %v", err)
 	}
 
-	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_UPLOAD_ZIP)
+	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_UPLOAD_FILE)
 
 	req := fasthttp.AcquireRequest()
 	resp := fasthttp.AcquireResponse()
@@ -234,6 +226,7 @@ func (hs *HTTPSync) UploadZipFile(zipPath string, uploadReq *UploadReq) error {
 	req.SetRequestURI(url)
 	req.Header.SetMethod("POST")
 	req.Header.SetContentType(writer.FormDataContentType())
+	// req.Header.SetCookie("Authorization", "Bearer "+hs.syncConfig.Token)
 	req.SetBody(body.Bytes())
 
 	hs.logger.Debug("发送zip上传请求到: %s", url)
@@ -242,8 +235,7 @@ func (hs *HTTPSync) UploadZipFile(zipPath string, uploadReq *UploadReq) error {
 	}
 
 	if resp.StatusCode() != fasthttp.StatusOK {
-		return fmt.Errorf("上传失败，状态码: %d，响应: %s",
-			resp.StatusCode(), string(resp.Body()))
+		return fmt.Errorf("上传失败，状态码: %d，响应: %s", resp.StatusCode(), string(resp.Body()))
 	}
 
 	hs.logger.Info("zip文件上传成功: %s", zipPath)

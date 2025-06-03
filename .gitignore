@@ -1,4 +1,9 @@
+# IDEs
 .vscode
 .idea
 
-logs/*
+# Builds
+bin
+
+# logs
+logs

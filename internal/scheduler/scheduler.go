@@ -5,7 +5,7 @@ import (
 	"archive/zip"
 	"context"
 	"encoding/json"
-	"io"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -15,8 +15,14 @@ import (
 	"codebase-syncer/internal/scanner"
 	"codebase-syncer/internal/storage"
 	"codebase-syncer/internal/syncer"
+	"codebase-syncer/internal/utils"
 	"codebase-syncer/pkg/logger"
-	"codebase-syncer/pkg/utils"
+)
+
+var (
+	syncConfigTimeout = 30 * time.Minute // 注册过期时间
+	maxRetries        = 3                // 最大重试次数
+	retryDelay        = 5 * time.Second  // 重试间隔
 )
 
 type Scheduler struct {
@@ -80,7 +86,7 @@ func (s *Scheduler) SetSyncInterval(interval time.Duration) {
 	s.logger.Info("同步间隔已更新为: %v", interval)
 }
 
-// 执行同步
+// performSync 执行同步
 func (s *Scheduler) performSync() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -99,21 +105,28 @@ func (s *Scheduler) performSync() {
 	s.logger.Info("开始执行同步任务")
 	startTime := time.Now()
 
-	projectConfigs := s.storage.GetConfigs()
-
-	for _, config := range projectConfigs {
-		s.performSyncForProject(config)
+	codebaseConfigs := s.storage.GetCodebaseConfigs()
+	for _, config := range codebaseConfigs {
+		if config.RegisterTime.IsZero() || time.Since(config.RegisterTime) > syncConfigTimeout {
+			s.logger.Info("codebase %s 上次注册时间已超时，删除配置，跳过同步", config.CodebaseId)
+			if err := s.storage.DeleteCodebaseConfig(config.CodebaseId); err != nil {
+				s.logger.Error("获取codebase配置失败: %v", err)
+			}
+			continue
+		}
+		s.performSyncForCodebase(config)
 	}
 
 	s.logger.Info("同步任务完成，总耗时: %v", time.Since(startTime))
 }
 
-func (s *Scheduler) performSyncForProject(config *storage.ProjectConfig) {
-	s.logger.Info("开始执行同步任务，项目: %s", config.CodebaseId)
+// performSyncForCodebase 执行单个codebase 的同步任务
+func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) {
+	s.logger.Info("开始执行同步任务，codebase: %s", config.CodebaseId)
 	startTime := time.Now()
 	localHashTree, err := s.fileScanner.ScanDirectory(config.CodebasePath)
 	if err != nil {
-		s.logger.Error("扫描本地目录失败: %v", err)
+		s.logger.Error("扫描本地目录(%s)失败: %v", config.CodebasePath, err)
 		return
 	}
 
@@ -141,16 +154,19 @@ func (s *Scheduler) performSyncForProject(config *storage.ProjectConfig) {
 	s.logger.Info("检测到 %d 个文件变更", len(changes))
 
 	// 处理所有文件变更
-	s.processFileChanges(config, changes)
+	if err := s.processFileChanges(config, changes); err != nil {
+		s.logger.Error("同步任务失败，处理文件变更失败: %v", err)
+		return
+	}
 
 	// 更新本地哈希树并保存配置
 	config.HashTree = localHashTree
 	config.LastSync = time.Now()
-	if err := s.storage.SaveProjectConfig(config); err != nil {
-		s.logger.Error("保存项目配置失败: %v", err)
+	if err := s.storage.SaveCodebaseConfig(config); err != nil {
+		s.logger.Error("保存codebase 配置失败: %v", err)
 	}
 
-	s.logger.Info("同步任务完成，项目: %s, 耗时: %v", config.CodebaseId, time.Since(startTime))
+	s.logger.Info("同步任务完成，codebase: %s, 耗时: %v", config.CodebaseId, time.Since(startTime))
 }
 
 type SyncMetadata struct {
@@ -162,7 +178,67 @@ type SyncMetadata struct {
 }
 
 // processFileChanges 处理文件变更，将上传逻辑封装
-func (s *Scheduler) processFileChanges(config *storage.ProjectConfig, changes []*storage.SyncFile) {
+func (s *Scheduler) processFileChanges(config *storage.CodebaseConfig, changes []*storage.SyncFile) error {
+	uploadReq := &syncer.UploadReq{
+		ClientId:     config.ClientID,
+		CodebasePath: config.CodebasePath,
+		CodebaseName: config.CodebaseName,
+	}
+
+	// 创建包含所有变更（新增和修改的文件）的zip文件
+	zipPath, err := s.createChangesZip(config, changes)
+	if err != nil {
+		return fmt.Errorf("创建zip文件失败: %v", err)
+	}
+
+	s.logger.Info("开始上报zip文件: %s", zipPath)
+
+	var errUpload error
+	for i := 0; i < maxRetries; i++ {
+		errUpload = s.httpSync.UploadZipFile(zipPath, uploadReq)
+		if errUpload == nil {
+			s.logger.Info("zip文件上报成功")
+			break
+		}
+		s.logger.Error("上报zip文件失败 (尝试 %d/%d): %v", i+1, maxRetries, errUpload)
+		if i < maxRetries-1 {
+			s.logger.Info("等待 %v 后重试...", retryDelay*time.Duration(i+1))
+			time.Sleep(retryDelay * time.Duration(i+1))
+		}
+	}
+
+	// 上报结束后，无论成功与否，都尝试删除本地的zip文件
+	if zipPath != "" {
+		if err := os.Remove(zipPath); err != nil {
+			s.logger.Warn("删除临时zip文件失败: %s, 错误: %v", zipPath, err)
+		} else {
+			s.logger.Info("成功删除临时zip文件: %s", zipPath)
+		}
+	}
+
+	if errUpload != nil {
+		return fmt.Errorf("上报zip文件最终失败: %v", errUpload)
+	}
+	return nil
+}
+
+// createChangesZip 创建包含文件变更和元数据的zip文件
+func (s *Scheduler) createChangesZip(config *storage.CodebaseConfig, changes []*storage.SyncFile) (string, error) {
+	zipDir := filepath.Join(utils.UploadTmpDir, "zip")
+	if err := os.MkdirAll(zipDir, 0755); err != nil {
+		return "", err
+	}
+
+	zipPath := filepath.Join(zipDir, config.CodebaseId+"-"+time.Now().Format("20060102150405")+".zip")
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		return "", err
+	}
+	defer zipFile.Close()
+
+	zipWriter := zip.NewWriter(zipFile)
+	defer zipWriter.Close()
+
 	// 创建SyncMetadata
 	metadata := &SyncMetadata{
 		ClientId:     config.ClientID,
@@ -172,153 +248,37 @@ func (s *Scheduler) processFileChanges(config *storage.ProjectConfig, changes []
 		Timestamp:    time.Now().Unix(),
 	}
 
-	// 按状态分类变更
-	var addedFiles, modifiedFiles, deletedFiles []*storage.SyncFile
 	for _, change := range changes {
-		switch change.Status {
-		case storage.FILE_STATUS_ADDED:
-			addedFiles = append(addedFiles, change)
-		case storage.FILE_STATUS_MODIFIED:
-			modifiedFiles = append(modifiedFiles, change)
-		case storage.FILE_STATUS_DELETED:
-			deletedFiles = append(deletedFiles, change)
-		}
-	}
-
-	uploadReq := &syncer.UploadReq{
-		ClientId:     config.ClientID,
-		CodebasePath: config.CodebasePath,
-		CodebaseName: config.CodebaseName,
-	}
-	// 创建临时zip文件
-	zipDir := filepath.Join(utils.UploadTmpDir, "zip")
-	if err := os.MkdirAll(zipDir, 0755); err != nil {
-		s.logger.Error("创建zip目录失败: %v", err)
-		return
-	}
-
-	zipPath := filepath.Join(zipDir, config.CodebaseId+"-"+time.Now().Format("20060102150405")+".zip")
-	zipFile, err := os.Create(zipPath)
-	if err != nil {
-		s.logger.Error("创建临时zip文件失败: %v", err)
-		return
-	}
-	defer zipFile.Close()
-
-	zipWriter := zip.NewWriter(zipFile)
-	defer zipWriter.Close()
-
-	// 上传新增文件
-	for _, file := range addedFiles {
-		s.logger.Info("上传新增文件: %s (项目: %s)", file.Path, config.CodebaseId)
-		if err := s.httpSync.UploadFile(file, uploadReq); err != nil {
-			s.logger.Error("上传新增文件失败: %s, 错误: %v", file.Path, err)
-		}
-		// 记录到metadata
-		filePath := file.Path
+		filePath := change.Path
 		if runtime.GOOS == "windows" {
 			filePath = filepath.ToSlash(filePath)
 		}
-		metadata.FileList[filePath] = file.Status
+		metadata.FileList[filePath] = change.Status
 
-		// 将文件添加到zip
-		if err := addFileToZip(zipWriter, file.Path, config.CodebasePath); err != nil {
-			s.logger.Error("添加文件到zip失败: %s, 错误: %v", file.Path, err)
+		// 只将新增和修改的文件添加到zip包
+		if change.Status == storage.FILE_STATUS_ADDED || change.Status == storage.FILE_STATUS_MODIFIED {
+			if err := utils.AddFileToZip(zipWriter, change.Path, config.CodebasePath); err != nil {
+				s.logger.Error("添加文件到zip失败: %s, 错误: %v", change.Path, err)
+				// 继续尝试添加其他文件，但记录错误
+			}
 		}
-	}
-
-	// 上传修改文件
-	for _, file := range modifiedFiles {
-		s.logger.Info("上传修改文件: %s (项目: %s)", file.Path, config.CodebaseId)
-		if err := s.httpSync.UploadFile(file, uploadReq); err != nil {
-			s.logger.Error("上传修改文件失败: %s, 错误: %v", file.Path, err)
-		}
-		// 记录到metadata
-		filePath := file.Path
-		if runtime.GOOS == "windows" {
-			filePath = filepath.ToSlash(filePath)
-		}
-		metadata.FileList[filePath] = file.Status
-
-		// 将文件添加到zip
-		if err := addFileToZip(zipWriter, file.Path, config.CodebasePath); err != nil {
-			s.logger.Error("添加文件到zip失败: %s, 错误: %v", file.Path, err)
-		}
-	}
-
-	// 处理删除文件
-	for _, file := range deletedFiles {
-		s.logger.Info("通知服务器删除文件: %s (项目: %s)", file.Path, config.CodebaseId)
-		if err := s.httpSync.UploadFile(file, uploadReq); err != nil {
-			s.logger.Error("通知服务器删除文件失败: %s, 错误: %v", file.Path, err)
-		}
-		// 记录到metadata
-		filePath := file.Path
-		if runtime.GOOS == "windows" {
-			filePath = filepath.ToSlash(filePath)
-		}
-		metadata.FileList[filePath] = file.Status
 	}
 
 	// 添加metadata文件到zip
 	metadataJson, err := json.Marshal(metadata)
 	if err != nil {
-		s.logger.Error("序列化metadata失败: %v", err)
-		return
+		return "", err
 	}
 
-	metadataPath := ".sync_metadata/" + time.Now().Format("20060102150405")
-	metadataWriter, err := zipWriter.Create(metadataPath)
+	metadataFilePath := ".shenma_sync/" + time.Now().Format("20060102150405")
+	metadataWriter, err := zipWriter.Create(metadataFilePath)
 	if err != nil {
-		s.logger.Error("创建metadata文件失败: %v", err)
-		return
+		return "", err
 	}
 
 	if _, err := metadataWriter.Write(metadataJson); err != nil {
-		s.logger.Error("写入metadata文件失败: %v", err)
-		return
+		return "", err
 	}
 
-	// 确保所有数据写入zip文件
-	zipWriter.Close()
-
-	s.logger.Info("开始上报zip文件: %s", zipPath)
-	if err := s.httpSync.UploadZipFile(zipPath, uploadReq); err != nil {
-		s.logger.Error("上报zip文件失败: %v", err)
-		return
-	}
-	s.logger.Info("zip文件上报成功")
-}
-
-// addFileToZip 将文件添加到zip中
-func addFileToZip(zipWriter *zip.Writer, filePath string, basePath string) error {
-	file, err := os.Open(filepath.Join(basePath, filePath))
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	info, err := file.Stat()
-	if err != nil {
-		return err
-	}
-
-	header, err := zip.FileInfoHeader(info)
-	if err != nil {
-		return err
-	}
-
-	if runtime.GOOS == "windows" {
-		filePath = filepath.ToSlash(filePath)
-	}
-	header.Name = filePath
-	header.Method = zip.Deflate
-
-	writer, err := zipWriter.CreateHeader(header)
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(writer, file)
-	return err
+	return zipPath, nil
 }

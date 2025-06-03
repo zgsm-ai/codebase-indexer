@@ -17,8 +17,8 @@ import (
 	"codebase-syncer/internal/scheduler"
 	"codebase-syncer/internal/storage"
 	"codebase-syncer/internal/syncer"
+	"codebase-syncer/internal/utils"
 	"codebase-syncer/pkg/logger"
-	"codebase-syncer/pkg/utils"
 
 	"google.golang.org/grpc"
 )
@@ -28,9 +28,6 @@ var (
 )
 
 func main() {
-	dir, _ := os.Getwd()
-	fmt.Printf("当前文件目录: %s\n", dir)
-
 	// 解析命令行参数
 	appName := flag.String("appname", "zgsm", "应用名称")
 	grpcServer := flag.String("grpc", "localhost:50051", "gRPC服务器地址")
@@ -44,11 +41,11 @@ func main() {
 	}
 
 	// 初始化日志系统
-	logger := logger.NewLogger(*logLevel)
+	logger := logger.NewLogger(utils.LogsDir, *logLevel)
 	logger.Info("客户端启动中...")
 
 	// 初始化各模块
-	storageManager := storage.NewStorageManager(logger)
+	storageManager := storage.NewStorageManager(utils.CacheDir, logger)
 	fileScanner := scanner.NewFileScanner(logger)
 	httpSync := syncer.NewHTTPSync(logger)
 	grpcHandler := handler.NewGRPCHandler(httpSync, storageManager, logger)
@@ -71,7 +68,7 @@ func main() {
 	}()
 
 	// 启动同步守护进程
-	daemon := daemon.NewDaemon(syncScheduler, grpcHandler, storageManager, logger)
+	daemon := daemon.NewDaemon(syncScheduler, grpcHandler, logger)
 	go daemon.Start()
 
 	// 处理系统信号，优雅退出

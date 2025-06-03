@@ -5,6 +5,8 @@ import (
 	"archive/zip"
 	"io"
 	"os"
+	"path/filepath"
+	"runtime"
 )
 
 // 构建 ZIP 文件
@@ -53,4 +55,37 @@ func CreateZipFile(filePaths []string, zipFileName string) error {
 		}
 	}
 	return nil
+}
+
+// AddFileToZip 将文件添加到zip中
+func AddFileToZip(zipWriter *zip.Writer, filePath string, basePath string) error {
+	file, err := os.Open(filepath.Join(basePath, filePath))
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+
+	header, err := zip.FileInfoHeader(info)
+	if err != nil {
+		return err
+	}
+
+	if runtime.GOOS == "windows" {
+		filePath = filepath.ToSlash(filePath)
+	}
+	header.Name = filePath
+	header.Method = zip.Deflate
+
+	writer, err := zipWriter.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(writer, file)
+	return err
 }

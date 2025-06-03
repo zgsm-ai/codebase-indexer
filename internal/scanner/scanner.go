@@ -17,6 +17,22 @@ import (
 	gitignore "github.com/sabhiram/go-gitignore"
 )
 
+// 默认过滤规则
+var defaultIgnore = []string{
+	// 过滤所有以点开头的文件和目录
+	".*",
+	// 保留其他非点开头的特定文件类型和目录
+	"*.swp", "*.swo",
+	"*.pyc", "*.class", "*.o", "*.obj",
+	"*.log", "*.tmp", "*.bak", "*.backup",
+	"logs/", "temp/", "tmp/", "node_modules/",
+	"vendor/", "bin/", "dist/", "build/",
+	"__pycache__/", "venv/", "target/",
+}
+
+// 最大文件大小（1MB）
+var maxFileSize int64 = 1 * 1024 * 1024 // 1MB
+
 type FileScanner struct {
 	logger logger.Logger
 }
@@ -49,6 +65,41 @@ func (fs *FileScanner) CalculateFileHash(filePath string) (string, error) {
 	return hashValue, nil
 }
 
+// loadIgnoreRules 加载并合并默认忽略规则和.gitignore文件中的规则
+func (fs *FileScanner) loadIgnoreRules(codebasePath string) *gitignore.GitIgnore {
+	// 首先使用默认规则创建ignore对象
+	// 创建一个副本以避免修改全局变量 defaultIgnore
+	currentIgnoreRules := make([]string, len(defaultIgnore))
+	copy(currentIgnoreRules, defaultIgnore)
+	compiledIgnore := gitignore.CompileIgnoreLines(currentIgnoreRules...)
+
+	// 读取.gitignore文件，并合并
+	ignoreFilePath := filepath.Join(codebasePath, ".gitignore")
+	if content, err := os.ReadFile(ignoreFilePath); err == nil {
+		// 合并.gitignore规则
+		var lines []string
+		for _, line := range bytes.Split(content, []byte{'\n'}) {
+			// 忽略空行和注释行
+			trimmedLine := bytes.TrimSpace(line)
+			if len(trimmedLine) > 0 && !bytes.HasPrefix(trimmedLine, []byte{'#'}) {
+				lines = append(lines, string(trimmedLine))
+			}
+		}
+		if len(lines) > 0 {
+			// 将 .gitignore 文件中的规则追加到默认规则之后进行编译
+			// 注意：这里的顺序很重要，后添加的规则通常有更高优先级或可以覆盖前面的规则，
+			// 具体行为取决于 go-gitignore 库的实现。
+			// 通常，更具体的规则（如 !important_file.txt）应该能覆盖更通用的规则（如 *.txt）。
+			// go-gitignore 应该能处理标准的 .gitignore 优先级。
+			compiledIgnore = gitignore.CompileIgnoreLines(append(currentIgnoreRules, lines...)...)
+		}
+	} else if !os.IsNotExist(err) {
+		fs.logger.Warn("读取.gitignore文件 %s 失败: %v", ignoreFilePath, err)
+		// 如果读取失败（非文件不存在错误），则仅使用默认规则
+	}
+	return compiledIgnore
+}
+
 // 扫描目录并生成哈希树
 func (fs *FileScanner) ScanDirectory(codebasePath string) (map[string]string, error) {
 	fs.logger.Info("开始扫描目录: %s", codebasePath)
@@ -57,32 +108,7 @@ func (fs *FileScanner) ScanDirectory(codebasePath string) (map[string]string, er
 	hashTree := make(map[string]string)
 	var filesScanned int
 
-	// 默认过滤规则
-	defaultIgnore := []string{
-		".git/", ".svn/", ".hg/",
-		".DS_Store", "*.swp", "*.swo",
-		"*.log", "*.tmp", "*.bak", "*.backup",
-		"logs/", "temp/", "tmp/", "node_modules/",
-		"vendor/", "bin/", "dist/", "build/",
-	}
-
-	// 首先使用默认规则创建ignore对象
-	ignore := gitignore.CompileIgnoreLines(defaultIgnore...)
-
-	// 读取.gitignore文件，并合并
-	ignoreFilePath := filepath.Join(codebasePath, ".gitignore")
-	if content, err := os.ReadFile(ignoreFilePath); err == nil {
-		// 合并.gitignore规则
-		var lines []string
-		for _, line := range bytes.Split(content, []byte{'\n'}) {
-			if len(line) > 0 && !bytes.HasPrefix(line, []byte{'#'}) {
-				lines = append(lines, string(line))
-			}
-		}
-		ignore = gitignore.CompileIgnoreLines(append(defaultIgnore, lines...)...)
-	} else if !os.IsNotExist(err) {
-		fs.logger.Warn("读取.gitignore文件失败: %v", err)
-	}
+	ignore := fs.loadIgnoreRules(codebasePath)
 
 	err := filepath.Walk(codebasePath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -93,7 +119,9 @@ func (fs *FileScanner) ScanDirectory(codebasePath string) (map[string]string, er
 		if info.IsDir() {
 			// 对于目录，检查是否应该跳过整个目录
 			relPath, _ := filepath.Rel(codebasePath, path)
-			if ignore != nil && ignore.MatchesPath(relPath+"/") {
+			// 如果是根目录本身 (relPath is "."), 不要因为 ".*" 规则而跳过它
+			if relPath != "." && ignore != nil && ignore.MatchesPath(relPath+"/") {
+				fs.logger.Debug("跳过被忽略的目录: %s", relPath)
 				return filepath.SkipDir
 			}
 			return nil
@@ -109,6 +137,12 @@ func (fs *FileScanner) ScanDirectory(codebasePath string) (map[string]string, er
 		// 检查文件是否在.gitignore中被排除
 		if ignore != nil && ignore.MatchesPath(relPath) {
 			fs.logger.Debug("跳过被.gitignore排除的文件: %s", relPath)
+			return nil
+		}
+
+		// 检查文件大小是否超过1MB
+		if info.Size() >= maxFileSize {
+			fs.logger.Debug("跳过大于1MB的文件: %s (大小: %.2f MB)", relPath, float64(info.Size())/1024/1024)
 			return nil
 		}
 
