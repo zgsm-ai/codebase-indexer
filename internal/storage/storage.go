@@ -37,7 +37,7 @@ type SyncFile struct {
 	Status string `json:"status"`
 }
 
-type ConfigManager struct {
+type StorageManager struct {
 	codebasePath    string
 	codebaseConfigs map[string]*CodebaseConfig // 存储所有codebase 配置
 	logger          logger.Logger
@@ -45,7 +45,7 @@ type ConfigManager struct {
 }
 
 // NewStorageManager 创建一个新的配置管理器
-func NewStorageManager(cacheDir string, logger logger.Logger) *ConfigManager {
+func NewStorageManager(cacheDir string, logger logger.Logger) *StorageManager {
 	// 确保codebase目录存在
 	codebasePath := filepath.Join(cacheDir, "codebase")
 	if _, err := os.Stat(codebasePath); os.IsNotExist(err) {
@@ -55,7 +55,7 @@ func NewStorageManager(cacheDir string, logger logger.Logger) *ConfigManager {
 	}
 
 	// 初始化 codebaseConfigs map
-	sm := &ConfigManager{
+	sm := &StorageManager{
 		codebasePath:    codebasePath,
 		logger:          logger,
 		codebaseConfigs: make(map[string]*CodebaseConfig),
@@ -65,14 +65,14 @@ func NewStorageManager(cacheDir string, logger logger.Logger) *ConfigManager {
 	return sm
 }
 
-// GetConfigs 获取所有项目配置
-func (cm *ConfigManager) GetCodebaseConfigs() map[string]*CodebaseConfig {
+// GetCodebaseConfigs 获取所有项目配置
+func (cm *StorageManager) GetCodebaseConfigs() map[string]*CodebaseConfig {
 	return cm.codebaseConfigs
 }
 
 // GetCodebaseConfig 加载codebase 配置
 // 优先从内存配置中查找，找不到再从文件系统加载
-func (cm *ConfigManager) GetCodebaseConfig(codebaseId string) (*CodebaseConfig, error) {
+func (cm *StorageManager) GetCodebaseConfig(codebaseId string) (*CodebaseConfig, error) {
 	cm.mutex.RLock()
 	config, exists := cm.codebaseConfigs[codebaseId]
 	cm.mutex.RUnlock()
@@ -95,7 +95,7 @@ func (cm *ConfigManager) GetCodebaseConfig(codebaseId string) (*CodebaseConfig, 
 }
 
 // 加载所有codebase 配置文件
-func (cm *ConfigManager) loadAllConfigs() {
+func (cm *StorageManager) loadAllConfigs() {
 	files, err := os.ReadDir(cm.codebasePath)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -119,7 +119,7 @@ func (cm *ConfigManager) loadAllConfigs() {
 }
 
 // loadCodebaseConfig 加载codebase 配置文件
-func (cm *ConfigManager) loadCodebaseConfig(codebaseId string) (*CodebaseConfig, error) {
+func (cm *StorageManager) loadCodebaseConfig(codebaseId string) (*CodebaseConfig, error) {
 	cm.logger.Info("加载codebase文件内容: %s", codebaseId)
 
 	cm.mutex.RLock()
@@ -152,7 +152,10 @@ func (cm *ConfigManager) loadCodebaseConfig(codebaseId string) (*CodebaseConfig,
 }
 
 // SaveCodebaseConfig 保存项目配置
-func (cm *ConfigManager) SaveCodebaseConfig(config *CodebaseConfig) error {
+func (cm *StorageManager) SaveCodebaseConfig(config *CodebaseConfig) error {
+	if config == nil {
+		return fmt.Errorf("codebase配置为空: %v", config)
+	}
 	cm.logger.Info("保存项目配置: %s", config.CodebasePath)
 
 	cm.mutex.Lock()
@@ -175,7 +178,7 @@ func (cm *ConfigManager) SaveCodebaseConfig(config *CodebaseConfig) error {
 }
 
 // DeleteCodebaseConfig 删除codebase 配置
-func (cm *ConfigManager) DeleteCodebaseConfig(codebaseId string) error {
+func (cm *StorageManager) DeleteCodebaseConfig(codebaseId string) error {
 	cm.logger.Info("删除codebase配置: %s", codebaseId)
 
 	filePath := filepath.Join(cm.codebasePath, codebaseId)

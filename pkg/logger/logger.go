@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -36,14 +35,17 @@ type logger struct {
 }
 
 // 创建新日志实例
-func NewLogger(logsDir, level string) Logger {
-	// 生成按日期命名的日志文件
-	currentDate := time.Now().Format("20060102")
-	logFileName := filepath.Join(logsDir, fmt.Sprintf("codebase-syncer-%s.log", currentDate))
+func NewLogger(logsDir, level string) (Logger, error) {
+	// 确保logs目录存在
+	if _, err := os.Stat(logsDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(logsDir, 0755); err != nil {
+			return nil, fmt.Errorf("无法创建codebase目录: %v", err)
+		}
+	}
 
 	// 设置日志输出到文件和控制台
 	fileWriter := zapcore.AddSync(&lumberjack.Logger{
-		Filename:   logFileName,
+		Filename:   filepath.Join(logsDir, "codebase-syncer.log"),
 		MaxSize:    100, // megabytes
 		MaxBackups: 0,   //
 		MaxAge:     5,   // days
@@ -61,8 +63,8 @@ func NewLogger(logsDir, level string) Logger {
 		MessageKey:     "msg",
 		StacktraceKey:  "stacktrace",
 		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.LowercaseLevelEncoder,
-		EncodeTime:     zapcore.TimeEncoderOfLayout("2006-01-02 15:04:05.000"),
+		EncodeLevel:    zapcore.CapitalLevelEncoder,
+		EncodeTime:     zapcore.ISO8601TimeEncoder,
 		EncodeDuration: zapcore.SecondsDurationEncoder,
 		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
@@ -92,7 +94,7 @@ func NewLogger(logsDir, level string) Logger {
 	return &logger{
 		log:   zapLogger,
 		sugar: sugar,
-	}
+	}, nil
 }
 
 // 调试级日志

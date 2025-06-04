@@ -41,7 +41,11 @@ func main() {
 	}
 
 	// 初始化日志系统
-	logger := logger.NewLogger(utils.LogsDir, *logLevel)
+	logger, err := logger.NewLogger(utils.LogsDir, *logLevel)
+	if err != nil {
+		fmt.Printf("初始化日志系统失败: %v\n", err)
+		return
+	}
 	logger.Info("客户端启动中...")
 
 	// 初始化各模块

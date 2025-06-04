@@ -20,13 +20,13 @@ import (
 // GRPCHandler gRPC服务处理
 type GRPCHandler struct {
 	httpSync *syncer.HTTPSync
-	storage  *storage.ConfigManager
+	storage  *storage.StorageManager
 	logger   logger.Logger
 	api.UnimplementedSyncServiceServer
 }
 
 // NewGRPCHandler 创建新的gRPC处理器
-func NewGRPCHandler(httpSync *syncer.HTTPSync, storage *storage.ConfigManager, logger logger.Logger) *GRPCHandler {
+func NewGRPCHandler(httpSync *syncer.HTTPSync, storage *storage.StorageManager, logger logger.Logger) *GRPCHandler {
 	return &GRPCHandler{
 		httpSync: httpSync,
 		storage:  storage,

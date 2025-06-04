@@ -29,14 +29,14 @@ type Scheduler struct {
 	syncInterval time.Duration
 	httpSync     *syncer.HTTPSync
 	fileScanner  *scanner.FileScanner
-	storage      *storage.ConfigManager
+	storage      *storage.StorageManager
 	logger       logger.Logger
 	mutex        sync.Mutex
 	isRunning    bool
 }
 
 func NewScheduler(syncInterval time.Duration, httpSync *syncer.HTTPSync,
-	fileScanner *scanner.FileScanner, storage *storage.ConfigManager,
+	fileScanner *scanner.FileScanner, storage *storage.StorageManager,
 	logger logger.Logger) *Scheduler {
 	return &Scheduler{
 		syncInterval: syncInterval,
