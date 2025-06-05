@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // MockLogger 是一个 mock logger 实现
@@ -22,30 +23,32 @@ type MockLogger struct {
 
 func (m *MockLogger) Debug(format string, v ...interface{}) {
 	fmt.Printf("[MOCK DEBUG] %s\n", fmt.Sprintf(format, v...)) // 输出日志
-	// m.Called(format, v)
+	m.Called(format, v)
 }
 
 func (m *MockLogger) Info(format string, v ...interface{}) {
 	fmt.Printf("[MOCK INFO] %s\n", fmt.Sprintf(format, v...)) // 输出日志
-	// m.Called(format, v)
+	m.Called(format, v)
 }
 
 func (m *MockLogger) Warn(format string, v ...interface{}) {
 	fmt.Printf("[MOCK WARN] %s\n", fmt.Sprintf(format, v...)) // 输出日志
-	// m.Called(format, v)
+	m.Called(format, v)
 }
 
 func (m *MockLogger) Error(format string, v ...interface{}) {
 	fmt.Printf("[MOCK ERROR] %s\n", fmt.Sprintf(format, v...)) // 输出日志
-	// m.Called(format, v)
+	m.Called(format, v)
 }
 
 func (m *MockLogger) Fatal(format string, v ...interface{}) {
 	fmt.Printf("[MOCK FATAL] %s\n", fmt.Sprintf(format, v...)) // 输出日志
-	// m.Called(format, v)
+	m.Called(format, v)
 }
 
 func TestNewStorageManager(t *testing.T) {
+	logger := &MockLogger{}
+
 	t.Run("创建新目录", func(t *testing.T) {
 		// 设置临时目录
 		tempDir := t.TempDir()
@@ -56,14 +59,13 @@ func TestNewStorageManager(t *testing.T) {
 			t.Fatalf("测试目录应该不存在: %v", err)
 		}
 
-		logger := &MockLogger{}
-		// logger.On("Fatal", mock.Anything, mock.Anything).Return()
-
-		sm := NewStorageManager(tempDir, logger)
+		sm, err := NewStorageManager(tempDir, logger)
+		assert.NoError(t, err)
+		require.NotNil(t, sm)
 
 		// 验证目录是否创建
-		if _, err := os.Stat(codebasePath); os.IsNotExist(err) {
-			t.Fatalf("应该创建了 codebase 目录: %v", err)
+		if _, statErr := os.Stat(codebasePath); os.IsNotExist(statErr) {
+			t.Fatalf("应该创建了 codebase 目录: %v", statErr)
 		}
 
 		// 验证结构体字段
@@ -74,19 +76,17 @@ func TestNewStorageManager(t *testing.T) {
 	})
 
 	t.Run("目录已存在", func(t *testing.T) {
+		// 预先创建目录
 		tempDir := t.TempDir()
 		codebasePath := filepath.Join(tempDir, "codebase")
-
-		// 预先创建目录
 		if err := os.Mkdir(codebasePath, 0755); err != nil {
 			t.Fatalf("无法创建测试目录: %v", err)
 		}
 
-		logger := &MockLogger{}
-		sm := NewStorageManager(tempDir, logger)
-
-		// 验证没有调用 Fatal
-		// logger.AssertNotCalled(t, "Fatal", mock.Anything, mock.Anything)
+		sm, err := NewStorageManager(tempDir, logger)
+		// 验证没有错误
+		assert.NoError(t, err)
+		require.NotNil(t, sm)
 
 		// 验证结构体字段
 		assert.Equal(t, codebasePath, sm.codebasePath)
@@ -96,17 +96,22 @@ func TestNewStorageManager(t *testing.T) {
 	})
 
 	t.Run("目录创建失败", func(t *testing.T) {
-		// 使用系统根目录应该会触发权限错误
-		logger := &MockLogger{}
-		// logger.On("Fatal", "无法创建codebase目录: %v", mock.Anything).Return()
+		// 创建一个临时根目录用于测试
+		rootDir := t.TempDir()
+		// 将 cacheDir 设置为一个文件的路径，而不是目录
+		fileAsCacheDirPath := filepath.Join(rootDir, "thisIsAFileNotADirectory")
+		if err := os.WriteFile(fileAsCacheDirPath, []byte("I am a file"), 0644); err != nil {
+			t.Fatalf("创建用作cacheDir的文件失败: %v", err)
+		}
 
-		sm := NewStorageManager("/", logger)
+		sm, err := NewStorageManager(fileAsCacheDirPath, logger)
 
-		// 验证 Fatal 被调用
-		// logger.AssertCalled(t, "Fatal", "无法创建codebase目录: %v", mock.Anything)
-
-		// 即使在错误情况下也应该返回有效的 StorageManager
-		assert.NotNil(t, sm)
+		// 验证返回了错误，并且 sm 为 nil
+		assert.Error(t, err)
+		if err != nil { // 确保 err 不是 nil 才调用 err.Error()
+			assert.Contains(t, err.Error(), "无法创建codebase目录")
+		}
+		assert.Nil(t, sm)
 	})
 }
 
@@ -150,6 +155,7 @@ func TestGetCodebaseConfigs(t *testing.T) {
 
 func TestGetCodebaseConfig(t *testing.T) {
 	logger := &MockLogger{}
+	logger.On("Info", mock.Anything, mock.Anything).Return()
 
 	t.Run("从内存获取现有配置", func(t *testing.T) {
 		configs := map[string]*CodebaseConfig{
@@ -180,13 +186,14 @@ func TestGetCodebaseConfig(t *testing.T) {
 		}
 
 		expectedConfig := &CodebaseConfig{CodebaseId: file}
-		// logger.On("Info", "加载codebase文件内容: %s", []interface{}{"test2"}).Return()
-		// logger.On("Info", "成功加载codebase文件，上次同步时间: %s", []interface{}{"0001-01-01T00:00:00Z"}).Return()
 
-		config, err := cm.GetCodebaseConfig("test2")
+		config, err := cm.GetCodebaseConfig(file)
 		assert.NoError(t, err)
 		assert.Equal(t, expectedConfig, config)
-		assert.Equal(t, expectedConfig, cm.codebaseConfigs["test2"])
+		assert.Equal(t, expectedConfig, cm.codebaseConfigs[file])
+
+		logger.AssertCalled(t, "Info", "加载codebase文件内容: %s", mock.Anything)
+		logger.AssertCalled(t, "Info", "成功加载codebase文件，上次同步时间: %s", mock.Anything)
 	})
 
 	t.Run("配置不存在返回错误", func(t *testing.T) {
@@ -198,12 +205,12 @@ func TestGetCodebaseConfig(t *testing.T) {
 			mutex:           sync.RWMutex{},
 		}
 
-		// logger.On("Info", "加载codebase文件内容: %s", []interface{}{"test3"}).Return()
-		// logger.On("Info", "成功加载codebase文件，上次同步时间: %s", []interface{}{"0001-01-01T00:00:00Z"}).Return()
 		config, err := cm.GetCodebaseConfig("test3")
 		assert.ErrorContains(t, err, "codebase文件不存在")
 		assert.Nil(t, config)
 		assert.Empty(t, cm.codebaseConfigs)
+
+		logger.AssertCalled(t, "Info", "加载codebase文件内容: %s", mock.Anything)
 	})
 
 	t.Run("并发访问安全", func(t *testing.T) {
@@ -229,6 +236,9 @@ func TestGetCodebaseConfig(t *testing.T) {
 				defer wg.Done()
 				_, err := cm.GetCodebaseConfig(fmt.Sprintf("test%d", id))
 				assert.NoError(t, err)
+
+				logger.AssertCalled(t, "Info", "加载codebase文件内容: %s", mock.Anything)
+				logger.AssertCalled(t, "Info", "成功加载codebase文件，上次同步时间: %s", mock.Anything)
 			}(i)
 		}
 		wg.Wait()
@@ -237,11 +247,10 @@ func TestGetCodebaseConfig(t *testing.T) {
 
 func TestConfigManager_loadAllConfigs(t *testing.T) {
 	logger := &MockLogger{}
+	logger.On("Info", mock.Anything, mock.Anything).Return()
+	logger.On("Error", mock.Anything, mock.Anything).Return()
 
 	t.Run("目录读取失败", func(t *testing.T) {
-		logger := &MockLogger{}
-		// logger.On("Error", "读取codebase目录失败: %v", mock.Anything).Return()
-
 		// 无权限目录
 		cm := &StorageManager{
 			codebasePath:    "/root", // Linux下无权限的目录
@@ -253,8 +262,7 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 		// 执行
 		cm.loadAllConfigs()
 
-		// 验证
-		// logger.AssertCalled(t, "Error", "读取codebase目录失败: %v", mock.Anything)
+		logger.AssertCalled(t, "Error", "读取codebase目录失败: %v", mock.Anything)
 	})
 
 	t.Run("目录中没有文件", func(t *testing.T) {
@@ -316,12 +324,12 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 
 		// 验证
 		assert.Equal(t, len(testFiles), len(cm.codebaseConfigs))
+
+		logger.AssertCalled(t, "Info", "加载codebase文件内容: %s", mock.Anything)
+		logger.AssertCalled(t, "Info", "成功加载codebase文件，上次同步时间: %s", mock.Anything)
 	})
 
 	t.Run("部分文件加载失败", func(t *testing.T) {
-		logger := &MockLogger{}
-		// logger.On("Error", "加载codebase文件 %s 失败: %v", mock.Anything, mock.Anything).Return()
-
 		tempDir := t.TempDir()
 		// 创建测试文件
 		testFiles := []string{"good", "bad"}
@@ -349,14 +357,18 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 
 		// 验证
 		assert.Equal(t, 1, len(cm.codebaseConfigs))
-		// logger.AssertCalled(t, "Error", "加载codebase文件 %s 失败: %v", mock.Anything, mock.Anything)
+
+		logger.AssertCalled(t, "Info", "加载codebase文件内容: %s", mock.Anything)
+		logger.AssertCalled(t, "Info", "成功加载codebase文件，上次同步时间: %s", mock.Anything)
+		logger.AssertCalled(t, "Error", "加载codebase文件 %s 失败: %v", mock.Anything, mock.Anything)
 	})
 }
 
 func TestConfigManager_loadCodebaseConfig(t *testing.T) {
+	logger := &MockLogger{}
+	logger.On("Info", mock.Anything, mock.Anything).Return()
 
 	t.Run("文件不存在", func(t *testing.T) {
-		logger := &MockLogger{}
 		tempDir := t.TempDir()
 		cm := &StorageManager{
 			codebasePath:    tempDir,
@@ -371,11 +383,11 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 		// 验证
 		assert.Nil(t, config)
 		assert.ErrorContains(t, err, "codebase文件不存在")
-		// logger.AssertCalled(t, "Info", "加载codebase文件内容: %s", mock.Anything)
+
+		logger.AssertCalled(t, "Info", "加载codebase文件内容: %s", mock.Anything)
 	})
 
 	t.Run("JSON解析失败", func(t *testing.T) {
-		logger := &MockLogger{}
 		tempDir := t.TempDir()
 		filePath := filepath.Join(tempDir, "invalid")
 		if err := os.WriteFile(filePath, []byte("{invalid json}"), 0644); err != nil {
@@ -394,11 +406,11 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 		// 验证
 		assert.Nil(t, config)
 		assert.ErrorContains(t, err, "解析codebase文件失败")
-		// logger.AssertCalled(t, "Info", "加载codebase文件内容: %s", mock.Anything)
+
+		logger.AssertCalled(t, "Info", "加载codebase文件内容: %s", mock.Anything)
 	})
 
 	t.Run("CodebaseId不匹配", func(t *testing.T) {
-		logger := &MockLogger{}
 		tempDir := t.TempDir()
 		filePath := filepath.Join(tempDir, "mismatch")
 		testData := `{"codebaseId":"other-id","lastSync":"2025-01-01T00:00:00Z"}`
@@ -418,12 +430,12 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 
 		// 验证
 		assert.Nil(t, config)
-		assert.ErrorContains(t, err, "codebase目录中的coebase文件ID不匹配")
-		// logger.AssertCalled(t, "Info", "加载codebase文件内容: %s", mock.Anything)
+		assert.ErrorContains(t, err, "coebaseId不匹配")
+
+		logger.AssertCalled(t, "Info", "加载codebase文件内容: %s", mock.Anything)
 	})
 
 	t.Run("成功加载配置", func(t *testing.T) {
-		logger := &MockLogger{}
 		tempDir := t.TempDir()
 		filePath := filepath.Join(tempDir, "valid.json")
 		testData := `{"codebaseId":"valid.json","lastSync":"2025-01-01T00:00:00Z"}`
@@ -438,8 +450,6 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 			mutex:           sync.RWMutex{},
 		}
 
-		// logger.On("Info", "成功加载codebase文件，上次同步时间: %s", mock.Anything).Return()
-
 		// 模拟调用
 		config, err := cm.loadCodebaseConfig("valid.json")
 
@@ -447,12 +457,12 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, config)
 		assert.Equal(t, "valid.json", config.CodebaseId)
-		// logger.AssertCalled(t, "Info", "加载codebase文件内容: %s", mock.Anything)
-		// logger.AssertCalled(t, "Info", "成功加载codebase文件，上次同步时间: %s", mock.Anything)
+
+		logger.AssertCalled(t, "Info", "加载codebase文件内容: %s", mock.Anything)
+		logger.AssertCalled(t, "Info", "成功加载codebase文件，上次同步时间: %s", mock.Anything)
 	})
 
 	t.Run("并发读取安全", func(t *testing.T) {
-		logger := &MockLogger{}
 		tempDir := t.TempDir()
 		filePath := filepath.Join(tempDir, "concurrent.json")
 		testData := `{"codebaseId":"concurrent.json","lastSync":"2025-01-01T00:00:00Z"}`
@@ -473,6 +483,9 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 				defer wg.Done()
 				_, err := cm.loadCodebaseConfig("concurrent.json")
 				assert.NoError(t, err)
+
+				logger.AssertCalled(t, "Info", "加载codebase文件内容: %s", mock.Anything)
+				logger.AssertCalled(t, "Info", "成功加载codebase文件，上次同步时间: %s", mock.Anything)
 			}()
 		}
 		wg.Wait()
@@ -481,6 +494,8 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 
 func TestSaveCodebaseConfig(t *testing.T) {
 	logger := &MockLogger{}
+	logger.On("Info", mock.Anything, mock.Anything).Return()
+
 	config := &CodebaseConfig{
 		CodebaseId:   "test123",
 		CodebasePath: "/test/path",
@@ -508,20 +523,6 @@ func TestSaveCodebaseConfig(t *testing.T) {
 			config:  config,
 			wantErr: false,
 		},
-		// {
-		// 	name: "fail on json marshal",
-		// 	prepare: func() *StorageManager {
-		// 		return &StorageManager{
-		// 			logger:          logger,
-		// 			codebasePath:    tempDir,
-		// 			codebaseConfigs: make(map[string]*CodebaseConfig),
-		// 			mutex:           sync.RWMutex{},
-		// 		}
-		// 	},
-		// 	config:      nil,
-		// 	wantErr:     true,
-		// 	expectError: "序列化配置失败",
-		// },
 		{
 			name: "fail on write file",
 			prepare: func() *StorageManager {
@@ -542,6 +543,7 @@ func TestSaveCodebaseConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cm := tt.prepare()
 			err := cm.SaveCodebaseConfig(tt.config)
+			logger.AssertCalled(t, "Info", "保存codebase配置: %s", mock.Anything)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SaveCodebaseConfig() error = %v, wantErr %v", err, tt.wantErr)
@@ -560,6 +562,8 @@ func TestSaveCodebaseConfig(t *testing.T) {
 				if cm.codebaseConfigs[tt.config.CodebaseId] == nil {
 					t.Errorf("memory config not saved")
 				}
+
+				logger.AssertCalled(t, "Info", "codebase配置保存成功, path: %s, codebaseId: %s", mock.Anything, mock.Anything)
 			}
 		})
 	}
@@ -567,7 +571,7 @@ func TestSaveCodebaseConfig(t *testing.T) {
 
 func TestDeleteCodebaseConfig(t *testing.T) {
 	logger := &MockLogger{}
-	// logger.On("Info", mock.Anything, mock.Anything).Return()
+	logger.On("Info", mock.Anything, mock.Anything).Return()
 
 	t.Run("删除内存和文件中的配置", func(t *testing.T) {
 		tempDir := t.TempDir()
@@ -605,8 +609,7 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 		// 验证内存中的配置已删除
 		assert.Nil(t, cm.codebaseConfigs[codebaseId])
 
-		// 验证日志调用
-		// logger.AssertCalled(t, "Info", "codebase配置已删除: %s (文件+内存)", mock.Anything)
+		logger.AssertCalled(t, "Info", "codebase配置已删除: %s (文件+内存)", mock.Anything)
 	})
 
 	t.Run("仅删除内存中的配置（当文件不存在时）", func(t *testing.T) {
@@ -629,8 +632,7 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 		// 验证内存中的配置已删除
 		assert.Nil(t, cm.codebaseConfigs[codebaseId])
 
-		// 验证日志调用
-		// logger.AssertCalled(t, "Info", "仅内存中的codebase配置已删除: %s", codebaseId)
+		logger.AssertCalled(t, "Info", "codebase配置已删除: %s (仅内存)", mock.Anything)
 	})
 
 	t.Run("仅删除文件中的配置（当内存中不存在时）", func(t *testing.T) {
@@ -658,8 +660,7 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 		_, err = os.Stat(filePath)
 		assert.True(t, os.IsNotExist(err))
 
-		// 验证日志调用
-		// logger.AssertCalled(t, "Info", "codebase文件已删除: %s (仅文件)", mock.Anything)
+		logger.AssertCalled(t, "Info", "codebase文件已删除: %s (仅文件)", mock.Anything)
 	})
 
 	t.Run("删除不存在的配置", func(t *testing.T) {

@@ -11,10 +11,16 @@ import (
 	"path/filepath"
 	"time"
 
-	"codebase-syncer/internal/storage"
 	"codebase-syncer/pkg/logger"
 
 	gitignore "github.com/sabhiram/go-gitignore"
+)
+
+// 文件状态常量
+const (
+	FILE_STATUS_ADDED    = "add"
+	FILE_STATUS_MODIFIED = "modify"
+	FILE_STATUS_DELETED  = "delete"
 )
 
 // 默认过滤规则
@@ -32,6 +38,13 @@ var defaultIgnore = []string{
 
 // 最大文件大小（1MB）
 var maxFileSize int64 = 1 * 1024 * 1024 // 1MB
+
+// 同步文件信息
+type FileStatus struct {
+	Path   string `json:"path"`
+	Hash   string `json:"hash"`
+	Status string `json:"status"`
+}
 
 type FileScanner struct {
 	logger logger.Logger
@@ -174,24 +187,24 @@ func (fs *FileScanner) ScanDirectory(codebasePath string) (map[string]string, er
 }
 
 // 计算文件差异 TODO: 待优化
-func (fs *FileScanner) CalculateFileChanges(local, remote map[string]string) []*storage.SyncFile {
-	var changes []*storage.SyncFile
+func (fs *FileScanner) CalculateFileChanges(local, remote map[string]string) []*FileStatus {
+	var changes []*FileStatus
 
 	// 检查新增或修改的文件
 	for path, localHash := range local {
 		if remoteHash, exists := remote[path]; !exists {
 			// 新增文件
-			changes = append(changes, &storage.SyncFile{
+			changes = append(changes, &FileStatus{
 				Path:   path,
 				Hash:   localHash,
-				Status: storage.FILE_STATUS_ADDED,
+				Status: FILE_STATUS_ADDED,
 			})
 		} else if localHash != remoteHash {
 			// 修改的文件
-			changes = append(changes, &storage.SyncFile{
+			changes = append(changes, &FileStatus{
 				Path:   path,
 				Hash:   localHash,
-				Status: storage.FILE_STATUS_MODIFIED,
+				Status: FILE_STATUS_MODIFIED,
 			})
 		}
 	}
@@ -199,10 +212,10 @@ func (fs *FileScanner) CalculateFileChanges(local, remote map[string]string) []*
 	// 检查删除的文件
 	for path := range remote {
 		if _, exists := local[path]; !exists {
-			changes = append(changes, &storage.SyncFile{
+			changes = append(changes, &FileStatus{
 				Path:   path,
 				Hash:   "",
-				Status: storage.FILE_STATUS_DELETED,
+				Status: FILE_STATUS_DELETED,
 			})
 		}
 	}

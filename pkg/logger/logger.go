@@ -36,12 +36,23 @@ type logger struct {
 
 // 创建新日志实例
 func NewLogger(logsDir, level string) (Logger, error) {
-	// 确保logs目录存在
-	if _, err := os.Stat(logsDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(logsDir, 0755); err != nil {
-			return nil, fmt.Errorf("无法创建codebase目录: %v", err)
-		}
+	// 确保logs目录是有效的可写路径
+	if logsDir == "" || strings.Contains(logsDir, "\x00") {
+		return nil, fmt.Errorf("日志目录路径无效")
 	}
+
+	// 尝试创建目录来验证是否有写入权限
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		return nil, fmt.Errorf("无法创建日志目录: %v", err)
+	}
+
+	testFile := filepath.Join(logsDir, ".test-write")
+	file, err := os.Create(testFile)
+	if err != nil {
+		return nil, fmt.Errorf("目录不可写: %v", err)
+	}
+	file.Close()
+	os.Remove(testFile)
 
 	// 设置日志输出到文件和控制台
 	fileWriter := zapcore.AddSync(&lumberjack.Logger{
@@ -58,7 +69,6 @@ func NewLogger(logsDir, level string) (Logger, error) {
 		TimeKey:        "time",
 		LevelKey:       "level",
 		NameKey:        "logger",
-		CallerKey:      "caller",
 		FunctionKey:    zapcore.OmitKey,
 		MessageKey:     "msg",
 		StacktraceKey:  "stacktrace",
@@ -77,18 +87,18 @@ func NewLogger(logsDir, level string) (Logger, error) {
 
 	core := zapcore.NewTee(
 		zapcore.NewCore(
-			zapcore.NewJSONEncoder(encoderConfig),
+			zapcore.NewConsoleEncoder(encoderConfig),
 			zapcore.AddSync(os.Stdout),
 			logLevel,
 		),
 		zapcore.NewCore(
-			zapcore.NewJSONEncoder(encoderConfig),
+			zapcore.NewConsoleEncoder(encoderConfig),
 			fileWriter,
 			logLevel,
 		),
 	)
 
-	zapLogger := zap.New(core, zap.AddCaller())
+	zapLogger := zap.New(core)
 	sugar := zapLogger.Sugar()
 
 	return &logger{

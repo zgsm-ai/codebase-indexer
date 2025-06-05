@@ -12,13 +12,6 @@ import (
 	"codebase-syncer/pkg/logger"
 )
 
-// 文件状态常量
-const (
-	FILE_STATUS_ADDED    = "add"
-	FILE_STATUS_MODIFIED = "modify"
-	FILE_STATUS_DELETED  = "delete"
-)
-
 // codebase配置
 type CodebaseConfig struct {
 	ClientID     string            `json:"clientId"`
@@ -30,13 +23,6 @@ type CodebaseConfig struct {
 	RegisterTime time.Time         `json:"registerTime"`
 }
 
-// 同步文件信息
-type SyncFile struct {
-	Path   string `json:"path"`
-	Hash   string `json:"hash"`
-	Status string `json:"status"`
-}
-
 type StorageManager struct {
 	codebasePath    string
 	codebaseConfigs map[string]*CodebaseConfig // 存储所有codebase 配置
@@ -45,12 +31,12 @@ type StorageManager struct {
 }
 
 // NewStorageManager 创建一个新的配置管理器
-func NewStorageManager(cacheDir string, logger logger.Logger) *StorageManager {
+func NewStorageManager(cacheDir string, logger logger.Logger) (*StorageManager, error) {
 	// 确保codebase目录存在
 	codebasePath := filepath.Join(cacheDir, "codebase")
 	if _, err := os.Stat(codebasePath); os.IsNotExist(err) {
 		if err := os.MkdirAll(codebasePath, 0755); err != nil {
-			logger.Fatal("无法创建codebase目录: %v", err)
+			return nil, fmt.Errorf("无法创建codebase目录: %v", err)
 		}
 	}
 
@@ -62,7 +48,7 @@ func NewStorageManager(cacheDir string, logger logger.Logger) *StorageManager {
 	}
 
 	sm.loadAllConfigs()
-	return sm
+	return sm, nil
 }
 
 // GetCodebaseConfigs 获取所有项目配置
@@ -98,9 +84,7 @@ func (cm *StorageManager) GetCodebaseConfig(codebaseId string) (*CodebaseConfig,
 func (cm *StorageManager) loadAllConfigs() {
 	files, err := os.ReadDir(cm.codebasePath)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			cm.logger.Error("读取codebase目录失败: %v", err)
-		}
+		cm.logger.Error("读取codebase目录失败: %v", err)
 		return
 	}
 
@@ -141,7 +125,7 @@ func (cm *StorageManager) loadCodebaseConfig(codebaseId string) (*CodebaseConfig
 	}
 
 	if config.CodebaseId != codebaseId {
-		return nil, fmt.Errorf("codebase目录中的coebase文件ID不匹配: 期望 %s，实际 %s",
+		return nil, fmt.Errorf("coebaseId不匹配: 期望 %s，实际 %s",
 			codebaseId, config.CodebaseId)
 	}
 
@@ -151,12 +135,12 @@ func (cm *StorageManager) loadCodebaseConfig(codebaseId string) (*CodebaseConfig
 	return &config, nil
 }
 
-// SaveCodebaseConfig 保存项目配置
+// SaveCodebaseConfig 保存codebase 配置
 func (cm *StorageManager) SaveCodebaseConfig(config *CodebaseConfig) error {
 	if config == nil {
 		return fmt.Errorf("codebase配置为空: %v", config)
 	}
-	cm.logger.Info("保存项目配置: %s", config.CodebasePath)
+	cm.logger.Info("保存codebase配置: %s", config.CodebasePath)
 
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
@@ -173,7 +157,7 @@ func (cm *StorageManager) SaveCodebaseConfig(config *CodebaseConfig) error {
 
 	// 原子性更新内存配置
 	cm.codebaseConfigs[config.CodebaseId] = config
-	cm.logger.Info("项目配置保存成功, path: %s, codebaseId: %s", filePath, config.CodebaseId)
+	cm.logger.Info("codebase配置保存成功, path: %s, codebaseId: %s", filePath, config.CodebaseId)
 	return nil
 }
 
@@ -191,7 +175,7 @@ func (cm *StorageManager) DeleteCodebaseConfig(codebaseId string) error {
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		if exists {
 			delete(cm.codebaseConfigs, codebaseId)
-			cm.logger.Info("仅内存中的codebase配置已删除: %s", codebaseId)
+			cm.logger.Info("codebase配置已删除: %s (仅内存)", codebaseId)
 		}
 		return nil
 	}

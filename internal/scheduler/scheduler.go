@@ -108,9 +108,9 @@ func (s *Scheduler) performSync() {
 	codebaseConfigs := s.storage.GetCodebaseConfigs()
 	for _, config := range codebaseConfigs {
 		if config.RegisterTime.IsZero() || time.Since(config.RegisterTime) > syncConfigTimeout {
-			s.logger.Info("codebase %s 上次注册时间已超时，删除配置，跳过同步", config.CodebaseId)
+			s.logger.Info("codebase %s 注册已过期，删除配置，跳过同步", config.CodebaseId)
 			if err := s.storage.DeleteCodebaseConfig(config.CodebaseId); err != nil {
-				s.logger.Error("获取codebase配置失败: %v", err)
+				s.logger.Error("删除codebase配置失败: %v", err)
 			}
 			continue
 		}
@@ -138,7 +138,7 @@ func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) {
 		s.logger.Info("本地哈希树为空，从服务器获取")
 		serverHashTree, err = s.httpSync.FetchServerHashTree(config.CodebasePath)
 		if err != nil {
-			s.logger.Error("从服务器获取哈希树失败: %v", err)
+			s.logger.Warn("从服务器获取哈希树失败: %v", err)
 			// 没有服务器哈希树，使用空哈希树进行全量同步
 			serverHashTree = make(map[string]string)
 		}
@@ -178,7 +178,7 @@ type SyncMetadata struct {
 }
 
 // processFileChanges 处理文件变更，将上传逻辑封装
-func (s *Scheduler) processFileChanges(config *storage.CodebaseConfig, changes []*storage.SyncFile) error {
+func (s *Scheduler) processFileChanges(config *storage.CodebaseConfig, changes []*scanner.FileStatus) error {
 	uploadReq := &syncer.UploadReq{
 		ClientId:     config.ClientID,
 		CodebasePath: config.CodebasePath,
@@ -195,12 +195,12 @@ func (s *Scheduler) processFileChanges(config *storage.CodebaseConfig, changes [
 
 	var errUpload error
 	for i := 0; i < maxRetries; i++ {
-		errUpload = s.httpSync.UploadZipFile(zipPath, uploadReq)
+		errUpload = s.httpSync.UploadFile(zipPath, uploadReq)
 		if errUpload == nil {
 			s.logger.Info("zip文件上报成功")
 			break
 		}
-		s.logger.Error("上报zip文件失败 (尝试 %d/%d): %v", i+1, maxRetries, errUpload)
+		s.logger.Warn("上报zip文件失败 (尝试 %d/%d): %v", i+1, maxRetries, errUpload)
 		if i < maxRetries-1 {
 			s.logger.Info("等待 %v 后重试...", retryDelay*time.Duration(i+1))
 			time.Sleep(retryDelay * time.Duration(i+1))
@@ -223,7 +223,7 @@ func (s *Scheduler) processFileChanges(config *storage.CodebaseConfig, changes [
 }
 
 // createChangesZip 创建包含文件变更和元数据的zip文件
-func (s *Scheduler) createChangesZip(config *storage.CodebaseConfig, changes []*storage.SyncFile) (string, error) {
+func (s *Scheduler) createChangesZip(config *storage.CodebaseConfig, changes []*scanner.FileStatus) (string, error) {
 	zipDir := filepath.Join(utils.UploadTmpDir, "zip")
 	if err := os.MkdirAll(zipDir, 0755); err != nil {
 		return "", err
@@ -256,10 +256,10 @@ func (s *Scheduler) createChangesZip(config *storage.CodebaseConfig, changes []*
 		metadata.FileList[filePath] = change.Status
 
 		// 只将新增和修改的文件添加到zip包
-		if change.Status == storage.FILE_STATUS_ADDED || change.Status == storage.FILE_STATUS_MODIFIED {
+		if change.Status == scanner.FILE_STATUS_ADDED || change.Status == scanner.FILE_STATUS_MODIFIED {
 			if err := utils.AddFileToZip(zipWriter, change.Path, config.CodebasePath); err != nil {
-				s.logger.Error("添加文件到zip失败: %s, 错误: %v", change.Path, err)
 				// 继续尝试添加其他文件，但记录错误
+				s.logger.Warn("添加文件到zip失败: %s, 错误: %v", change.Path, err)
 			}
 		}
 	}

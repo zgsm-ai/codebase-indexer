@@ -8,12 +8,10 @@ import (
 	"io"
 	"mime/multipart"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"time"
 
-	"codebase-syncer/internal/storage"
 	"codebase-syncer/pkg/logger"
 
 	"github.com/valyala/fasthttp"
@@ -97,7 +95,7 @@ func (hs *HTTPSync) FetchServerHashTree(codebasePath string) (map[string]string,
 
 	hs.logger.Debug("发送获取哈希树请求到: %s", url)
 	if err := hs.httpClient.Do(req, resp); err != nil {
-		return nil, fmt.Errorf("发送获取哈希树请求失败: %v", err)
+		return nil, fmt.Errorf("发送请求失败: %v", err)
 	}
 
 	// 处理响应
@@ -108,7 +106,7 @@ func (hs *HTTPSync) FetchServerHashTree(codebasePath string) (map[string]string,
 
 	var responseData ComparisonResp
 	if err := json.Unmarshal(resp.Body(), &responseData); err != nil {
-		return nil, fmt.Errorf("解析哈希树响应失败: %v", err)
+		return nil, fmt.Errorf("解析响应失败: %v", err)
 	}
 
 	hashTree := make(map[string]string)
@@ -130,63 +128,11 @@ type UploadReq struct {
 	CodebaseName string `json:"codebaseName"`
 }
 
-// 上传文件
-func (hs *HTTPSync) UploadFile(syncFile *storage.SyncFile, uploadReq *UploadReq) error {
-	hs.logger.Info("上传文件: %s，状态: %s", syncFile.Path, syncFile.Status)
+// UploadFile 上传文件到服务器
+func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
+	hs.logger.Info("上传文件: %s", filePath)
 
-	// 准备请求数据
-	filePath := path.Join(uploadReq.CodebasePath, syncFile.Path)
 	file, err := os.Open(filePath)
-	if err != nil {
-		return fmt.Errorf("打开文件失败: %v", err)
-	}
-	defer file.Close()
-
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("file", syncFile.Path)
-	io.Copy(part, file)
-	writer.WriteField("project", uploadReq.CodebaseName) // TODO: 测试，后续删除
-	writer.WriteField("clientId", uploadReq.ClientId)
-	writer.WriteField("codebasePath", uploadReq.CodebasePath)
-	writer.WriteField("codebaseName", uploadReq.CodebaseName)
-	writer.Close()
-
-	// 发送请求
-	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_UPLOAD_FILE)
-
-	req := fasthttp.AcquireRequest()
-	resp := fasthttp.AcquireResponse()
-	defer func() {
-		fasthttp.ReleaseRequest(req)
-		fasthttp.ReleaseResponse(resp)
-	}()
-
-	req.SetRequestURI(url)
-	req.Header.SetMethod("POST")
-	req.Header.SetContentType(writer.FormDataContentType())
-	// req.Header.SetCookie("Authorization", "Bearer "+hs.syncConfig.Token)
-	req.SetBody(body.Bytes())
-
-	hs.logger.Debug("发送上传请求到: %s，文件: %s", url, syncFile.Path)
-	if err := hs.httpClient.Do(req, resp); err != nil {
-		return fmt.Errorf("发送上传请求失败: %v", err)
-	}
-
-	// 处理响应
-	if resp.StatusCode() != fasthttp.StatusOK {
-		return fmt.Errorf("上传文件失败，状态码: %d，响应: %s", resp.StatusCode(), string(resp.Body()))
-	}
-
-	hs.logger.Info("文件上传成功: %s", syncFile.Path)
-	return nil
-}
-
-// UploadZipFile 上传zip文件到服务器
-func (hs *HTTPSync) UploadZipFile(zipPath string, uploadReq *UploadReq) error {
-	hs.logger.Info("上传zip文件: %s", zipPath)
-
-	file, err := os.Open(zipPath)
 	if err != nil {
 		return fmt.Errorf("打开zip文件失败: %v", err)
 	}
@@ -196,7 +142,7 @@ func (hs *HTTPSync) UploadZipFile(zipPath string, uploadReq *UploadReq) error {
 	writer := multipart.NewWriter(body)
 
 	// 添加zip文件
-	part, err := writer.CreateFormFile("file", filepath.Base(zipPath))
+	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
 	if err != nil {
 		return fmt.Errorf("创建表单文件失败: %v", err)
 	}
@@ -226,10 +172,10 @@ func (hs *HTTPSync) UploadZipFile(zipPath string, uploadReq *UploadReq) error {
 	req.SetRequestURI(url)
 	req.Header.SetMethod("POST")
 	req.Header.SetContentType(writer.FormDataContentType())
-	// req.Header.SetCookie("Authorization", "Bearer "+hs.syncConfig.Token)
+	req.Header.SetCookie("Authorization", "Bearer "+hs.syncConfig.Token)
 	req.SetBody(body.Bytes())
 
-	hs.logger.Debug("发送zip上传请求到: %s", url)
+	hs.logger.Debug("发送文件上传请求到: %s", url)
 	if err := hs.httpClient.Do(req, resp); err != nil {
 		return fmt.Errorf("发送请求失败: %v", err)
 	}
@@ -238,6 +184,6 @@ func (hs *HTTPSync) UploadZipFile(zipPath string, uploadReq *UploadReq) error {
 		return fmt.Errorf("上传失败，状态码: %d，响应: %s", resp.StatusCode(), string(resp.Body()))
 	}
 
-	hs.logger.Info("zip文件上传成功: %s", zipPath)
+	hs.logger.Info("文件上传成功: %s", filePath)
 	return nil
 }

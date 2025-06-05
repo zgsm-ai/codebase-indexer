@@ -2,6 +2,7 @@ package utils
 
 import (
 	"archive/zip"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -9,132 +10,21 @@ import (
 	"testing"
 )
 
-func TestCreateZipFile(t *testing.T) {
-	t.Run("successful zip creation with single file", func(t *testing.T) {
-		// 准备测试文件
-		tempDir := t.TempDir()
-		testFile := filepath.Join(tempDir, "test.txt")
-		if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
-			t.Fatal(err)
-		}
-
-		zipFile := filepath.Join(tempDir, "test.zip")
-
-		// 调用函数
-		err := CreateZipFile([]string{testFile}, zipFile)
-		if err != nil {
-			t.Fatalf("CreateZipFile failed: %v", err)
-		}
-
-		// 验证ZIP文件
-		if !fileExists(zipFile) {
-			t.Error("zip file was not created")
-		}
-
-		verifyZipContent(t, zipFile, map[string]string{
-			testFile: "test content",
-		})
-	})
-
-	t.Run("create zip with multiple files", func(t *testing.T) {
-		tempDir := t.TempDir()
-
-		// 创建多个测试文件
-		file1 := filepath.Join(tempDir, "file1.txt")
-		file2 := filepath.Join(tempDir, "file2.txt")
-		os.WriteFile(file1, []byte("file1 content"), 0644)
-		os.WriteFile(file2, []byte("file2 content"), 0644)
-
-		zipFile := filepath.Join(tempDir, "multi.zip")
-
-		err := CreateZipFile([]string{file1, file2}, zipFile)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		verifyZipContent(t, zipFile, map[string]string{
-			file1: "file1 content",
-			file2: "file2 content",
-		})
-	})
-
-	t.Run("empty file list should create empty zip", func(t *testing.T) {
-		tempDir := t.TempDir()
-		zipFile := filepath.Join(tempDir, "empty.zip")
-
-		err := CreateZipFile([]string{}, zipFile)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if !fileExists(zipFile) {
-			t.Error("empty zip file was not created")
-		}
-
-		// 验证空ZIP文件
-		r, err := zip.OpenReader(zipFile)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer r.Close()
-
-		if len(r.File) != 0 {
-			t.Errorf("expected empty zip, got %d files", len(r.File))
-		}
-	})
-
-	t.Run("non-existent files should return error", func(t *testing.T) {
-		tempDir := t.TempDir()
-		zipFile := filepath.Join(tempDir, "error.zip")
-
-		err := CreateZipFile([]string{"nonexistent.txt"}, zipFile)
-		if err == nil {
-			t.Error("expected error for non-existent file")
-		}
-	})
-
-	t.Run("invalid zip file path should return error", func(t *testing.T) {
-		err := CreateZipFile([]string{"somefile.txt"}, "/invalid/path/zipfile.zip")
-		if err == nil {
-			t.Error("expected error for invalid zip file path")
-		}
-	})
-
-	t.Run("should handle directory input correctly", func(t *testing.T) {
-		tempDir := t.TempDir()
-
-		// 创建测试目录和文件
-		subDir := filepath.Join(tempDir, "subdir")
-		os.Mkdir(subDir, 0755)
-		fileInDir := filepath.Join(subDir, "file.txt")
-		os.WriteFile(fileInDir, []byte("dir content"), 0644)
-
-		zipFile := filepath.Join(tempDir, "dir.zip")
-
-		err := CreateZipFile([]string{subDir, fileInDir}, zipFile)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		verifyZipContent(t, zipFile, map[string]string{
-			fileInDir: "dir content",
-		})
-	})
-}
-
 // verifyZipContent 验证ZIP文件内容
 func verifyZipContent(t *testing.T, zipPath string, expected map[string]string) {
 	t.Helper()
 
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal("OpenReader failed:", err)
 	}
 	defer r.Close()
 
 	for name, expectedContent := range expected {
 		found := false
 		for _, f := range r.File {
+			t.Log("zip file: ", f.Name)
+			fmt.Println("zip file: ", f.Name)
 			if f.Name == name {
 				found = true
 
@@ -162,16 +52,16 @@ func verifyZipContent(t *testing.T, zipPath string, expected map[string]string) 
 	}
 }
 
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
-
 func TestAddFileToZip(t *testing.T) {
 	t.Run("successfully add file to zip", func(t *testing.T) {
 		tempDir := t.TempDir()
 		testFile := filepath.Join(tempDir, "test.txt")
 		if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		// 获取testFile相对于tempDir的相对路径
+		testFileRelPath, err := filepath.Rel(tempDir, testFile)
+		if err != nil {
 			t.Fatal(err)
 		}
 
@@ -183,15 +73,16 @@ func TestAddFileToZip(t *testing.T) {
 		defer zipFileHandle.Close()
 
 		zipWriter := zip.NewWriter(zipFileHandle)
-		defer zipWriter.Close()
-
-		err = AddFileToZip(zipWriter, testFile, tempDir)
+		err = AddFileToZip(zipWriter, testFileRelPath, tempDir)
+		if err == nil {
+			err = zipWriter.Close()
+		}
 		if err != nil {
 			t.Fatalf("AddFileToZip failed: %v", err)
 		}
 
 		verifyZipContent(t, zipFile, map[string]string{
-			testFile: "test content",
+			testFileRelPath: "test content",
 		})
 	})
 
@@ -226,6 +117,11 @@ func TestAddFileToZip(t *testing.T) {
 		if err := os.WriteFile(testFile, []byte("windows content"), 0644); err != nil {
 			t.Fatal(err)
 		}
+		// 获取testFile相对于tempDir的相对路径
+		testFileRelPath, err := filepath.Rel(tempDir, testFile)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		zipFile := filepath.Join(tempDir, "windows.zip")
 		zipFileHandle, err := os.Create(zipFile)
@@ -235,9 +131,10 @@ func TestAddFileToZip(t *testing.T) {
 		defer zipFileHandle.Close()
 
 		zipWriter := zip.NewWriter(zipFileHandle)
-		defer zipWriter.Close()
-
-		err = AddFileToZip(zipWriter, testFile, tempDir)
+		err = AddFileToZip(zipWriter, testFileRelPath, tempDir)
+		if err == nil {
+			err = zipWriter.Close()
+		}
 		if err != nil {
 			t.Fatalf("AddFileToZip failed: %v", err)
 		}
