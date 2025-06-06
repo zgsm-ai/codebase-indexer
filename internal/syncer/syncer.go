@@ -134,7 +134,7 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 
 	file, err := os.Open(filePath)
 	if err != nil {
-		return fmt.Errorf("打开zip文件失败: %v", err)
+		return fmt.Errorf("打开文件失败: %v", err)
 	}
 	defer file.Close()
 

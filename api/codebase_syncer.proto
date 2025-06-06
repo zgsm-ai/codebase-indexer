@@ -40,8 +40,26 @@ message UnregisterSyncRequest {
     string workspace_name = 3;     // 工作区名称
 }
 
+// 版本信息请求
+message VersionRequest {
+    string client_id = 1;  // 客户ID
+}
+
+// 版本信息响应
+message VersionResponse {
+    message Data {
+        string version = 1;  // 版本号
+        string app_name = 2;  // 应用名称
+        string os_name = 3;  // 操作系统名称
+        string arch_name = 4;  // 架构名称
+    }
+    bool success = 1;           // 是否成功
+    string message = 2;         // 消息
+    Data data = 3;              // 数据
+}
+
 // 同步服务定义
-service SyncService {    
+service SyncService {
     // 注册项目同步
     rpc RegisterSync(RegisterSyncRequest) returns (RegisterSyncResponse);
     
@@ -50,4 +68,7 @@ service SyncService {
     
     // 共享 AccessToken（明文传输，服务端加密存储）
     rpc ShareAccessToken(ShareAccessTokenRequest) returns (ShareAccessTokenResponse);
+
+    // 获取应用名称和版本信息
+    rpc GetVersion(VersionRequest) returns (VersionResponse);
 }

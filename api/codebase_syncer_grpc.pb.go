@@ -23,6 +23,7 @@ const (
 	SyncService_RegisterSync_FullMethodName     = "/codebase_syncer.SyncService/RegisterSync"
 	SyncService_UnregisterSync_FullMethodName   = "/codebase_syncer.SyncService/UnregisterSync"
 	SyncService_ShareAccessToken_FullMethodName = "/codebase_syncer.SyncService/ShareAccessToken"
+	SyncService_GetVersion_FullMethodName       = "/codebase_syncer.SyncService/GetVersion"
 )
 
 // SyncServiceClient is the client API for SyncService service.
@@ -37,6 +38,8 @@ type SyncServiceClient interface {
 	UnregisterSync(ctx context.Context, in *UnregisterSyncRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 共享 AccessToken（明文传输，服务端加密存储）
 	ShareAccessToken(ctx context.Context, in *ShareAccessTokenRequest, opts ...grpc.CallOption) (*ShareAccessTokenResponse, error)
+	// 获取应用名称和版本信息
+	GetVersion(ctx context.Context, in *VersionRequest, opts ...grpc.CallOption) (*VersionResponse, error)
 }
 
 type syncServiceClient struct {
@@ -77,6 +80,16 @@ func (c *syncServiceClient) ShareAccessToken(ctx context.Context, in *ShareAcces
 	return out, nil
 }
 
+func (c *syncServiceClient) GetVersion(ctx context.Context, in *VersionRequest, opts ...grpc.CallOption) (*VersionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VersionResponse)
+	err := c.cc.Invoke(ctx, SyncService_GetVersion_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SyncServiceServer is the server API for SyncService service.
 // All implementations must embed UnimplementedSyncServiceServer
 // for forward compatibility.
@@ -89,6 +102,8 @@ type SyncServiceServer interface {
 	UnregisterSync(context.Context, *UnregisterSyncRequest) (*emptypb.Empty, error)
 	// 共享 AccessToken（明文传输，服务端加密存储）
 	ShareAccessToken(context.Context, *ShareAccessTokenRequest) (*ShareAccessTokenResponse, error)
+	// 获取应用名称和版本信息
+	GetVersion(context.Context, *VersionRequest) (*VersionResponse, error)
 	mustEmbedUnimplementedSyncServiceServer()
 }
 
@@ -107,6 +122,9 @@ func (UnimplementedSyncServiceServer) UnregisterSync(context.Context, *Unregiste
 }
 func (UnimplementedSyncServiceServer) ShareAccessToken(context.Context, *ShareAccessTokenRequest) (*ShareAccessTokenResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ShareAccessToken not implemented")
+}
+func (UnimplementedSyncServiceServer) GetVersion(context.Context, *VersionRequest) (*VersionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetVersion not implemented")
 }
 func (UnimplementedSyncServiceServer) mustEmbedUnimplementedSyncServiceServer() {}
 func (UnimplementedSyncServiceServer) testEmbeddedByValue()                     {}
@@ -183,6 +201,24 @@ func _SyncService_ShareAccessToken_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SyncService_GetVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(VersionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SyncServiceServer).GetVersion(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SyncService_GetVersion_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SyncServiceServer).GetVersion(ctx, req.(*VersionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SyncService_ServiceDesc is the grpc.ServiceDesc for SyncService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -201,6 +237,10 @@ var SyncService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ShareAccessToken",
 			Handler:    _SyncService_ShareAccessToken_Handler,
+		},
+		{
+			MethodName: "GetVersion",
+			Handler:    _SyncService_GetVersion_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

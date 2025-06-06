@@ -22,21 +22,34 @@ type GRPCHandler struct {
 	httpSync *syncer.HTTPSync
 	storage  *storage.StorageManager
 	logger   logger.Logger
+	appName  string
+	version  string
+	osName   string
+	archName string
 	api.UnimplementedSyncServiceServer
 }
 
 // NewGRPCHandler 创建新的gRPC处理器
-func NewGRPCHandler(httpSync *syncer.HTTPSync, storage *storage.StorageManager, logger logger.Logger) *GRPCHandler {
+func NewGRPCHandler(httpSync *syncer.HTTPSync, storage *storage.StorageManager, logger logger.Logger, appName, version, osName, archName string) *GRPCHandler {
 	return &GRPCHandler{
 		httpSync: httpSync,
 		storage:  storage,
 		logger:   logger,
+		appName:  appName,
+		version:  version,
+		osName:   osName,
+		archName: archName,
 	}
 }
 
 // RegisterSync 注册同步
 func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncRequest) (*api.RegisterSyncResponse, error) {
-	h.logger.Info("接收到工作区注册请求: WorkspacePath=%s, WorkspaceName=%s, ClientId=%s", req.WorkspacePath, req.WorkspaceName, req.ClientId)
+	h.logger.Info("接收到工作区注册请求: WorkspacePath=%s, WorkspaceName=%s", req.WorkspacePath, req.WorkspaceName)
+	// 检查请求参数
+	if req.ClientId == "" || req.WorkspacePath == "" || req.WorkspaceName == "" {
+		h.logger.Error("工作区注册请求参数错误")
+		return &api.RegisterSyncResponse{Success: false, Message: "参数错误"}, nil
+	}
 
 	codebaseConfigsToRegister, err := h.findCodebasePathsToRegister(req.WorkspacePath, req.WorkspaceName)
 	if err != nil {
@@ -109,12 +122,17 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 // UnregisterSync 注销同步
 func (h *GRPCHandler) UnregisterSync(ctx context.Context, req *api.UnregisterSyncRequest) (*emptypb.Empty, error) {
 	h.logger.Info("接收到工作区注销请求: WorkspacePath=%s, WorkspaceName=%s", req.WorkspacePath, req.WorkspaceName)
+	// 检查请求参数
+	if req.ClientId == "" || req.WorkspacePath == "" || req.WorkspaceName == "" {
+		h.logger.Error("工作区注销请求参数错误")
+		return &emptypb.Empty{}, fmt.Errorf("参数错误")
+	}
 
 	codebaseConfigsToUnregister, err := h.findCodebasePathsToRegister(req.WorkspacePath, req.WorkspaceName)
 	if err != nil {
 		h.logger.Error("查找待注销的codebase路径失败: %v. WorkspacePath=%s, WorkspaceName=%s", err, req.WorkspacePath, req.WorkspaceName)
 		// 即使查找失败，也尝试返回 Empty，因为注销操作的目标是清理，不应因查找阶段的错误而阻塞
-		return &emptypb.Empty{}, fmt.Errorf("查找待注销的codebase路径失败: %w", err) // 或者返回 nil error，仅记录日志
+		return &emptypb.Empty{}, fmt.Errorf("查找待注销的codebase路径失败: %v", err) // 或者返回 nil error，仅记录日志
 	}
 
 	if len(codebaseConfigsToUnregister) == 0 {
@@ -160,7 +178,7 @@ func (h *GRPCHandler) UnregisterSync(ctx context.Context, req *api.UnregisterSyn
 
 // ShareAccessToken 同步Token
 func (h *GRPCHandler) ShareAccessToken(ctx context.Context, req *api.ShareAccessTokenRequest) (*api.ShareAccessTokenResponse, error) {
-	h.logger.Info("接收到Token同步请求: %+v", req)
+	h.logger.Info("接收到Token同步请求: ClientId=%s, ServerEndpoint=%s", req.ClientId, req.ServerEndpoint)
 	if req.ClientId == "" || req.ServerEndpoint == "" || req.AccessToken == "" {
 		h.logger.Error("Token同步请求参数错误")
 		return &api.ShareAccessTokenResponse{Success: false, Message: "参数错误"}, nil
@@ -173,6 +191,25 @@ func (h *GRPCHandler) ShareAccessToken(ctx context.Context, req *api.ShareAccess
 	h.httpSync.SetSyncConfig(syncConfig)
 	h.logger.Info("更新全局token: %s, %s", req.ServerEndpoint, req.AccessToken)
 	return &api.ShareAccessTokenResponse{Success: true, Message: "ok"}, nil
+}
+
+// GetVersion 获取应用版本信息
+func (h *GRPCHandler) GetVersion(ctx context.Context, req *api.VersionRequest) (*api.VersionResponse, error) {
+	h.logger.Info("接收到版本信息请求: ClientId=%s", req.ClientId)
+	if req.ClientId == "" {
+		h.logger.Error("版本信息请求参数错误")
+		return &api.VersionResponse{Success: false, Message: "参数错误"}, nil
+	}
+	return &api.VersionResponse{
+		Success: true,
+		Message: "ok",
+		Data: &api.VersionResponse_Data{
+			AppName:  h.appName,
+			Version:  h.version,
+			OsName:   h.osName,
+			ArchName: h.archName,
+		},
+	}, nil
 }
 
 // isGitRepository 检查给定路径是否是一个 .git 仓库的根目录

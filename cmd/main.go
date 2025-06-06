@@ -25,13 +25,21 @@ import (
 
 var (
 	// version will be set by the linker during build
+	osName   string
+	archName string
 	version  string
 	interval = 1 * time.Minute // 同步间隔
 )
 
 func main() {
+	if osName != "" {
+		fmt.Printf("OS: %s\n", osName)
+	}
+	if archName != "" {
+		fmt.Printf("Arch: %s\n", archName)
+	}
 	if version != "" {
-		fmt.Printf("App Version: %s\n", version)
+		fmt.Printf("Version: %s\n", version)
 	}
 	// 解析命令行参数
 	appName := flag.String("appname", "zgsm", "应用名称")
@@ -51,7 +59,7 @@ func main() {
 		fmt.Printf("初始化日志系统失败: %v\n", err)
 		return
 	}
-	logger.Info("App: %s, Version: %s, 启动中...", *appName, version)
+	logger.Info("OS: %s, Arch: %s, App: %s, Version: %s, 启动中...", osName, archName, *appName, version)
 
 	// 初始化各模块
 	storageManager, err := storage.NewStorageManager(utils.CacheDir, logger)
@@ -61,7 +69,7 @@ func main() {
 	}
 	fileScanner := scanner.NewFileScanner(logger)
 	httpSync := syncer.NewHTTPSync(logger)
-	grpcHandler := handler.NewGRPCHandler(httpSync, storageManager, logger)
+	grpcHandler := handler.NewGRPCHandler(httpSync, storageManager, logger, *appName, version, osName, archName)
 	syncScheduler := scheduler.NewScheduler(interval, httpSync, fileScanner, storageManager, logger)
 
 	// 启动gRPC服务端

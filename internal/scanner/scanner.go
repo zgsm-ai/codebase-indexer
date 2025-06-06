@@ -186,7 +186,7 @@ func (fs *FileScanner) ScanDirectory(codebasePath string) (map[string]string, er
 	return hashTree, nil
 }
 
-// 计算文件差异 TODO: 待优化
+// 计算文件差异
 func (fs *FileScanner) CalculateFileChanges(local, remote map[string]string) []*FileStatus {
 	var changes []*FileStatus
 

@@ -179,46 +179,23 @@ type SyncMetadata struct {
 
 // processFileChanges 处理文件变更，将上传逻辑封装
 func (s *Scheduler) processFileChanges(config *storage.CodebaseConfig, changes []*scanner.FileStatus) error {
-	uploadReq := &syncer.UploadReq{
-		ClientId:     config.ClientID,
-		CodebasePath: config.CodebasePath,
-		CodebaseName: config.CodebaseName,
-	}
-
 	// 创建包含所有变更（新增和修改的文件）的zip文件
 	zipPath, err := s.createChangesZip(config, changes)
 	if err != nil {
 		return fmt.Errorf("创建zip文件失败: %v", err)
 	}
 
-	s.logger.Info("开始上报zip文件: %s", zipPath)
-
-	var errUpload error
-	for i := 0; i < maxRetries; i++ {
-		errUpload = s.httpSync.UploadFile(zipPath, uploadReq)
-		if errUpload == nil {
-			s.logger.Info("zip文件上报成功")
-			break
-		}
-		s.logger.Warn("上报zip文件失败 (尝试 %d/%d): %v", i+1, maxRetries, errUpload)
-		if i < maxRetries-1 {
-			s.logger.Info("等待 %v 后重试...", retryDelay*time.Duration(i+1))
-			time.Sleep(retryDelay * time.Duration(i+1))
-		}
+	// 上传zip文件
+	uploadReq := &syncer.UploadReq{
+		ClientId:     config.ClientID,
+		CodebasePath: config.CodebasePath,
+		CodebaseName: config.CodebaseName,
+	}
+	err = s.uploadChangesZip(zipPath, uploadReq)
+	if err != nil {
+		return fmt.Errorf("上传zip文件失败: %v", err)
 	}
 
-	// 上报结束后，无论成功与否，都尝试删除本地的zip文件
-	if zipPath != "" {
-		if err := os.Remove(zipPath); err != nil {
-			s.logger.Warn("删除临时zip文件失败: %s, 错误: %v", zipPath, err)
-		} else {
-			s.logger.Info("成功删除临时zip文件: %s", zipPath)
-		}
-	}
-
-	if errUpload != nil {
-		return fmt.Errorf("上报zip文件最终失败: %v", errUpload)
-	}
 	return nil
 }
 
@@ -281,4 +258,37 @@ func (s *Scheduler) createChangesZip(config *storage.CodebaseConfig, changes []*
 	}
 
 	return zipPath, nil
+}
+
+func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq *syncer.UploadReq) error {
+	s.logger.Info("开始上报zip文件: %s", zipPath)
+
+	var errUpload error
+	for i := 0; i < maxRetries; i++ {
+		errUpload = s.httpSync.UploadFile(zipPath, uploadReq)
+		if errUpload == nil {
+			s.logger.Info("zip文件上报成功")
+			break
+		}
+		s.logger.Warn("上报zip文件失败 (尝试 %d/%d): %v", i+1, maxRetries, errUpload)
+		if i < maxRetries-1 {
+			s.logger.Info("等待 %v 后重试...", retryDelay*time.Duration(i+1))
+			time.Sleep(retryDelay * time.Duration(i+1))
+		}
+	}
+
+	// 上报结束后，无论成功与否，都尝试删除本地的zip文件
+	if zipPath != "" {
+		if err := os.Remove(zipPath); err != nil {
+			s.logger.Warn("删除临时zip文件失败: %s, 错误: %v", zipPath, err)
+		} else {
+			s.logger.Info("成功删除临时zip文件: %s", zipPath)
+		}
+	}
+
+	if errUpload != nil {
+		return fmt.Errorf("上报zip文件最终失败: %v", errUpload)
+	}
+
+	return nil
 }

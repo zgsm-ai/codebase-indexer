@@ -43,8 +43,8 @@ MAIN_PACKAGE_PATH="cmd/main.go" # Adjust if your main package is elsewhere
 # For this to work, you'd need a variable in your Go main package, e.g.:
 # var version string
 # Then uncomment and adjust the line below:
-# LD_FLAGS="-s -w -X main.version=$APP_VERSION"
-LD_FLAGS="-s -w -X main.version=$APP_VERSION"
+# LD_FLAGS="-s -w -X main.version=$APP_VERSION -X main.osName=$TARGET_OS -X main.archName=$TARGET_ARCH"
+LD_FLAGS="-s -w -X main.version=$APP_VERSION -X main.osName=$TARGET_OS -X main.archName=$TARGET_ARCH"
 
 # Determine output filename
 OUTPUT_FILENAME="codebase-syncer_${APP_VERSION}_${TARGET_OS}_${TARGET_ARCH}"
