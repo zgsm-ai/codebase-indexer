@@ -29,13 +29,20 @@ type SyncConfig struct {
 	ServerURL string
 }
 
+type SyncInterface interface {
+	SetSyncConfig(config *SyncConfig)
+	GetSyncConfig() *SyncConfig
+	FetchServerHashTree(codebasePath string) (map[string]string, error)
+	UploadFile(codebasePath string, uploadRe *UploadReq) error
+}
+
 type HTTPSync struct {
 	syncConfig *SyncConfig
 	httpClient *fasthttp.Client
 	logger     logger.Logger
 }
 
-func NewHTTPSync(logger logger.Logger) *HTTPSync {
+func NewHTTPSync(logger logger.Logger) SyncInterface {
 	return &HTTPSync{
 		httpClient: &fasthttp.Client{
 			ReadTimeout:  60 * time.Second,

@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	api "codebase-syncer/api" // 已生成的protobuf包
 	"codebase-syncer/internal/daemon"
@@ -28,7 +27,6 @@ var (
 	osName   string
 	archName string
 	version  string
-	interval = 1 * time.Minute // 同步间隔
 )
 
 func main() {
@@ -70,7 +68,7 @@ func main() {
 	fileScanner := scanner.NewFileScanner(logger)
 	httpSync := syncer.NewHTTPSync(logger)
 	grpcHandler := handler.NewGRPCHandler(httpSync, storageManager, logger, *appName, version, osName, archName)
-	syncScheduler := scheduler.NewScheduler(interval, httpSync, fileScanner, storageManager, logger)
+	syncScheduler := scheduler.NewScheduler(httpSync, fileScanner, storageManager, logger)
 
 	// 启动gRPC服务端
 	lis, err := net.Listen("tcp", *grpcServer)

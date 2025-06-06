@@ -23,6 +23,13 @@ type CodebaseConfig struct {
 	RegisterTime time.Time         `json:"registerTime"`
 }
 
+type SotrageInterface interface {
+	GetCodebaseConfigs() map[string]*CodebaseConfig
+	GetCodebaseConfig(codebaseId string) (*CodebaseConfig, error)
+	SaveCodebaseConfig(config *CodebaseConfig) error
+	DeleteCodebaseConfig(codebaseId string) error
+}
+
 type StorageManager struct {
 	codebasePath    string
 	codebaseConfigs map[string]*CodebaseConfig // 存储所有codebase 配置

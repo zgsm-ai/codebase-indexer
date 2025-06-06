@@ -20,36 +20,34 @@ import (
 )
 
 var (
+	syncInterval      = 1 * time.Minute  // 同步间隔
 	syncConfigTimeout = 30 * time.Minute // 注册过期时间
 	maxRetries        = 3                // 最大重试次数
 	retryDelay        = 5 * time.Second  // 重试间隔
 )
 
 type Scheduler struct {
-	syncInterval time.Duration
-	httpSync     *syncer.HTTPSync
-	fileScanner  *scanner.FileScanner
-	storage      *storage.StorageManager
-	logger       logger.Logger
-	mutex        sync.Mutex
-	isRunning    bool
+	httpSync    syncer.SyncInterface
+	fileScanner *scanner.FileScanner
+	storage     *storage.StorageManager
+	logger      logger.Logger
+	mutex       sync.Mutex
+	isRunning   bool
 }
 
-func NewScheduler(syncInterval time.Duration, httpSync *syncer.HTTPSync,
-	fileScanner *scanner.FileScanner, storage *storage.StorageManager,
+func NewScheduler(httpSync syncer.SyncInterface, fileScanner *scanner.FileScanner, storage *storage.StorageManager,
 	logger logger.Logger) *Scheduler {
 	return &Scheduler{
-		syncInterval: syncInterval,
-		httpSync:     httpSync,
-		fileScanner:  fileScanner,
-		storage:      storage,
-		logger:       logger,
+		httpSync:    httpSync,
+		fileScanner: fileScanner,
+		storage:     storage,
+		logger:      logger,
 	}
 }
 
 // 启动调度器
 func (s *Scheduler) Start(ctx context.Context) {
-	s.logger.Info("启动同步调度器，间隔: %v", s.syncInterval)
+	s.logger.Info("启动同步调度器，间隔: %v", syncInterval)
 
 	// 立即执行一次同步
 	if s.httpSync.GetSyncConfig() == nil {
@@ -59,7 +57,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 	}
 
 	// 设置定时器
-	ticker := time.NewTicker(s.syncInterval)
+	ticker := time.NewTicker(syncInterval)
 	defer ticker.Stop()
 
 	for {
@@ -79,10 +77,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 
 // 设置同步间隔
 func (s *Scheduler) SetSyncInterval(interval time.Duration) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	s.syncInterval = interval
+	syncInterval = interval
 	s.logger.Info("同步间隔已更新为: %v", interval)
 }
 

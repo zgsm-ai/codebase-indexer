@@ -19,7 +19,7 @@ import (
 
 // GRPCHandler gRPC服务处理
 type GRPCHandler struct {
-	httpSync *syncer.HTTPSync
+	httpSync syncer.SyncInterface
 	storage  *storage.StorageManager
 	logger   logger.Logger
 	appName  string
@@ -30,7 +30,7 @@ type GRPCHandler struct {
 }
 
 // NewGRPCHandler 创建新的gRPC处理器
-func NewGRPCHandler(httpSync *syncer.HTTPSync, storage *storage.StorageManager, logger logger.Logger, appName, version, osName, archName string) *GRPCHandler {
+func NewGRPCHandler(httpSync syncer.SyncInterface, storage *storage.StorageManager, logger logger.Logger, appName, version, osName, archName string) *GRPCHandler {
 	return &GRPCHandler{
 		httpSync: httpSync,
 		storage:  storage,
@@ -76,7 +76,7 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 		if errGet != nil {
 			h.logger.Warn("获取codebase配置失败 (codebaseId: %s): %v. 将进行初始化.", codebaseId, errGet)
 			codebaseConfig = &storage.CodebaseConfig{
-				ClientID:     req.ClientId, // 使用请求中的 ClientId
+				ClientID:     req.ClientId,
 				CodebaseName: pendingConfig.CodebaseName,
 				CodebasePath: pendingConfig.CodebasePath,
 				CodebaseId:   codebaseId,
@@ -84,11 +84,11 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 			}
 		} else {
 			h.logger.Info("找到现有codebase配置 (codebaseId: %s). 将进行更新.", codebaseId)
-			codebaseConfig.ClientID = req.ClientId                   // 更新 ClientID
-			codebaseConfig.CodebaseName = pendingConfig.CodebaseName // 确保名称是最新的
-			codebaseConfig.CodebasePath = pendingConfig.CodebasePath // 确保路径是最新的
-			codebaseConfig.CodebaseId = codebaseId                   // 确保 ID 是最新的
-			codebaseConfig.RegisterTime = time.Now()                 // 更新注册时间为当前时间
+			codebaseConfig.ClientID = req.ClientId
+			codebaseConfig.CodebaseName = pendingConfig.CodebaseName
+			codebaseConfig.CodebasePath = pendingConfig.CodebasePath
+			codebaseConfig.CodebaseId = codebaseId
+			codebaseConfig.RegisterTime = time.Now() // 更新注册时间为当前时间
 		}
 
 		if errSave := h.storage.SaveCodebaseConfig(codebaseConfig); errSave != nil {
@@ -150,7 +150,7 @@ func (h *GRPCHandler) UnregisterSync(ctx context.Context, req *api.UnregisterSyn
 		if errDelete := h.storage.DeleteCodebaseConfig(codebaseId); errDelete != nil {
 			h.logger.Error("删除codebase配置失败 (Name: %s, Path: %s, Id: %s): %v", config.CodebaseName, config.CodebasePath, codebaseId, errDelete)
 			lastError = errDelete // 记录最后一个错误
-			continue              // 继续尝试注销其他的
+			continue
 		}
 		h.logger.Info("Codebase (Name: %s, Path: %s, Id: %s) 注销成功", config.CodebaseName, config.CodebasePath, codebaseId)
 		unregisteredCount++
@@ -170,7 +170,7 @@ func (h *GRPCHandler) UnregisterSync(ctx context.Context, req *api.UnregisterSyn
 	// 单个删除失败不应导致整个操作失败。
 	if lastError != nil && unregisteredCount == 0 && len(codebaseConfigsToUnregister) > 0 {
 		// 如果一个都没成功，并且确实有东西要删，可以考虑返回错误
-		return &emptypb.Empty{}, fmt.Errorf("所有codebase注销均失败: %w", lastError)
+		return &emptypb.Empty{}, fmt.Errorf("所有codebase注销均失败: %v", lastError)
 	}
 
 	return &emptypb.Empty{}, nil
