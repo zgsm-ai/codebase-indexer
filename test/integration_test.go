@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -36,31 +36,31 @@ func (s *IntegrationTestSuite) SetupTest() {
 	rootPath := os.TempDir()
 	logPath, err := utils.GetLogDir(rootPath)
 	if err != nil {
-		fmt.Printf("获取log目录失败: %v\n", err)
+		s.T().Fatalf("获取log目录失败: %v", err)
 	}
 	fmt.Printf("log目录: %s\n", logPath)
 
 	// 初始化缓存目录
 	cachePath, err := utils.GetCacheDir(rootPath)
 	if err != nil {
-		fmt.Printf("获取缓存目录失败: %v\n", err)
+		s.T().Fatalf("获取缓存目录失败: %v", err)
 	}
 	fmt.Printf("缓存目录: %s\n", cachePath)
 
 	// 初始化上报临时目录
-	_, err = utils.GetUploadTmpDir(rootPath)
+	uploadTmpPath, err := utils.GetUploadTmpDir(rootPath)
 	if err != nil {
-		fmt.Printf("获取上报临时目录失败: %v\n", err)
+		s.T().Fatalf("获取上报临时目录失败: %v", err)
 	}
+	fmt.Printf("上报临时目录: %s\n", uploadTmpPath)
+
 	logger, err := logger.NewLogger(logPath, "info")
 	if err != nil {
-		fmt.Printf("初始化日志系统失败: %v\n", err)
-		return
+		s.T().Fatalf("初始化日志系统失败: %v", err)
 	}
 	storageManager, err := storage.NewStorageManager(cachePath, logger)
 	if err != nil {
-		logger.Fatal("初始化存储管理器失败: %v", err)
-		return
+		s.T().Fatalf("初始化存储系统失败: %v", err)
 	}
 	fileScanner := scanner.NewFileScanner(logger)
 	s.handler = handler.NewGRPCHandler(httpSync, storageManager, logger, "test-app", "v0.0.1", "windows", "amd64")
@@ -68,20 +68,57 @@ func (s *IntegrationTestSuite) SetupTest() {
 }
 
 func (s *IntegrationTestSuite) TestRegisterSync() {
-	req := &api.RegisterSyncRequest{
-		ClientId:      "test-client",
-		WorkspacePath: path.Join(os.TempDir(), "register-test"),
-		WorkspaceName: "register-test",
+	registerPath := filepath.Join(os.TempDir(), "register-test")
+	tests := []struct {
+		name    string
+		req     *api.RegisterSyncRequest
+		wantErr bool
+	}{
+		{
+			name: "valid request",
+			req: &api.RegisterSyncRequest{
+				ClientId:      "client1",
+				WorkspacePath: registerPath,
+				WorkspaceName: "register-test",
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing client id",
+			req: &api.RegisterSyncRequest{
+				WorkspacePath: registerPath,
+				WorkspaceName: "register-test",
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty workspace path",
+			req: &api.RegisterSyncRequest{
+				ClientId:      "client1",
+				WorkspacePath: "",
+				WorkspaceName: "register-test",
+			},
+			wantErr: true,
+		},
 	}
 
-	resp, err := s.handler.RegisterSync(context.Background(), req)
+	for _, tt := range tests {
+		s.T().Run(tt.name, func(t *testing.T) {
+			resp, err := s.handler.RegisterSync(context.Background(), tt.req)
 
-	assert.NoError(s.T(), err)
-	assert.NotNil(s.T(), resp)
+			if tt.wantErr {
+				assert.NoError(t, err)
+				assert.Contains(t, resp.Message, "参数错误")
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, resp)
+			}
+		})
+	}
 }
 
 func (s *IntegrationTestSuite) TestUnregisterSync() {
-	workspaceDir := path.Join(os.TempDir(), "unregister-test")
+	workspaceDir := filepath.Join(os.TempDir(), "unregister-test")
 	err := os.MkdirAll(workspaceDir, 0755)
 	assert.NoError(s.T(), err)
 	defer os.RemoveAll(workspaceDir)
@@ -142,13 +179,41 @@ func (s *IntegrationTestSuite) TestUnregisterSyncInvalidParams() {
 }
 
 func (s *IntegrationTestSuite) TestHandlerVersion() {
-	req := &api.VersionRequest{ClientId: "test-client"}
+	tests := []struct {
+		name     string
+		clientId string
+		wantErr  bool
+	}{
+		{
+			name:     "normal case",
+			clientId: "client1",
+			wantErr:  false,
+		},
+		{
+			name:     "empty client id",
+			clientId: "",
+			wantErr:  true,
+		},
+	}
 
-	resp, err := s.handler.GetVersion(context.Background(), req)
+	for _, tt := range tests {
+		s.T().Run(tt.name, func(t *testing.T) {
+			req := &api.VersionRequest{
+				ClientId: tt.clientId,
+			}
 
-	assert.NoError(s.T(), err)
-	assert.Equal(s.T(), "test-app", resp.Data.AppName)
-	assert.Equal(s.T(), "v0.0.1", resp.Data.Version)
+			resp, err := s.handler.GetVersion(context.Background(), req)
+
+			if tt.wantErr {
+				assert.NoError(t, err)
+				assert.Contains(t, resp.Message, "参数错误")
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(s.T(), "test-app", resp.Data.AppName)
+				assert.Equal(s.T(), "v0.0.1", resp.Data.Version)
+			}
+		})
+	}
 }
 
 func (s *IntegrationTestSuite) TestTokenSharing() {
@@ -169,7 +234,7 @@ func (s *IntegrationTestSuite) TestFullIntegrationFlow() {
 	httpSync.On("FetchServerHashTree", mock.Anything).Return(map[string]string{}, nil)
 	httpSync.On("Sync", mock.Anything, mock.Anything).Return(nil)
 	// 提前创建工作区目录
-	workspaceDir := path.Join(os.TempDir(), "test-workspace")
+	workspaceDir := filepath.Join(os.TempDir(), "test-workspace")
 	err := os.MkdirAll(workspaceDir, 0755)
 	assert.NoError(s.T(), err)
 	// 1. Register workspace

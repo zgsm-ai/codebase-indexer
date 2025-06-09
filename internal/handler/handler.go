@@ -94,7 +94,6 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 		if errSave := h.storage.SaveCodebaseConfig(codebaseConfig); errSave != nil {
 			h.logger.Error("保存codebase配置失败 (Name: %s, Path: %s, Id: %s): %v", codebaseConfig.CodebaseName, codebaseConfig.CodebasePath, codebaseConfig.CodebaseId, errSave)
 			lastError = errSave // 记录最后一个错误
-			// 当前选择继续尝试，但记录错误
 			continue
 		}
 		h.logger.Info("Codebase (Name: %s, Path: %s, Id: %s) 注册/更新成功", codebaseConfig.CodebaseName, codebaseConfig.CodebasePath, codebaseConfig.CodebaseId)
@@ -102,7 +101,6 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 	}
 
 	if registeredCount == 0 && lastError != nil {
-		// 如果一个都没成功，并且有错误
 		return &api.RegisterSyncResponse{Success: false, Message: fmt.Sprintf("所有codebase注册均失败: %v", lastError)}, lastError
 	}
 
@@ -110,9 +108,9 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 		// 如果部分成功，部分失败
 		h.logger.Warn("部分codebase注册失败. 成功: %d, 失败: %d.最后一个错误: %v", registeredCount, len(codebaseConfigsToRegister)-registeredCount, lastError)
 		return &api.RegisterSyncResponse{
-			Success: true, // 标记为部分成功
+			Success: true,
 			Message: fmt.Sprintf("部分codebase注册成功 (%d/%d). 最后一个错误: %v", registeredCount, len(codebaseConfigsToRegister), lastError),
-		}, nil // 返回nil error，因为操作部分成功
+		}, nil
 	}
 
 	h.logger.Info("所有 %d 个codebase均已成功注册/更新.", registeredCount)
@@ -218,7 +216,7 @@ func (h *GRPCHandler) isGitRepository(path string) bool {
 	info, err := os.Stat(gitPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			h.logger.Debug("检查git仓库 %s 时发生错误: %v", gitPath, err)
+			h.logger.Warn("检查git仓库 %s 时发生错误: %v", gitPath, err)
 		}
 		return false
 	}

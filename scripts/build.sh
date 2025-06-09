@@ -5,14 +5,14 @@
 # Function to display usage
 usage() {
   echo "Usage: $0 <GOOS> <GOARCH> <VERSION>"
-  echo "Example: $0 linux amd64 v1.0.0"
+  echo "Example: $0 linux amd64 1.0.0"
   echo "Example: $0 windows amd64 1.0.0-beta"
-  echo "Example: $0 darwin arm64 latest"
+  echo "Example: $0 darwin arm64 1.1.0"
   echo ""
   echo "Parameters:"
   echo "  <GOOS>      Target operating system (e.g., linux, windows, darwin)"
-  echo "  <GOARCH>    Target architecture (e.g., amd64, 386, arm64)"
-  echo "  <VERSION>   Version string for the build (e.g., v1.0.0, 0.1.x)"
+  echo "  <GOARCH>    Target architecture (e.g., amd64, 386, arm64, arm)"
+  echo "  <VERSION>   Version string for the build (e.g., 1.0.0, 1.0.0-beta)"
   exit 1
 }
 
@@ -47,7 +47,7 @@ MAIN_PACKAGE_PATH="cmd/main.go" # Adjust if your main package is elsewhere
 LD_FLAGS="-s -w -X main.version=$APP_VERSION -X main.osName=$TARGET_OS -X main.archName=$TARGET_ARCH"
 
 # Determine output filename
-OUTPUT_FILENAME="codebase-syncer_${APP_VERSION}_${TARGET_OS}_${TARGET_ARCH}"
+OUTPUT_FILENAME="codebaseSyncer-${TARGET_OS}-${TARGET_ARCH}-${APP_VERSION}"
 if [ "$TARGET_OS" = "windows" ]; then
   OUTPUT_FILENAME="${OUTPUT_FILENAME}.exe"
 fi
