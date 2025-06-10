@@ -38,7 +38,7 @@ type StorageManager struct {
 }
 
 // NewStorageManager 创建一个新的配置管理器
-func NewStorageManager(cacheDir string, logger logger.Logger) (*StorageManager, error) {
+func NewStorageManager(cacheDir string, logger logger.Logger) (SotrageInterface, error) {
 	// 确保codebase目录存在
 	codebasePath := filepath.Join(cacheDir, "codebase")
 	if _, err := os.Stat(codebasePath); os.IsNotExist(err) {

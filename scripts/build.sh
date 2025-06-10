@@ -6,13 +6,13 @@
 usage() {
   echo "Usage: $0 <GOOS> <GOARCH> <VERSION>"
   echo "Example: $0 linux amd64 1.0.0"
-  echo "Example: $0 windows amd64 1.0.0-beta"
+  echo "Example: $0 windows amd64 1.0.0_beta"
   echo "Example: $0 darwin arm64 1.1.0"
   echo ""
   echo "Parameters:"
   echo "  <GOOS>      Target operating system (e.g., linux, windows, darwin)"
   echo "  <GOARCH>    Target architecture (e.g., amd64, 386, arm64, arm)"
-  echo "  <VERSION>   Version string for the build (e.g., 1.0.0, 1.0.0-beta)"
+  echo "  <VERSION>   Version string for the build (e.g., 1.0.0, 1.0.0_beta)"
   exit 1
 }
 

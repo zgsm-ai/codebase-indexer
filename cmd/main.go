@@ -41,7 +41,7 @@ func main() {
 	}
 	// 解析命令行参数
 	appName := flag.String("appname", "zgsm", "应用名称")
-	grpcServer := flag.String("grpc", "localhost:50051", "gRPC服务器地址")
+	grpcServer := flag.String("grpc", "localhost:51353", "gRPC服务器地址")
 	logLevel := flag.String("loglevel", "info", "日志级别 (debug, info, warn, error)")
 	flag.Parse()
 
@@ -67,7 +67,8 @@ func main() {
 	}
 	fileScanner := scanner.NewFileScanner(logger)
 	httpSync := syncer.NewHTTPSync(logger)
-	grpcHandler := handler.NewGRPCHandler(httpSync, storageManager, logger, *appName, version, osName, archName)
+	appInfo := &handler.AppInfo{AppName: *appName, ArchName: archName, OSName: osName, Version: version}
+	grpcHandler := handler.NewGRPCHandler(httpSync, storageManager, logger, appInfo)
 	syncScheduler := scheduler.NewScheduler(httpSync, fileScanner, storageManager, logger)
 
 	// 启动gRPC服务端

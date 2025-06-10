@@ -17,28 +17,29 @@ import (
 	"codebase-syncer/pkg/logger"
 )
 
+type AppInfo struct {
+	AppName  string `json:"appName"`
+	Version  string `json:"version"`
+	OSName   string `json:"osName"`
+	ArchName string `json:"archName"`
+}
+
 // GRPCHandler gRPC服务处理
 type GRPCHandler struct {
+	appInfo  *AppInfo
 	httpSync syncer.SyncInterface
-	storage  *storage.StorageManager
+	storage  storage.SotrageInterface
 	logger   logger.Logger
-	appName  string
-	version  string
-	osName   string
-	archName string
 	api.UnimplementedSyncServiceServer
 }
 
 // NewGRPCHandler 创建新的gRPC处理器
-func NewGRPCHandler(httpSync syncer.SyncInterface, storage *storage.StorageManager, logger logger.Logger, appName, version, osName, archName string) *GRPCHandler {
+func NewGRPCHandler(httpSync syncer.SyncInterface, storage storage.SotrageInterface, logger logger.Logger, appInfo *AppInfo) *GRPCHandler {
 	return &GRPCHandler{
+		appInfo:  appInfo,
 		httpSync: httpSync,
 		storage:  storage,
 		logger:   logger,
-		appName:  appName,
-		version:  version,
-		osName:   osName,
-		archName: archName,
 	}
 }
 
@@ -59,9 +60,6 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 
 	if len(codebaseConfigsToRegister) == 0 {
 		h.logger.Warn("未找到可注册的codebase路径: %s", req.WorkspacePath)
-		// 根据需求，如果一个都没找到（包括原始路径本身也不作为codebase），可以返回错误或特定消息
-		// 当前 findCodebasePathsToRegister 的逻辑是，如果啥都没有，会把原始路径返回，所以这里理论上不会是0
-		// 但为了健壮性，可以保留一个检查
 		return &api.RegisterSyncResponse{Success: false, Message: "未找到可注册的codebase"}, nil
 	}
 
@@ -202,10 +200,10 @@ func (h *GRPCHandler) GetVersion(ctx context.Context, req *api.VersionRequest) (
 		Success: true,
 		Message: "ok",
 		Data: &api.VersionResponse_Data{
-			AppName:  h.appName,
-			Version:  h.version,
-			OsName:   h.osName,
-			ArchName: h.archName,
+			AppName:  h.appInfo.AppName,
+			Version:  h.appInfo.Version,
+			OsName:   h.appInfo.OSName,
+			ArchName: h.appInfo.ArchName,
 		},
 	}, nil
 }

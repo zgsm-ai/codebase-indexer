@@ -28,14 +28,14 @@ var (
 
 type Scheduler struct {
 	httpSync    syncer.SyncInterface
-	fileScanner *scanner.FileScanner
-	storage     *storage.StorageManager
+	fileScanner scanner.ScannerInterface
+	storage     storage.SotrageInterface
 	logger      logger.Logger
 	mutex       sync.Mutex
 	isRunning   bool
 }
 
-func NewScheduler(httpSync syncer.SyncInterface, fileScanner *scanner.FileScanner, storage *storage.StorageManager,
+func NewScheduler(httpSync syncer.SyncInterface, fileScanner scanner.ScannerInterface, storage storage.SotrageInterface,
 	logger logger.Logger) *Scheduler {
 	return &Scheduler{
 		httpSync:    httpSync,
@@ -282,7 +282,8 @@ func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq *syncer.UploadReq
 	}
 
 	if errUpload != nil {
-		return fmt.Errorf("上报zip文件最终失败: %v", errUpload)
+		s.logger.Error("上报zip文件最终失败: %v", errUpload)
+		return errUpload
 	}
 
 	return nil

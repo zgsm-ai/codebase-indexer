@@ -46,11 +46,17 @@ type FileStatus struct {
 	Status string `json:"status"`
 }
 
+type ScannerInterface interface {
+	CalculateFileHash(filePath string) (string, error)
+	ScanDirectory(codebasePath string) (map[string]string, error)
+	CalculateFileChanges(local, remote map[string]string) []*FileStatus
+}
+
 type FileScanner struct {
 	logger logger.Logger
 }
 
-func NewFileScanner(logger logger.Logger) *FileScanner {
+func NewFileScanner(logger logger.Logger) ScannerInterface {
 	return &FileScanner{
 		logger: logger,
 	}
