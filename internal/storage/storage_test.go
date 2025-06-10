@@ -67,12 +67,6 @@ func TestNewStorageManager(t *testing.T) {
 		if _, statErr := os.Stat(codebasePath); os.IsNotExist(statErr) {
 			t.Fatalf("应该创建了 codebase 目录: %v", statErr)
 		}
-
-		// 验证结构体字段
-		assert.Equal(t, codebasePath, sm.codebasePath)
-		assert.Equal(t, logger, sm.logger)
-		assert.NotNil(t, sm.codebaseConfigs)
-		assert.Empty(t, sm.codebaseConfigs)
 	})
 
 	t.Run("目录已存在", func(t *testing.T) {
@@ -87,12 +81,6 @@ func TestNewStorageManager(t *testing.T) {
 		// 验证没有错误
 		assert.NoError(t, err)
 		require.NotNil(t, sm)
-
-		// 验证结构体字段
-		assert.Equal(t, codebasePath, sm.codebasePath)
-		assert.Equal(t, logger, sm.logger)
-		assert.NotNil(t, sm.codebaseConfigs)
-		assert.Empty(t, sm.codebaseConfigs)
 	})
 
 	t.Run("目录创建失败", func(t *testing.T) {

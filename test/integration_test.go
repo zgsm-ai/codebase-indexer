@@ -30,6 +30,12 @@ type IntegrationTestSuite struct {
 }
 
 var httpSync = new(mocks.MockHTTPSync)
+var appInfo = &handler.AppInfo{
+	AppName:  "test-app",
+	OSName:   "windows",
+	ArchName: "amd64",
+	Version:  "1.0.0",
+}
 
 func (s *IntegrationTestSuite) SetupTest() {
 	// 使用真实对象进行测试
@@ -63,7 +69,7 @@ func (s *IntegrationTestSuite) SetupTest() {
 		s.T().Fatalf("初始化存储系统失败: %v", err)
 	}
 	fileScanner := scanner.NewFileScanner(logger)
-	s.handler = handler.NewGRPCHandler(httpSync, storageManager, logger, "test-app", "v0.0.1", "windows", "amd64")
+	s.handler = handler.NewGRPCHandler(httpSync, storageManager, logger, appInfo)
 	s.scheduler = scheduler.NewScheduler(httpSync, fileScanner, storageManager, logger)
 }
 
@@ -210,7 +216,7 @@ func (s *IntegrationTestSuite) TestHandlerVersion() {
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(s.T(), "test-app", resp.Data.AppName)
-				assert.Equal(s.T(), "v0.0.1", resp.Data.Version)
+				assert.Equal(s.T(), "1.0.0", resp.Data.Version)
 			}
 		})
 	}

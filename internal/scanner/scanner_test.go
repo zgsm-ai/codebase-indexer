@@ -45,7 +45,7 @@ func TestCalculateFileHash(t *testing.T) {
 
 func TestLoadIgnoreRules(t *testing.T) {
 	logger := &MockLogger{t}
-	fs := NewFileScanner(logger)
+	fs := &FileScanner{logger: logger}
 
 	t.Run("仅使用默认规则", func(t *testing.T) {
 		tempDir := t.TempDir()
@@ -138,7 +138,7 @@ func TestScanDirectory(t *testing.T) {
 	})
 }
 
-func benchmarkScanDirectory(t *testing.T, fileCount int) (*MockLogger, *FileScanner, string) {
+func benchmarkScanDirectory(t *testing.T, fileCount int) (*MockLogger, ScannerInterface, string) {
 	logger := &MockLogger{t}
 	fs := NewFileScanner(logger)
 

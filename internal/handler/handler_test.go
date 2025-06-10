@@ -14,13 +14,19 @@ import (
 )
 
 var mockLogger = &mocks.MockLogger{}
+var appInfo = &AppInfo{
+	AppName:  "test-app",
+	OSName:   "windows",
+	ArchName: "amd64",
+	Version:  "1.0.0",
+}
 
 func TestNewGRPCHandler(t *testing.T) {
 	// 创建测试所需对象
 	httpSync := &syncer.HTTPSync{}
 	storageManager := &storage.StorageManager{}
 
-	h := NewGRPCHandler(httpSync, storageManager, mockLogger, "test-app", "1.0.0", "windows", "amd64")
+	h := NewGRPCHandler(httpSync, storageManager, mockLogger, appInfo)
 	assert.NotNil(t, h)
 }
 
@@ -34,7 +40,7 @@ func TestIsGitRepository(t *testing.T) {
 
 	httpSync := &syncer.HTTPSync{}
 	storageManager := &storage.StorageManager{}
-	h := NewGRPCHandler(httpSync, storageManager, mockLogger, "test-app", "1.0.0", "windows", "amd64")
+	h := NewGRPCHandler(httpSync, storageManager, mockLogger, appInfo)
 
 	// 测试有效git仓库
 	assert.True(t, h.isGitRepository(tmpDir))
@@ -68,7 +74,7 @@ func TestFindCodebasePathsToRegister(t *testing.T) {
 
 	httpSync := &syncer.HTTPSync{}
 	storageManager := &storage.StorageManager{}
-	h := NewGRPCHandler(httpSync, storageManager, mockLogger, "test-app", "1.0.0", "windows", "amd64")
+	h := NewGRPCHandler(httpSync, storageManager, mockLogger, appInfo)
 
 	// 测试查找codebase路径
 	configs, err := h.findCodebasePathsToRegister(baseDir, "test-name")
