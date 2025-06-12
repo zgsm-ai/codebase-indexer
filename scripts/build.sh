@@ -32,7 +32,7 @@ PROJECT_ROOT="$(realpath "$SCRIPT_DIR/..")"
 cd "$PROJECT_ROOT" || exit
 
 # Define the output directory for builds
-OUTPUT_DIR="bin" # Output directory relative to project root
+OUTPUT_DIR="bin/$APP_VERSION" # Output directory relative to project root
 mkdir -p "$PROJECT_ROOT/$OUTPUT_DIR"
 
 # Define the main Go package path
