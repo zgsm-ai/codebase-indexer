@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"time"
 
+	"codebase-syncer/internal/storage"
 	"codebase-syncer/pkg/logger"
 
 	"github.com/valyala/fasthttp"
@@ -19,8 +20,8 @@ import (
 
 // 服务端API路径
 const (
-	API_UPLOAD_FILE   = "/codebase-indexer/api/v1/files/upload"
-	API_GET_HASH_TREE = "/codebase-indexer/api/v1/comparison"
+	API_UPLOAD_FILE       = "/codebase-indexer/api/v1/files/upload"
+	API_GET_CODEBASE_HASH = "/codebase-indexer/api/v1/codebases/hash"
 )
 
 type SyncConfig struct {
@@ -34,6 +35,7 @@ type SyncInterface interface {
 	GetSyncConfig() *SyncConfig
 	FetchServerHashTree(codebasePath string) (map[string]string, error)
 	UploadFile(codebasePath string, uploadRe *UploadReq) error
+	GetClientConfig() (storage.ClientConfig, error)
 }
 
 type HTTPSync struct {
@@ -60,22 +62,22 @@ func (hs *HTTPSync) GetSyncConfig() *SyncConfig {
 	return hs.syncConfig
 }
 
-type ComparisonReq struct {
+type CodebaseHashReq struct {
 	ClientId     string `json:"clientId"`
 	CodebasePath string `json:"codebasePath"`
 }
 
-type ComparisonResp struct {
-	Code    int                `json:"code"`
-	Message string             `json:"message"`
-	Data    ComparisonRespData `json:"data"`
+type CodebaseHashResp struct {
+	Code    int                  `json:"code"`
+	Message string               `json:"message"`
+	Data    CodebaseHashRespData `json:"data"`
 }
 
-type ComparisonRespData struct {
-	CodebaseTree []TreeItem `json:"codebaseTree"`
+type CodebaseHashRespData struct {
+	List []HashItem `json:"list"`
 }
 
-type TreeItem struct {
+type HashItem struct {
 	Path string `json:"path"`
 	Hash string `json:"hash"`
 }
@@ -86,7 +88,7 @@ func (hs *HTTPSync) FetchServerHashTree(codebasePath string) (map[string]string,
 
 	// 准备请求
 	url := fmt.Sprintf("%s%s?clientId=%s&codebasePath=%s",
-		hs.syncConfig.ServerURL, API_GET_HASH_TREE, hs.syncConfig.ClientId, codebasePath)
+		hs.syncConfig.ServerURL, API_GET_CODEBASE_HASH, hs.syncConfig.ClientId, codebasePath)
 
 	req := fasthttp.AcquireRequest()
 	resp := fasthttp.AcquireResponse()
@@ -111,13 +113,13 @@ func (hs *HTTPSync) FetchServerHashTree(codebasePath string) (map[string]string,
 			resp.StatusCode(), string(resp.Body()))
 	}
 
-	var responseData ComparisonResp
+	var responseData CodebaseHashResp
 	if err := json.Unmarshal(resp.Body(), &responseData); err != nil {
 		return nil, fmt.Errorf("解析响应失败: %v", err)
 	}
 
 	hashTree := make(map[string]string)
-	for _, item := range responseData.Data.CodebaseTree {
+	for _, item := range responseData.Data.List {
 		path := item.Path
 		if runtime.GOOS == "windows" {
 			path = filepath.FromSlash(path)
@@ -193,4 +195,48 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 
 	hs.logger.Info("文件上传成功: %s", filePath)
 	return nil
+}
+
+// 客户端配置文件URI
+const (
+	API_GET_CLIENT_CONFIG = "/codebaseSyncer_cli_tools/config.json"
+)
+
+// 获取客户端配置文件
+func (hs *HTTPSync) GetClientConfig() (storage.ClientConfig, error) {
+	hs.logger.Info("从服务器获取客户端配置文件")
+
+	// 准备请求
+	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_GET_CLIENT_CONFIG)
+
+	req := fasthttp.AcquireRequest()
+	resp := fasthttp.AcquireResponse()
+	defer func() {
+		fasthttp.ReleaseRequest(req)
+		fasthttp.ReleaseResponse(resp)
+	}()
+
+	req.SetRequestURI(url)
+	req.Header.SetMethod("GET")
+	req.Header.SetContentType("application/json")
+	req.Header.SetCookie("Authorization", "Bearer "+hs.syncConfig.Token)
+
+	hs.logger.Debug("发送获取客户端配置文件请求到: %s", url)
+	if err := hs.httpClient.Do(req, resp); err != nil {
+		return storage.ClientConfig{}, fmt.Errorf("发送请求失败: %v", err)
+	}
+
+	// 处理响应
+	if resp.StatusCode() != fasthttp.StatusOK {
+		return storage.ClientConfig{}, fmt.Errorf("获取客户端配置文件失败，状态码: %d，响应: %s",
+			resp.StatusCode(), string(resp.Body()))
+	}
+
+	var clientConfig storage.ClientConfig
+	if err := json.Unmarshal(resp.Body(), &clientConfig); err != nil {
+		return storage.ClientConfig{}, fmt.Errorf("解析响应失败: %v", err)
+	}
+
+	hs.logger.Info("成功获取客户端配置文件")
+	return clientConfig, nil
 }

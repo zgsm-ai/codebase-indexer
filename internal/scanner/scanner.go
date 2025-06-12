@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"codebase-syncer/internal/storage"
 	"codebase-syncer/pkg/logger"
 
 	gitignore "github.com/sabhiram/go-gitignore"
@@ -23,22 +24,6 @@ const (
 	FILE_STATUS_DELETED  = "delete"
 )
 
-// 默认过滤规则
-var defaultIgnore = []string{
-	// 过滤所有以点开头的文件和目录
-	".*",
-	// 保留其他非点开头的特定文件类型和目录
-	"*.swp", "*.swo",
-	"*.pyc", "*.class", "*.o", "*.obj",
-	"*.log", "*.tmp", "*.bak", "*.backup",
-	"logs/", "temp/", "tmp/", "node_modules/",
-	"vendor/", "bin/", "dist/", "build/",
-	"__pycache__/", "venv/", "target/",
-}
-
-// 最大文件大小（1MB）
-var maxFileSize int64 = 1 * 1024 * 1024 // 1MB
-
 // 同步文件信息
 type FileStatus struct {
 	Path   string `json:"path"`
@@ -46,19 +31,43 @@ type FileStatus struct {
 	Status string `json:"status"`
 }
 
+type ScannerConfig struct {
+	IgnorePatterns []string // 忽略规则列表
+	MaxFileSizeMB  int      // 文件大小限制，单位MB
+}
+
 type ScannerInterface interface {
+	SetScannerConfig(config *ScannerConfig)
 	CalculateFileHash(filePath string) (string, error)
 	ScanDirectory(codebasePath string) (map[string]string, error)
 	CalculateFileChanges(local, remote map[string]string) []*FileStatus
 }
 
 type FileScanner struct {
-	logger logger.Logger
+	scannerConfig *ScannerConfig
+	logger        logger.Logger
 }
 
 func NewFileScanner(logger logger.Logger) ScannerInterface {
+	defaultScannerConfig := &ScannerConfig{
+		IgnorePatterns: storage.DefaultIgnorePatterns,
+		MaxFileSizeMB:  storage.DefaultConfigSync.MaxFileSizeMB,
+	}
 	return &FileScanner{
-		logger: logger,
+		scannerConfig: defaultScannerConfig,
+		logger:        logger,
+	}
+}
+
+func (fs *FileScanner) SetScannerConfig(config *ScannerConfig) {
+	if config == nil {
+		return
+	}
+	if len(config.IgnorePatterns) > 0 {
+		fs.scannerConfig.IgnorePatterns = config.IgnorePatterns
+	}
+	if config.MaxFileSizeMB > 0 && config.MaxFileSizeMB <= 10 {
+		fs.scannerConfig.MaxFileSizeMB = config.MaxFileSizeMB
 	}
 }
 
@@ -87,9 +96,7 @@ func (fs *FileScanner) CalculateFileHash(filePath string) (string, error) {
 // loadIgnoreRules 加载并合并默认忽略规则和.gitignore文件中的规则
 func (fs *FileScanner) loadIgnoreRules(codebasePath string) *gitignore.GitIgnore {
 	// 首先使用默认规则创建ignore对象
-	// 创建一个副本以避免修改全局变量 defaultIgnore
-	currentIgnoreRules := make([]string, len(defaultIgnore))
-	copy(currentIgnoreRules, defaultIgnore)
+	currentIgnoreRules := fs.scannerConfig.IgnorePatterns
 	compiledIgnore := gitignore.CompileIgnoreLines(currentIgnoreRules...)
 
 	// 读取.gitignore文件，并合并
@@ -159,9 +166,11 @@ func (fs *FileScanner) ScanDirectory(codebasePath string) (map[string]string, er
 			return nil
 		}
 
-		// 检查文件大小是否超过1MB
+		// 检查文件大小是否超过最大限制
+		maxFileSizeMB := fs.scannerConfig.MaxFileSizeMB
+		maxFileSize := int64(maxFileSizeMB * 1024 * 1024)
 		if info.Size() >= maxFileSize {
-			fs.logger.Debug("跳过大于1MB的文件: %s (大小: %.2f MB)", relPath, float64(info.Size())/1024/1024)
+			fs.logger.Debug("跳过大于%dMB的文件: %s (大小: %.2f MB)", maxFileSizeMB, relPath, float64(info.Size())/1024/1024)
 			return nil
 		}
 

@@ -39,6 +39,7 @@ func main() {
 	if version != "" {
 		fmt.Printf("Version: %s\n", version)
 	}
+
 	// 解析命令行参数
 	appName := flag.String("appname", "zgsm", "应用名称")
 	grpcServer := flag.String("grpc", "localhost:51353", "gRPC服务器地址")
@@ -71,7 +72,7 @@ func main() {
 	grpcHandler := handler.NewGRPCHandler(httpSync, storageManager, logger, appInfo)
 	syncScheduler := scheduler.NewScheduler(httpSync, fileScanner, storageManager, logger)
 
-	// 启动gRPC服务端
+	// 初始化gRPC服务端
 	lis, err := net.Listen("tcp", *grpcServer)
 	if err != nil {
 		logger.Fatal("failed to listen: %v", err)
@@ -79,16 +80,9 @@ func main() {
 	}
 	s := grpc.NewServer()
 	api.RegisterSyncServiceServer(s, grpcHandler)
-	go func() {
-		logger.Info("启动gRPC服务端，监听地址: %s", *grpcServer)
-		if err := s.Serve(lis); err != nil {
-			logger.Fatal("failed to serve: %v", err)
-			return
-		}
-	}()
 
-	// 启动同步守护进程
-	daemon := daemon.NewDaemon(syncScheduler, grpcHandler, logger)
+	// 启动守护进程
+	daemon := daemon.NewDaemon(syncScheduler, s, lis, httpSync, logger)
 	go daemon.Start()
 
 	// 处理系统信号，优雅退出

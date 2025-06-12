@@ -1,6 +1,7 @@
 package mocks
 
 import (
+	"codebase-syncer/internal/storage"
 	"codebase-syncer/internal/syncer"
 
 	"github.com/stretchr/testify/mock"
@@ -27,4 +28,9 @@ func (m *MockHTTPSync) FetchServerHashTree(codebasePath string) (map[string]stri
 func (m *MockHTTPSync) UploadFile(filePath string, uploadReq *syncer.UploadReq) error {
 	args := m.Called(filePath, uploadReq)
 	return args.Error(0)
+}
+
+func (m *MockHTTPSync) GetClientConfig() (storage.ClientConfig, error) {
+	args := m.Called()
+	return args.Get(0).(storage.ClientConfig), args.Error(1)
 }

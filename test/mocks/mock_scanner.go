@@ -10,6 +10,10 @@ type MockScanner struct {
 	mock.Mock
 }
 
+func (m *MockScanner) SetScannerConfig(config *scanner.ScannerConfig) {
+	m.Called(config)
+}
+
 func (m *MockScanner) CalculateFileHash(filePath string) (string, error) {
 	args := m.Called(filePath)
 	return args.String(0), args.Error(1)

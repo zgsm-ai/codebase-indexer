@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,53 +20,97 @@ import (
 	"codebase-syncer/pkg/logger"
 )
 
-var (
-	syncInterval      = 1 * time.Minute  // 同步间隔
-	syncConfigTimeout = 30 * time.Minute // 注册过期时间
-	maxRetries        = 3                // 最大重试次数
-	retryDelay        = 5 * time.Second  // 重试间隔
-)
-
-type Scheduler struct {
-	httpSync    syncer.SyncInterface
-	fileScanner scanner.ScannerInterface
-	storage     storage.SotrageInterface
-	logger      logger.Logger
-	mutex       sync.Mutex
-	isRunning   bool
+type SchedulerConfig struct {
+	IntervalMinutes       int // 同步间隔，单位：分钟
+	RegisterExpireMinutes int // 注册过期时间，单位：分钟
+	MaxRetries            int // 最大重试次数
+	RetryIntervalSeconds  int // 重试间隔，单位：秒
 }
 
-func NewScheduler(httpSync syncer.SyncInterface, fileScanner scanner.ScannerInterface, storage storage.SotrageInterface,
+type Scheduler struct {
+	httpSync         syncer.SyncInterface
+	fileScanner      scanner.ScannerInterface
+	storage          storage.SotrageInterface
+	sechedulerConfig *SchedulerConfig
+	logger           logger.Logger
+	mutex            sync.Mutex
+	isRunning        bool
+	restartCh        chan struct{} // 重启通道
+	updateCh         chan struct{} // 更新配置通道
+	currentTicker    *time.Ticker
+}
+
+func NewScheduler(httpSync syncer.SyncInterface, fileScanner scanner.ScannerInterface, storageManager storage.SotrageInterface,
 	logger logger.Logger) *Scheduler {
+	defaultSchedulerConfig := &SchedulerConfig{
+		IntervalMinutes:       storage.DefaultConfigSync.IntervalMinutes,
+		RegisterExpireMinutes: storage.DefaultConfigServer.RegisterExpireMinutes,
+		MaxRetries:            storage.DefaultConfigSync.MaxRetries,
+		RetryIntervalSeconds:  storage.DefaultConfigSync.RetryDelaySeconds,
+	}
 	return &Scheduler{
-		httpSync:    httpSync,
-		fileScanner: fileScanner,
-		storage:     storage,
-		logger:      logger,
+		httpSync:         httpSync,
+		fileScanner:      fileScanner,
+		storage:          storageManager,
+		sechedulerConfig: defaultSchedulerConfig,
+		restartCh:        make(chan struct{}),
+		updateCh:         make(chan struct{}),
+		logger:           logger,
+	}
+}
+
+// SetSchedulerConfig 设置调度器配置
+func (s *Scheduler) SetSchedulerConfig(config *SchedulerConfig) {
+	if config == nil {
+		return
+	}
+	if config.IntervalMinutes > 0 && config.IntervalMinutes <= 30 {
+		s.sechedulerConfig.IntervalMinutes = config.IntervalMinutes
+	}
+	if config.RegisterExpireMinutes > 0 && config.RegisterExpireMinutes <= 60 {
+		s.sechedulerConfig.RegisterExpireMinutes = config.RegisterExpireMinutes
+	}
+	if config.MaxRetries > 1 && config.MaxRetries <= 10 {
+		s.sechedulerConfig.MaxRetries = config.MaxRetries
+	}
+	if config.RetryIntervalSeconds > 0 && config.RetryIntervalSeconds <= 30 {
+		s.sechedulerConfig.RetryIntervalSeconds = config.RetryIntervalSeconds
 	}
 }
 
 // 启动调度器
 func (s *Scheduler) Start(ctx context.Context) {
+	go s.runScheduler(ctx, true)
+}
+
+// runScheduler 实际运行调度器循环
+func (s *Scheduler) runScheduler(parentCtx context.Context, initial bool) {
+	syncInterval := time.Duration(s.sechedulerConfig.IntervalMinutes) * time.Minute
+
 	s.logger.Info("启动同步调度器，间隔: %v", syncInterval)
 
 	// 立即执行一次同步
-	if s.httpSync.GetSyncConfig() == nil {
-		s.logger.Warn("未配置同步配置，跳过同步")
-	} else {
+	if initial && s.httpSync.GetSyncConfig() != nil {
 		s.performSync()
 	}
 
 	// 设置定时器
-	ticker := time.NewTicker(syncInterval)
-	defer ticker.Stop()
+	s.currentTicker = time.NewTicker(syncInterval)
+	defer s.currentTicker.Stop()
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-parentCtx.Done():
 			s.logger.Info("同步调度器已停止")
 			return
-		case <-ticker.C:
+		case <-s.restartCh:
+			s.logger.Info("收到重启信号，重启调度器")
+			return
+		case <-s.updateCh:
+			s.logger.Info("收到更新配置信号，等待更新配置")
+			time.Sleep(500 * time.Millisecond)
+			continue
+		case <-s.currentTicker.C:
 			if s.httpSync.GetSyncConfig() == nil {
 				s.logger.Warn("未配置同步配置，跳过同步")
 				continue
@@ -75,10 +120,41 @@ func (s *Scheduler) Start(ctx context.Context) {
 	}
 }
 
-// 设置同步间隔
-func (s *Scheduler) SetSyncInterval(interval time.Duration) {
-	syncInterval = interval
-	s.logger.Info("同步间隔已更新为: %v", interval)
+// Restart 重启调度器
+func (s *Scheduler) Restart(ctx context.Context) {
+	s.logger.Info("准备重启调度器")
+
+	s.restartCh <- struct{}{}
+	s.logger.Info("调度器重启信号已发送")
+	time.Sleep(100 * time.Millisecond) // 等待调度器重启
+
+	go s.runScheduler(ctx, false)
+}
+
+// Update 更新调度器配置
+func (s *Scheduler) Update(ctx context.Context) {
+	s.logger.Info("准备更新调度器")
+
+	s.updateCh <- struct{}{}
+	s.logger.Info("调度器更新配置信号已发送")
+	time.Sleep(100 * time.Millisecond) // 等待调度器更新
+
+	config := storage.GetClientConfig()
+	// 更新scheduler配置
+	schedulerConfig := &SchedulerConfig{
+		IntervalMinutes:       config.Sync.IntervalMinutes,
+		RegisterExpireMinutes: config.Server.RegisterExpireMinutes,
+		MaxRetries:            config.Sync.MaxRetries,
+		RetryIntervalSeconds:  config.Sync.RetryDelaySeconds,
+	}
+	s.SetSchedulerConfig(schedulerConfig)
+
+	// 更新scanner配置
+	scannerConfig := &scanner.ScannerConfig{
+		IgnorePatterns: config.Sync.IgnorePatterns,
+		MaxFileSizeMB:  config.Sync.MaxFileSizeMB,
+	}
+	s.fileScanner.SetScannerConfig(scannerConfig)
 }
 
 // performSync 执行同步
@@ -100,6 +176,7 @@ func (s *Scheduler) performSync() {
 	s.logger.Info("开始执行同步任务")
 	startTime := time.Now()
 
+	syncConfigTimeout := time.Duration(s.sechedulerConfig.RegisterExpireMinutes) * time.Minute
 	codebaseConfigs := s.storage.GetCodebaseConfigs()
 	for _, config := range codebaseConfigs {
 		if config.RegisterTime.IsZero() || time.Since(config.RegisterTime) > syncConfigTimeout {
@@ -256,6 +333,9 @@ func (s *Scheduler) createChangesZip(config *storage.CodebaseConfig, changes []*
 }
 
 func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq *syncer.UploadReq) error {
+	maxRetries := s.sechedulerConfig.MaxRetries
+	retryDelay := time.Duration(s.sechedulerConfig.RetryIntervalSeconds) * time.Second
+
 	s.logger.Info("开始上报zip文件: %s", zipPath)
 
 	var errUpload error
@@ -263,6 +343,10 @@ func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq *syncer.UploadReq
 		errUpload = s.httpSync.UploadFile(zipPath, uploadReq)
 		if errUpload == nil {
 			s.logger.Info("zip文件上报成功")
+			break
+		}
+		if strings.Contains(errUpload.Error(), "429") {
+			s.logger.Warn("上传文件被限流，退出重试")
 			break
 		}
 		s.logger.Warn("上报zip文件失败 (尝试 %d/%d): %v", i+1, maxRetries, errUpload)
@@ -282,7 +366,6 @@ func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq *syncer.UploadReq
 	}
 
 	if errUpload != nil {
-		s.logger.Error("上报zip文件最终失败: %v", errUpload)
 		return errUpload
 	}
 
