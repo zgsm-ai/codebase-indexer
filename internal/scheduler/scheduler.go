@@ -78,46 +78,9 @@ func (s *Scheduler) SetSchedulerConfig(config *SchedulerConfig) {
 	}
 }
 
-// 启动调度器
+// Start 启动调度器
 func (s *Scheduler) Start(ctx context.Context) {
 	go s.runScheduler(ctx, true)
-}
-
-// runScheduler 实际运行调度器循环
-func (s *Scheduler) runScheduler(parentCtx context.Context, initial bool) {
-	syncInterval := time.Duration(s.sechedulerConfig.IntervalMinutes) * time.Minute
-
-	s.logger.Info("启动同步调度器，间隔: %v", syncInterval)
-
-	// 立即执行一次同步
-	if initial && s.httpSync.GetSyncConfig() != nil {
-		s.performSync()
-	}
-
-	// 设置定时器
-	s.currentTicker = time.NewTicker(syncInterval)
-	defer s.currentTicker.Stop()
-
-	for {
-		select {
-		case <-parentCtx.Done():
-			s.logger.Info("同步调度器已停止")
-			return
-		case <-s.restartCh:
-			s.logger.Info("收到重启信号，重启调度器")
-			return
-		case <-s.updateCh:
-			s.logger.Info("收到更新配置信号，等待更新配置")
-			time.Sleep(500 * time.Millisecond)
-			continue
-		case <-s.currentTicker.C:
-			if s.httpSync.GetSyncConfig() == nil {
-				s.logger.Warn("未配置同步配置，跳过同步")
-				continue
-			}
-			s.performSync()
-		}
-	}
 }
 
 // Restart 重启调度器
@@ -155,6 +118,43 @@ func (s *Scheduler) Update(ctx context.Context) {
 		MaxFileSizeMB:  config.Sync.MaxFileSizeMB,
 	}
 	s.fileScanner.SetScannerConfig(scannerConfig)
+}
+
+// runScheduler 实际运行调度器循环
+func (s *Scheduler) runScheduler(parentCtx context.Context, initial bool) {
+	syncInterval := time.Duration(s.sechedulerConfig.IntervalMinutes) * time.Minute
+
+	s.logger.Info("启动同步调度器，间隔: %v", syncInterval)
+
+	// 立即执行一次同步
+	if initial && s.httpSync.GetSyncConfig() != nil {
+		s.performSync()
+	}
+
+	// 设置定时器
+	s.currentTicker = time.NewTicker(syncInterval)
+	defer s.currentTicker.Stop()
+
+	for {
+		select {
+		case <-parentCtx.Done():
+			s.logger.Info("同步调度器已停止")
+			return
+		case <-s.restartCh:
+			s.logger.Info("收到重启信号，重启调度器")
+			return
+		case <-s.updateCh:
+			s.logger.Info("收到更新配置信号，等待更新配置")
+			time.Sleep(500 * time.Millisecond)
+			continue
+		case <-s.currentTicker.C:
+			if s.httpSync.GetSyncConfig() == nil {
+				s.logger.Warn("未配置同步配置，跳过同步")
+				continue
+			}
+			s.performSync()
+		}
+	}
 }
 
 // performSync 执行同步
@@ -241,14 +241,6 @@ func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) {
 	s.logger.Info("同步任务完成，codebase: %s, 耗时: %v", config.CodebaseId, time.Since(startTime))
 }
 
-type SyncMetadata struct {
-	ClientId     string            `json:"clientId"`
-	CodebaseName string            `json:"codebaseName"`
-	CodebasePath string            `json:"codebasePath"`
-	FileList     map[string]string `json:"fileList"`
-	Timestamp    int64             `json:"timestamp"`
-}
-
 // processFileChanges 处理文件变更，将上传逻辑封装
 func (s *Scheduler) processFileChanges(config *storage.CodebaseConfig, changes []*scanner.FileStatus) error {
 	// 创建包含所有变更（新增和修改的文件）的zip文件
@@ -269,6 +261,14 @@ func (s *Scheduler) processFileChanges(config *storage.CodebaseConfig, changes [
 	}
 
 	return nil
+}
+
+type SyncMetadata struct {
+	ClientId     string            `json:"clientId"`
+	CodebaseName string            `json:"codebaseName"`
+	CodebasePath string            `json:"codebasePath"`
+	FileList     map[string]string `json:"fileList"`
+	Timestamp    int64             `json:"timestamp"`
 }
 
 // createChangesZip 创建包含文件变更和元数据的zip文件

@@ -90,6 +90,7 @@ func (d *Daemon) checkAndUpdateConfig() {
 		d.logger.Error("获取客户端配置失败: %v", err)
 		return
 	}
+	d.logger.Info("已获取最新客户端配置: %+v", newConfig)
 
 	// 获取当前配置
 	currentConfig := storage.GetClientConfig()
@@ -98,7 +99,6 @@ func (d *Daemon) checkAndUpdateConfig() {
 		return
 	}
 
-	d.logger.Info("检测到客户端配置变化，更新配置")
 	// 更新存储中的配置
 	storage.SetClientConfig(newConfig)
 	// 检查是否需要重启scheduler

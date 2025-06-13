@@ -72,7 +72,7 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 
 		codebaseConfig, errGet := h.storage.GetCodebaseConfig(codebaseId)
 		if errGet != nil {
-			h.logger.Warn("获取codebase配置失败 (codebaseId: %s): %v. 将进行初始化.", codebaseId, errGet)
+			h.logger.Warn("获取codebase(Id: %s)配置失败: %v, 将进行初始化", codebaseId, errGet)
 			codebaseConfig = &storage.CodebaseConfig{
 				ClientID:     req.ClientId,
 				CodebaseName: pendingConfig.CodebaseName,
@@ -81,7 +81,7 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 				RegisterTime: time.Now(), // 设置注册时间为当前时间
 			}
 		} else {
-			h.logger.Info("找到现有codebase配置 (codebaseId: %s). 将进行更新.", codebaseId)
+			h.logger.Info("找到现有codebase(Id: %s)配置, 将进行更新", codebaseId)
 			codebaseConfig.ClientID = req.ClientId
 			codebaseConfig.CodebaseName = pendingConfig.CodebaseName
 			codebaseConfig.CodebasePath = pendingConfig.CodebasePath
@@ -239,8 +239,6 @@ func (h *GRPCHandler) findCodebasePathsToRegister(basePath string, baseName stri
 	subDirs, err := os.ReadDir(basePath)
 	if err != nil {
 		h.logger.Error("读取目录 %s 失败: %v", basePath, err)
-		// 如果读取目录失败，根据策略，可以直接返回错误，或者将 basePath 作为默认
-		// 这里选择返回错误，让上层处理
 		return nil, fmt.Errorf("读取目录 %s 失败: %w", basePath, err)
 	}
 

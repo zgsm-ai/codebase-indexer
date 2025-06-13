@@ -59,6 +59,7 @@ func NewFileScanner(logger logger.Logger) ScannerInterface {
 	}
 }
 
+// SetScannerConfig 设置扫描器配置
 func (fs *FileScanner) SetScannerConfig(config *ScannerConfig) {
 	if config == nil {
 		return
@@ -126,7 +127,7 @@ func (fs *FileScanner) loadIgnoreRules(codebasePath string) *gitignore.GitIgnore
 	return compiledIgnore
 }
 
-// 扫描目录并生成哈希树
+// ScanDirectory 扫描目录并生成哈希树
 func (fs *FileScanner) ScanDirectory(codebasePath string) (map[string]string, error) {
 	fs.logger.Info("开始扫描目录: %s", codebasePath)
 	startTime := time.Now()
@@ -136,6 +137,8 @@ func (fs *FileScanner) ScanDirectory(codebasePath string) (map[string]string, er
 
 	ignore := fs.loadIgnoreRules(codebasePath)
 
+	maxFileSizeMB := fs.scannerConfig.MaxFileSizeMB
+	maxFileSize := int64(maxFileSizeMB * 1024 * 1024)
 	err := filepath.Walk(codebasePath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			fs.logger.Warn("访问文件 %s 时出错: %v", path, err)
@@ -167,8 +170,6 @@ func (fs *FileScanner) ScanDirectory(codebasePath string) (map[string]string, er
 		}
 
 		// 检查文件大小是否超过最大限制
-		maxFileSizeMB := fs.scannerConfig.MaxFileSizeMB
-		maxFileSize := int64(maxFileSizeMB * 1024 * 1024)
 		if info.Size() >= maxFileSize {
 			fs.logger.Debug("跳过大于%dMB的文件: %s (大小: %.2f MB)", maxFileSizeMB, relPath, float64(info.Size())/1024/1024)
 			return nil

@@ -51,6 +51,8 @@ func main() {
 		fmt.Printf("初始化目录失败: %v\n", err)
 		return
 	}
+	// 初始化配置
+	initConfig()
 
 	// 初始化日志系统
 	logger, err := logger.NewLogger(utils.LogsDir, *logLevel)
@@ -130,4 +132,10 @@ func initDir(appName string) error {
 	fmt.Printf("上报临时目录: %s\n", uploadTmpPath)
 
 	return nil
+}
+
+// initConfig 初始化配置
+func initConfig() {
+	// 设置客户端默认配置
+	storage.SetClientConfig(storage.DefaultClientConfig)
 }

@@ -57,9 +57,9 @@ func NewLogger(logsDir, level string) (Logger, error) {
 	// 设置日志输出到文件和控制台
 	fileWriter := zapcore.AddSync(&lumberjack.Logger{
 		Filename:   filepath.Join(logsDir, "codebase-syncer.log"),
-		MaxSize:    20, // megabytes
+		MaxSize:    50, // megabytes
 		MaxBackups: 0,  //
-		MaxAge:     5,  // days
+		MaxAge:     30, // days
 		Compress:   true,
 		LocalTime:  true,
 	})
