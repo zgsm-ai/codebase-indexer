@@ -100,7 +100,7 @@ func (hs *HTTPSync) FetchServerHashTree(codebasePath string) (map[string]string,
 	req.SetRequestURI(url)
 	req.Header.SetMethod("GET")
 	req.Header.SetContentType("application/json")
-	req.Header.SetCookie("Authorization", "Bearer "+hs.syncConfig.Token)
+	req.Header.Set("Authorization", "Bearer "+hs.syncConfig.Token)
 
 	hs.logger.Debug("发送获取哈希树请求到: %s", url)
 	if err := hs.httpClient.Do(req, resp); err != nil {
@@ -181,7 +181,7 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 	req.SetRequestURI(url)
 	req.Header.SetMethod("POST")
 	req.Header.SetContentType(writer.FormDataContentType())
-	req.Header.SetCookie("Authorization", "Bearer "+hs.syncConfig.Token)
+	req.Header.Set("Authorization", "Bearer "+hs.syncConfig.Token)
 	req.SetBody(body.Bytes())
 
 	hs.logger.Debug("发送文件上传请求到: %s", url)
@@ -219,7 +219,7 @@ func (hs *HTTPSync) GetClientConfig() (storage.ClientConfig, error) {
 	req.SetRequestURI(url)
 	req.Header.SetMethod("GET")
 	req.Header.SetContentType("application/json")
-	req.Header.SetCookie("Authorization", "Bearer "+hs.syncConfig.Token)
+	req.Header.Set("Authorization", "Bearer "+hs.syncConfig.Token)
 
 	hs.logger.Debug("发送获取客户端配置文件请求到: %s", url)
 	if err := hs.httpClient.Do(req, resp); err != nil {

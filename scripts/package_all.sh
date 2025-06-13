@@ -5,18 +5,18 @@
 
 # Function to display usage
 usage() {
-  echo "Usage: $0 [VERSION]"
-  echo "VERSION: Version string for the build (optional, defaults to '1.0.0')"
+  echo "Usage: $0 VERSION"
+  echo "VERSION: Version string for the build (required)"
   exit 1
 }
 
-# Default version
-VERSION="1.0.0"
-
 # Check if version is provided
-if [ -n "$1" ]; then
-  VERSION="$1"
+if [ -z "$1" ]; then
+  usage
+  exit 1
 fi
+
+VERSION="$1"
 
 echo "Starting multi-platform build for version: $VERSION"
 echo ""

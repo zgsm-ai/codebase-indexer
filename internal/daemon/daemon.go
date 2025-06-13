@@ -65,7 +65,7 @@ func (d *Daemon) Start() {
 	d.wg.Add(1)
 	go func() {
 		defer d.wg.Done()
-		ticker := time.NewTicker(10 * time.Minute)
+		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
 
 		for {

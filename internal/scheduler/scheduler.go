@@ -345,7 +345,7 @@ func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq *syncer.UploadReq
 			s.logger.Info("zip文件上报成功")
 			break
 		}
-		if strings.Contains(errUpload.Error(), "429") {
+		if strings.Contains(errUpload.Error(), "429") || strings.Contains(errUpload.Error(), "503") {
 			s.logger.Warn("上传文件被限流，退出重试")
 			break
 		}
