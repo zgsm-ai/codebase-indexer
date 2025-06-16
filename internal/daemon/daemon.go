@@ -43,13 +43,13 @@ func NewDaemon(scheduler *scheduler.Scheduler, grpcServer *grpc.Server, grpcList
 }
 
 func (d *Daemon) Start() {
-	d.logger.Info("守护进程已启动")
+	d.logger.Info("daemon process started")
 
 	// 启动gRPC服务端
 	go func() {
-		d.logger.Info("启动gRPC服务端，监听地址: %s", d.grpcListen.Addr().String())
+		d.logger.Info("starting gRPC server, listening on: %s", d.grpcListen.Addr().String())
 		if err := d.grpcServer.Serve(d.grpcListen); err != nil {
-			d.logger.Fatal("failed to serve: %v", err)
+			d.logger.Fatal("gRPC server failed to serve: %v", err)
 			return
 		}
 	}()
@@ -71,7 +71,7 @@ func (d *Daemon) Start() {
 		for {
 			select {
 			case <-d.ctx.Done():
-				d.logger.Info("配置检查任务已停止")
+				d.logger.Info("config check task stopped")
 				return
 			case <-ticker.C:
 				d.checkAndUpdateConfig()
@@ -82,20 +82,20 @@ func (d *Daemon) Start() {
 
 // checkAndUpdateConfig 检查并更新客户端配置
 func (d *Daemon) checkAndUpdateConfig() {
-	d.logger.Info("开始检查客户端配置更新")
+	d.logger.Info("starting client config update check")
 
 	// 获取最新客户端配置
 	newConfig, err := d.httpSync.GetClientConfig()
 	if err != nil {
-		d.logger.Error("获取客户端配置失败: %v", err)
+		d.logger.Error("failed to get client config: %v", err)
 		return
 	}
-	d.logger.Info("已获取最新客户端配置: %+v", newConfig)
+	d.logger.Info("latest client config retrieved: %+v", newConfig)
 
 	// 获取当前配置
 	currentConfig := storage.GetClientConfig()
 	if !configChanged(currentConfig, newConfig) {
-		d.logger.Info("客户端配置未发生更改")
+		d.logger.Info("client config unchanged")
 		return
 	}
 
@@ -114,12 +114,13 @@ func (d *Daemon) checkAndUpdateConfig() {
 	d.scheduler.Update(d.ctx)
 
 	d.schedWG.Wait()
-	d.logger.Info("客户端配置更新完成")
+	d.logger.Info("client config update completed")
 }
 
 // configChanged 检查配置是否有变化
 func configChanged(current, new storage.ClientConfig) bool {
 	return current.Server.RegisterExpireMinutes != new.Server.RegisterExpireMinutes ||
+		current.Server.HashTreeExpireHours != new.Server.HashTreeExpireHours ||
 		current.Sync.IntervalMinutes != new.Sync.IntervalMinutes ||
 		current.Sync.MaxFileSizeMB != new.Sync.MaxFileSizeMB ||
 		current.Sync.MaxRetries != new.Sync.MaxRetries ||
@@ -141,14 +142,14 @@ func equalIgnorePatterns(a, b []string) bool {
 }
 
 func (d *Daemon) Stop() {
-	d.logger.Info("正在停止守护进程...")
+	d.logger.Info("stopping daemon process...")
 	d.cancel()
 	utils.CleanUploadTmpDir()
-	d.logger.Info("已清理临时目录")
+	d.logger.Info("temp directory cleaned up")
 	d.wg.Wait()
 	if d.grpcServer != nil {
 		d.grpcServer.GracefulStop()
-		d.logger.Info("gRPC服务已停止")
+		d.logger.Info("gRPC service stopped")
 	}
-	d.logger.Info("守护进程已停止")
+	d.logger.Info("daemon process stopped")
 }

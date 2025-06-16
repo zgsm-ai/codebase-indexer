@@ -4,6 +4,7 @@ package storage
 
 type ConfigServer struct {
 	RegisterExpireMinutes int `json:"registerExpireMinutes"`
+	HashTreeExpireHours   int `json:"hashTreeExpireHours"`
 }
 
 type ConfigSync struct {
@@ -22,6 +23,7 @@ type ClientConfig struct {
 
 var DefaultConfigServer = ConfigServer{
 	RegisterExpireMinutes: 30, // 默认注册有效期30分钟
+	HashTreeExpireHours:   24, // 默认哈希树有效期24小时
 }
 
 var DefaultIgnorePatterns = []string{

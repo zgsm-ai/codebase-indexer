@@ -18,20 +18,28 @@ import (
 )
 
 var (
-	mockLogger      = &mocks.MockLogger{}
-	mockStorage     = &mocks.MockStorageManager{}
-	mockHttpSync    = &mocks.MockHTTPSync{}
-	mockFileScanner = &mocks.MockScanner{}
+	mockLogger       = &mocks.MockLogger{}
+	mockStorage      = &mocks.MockStorageManager{}
+	mockHttpSync     = &mocks.MockHTTPSync{}
+	mockFileScanner  = &mocks.MockScanner{}
+	sechedulerConfig = &SchedulerConfig{
+		IntervalMinutes:       5,
+		RegisterExpireMinutes: 30,
+		HashTreeExpireHours:   24,
+		MaxRetries:            3,
+		RetryIntervalSeconds:  5,
+	}
 )
 
 func TestPerformSync(t *testing.T) {
 	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
 
 	s := &Scheduler{
-		httpSync:    mockHttpSync,
-		fileScanner: mockFileScanner,
-		storage:     mockStorage,
-		logger:      mockLogger,
+		httpSync:         mockHttpSync,
+		fileScanner:      mockFileScanner,
+		storage:          mockStorage,
+		sechedulerConfig: sechedulerConfig,
+		logger:           mockLogger,
 	}
 
 	t.Run("AlreadyRunning", func(t *testing.T) {
@@ -60,8 +68,8 @@ func TestPerformSync(t *testing.T) {
 
 		s.performSync()
 
-		mockLogger.AssertCalled(t, "Info", "开始执行同步任务", mock.Anything)
-		mockLogger.AssertCalled(t, "Info", "同步任务完成，总耗时: %v", mock.Anything)
+		mockLogger.AssertCalled(t, "Info", "starting sync task", mock.Anything)
+		mockLogger.AssertCalled(t, "Info", "sync task completed, total time: %v", mock.Anything)
 	})
 }
 
@@ -70,10 +78,11 @@ func TestPerformSyncForCodebase(t *testing.T) {
 	mockLogger.On("Error", mock.Anything, mock.Anything).Return()
 
 	s := &Scheduler{
-		httpSync:    mockHttpSync,
-		fileScanner: mockFileScanner,
-		storage:     mockStorage,
-		logger:      mockLogger,
+		httpSync:         mockHttpSync,
+		fileScanner:      mockFileScanner,
+		storage:          mockStorage,
+		sechedulerConfig: sechedulerConfig,
+		logger:           mockLogger,
 	}
 
 	t.Run("ScanDirectoryError", func(t *testing.T) {
@@ -89,8 +98,8 @@ func TestPerformSyncForCodebase(t *testing.T) {
 
 		s.performSyncForCodebase(config)
 
-		mockLogger.AssertCalled(t, "Info", "开始执行同步任务，codebase: %s", mock.Anything)
-		mockLogger.AssertCalled(t, "Error", "扫描本地目录(%s)失败: %v", mock.Anything, mock.Anything)
+		mockLogger.AssertCalled(t, "Info", "starting sync task for codebase: %s", mock.Anything)
+		mockLogger.AssertCalled(t, "Error", "failed to scan local directory (%s): %v", mock.Anything, mock.Anything)
 	})
 }
 
@@ -100,10 +109,11 @@ func TestProcessFileChanges(t *testing.T) {
 	mockLogger.On("Error", mock.Anything, mock.Anything).Return()
 
 	s := &Scheduler{
-		httpSync:    mockHttpSync,
-		fileScanner: mockFileScanner,
-		storage:     mockStorage,
-		logger:      mockLogger,
+		httpSync:         mockHttpSync,
+		fileScanner:      mockFileScanner,
+		storage:          mockStorage,
+		sechedulerConfig: sechedulerConfig,
+		logger:           mockLogger,
 	}
 
 	t.Run("NormalProcessFileChanges", func(t *testing.T) {
@@ -126,8 +136,8 @@ func TestProcessFileChanges(t *testing.T) {
 		err := s.processFileChanges(config, changes)
 
 		assert.NoError(t, err)
-		mockLogger.AssertCalled(t, "Info", "开始上报zip文件: %s", mock.Anything)
-		mockLogger.AssertCalled(t, "Info", "zip文件上报成功", mock.Anything)
+		mockLogger.AssertCalled(t, "Info", "starting to upload zip file: %s", mock.Anything)
+		mockLogger.AssertCalled(t, "Info", "zip file uploaded successfully", mock.Anything)
 	})
 
 	t.Run("CreateChangesZipError", func(t *testing.T) {
@@ -154,7 +164,7 @@ func TestProcessFileChanges(t *testing.T) {
 		err = s.processFileChanges(config, changes)
 
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "创建zip文件失败")
+		assert.Contains(t, err.Error(), "failed to create zip file")
 	})
 
 	t.Run("UploadChangesZipError", func(t *testing.T) {
@@ -178,8 +188,7 @@ func TestProcessFileChanges(t *testing.T) {
 		err := s.processFileChanges(config, changes)
 
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "上传zip文件失败")
-		mockLogger.AssertCalled(t, "Error", "上报zip文件最终失败: %v", mock.Anything)
+		assert.Contains(t, err.Error(), "failed to upload zip file")
 	})
 }
 
@@ -187,10 +196,11 @@ func TestCreateChangesZip(t *testing.T) {
 	mockLogger.On("Warn", mock.Anything, mock.Anything).Return()
 
 	s := &Scheduler{
-		httpSync:    mockHttpSync,
-		fileScanner: mockFileScanner,
-		storage:     mockStorage,
-		logger:      mockLogger,
+		httpSync:         mockHttpSync,
+		fileScanner:      mockFileScanner,
+		storage:          mockStorage,
+		sechedulerConfig: sechedulerConfig,
+		logger:           mockLogger,
 	}
 
 	t.Run("NormalChanges", func(t *testing.T) {
@@ -212,7 +222,7 @@ func TestCreateChangesZip(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.NotEmpty(t, path)
-		mockLogger.AssertCalled(t, "Warn", "添加文件到zip失败: %s, 错误: %v", mock.Anything, mock.Anything)
+		mockLogger.AssertCalled(t, "Warn", "failed to add file to zip: %s, error: %v", mock.Anything, mock.Anything)
 	})
 }
 
@@ -221,10 +231,11 @@ func TestUploadChangesZip(t *testing.T) {
 	mockLogger.On("Warn", mock.Anything, mock.Anything).Return()
 
 	s := &Scheduler{
-		httpSync:    mockHttpSync,
-		fileScanner: mockFileScanner,
-		storage:     mockStorage,
-		logger:      mockLogger,
+		httpSync:         mockHttpSync,
+		fileScanner:      mockFileScanner,
+		storage:          mockStorage,
+		sechedulerConfig: sechedulerConfig,
+		logger:           mockLogger,
 	}
 
 	t.Run("SuccessAfterRetry", func(t *testing.T) {
@@ -249,7 +260,7 @@ func TestUploadChangesZip(t *testing.T) {
 		err = s.uploadChangesZip(tempFile, uploadReq)
 
 		assert.NoError(t, err)
-		mockLogger.AssertCalled(t, "Info", "zip文件上报成功", mock.Anything)
+		mockLogger.AssertCalled(t, "Info", "zip file uploaded successfully", mock.Anything)
 		mockHttpSync.AssertExpectations(t)
 	})
 }

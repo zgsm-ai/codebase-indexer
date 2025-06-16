@@ -42,31 +42,31 @@ func (s *IntegrationTestSuite) SetupTest() {
 	rootPath := os.TempDir()
 	logPath, err := utils.GetLogDir(rootPath)
 	if err != nil {
-		s.T().Fatalf("获取log目录失败: %v", err)
+		s.T().Fatalf("failed to get log directory: %v", err)
 	}
 	fmt.Printf("log目录: %s\n", logPath)
 
 	// 初始化缓存目录
 	cachePath, err := utils.GetCacheDir(rootPath)
 	if err != nil {
-		s.T().Fatalf("获取缓存目录失败: %v", err)
+		s.T().Fatalf("failed to get cache directory: %v", err)
 	}
 	fmt.Printf("缓存目录: %s\n", cachePath)
 
 	// 初始化上报临时目录
 	uploadTmpPath, err := utils.GetUploadTmpDir(rootPath)
 	if err != nil {
-		s.T().Fatalf("获取上报临时目录失败: %v", err)
+		s.T().Fatalf("failed to get upload temp directory: %v", err)
 	}
 	fmt.Printf("上报临时目录: %s\n", uploadTmpPath)
 
 	logger, err := logger.NewLogger(logPath, "info")
 	if err != nil {
-		s.T().Fatalf("初始化日志系统失败: %v", err)
+		s.T().Fatalf("failed to initialize logger: %v", err)
 	}
 	storageManager, err := storage.NewStorageManager(cachePath, logger)
 	if err != nil {
-		s.T().Fatalf("初始化存储系统失败: %v", err)
+		s.T().Fatalf("failed to initialize storage system: %v", err)
 	}
 	fileScanner := scanner.NewFileScanner(logger)
 	s.handler = handler.NewGRPCHandler(httpSync, storageManager, logger, appInfo)
@@ -114,7 +114,7 @@ func (s *IntegrationTestSuite) TestRegisterSync() {
 
 			if tt.wantErr {
 				assert.NoError(t, err)
-				assert.Contains(t, resp.Message, "参数错误")
+				assert.Contains(t, resp.Message, "invalid parameters")
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, resp)
@@ -154,21 +154,21 @@ func (s *IntegrationTestSuite) TestUnregisterSyncInvalidParams() {
 		req  *api.UnregisterSyncRequest
 	}{
 		{
-			name: "缺少ClientId",
+			name: "missing ClientId",
 			req: &api.UnregisterSyncRequest{
 				WorkspacePath: "/tmp/test",
 				WorkspaceName: "test",
 			},
 		},
 		{
-			name: "缺少WorkspacePath",
+			name: "missing WorkspacePath",
 			req: &api.UnregisterSyncRequest{
 				ClientId:      "test-client",
 				WorkspaceName: "test",
 			},
 		},
 		{
-			name: "缺少WorkspaceName",
+			name: "missing WorkspaceName",
 			req: &api.UnregisterSyncRequest{
 				ClientId:      "test-client",
 				WorkspacePath: "/tmp/test",
@@ -212,7 +212,7 @@ func (s *IntegrationTestSuite) TestHandlerVersion() {
 
 			if tt.wantErr {
 				assert.NoError(t, err)
-				assert.Contains(t, resp.Message, "参数错误")
+				assert.Contains(t, resp.Message, "invalid parameters")
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(s.T(), "test-app", resp.Data.AppName)

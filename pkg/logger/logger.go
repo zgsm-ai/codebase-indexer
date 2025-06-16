@@ -11,7 +11,7 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-// 日志级别映射
+// Log level mapping
 var logLevelMap = map[string]zapcore.Level{
 	"debug": zapcore.DebugLevel,
 	"info":  zapcore.InfoLevel,
@@ -19,7 +19,7 @@ var logLevelMap = map[string]zapcore.Level{
 	"error": zapcore.ErrorLevel,
 }
 
-// 日志接口
+// Logger interface
 type Logger interface {
 	Debug(format string, args ...any)
 	Info(format string, args ...any)
@@ -28,28 +28,28 @@ type Logger interface {
 	Fatal(format string, args ...any)
 }
 
-// 日志实现
+// Logger implementation
 type logger struct {
 	log   *zap.Logger
 	sugar *zap.SugaredLogger
 }
 
-// 创建新日志实例
+// NewLogger Create new logger instance
 func NewLogger(logsDir, level string) (Logger, error) {
 	// 确保logs目录是有效的可写路径
 	if logsDir == "" || strings.Contains(logsDir, "\x00") {
-		return nil, fmt.Errorf("日志目录路径无效")
+		return nil, fmt.Errorf("invalid log directory path")
 	}
 
 	// 尝试创建目录来验证是否有写入权限
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
-		return nil, fmt.Errorf("无法创建日志目录: %v", err)
+		return nil, fmt.Errorf("failed to create log directory: %v", err)
 	}
 
 	testFile := filepath.Join(logsDir, ".test-write")
 	file, err := os.Create(testFile)
 	if err != nil {
-		return nil, fmt.Errorf("目录不可写: %v", err)
+		return nil, fmt.Errorf("directory is not writable: %v", err)
 	}
 	file.Close()
 	os.Remove(testFile)
@@ -107,27 +107,27 @@ func NewLogger(logsDir, level string) (Logger, error) {
 	}, nil
 }
 
-// 调试级日志
+// Debug level log
 func (l *logger) Debug(format string, args ...any) {
 	l.sugar.Debugf(format, args...)
 }
 
-// 信息级日志
+// Info level log
 func (l *logger) Info(format string, args ...any) {
 	l.sugar.Infof(format, args...)
 }
 
-// 警告级日志
+// Warning level log
 func (l *logger) Warn(format string, args ...any) {
 	l.sugar.Warnf(format, args...)
 }
 
-// 错误级日志
+// Error level log
 func (l *logger) Error(format string, args ...any) {
 	l.sugar.Errorf(format, args...)
 }
 
-// 致命错误日志
+// Fatal error log
 func (l *logger) Fatal(format string, args ...any) {
 	l.sugar.Fatalf(format, args...)
 }

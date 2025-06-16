@@ -23,6 +23,7 @@ import (
 type SchedulerConfig struct {
 	IntervalMinutes       int // 同步间隔，单位：分钟
 	RegisterExpireMinutes int // 注册过期时间，单位：分钟
+	HashTreeExpireHours   int // 哈希树过期时间，单位：小时
 	MaxRetries            int // 最大重试次数
 	RetryIntervalSeconds  int // 重试间隔，单位：秒
 }
@@ -45,6 +46,7 @@ func NewScheduler(httpSync syncer.SyncInterface, fileScanner scanner.ScannerInte
 	defaultSchedulerConfig := &SchedulerConfig{
 		IntervalMinutes:       storage.DefaultConfigSync.IntervalMinutes,
 		RegisterExpireMinutes: storage.DefaultConfigServer.RegisterExpireMinutes,
+		HashTreeExpireHours:   storage.DefaultConfigServer.HashTreeExpireHours,
 		MaxRetries:            storage.DefaultConfigSync.MaxRetries,
 		RetryIntervalSeconds:  storage.DefaultConfigSync.RetryDelaySeconds,
 	}
@@ -70,6 +72,9 @@ func (s *Scheduler) SetSchedulerConfig(config *SchedulerConfig) {
 	if config.RegisterExpireMinutes > 0 && config.RegisterExpireMinutes <= 60 {
 		s.sechedulerConfig.RegisterExpireMinutes = config.RegisterExpireMinutes
 	}
+	if config.HashTreeExpireHours > 0 {
+		s.sechedulerConfig.HashTreeExpireHours = config.HashTreeExpireHours
+	}
 	if config.MaxRetries > 1 && config.MaxRetries <= 10 {
 		s.sechedulerConfig.MaxRetries = config.MaxRetries
 	}
@@ -85,10 +90,10 @@ func (s *Scheduler) Start(ctx context.Context) {
 
 // Restart 重启调度器
 func (s *Scheduler) Restart(ctx context.Context) {
-	s.logger.Info("准备重启调度器")
+	s.logger.Info("preparing to restart scheduler")
 
 	s.restartCh <- struct{}{}
-	s.logger.Info("调度器重启信号已发送")
+	s.logger.Info("scheduler restart signal sent")
 	time.Sleep(100 * time.Millisecond) // 等待调度器重启
 
 	go s.runScheduler(ctx, false)
@@ -96,10 +101,10 @@ func (s *Scheduler) Restart(ctx context.Context) {
 
 // Update 更新调度器配置
 func (s *Scheduler) Update(ctx context.Context) {
-	s.logger.Info("准备更新调度器")
+	s.logger.Info("preparing to update scheduler")
 
 	s.updateCh <- struct{}{}
-	s.logger.Info("调度器更新配置信号已发送")
+	s.logger.Info("scheduler config update signal sent")
 	time.Sleep(100 * time.Millisecond) // 等待调度器更新
 
 	config := storage.GetClientConfig()
@@ -107,6 +112,7 @@ func (s *Scheduler) Update(ctx context.Context) {
 	schedulerConfig := &SchedulerConfig{
 		IntervalMinutes:       config.Sync.IntervalMinutes,
 		RegisterExpireMinutes: config.Server.RegisterExpireMinutes,
+		HashTreeExpireHours:   config.Server.HashTreeExpireHours,
 		MaxRetries:            config.Sync.MaxRetries,
 		RetryIntervalSeconds:  config.Sync.RetryDelaySeconds,
 	}
@@ -124,7 +130,7 @@ func (s *Scheduler) Update(ctx context.Context) {
 func (s *Scheduler) runScheduler(parentCtx context.Context, initial bool) {
 	syncInterval := time.Duration(s.sechedulerConfig.IntervalMinutes) * time.Minute
 
-	s.logger.Info("启动同步调度器，间隔: %v", syncInterval)
+	s.logger.Info("starting sync scheduler with interval: %v", syncInterval)
 
 	// 立即执行一次同步
 	if initial && s.httpSync.GetSyncConfig() != nil {
@@ -138,18 +144,18 @@ func (s *Scheduler) runScheduler(parentCtx context.Context, initial bool) {
 	for {
 		select {
 		case <-parentCtx.Done():
-			s.logger.Info("同步调度器已停止")
+			s.logger.Info("sync scheduler stopped")
 			return
 		case <-s.restartCh:
-			s.logger.Info("收到重启信号，重启调度器")
+			s.logger.Info("received restart signal, restarting scheduler")
 			return
 		case <-s.updateCh:
-			s.logger.Info("收到更新配置信号，等待更新配置")
+			s.logger.Info("received config update signal, waiting for update")
 			time.Sleep(500 * time.Millisecond)
 			continue
 		case <-s.currentTicker.C:
 			if s.httpSync.GetSyncConfig() == nil {
-				s.logger.Warn("未配置同步配置，跳过同步")
+				s.logger.Warn("sync config not found, skipping sync")
 				continue
 			}
 			s.performSync()
@@ -164,7 +170,7 @@ func (s *Scheduler) performSync() {
 
 	// 防止同时执行多个同步任务
 	if s.isRunning {
-		s.logger.Info("已有同步任务正在执行，跳过本次同步")
+		s.logger.Info("sync task already running, skipping this run")
 		return
 	}
 
@@ -173,72 +179,80 @@ func (s *Scheduler) performSync() {
 		s.isRunning = false
 	}()
 
-	s.logger.Info("开始执行同步任务")
+	s.logger.Info("starting sync task")
 	startTime := time.Now()
 
 	syncConfigTimeout := time.Duration(s.sechedulerConfig.RegisterExpireMinutes) * time.Minute
 	codebaseConfigs := s.storage.GetCodebaseConfigs()
 	for _, config := range codebaseConfigs {
 		if config.RegisterTime.IsZero() || time.Since(config.RegisterTime) > syncConfigTimeout {
-			s.logger.Info("codebase %s 注册已过期，删除配置，跳过同步", config.CodebaseId)
+			s.logger.Info("codebase %s registration expired, deleting config, skipping sync", config.CodebaseId)
 			if err := s.storage.DeleteCodebaseConfig(config.CodebaseId); err != nil {
-				s.logger.Error("删除codebase配置失败: %v", err)
+				s.logger.Error("failed to delete codebase config: %v", err)
 			}
 			continue
 		}
 		s.performSyncForCodebase(config)
 	}
 
-	s.logger.Info("同步任务完成，总耗时: %v", time.Since(startTime))
+	s.logger.Info("sync task completed, total time: %v", time.Since(startTime))
 }
 
 // performSyncForCodebase 执行单个codebase 的同步任务
 func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) {
-	s.logger.Info("开始执行同步任务，codebase: %s", config.CodebaseId)
-	startTime := time.Now()
+	s.logger.Info("starting sync task for codebase: %s", config.CodebaseId)
+	nowTime := time.Now()
 	localHashTree, err := s.fileScanner.ScanDirectory(config.CodebasePath)
 	if err != nil {
-		s.logger.Error("扫描本地目录(%s)失败: %v", config.CodebasePath, err)
+		s.logger.Error("failed to scan local directory (%s): %v", config.CodebasePath, err)
 		return
 	}
 
-	// 获取服务器哈希树
+	// 获取codebase哈希树
 	var serverHashTree map[string]string
-	if len(config.HashTree) > 0 {
+	if len(config.HashTree) > 0 && config.LastSync.Add(time.Duration(s.sechedulerConfig.HashTreeExpireHours)*time.Hour).After(nowTime) {
 		serverHashTree = config.HashTree
 	} else {
-		s.logger.Info("本地哈希树为空，从服务器获取")
+		s.logger.Info("local hash tree empty, fetching from server")
 		serverHashTree, err = s.httpSync.FetchServerHashTree(config.CodebasePath)
 		if err != nil {
-			s.logger.Warn("从服务器获取哈希树失败: %v", err)
+			s.logger.Warn("failed to get hash tree from server: %v", err)
 			// 没有服务器哈希树，使用空哈希树进行全量同步
 			serverHashTree = make(map[string]string)
+		} else {
+			// 更新codebase哈希树
+			s.logger.Info("fetched server hash tree successfully, updating codebase config")
+			config.HashTree = serverHashTree
+			config.LastSync = nowTime
+			if err := s.storage.SaveCodebaseConfig(config); err != nil {
+				s.logger.Error("failed to save codebase config: %v", err)
+			}
 		}
 	}
 
 	// 比较哈希树，找出变更
 	changes := s.fileScanner.CalculateFileChanges(localHashTree, serverHashTree)
 	if len(changes) == 0 {
-		s.logger.Info("未检测到文件变更，同步完成")
+		s.logger.Info("no file changes detected, sync completed")
 		return
 	}
 
-	s.logger.Info("检测到 %d 个文件变更", len(changes))
+	s.logger.Info("detected %d file changes", len(changes))
 
 	// 处理所有文件变更
 	if err := s.processFileChanges(config, changes); err != nil {
-		s.logger.Error("同步任务失败，处理文件变更失败: %v", err)
+		s.logger.Error("sync task failed, file changes processing failed: %v", err)
 		return
 	}
 
 	// 更新本地哈希树并保存配置
 	config.HashTree = localHashTree
-	config.LastSync = time.Now()
+	config.LastSync = nowTime
 	if err := s.storage.SaveCodebaseConfig(config); err != nil {
-		s.logger.Error("保存codebase 配置失败: %v", err)
+		s.logger.Error("failed to save codebase config: %v", err)
 	}
 
-	s.logger.Info("同步任务完成，codebase: %s, 耗时: %v", config.CodebaseId, time.Since(startTime))
+	s.logger.Info("sync task completed for codebase: %s, time taken: %v", config.CodebaseId, time.Since(nowTime))
 }
 
 // processFileChanges 处理文件变更，将上传逻辑封装
@@ -246,7 +260,7 @@ func (s *Scheduler) processFileChanges(config *storage.CodebaseConfig, changes [
 	// 创建包含所有变更（新增和修改的文件）的zip文件
 	zipPath, err := s.createChangesZip(config, changes)
 	if err != nil {
-		return fmt.Errorf("创建zip文件失败: %v", err)
+		return fmt.Errorf("failed to create zip file: %v", err)
 	}
 
 	// 上传zip文件
@@ -257,7 +271,7 @@ func (s *Scheduler) processFileChanges(config *storage.CodebaseConfig, changes [
 	}
 	err = s.uploadChangesZip(zipPath, uploadReq)
 	if err != nil {
-		return fmt.Errorf("上传zip文件失败: %v", err)
+		return fmt.Errorf("failed to upload zip file: %v", err)
 	}
 
 	return nil
@@ -308,7 +322,7 @@ func (s *Scheduler) createChangesZip(config *storage.CodebaseConfig, changes []*
 		if change.Status == scanner.FILE_STATUS_ADDED || change.Status == scanner.FILE_STATUS_MODIFIED {
 			if err := utils.AddFileToZip(zipWriter, change.Path, config.CodebasePath); err != nil {
 				// 继续尝试添加其他文件，但记录错误
-				s.logger.Warn("添加文件到zip失败: %s, 错误: %v", change.Path, err)
+				s.logger.Warn("failed to add file to zip: %s, error: %v", change.Path, err)
 			}
 		}
 	}
@@ -336,22 +350,22 @@ func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq *syncer.UploadReq
 	maxRetries := s.sechedulerConfig.MaxRetries
 	retryDelay := time.Duration(s.sechedulerConfig.RetryIntervalSeconds) * time.Second
 
-	s.logger.Info("开始上报zip文件: %s", zipPath)
+	s.logger.Info("starting to upload zip file: %s", zipPath)
 
 	var errUpload error
 	for i := 0; i < maxRetries; i++ {
 		errUpload = s.httpSync.UploadFile(zipPath, uploadReq)
 		if errUpload == nil {
-			s.logger.Info("zip文件上报成功")
+			s.logger.Info("zip file uploaded successfully")
 			break
 		}
 		if strings.Contains(errUpload.Error(), "429") || strings.Contains(errUpload.Error(), "503") {
-			s.logger.Warn("上传文件被限流，退出重试")
+			s.logger.Warn("upload rate limited, aborting retry")
 			break
 		}
-		s.logger.Warn("上报zip文件失败 (尝试 %d/%d): %v", i+1, maxRetries, errUpload)
+		s.logger.Warn("failed to upload zip file (attempt %d/%d): %v", i+1, maxRetries, errUpload)
 		if i < maxRetries-1 {
-			s.logger.Info("等待 %v 后重试...", retryDelay*time.Duration(i+1))
+			s.logger.Info("waiting %v before retry...", retryDelay*time.Duration(i+1))
 			time.Sleep(retryDelay * time.Duration(i+1))
 		}
 	}
@@ -359,9 +373,9 @@ func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq *syncer.UploadReq
 	// 上报结束后，无论成功与否，都尝试删除本地的zip文件
 	if zipPath != "" {
 		if err := os.Remove(zipPath); err != nil {
-			s.logger.Warn("删除临时zip文件失败: %s, 错误: %v", zipPath, err)
+			s.logger.Warn("failed to delete temp zip file: %s, error: %v", zipPath, err)
 		} else {
-			s.logger.Info("成功删除临时zip文件: %s", zipPath)
+			s.logger.Info("temp zip file deleted successfully: %s", zipPath)
 		}
 	}
 

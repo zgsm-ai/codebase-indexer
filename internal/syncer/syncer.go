@@ -84,7 +84,7 @@ type HashItem struct {
 
 // 获取服务端哈希树
 func (hs *HTTPSync) FetchServerHashTree(codebasePath string) (map[string]string, error) {
-	hs.logger.Info("从服务器获取哈希树: %s", codebasePath)
+	hs.logger.Info("fetching hash tree from server: %s", codebasePath)
 
 	// 准备请求
 	url := fmt.Sprintf("%s%s?clientId=%s&codebasePath=%s",
@@ -102,20 +102,20 @@ func (hs *HTTPSync) FetchServerHashTree(codebasePath string) (map[string]string,
 	req.Header.SetContentType("application/json")
 	req.Header.Set("Authorization", "Bearer "+hs.syncConfig.Token)
 
-	hs.logger.Debug("发送获取哈希树请求到: %s", url)
+	hs.logger.Debug("sending hash tree request to: %s", url)
 	if err := hs.httpClient.Do(req, resp); err != nil {
-		return nil, fmt.Errorf("发送请求失败: %v", err)
+		return nil, fmt.Errorf("failed to send request: %v", err)
 	}
 
 	// 处理响应
 	if resp.StatusCode() != fasthttp.StatusOK {
-		return nil, fmt.Errorf("获取哈希树失败，状态码: %d，响应: %s",
+		return nil, fmt.Errorf("failed to get hash tree, status: %d, response: %s",
 			resp.StatusCode(), string(resp.Body()))
 	}
 
 	var responseData CodebaseHashResp
 	if err := json.Unmarshal(resp.Body(), &responseData); err != nil {
-		return nil, fmt.Errorf("解析响应失败: %v", err)
+		return nil, fmt.Errorf("failed to parse response: %v", err)
 	}
 
 	hashTree := make(map[string]string)
@@ -127,7 +127,7 @@ func (hs *HTTPSync) FetchServerHashTree(codebasePath string) (map[string]string,
 		hashTree[path] = item.Hash
 	}
 
-	hs.logger.Info("成功获取服务器哈希树，包含 %d 个文件", len(hashTree))
+	hs.logger.Info("successfully fetched server hash tree, contains %d files", len(hashTree))
 	return hashTree, nil
 }
 
@@ -139,11 +139,11 @@ type UploadReq struct {
 
 // UploadFile 上传文件到服务器
 func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
-	hs.logger.Info("上传文件: %s", filePath)
+	hs.logger.Info("uploading file: %s", filePath)
 
 	file, err := os.Open(filePath)
 	if err != nil {
-		return fmt.Errorf("打开文件失败: %v", err)
+		return fmt.Errorf("failed to open file: %v", err)
 	}
 	defer file.Close()
 
@@ -153,11 +153,11 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 	// 添加zip文件
 	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
 	if err != nil {
-		return fmt.Errorf("创建表单文件失败: %v", err)
+		return fmt.Errorf("failed to create form file: %v", err)
 	}
 
 	if _, err := io.Copy(part, file); err != nil {
-		return fmt.Errorf("复制文件内容失败: %v", err)
+		return fmt.Errorf("failed to copy file content: %v", err)
 	}
 
 	// 添加表单字段
@@ -166,7 +166,7 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 	writer.WriteField("codebaseName", uploadReq.CodebaseName)
 
 	if err := writer.Close(); err != nil {
-		return fmt.Errorf("关闭写入器失败: %v", err)
+		return fmt.Errorf("failed to close writer: %v", err)
 	}
 
 	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_UPLOAD_FILE)
@@ -184,16 +184,16 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 	req.Header.Set("Authorization", "Bearer "+hs.syncConfig.Token)
 	req.SetBody(body.Bytes())
 
-	hs.logger.Debug("发送文件上传请求到: %s", url)
+	hs.logger.Debug("sending file upload request to: %s", url)
 	if err := hs.httpClient.Do(req, resp); err != nil {
-		return fmt.Errorf("发送请求失败: %v", err)
+		return fmt.Errorf("failed to send request: %v", err)
 	}
 
 	if resp.StatusCode() != fasthttp.StatusOK {
-		return fmt.Errorf("上传失败，状态码: %d，响应: %s", resp.StatusCode(), string(resp.Body()))
+		return fmt.Errorf("upload failed, status: %d, response: %s", resp.StatusCode(), string(resp.Body()))
 	}
 
-	hs.logger.Info("文件上传成功: %s", filePath)
+	hs.logger.Info("file uploaded successfully: %s", filePath)
 	return nil
 }
 
@@ -204,7 +204,7 @@ const (
 
 // 获取客户端配置文件
 func (hs *HTTPSync) GetClientConfig() (storage.ClientConfig, error) {
-	hs.logger.Info("从服务器获取客户端配置文件")
+	hs.logger.Info("fetching client config from server")
 
 	// 准备请求
 	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_GET_CLIENT_CONFIG)
@@ -221,22 +221,22 @@ func (hs *HTTPSync) GetClientConfig() (storage.ClientConfig, error) {
 	req.Header.SetContentType("application/json")
 	req.Header.Set("Authorization", "Bearer "+hs.syncConfig.Token)
 
-	hs.logger.Debug("发送获取客户端配置文件请求到: %s", url)
+	hs.logger.Debug("sending client config request to: %s", url)
 	if err := hs.httpClient.Do(req, resp); err != nil {
-		return storage.ClientConfig{}, fmt.Errorf("发送请求失败: %v", err)
+		return storage.ClientConfig{}, fmt.Errorf("failed to send request: %v", err)
 	}
 
 	// 处理响应
 	if resp.StatusCode() != fasthttp.StatusOK {
-		return storage.ClientConfig{}, fmt.Errorf("获取客户端配置文件失败，状态码: %d，响应: %s",
+		return storage.ClientConfig{}, fmt.Errorf("failed to get client config, status: %d, response: %s",
 			resp.StatusCode(), string(resp.Body()))
 	}
 
 	var clientConfig storage.ClientConfig
 	if err := json.Unmarshal(resp.Body(), &clientConfig); err != nil {
-		return storage.ClientConfig{}, fmt.Errorf("解析响应失败: %v", err)
+		return storage.ClientConfig{}, fmt.Errorf("failed to parse response: %v", err)
 	}
 
-	hs.logger.Info("成功获取客户端配置文件")
+	hs.logger.Info("client config fetched successfully")
 	return clientConfig, nil
 }

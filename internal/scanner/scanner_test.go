@@ -11,6 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	scannerConfig = &ScannerConfig{
+		IgnorePatterns: []string{".git", ".idea", "node_modules/", "vendor/", "dist/", "build/"},
+		MaxFileSizeMB:  10,
+	}
+)
+
 // MockLogger 是用于测试的mock logger
 type MockLogger struct {
 	t *testing.T
@@ -26,7 +33,7 @@ func TestCalculateFileHash(t *testing.T) {
 	logger := &MockLogger{t}
 	fs := NewFileScanner(logger)
 
-	t.Run("计算文件哈希", func(t *testing.T) {
+	t.Run("calculate file hash", func(t *testing.T) {
 		tempDir := t.TempDir()
 		testFile := filepath.Join(tempDir, "test.txt")
 		content := "test content"
@@ -37,7 +44,7 @@ func TestCalculateFileHash(t *testing.T) {
 		assert.NotEmpty(t, hash)
 	})
 
-	t.Run("处理不存在文件", func(t *testing.T) {
+	t.Run("handle nonexistent file", func(t *testing.T) {
 		_, err := fs.CalculateFileHash("nonexistent.txt")
 		assert.Error(t, err)
 	})
@@ -45,9 +52,9 @@ func TestCalculateFileHash(t *testing.T) {
 
 func TestLoadIgnoreRules(t *testing.T) {
 	logger := &MockLogger{t}
-	fs := &FileScanner{logger: logger}
+	fs := &FileScanner{scannerConfig: scannerConfig, logger: logger}
 
-	t.Run("仅使用默认规则", func(t *testing.T) {
+	t.Run("use default rules only", func(t *testing.T) {
 		tempDir := t.TempDir()
 		ignore := fs.loadIgnoreRules(tempDir)
 		require.NotNil(t, ignore)
@@ -59,7 +66,7 @@ func TestLoadIgnoreRules(t *testing.T) {
 		assert.False(t, ignore.MatchesPath("src/main.go"))
 	})
 
-	t.Run("合并.gitignore规则", func(t *testing.T) {
+	t.Run("merge gitignore rules", func(t *testing.T) {
 		tempDir := t.TempDir()
 		gitignoreContent := "/build\n*.log\n"
 		require.NoError(t, os.WriteFile(
@@ -105,28 +112,28 @@ func TestScanDirectory(t *testing.T) {
 		return tempDir
 	}
 
-	t.Run("扫描目录并过滤文件", func(t *testing.T) {
+	t.Run("scan directory and filter files", func(t *testing.T) {
 		codebasePath := setupTestDir(t)
 		hashTree, err := fs.ScanDirectory(codebasePath)
 		require.NoError(t, err)
 
 		// 验证包含的文件
 		_, ok := hashTree[filepath.Join("src", "main.go")]
-		assert.True(t, ok, "应该包含src/main.go")
+		assert.True(t, ok, "should include src/main.go")
 		_, ok = hashTree[filepath.Join("src", "pkg", "utils.go")]
-		assert.True(t, ok, "应该包含src/pkg/utils.go")
+		assert.True(t, ok, "should include src/pkg/utils.go")
 
 		// 验证排除的文件
 		_, ok = hashTree[filepath.Join("build", "main.exe")]
-		assert.False(t, ok, "应该排除build/main.exe")
+		assert.False(t, ok, "should exclude build/main.exe")
 
 		_, ok = hashTree[filepath.Join("node_modules", "module")]
-		assert.False(t, ok, "应该排除node_modules/module")
+		assert.False(t, ok, "should exclude node_modules/module")
 	})
 
-	t.Run("Windows路径格式兼容", func(t *testing.T) {
+	t.Run("windows path compatibility", func(t *testing.T) {
 		if runtime.GOOS != "windows" {
-			t.Skip("仅Windows系统运行此测试")
+			t.Skip("skip: only run on Windows system")
 		}
 		codebasePath := setupTestDir(t)
 		hashTree, err := fs.ScanDirectory(codebasePath)
@@ -134,7 +141,7 @@ func TestScanDirectory(t *testing.T) {
 
 		// 使用Windows风格路径验证
 		_, ok := hashTree["src\\main.go"]
-		assert.True(t, ok, "应该识别Windows路径格式")
+		assert.True(t, ok, "should recognize Windows path format")
 	})
 }
 
@@ -179,7 +186,7 @@ func TestCalculateFileChanges(t *testing.T) {
 	logger := &MockLogger{t}
 	fs := NewFileScanner(logger)
 
-	t.Run("识别文件变化", func(t *testing.T) {
+	t.Run("detect file changes", func(t *testing.T) {
 		local := map[string]string{
 			"added.txt":    "hash1",
 			"modified.txt": "hash2", // 与remote中不同

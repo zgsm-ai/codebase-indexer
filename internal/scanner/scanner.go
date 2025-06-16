@@ -78,17 +78,17 @@ func (fs *FileScanner) CalculateFileHash(filePath string) (string, error) {
 
 	file, err := os.Open(filePath)
 	if err != nil {
-		return "", fmt.Errorf("无法打开文件 %s: %v", filePath, err)
+		return "", fmt.Errorf("failed to open file %s: %v", filePath, err)
 	}
 	defer file.Close()
 
 	hash := sha256.New()
 	if _, err := io.Copy(hash, file); err != nil {
-		return "", fmt.Errorf("无法计算文件 %s 的哈希值: %v", filePath, err)
+		return "", fmt.Errorf("failed to calculate hash for file %s: %v", filePath, err)
 	}
 
 	hashValue := hex.EncodeToString(hash.Sum(nil))
-	fs.logger.Debug("计算文件 %s 的哈希值完成，耗时: %v，哈希值: %s",
+	fs.logger.Debug("file hash calculated for %s, time taken: %v, hash: %s",
 		filePath, time.Since(startTime), hashValue)
 
 	return hashValue, nil
@@ -121,7 +121,7 @@ func (fs *FileScanner) loadIgnoreRules(codebasePath string) *gitignore.GitIgnore
 			compiledIgnore = gitignore.CompileIgnoreLines(append(currentIgnoreRules, lines...)...)
 		}
 	} else if !os.IsNotExist(err) {
-		fs.logger.Warn("读取.gitignore文件 %s 失败: %v", ignoreFilePath, err)
+		fs.logger.Warn("failed to read .gitignore file %s: %v", ignoreFilePath, err)
 		// 如果读取失败（非文件不存在错误），则仅使用默认规则
 	}
 	return compiledIgnore
@@ -129,7 +129,7 @@ func (fs *FileScanner) loadIgnoreRules(codebasePath string) *gitignore.GitIgnore
 
 // ScanDirectory 扫描目录并生成哈希树
 func (fs *FileScanner) ScanDirectory(codebasePath string) (map[string]string, error) {
-	fs.logger.Info("开始扫描目录: %s", codebasePath)
+	fs.logger.Info("starting directory scan: %s", codebasePath)
 	startTime := time.Now()
 
 	hashTree := make(map[string]string)
@@ -141,7 +141,7 @@ func (fs *FileScanner) ScanDirectory(codebasePath string) (map[string]string, er
 	maxFileSize := int64(maxFileSizeMB * 1024 * 1024)
 	err := filepath.Walk(codebasePath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			fs.logger.Warn("访问文件 %s 时出错: %v", path, err)
+			fs.logger.Warn("error accessing file %s: %v", path, err)
 			return nil // 继续扫描其他文件
 		}
 
@@ -150,7 +150,7 @@ func (fs *FileScanner) ScanDirectory(codebasePath string) (map[string]string, er
 			relPath, _ := filepath.Rel(codebasePath, path)
 			// 如果是根目录本身 (relPath is "."), 不要因为 ".*" 规则而跳过它
 			if relPath != "." && ignore != nil && ignore.MatchesPath(relPath+"/") {
-				fs.logger.Debug("跳过被忽略的目录: %s", relPath)
+				fs.logger.Debug("skipping ignored directory: %s", relPath)
 				return filepath.SkipDir
 			}
 			return nil
@@ -159,26 +159,26 @@ func (fs *FileScanner) ScanDirectory(codebasePath string) (map[string]string, er
 		// 计算相对路径
 		relPath, err := filepath.Rel(codebasePath, path)
 		if err != nil {
-			fs.logger.Warn("无法获取文件 %s 的相对路径: %v", path, err)
+			fs.logger.Warn("failed to get relative path for file %s: %v", path, err)
 			return nil
 		}
 
 		// 检查文件是否在.gitignore中被排除
 		if ignore != nil && ignore.MatchesPath(relPath) {
-			fs.logger.Debug("跳过被.gitignore排除的文件: %s", relPath)
+			fs.logger.Debug("skipping file excluded by .gitignore: %s", relPath)
 			return nil
 		}
 
 		// 检查文件大小是否超过最大限制
 		if info.Size() >= maxFileSize {
-			fs.logger.Debug("跳过大于%dMB的文件: %s (大小: %.2f MB)", maxFileSizeMB, relPath, float64(info.Size())/1024/1024)
+			fs.logger.Debug("skipping file larger than %dMB: %s (size: %.2f MB)", maxFileSizeMB, relPath, float64(info.Size())/1024/1024)
 			return nil
 		}
 
 		// 计算文件哈希
 		hash, err := fs.CalculateFileHash(path)
 		if err != nil {
-			fs.logger.Warn("计算文件 %s 的哈希值时出错: %v", path, err)
+			fs.logger.Warn("error calculating hash for file %s: %v", path, err)
 			return nil
 		}
 
@@ -186,17 +186,17 @@ func (fs *FileScanner) ScanDirectory(codebasePath string) (map[string]string, er
 		filesScanned++
 
 		if filesScanned%100 == 0 {
-			fs.logger.Debug("已扫描 %d 个文件", filesScanned)
+			fs.logger.Debug("%d files scanned", filesScanned)
 		}
 
 		return nil
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("扫描目录失败: %v", err)
+		return nil, fmt.Errorf("failed to scan directory: %v", err)
 	}
 
-	fs.logger.Info("目录扫描完成，共扫描 %d 个文件，耗时: %v",
+	fs.logger.Info("directory scan completed, %d files scanned, time taken: %v",
 		filesScanned, time.Since(startTime))
 
 	return hashTree, nil

@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	api "codebase-syncer/api" // 已生成的protobuf包
+	api "codebase-syncer/api"
 	"codebase-syncer/internal/daemon"
 	"codebase-syncer/internal/handler"
 	"codebase-syncer/internal/scanner"
@@ -41,14 +41,14 @@ func main() {
 	}
 
 	// 解析命令行参数
-	appName := flag.String("appname", "zgsm", "应用名称")
-	grpcServer := flag.String("grpc", "localhost:51353", "gRPC服务器地址")
-	logLevel := flag.String("loglevel", "info", "日志级别 (debug, info, warn, error)")
+	appName := flag.String("appname", "zgsm", "app name")
+	grpcServer := flag.String("grpc", "localhost:51353", "gRPC server address")
+	logLevel := flag.String("loglevel", "info", "log level (debug, info, warn, error)")
 	flag.Parse()
 
 	// 初始化目录
 	if err := initDir(*appName); err != nil {
-		fmt.Printf("初始化目录失败: %v\n", err)
+		fmt.Printf("failed to initialize directory: %v\n", err)
 		return
 	}
 	// 初始化配置
@@ -57,15 +57,15 @@ func main() {
 	// 初始化日志系统
 	logger, err := logger.NewLogger(utils.LogsDir, *logLevel)
 	if err != nil {
-		fmt.Printf("初始化日志系统失败: %v\n", err)
+		fmt.Printf("failed to initialize logging system: %v\n", err)
 		return
 	}
-	logger.Info("OS: %s, Arch: %s, App: %s, Version: %s, 启动中...", osName, archName, *appName, version)
+	logger.Info("OS: %s, Arch: %s, App: %s, Version: %s, Starting...", osName, archName, *appName, version)
 
 	// 初始化各模块
 	storageManager, err := storage.NewStorageManager(utils.CacheDir, logger)
 	if err != nil {
-		logger.Fatal("初始化存储管理器失败: %v", err)
+		logger.Fatal("failed to initialize storage manager: %v", err)
 		return
 	}
 	fileScanner := scanner.NewFileScanner(logger)
@@ -92,9 +92,9 @@ func main() {
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 
-	logger.Info("接收到退出信号，正在优雅关闭...")
+	logger.Info("received shutdown signal, shutting down gracefully...")
 	daemon.Stop()
-	logger.Info("客户端已成功关闭")
+	logger.Info("client has been successfully closed")
 }
 
 // initDir 初始化目录
@@ -102,34 +102,30 @@ func initDir(appName string) error {
 	// 初始化根目录
 	rootPath, err := utils.GetRootDir(appName)
 	if err != nil {
-		fmt.Printf("获取根目录失败: %v\n", err)
-		return fmt.Errorf("获取根目录失败: %v", err)
+		return fmt.Errorf("failed to get root directory: %v", err)
 	}
-	fmt.Printf("根目录: %s\n", rootPath)
+	fmt.Printf("root directory: %s\n", rootPath)
 
 	// 初始化日志目录
 	logPath, err := utils.GetLogDir(rootPath)
 	if err != nil {
-		fmt.Printf("获取log目录失败: %v\n", err)
-		return fmt.Errorf("获取log目录失败: %v", err)
+		return fmt.Errorf("failed to get log directory: %v", err)
 	}
-	fmt.Printf("log目录: %s\n", logPath)
+	fmt.Printf("log directory: %s\n", logPath)
 
 	// 初始化缓存目录
 	cachePath, err := utils.GetCacheDir(rootPath)
 	if err != nil {
-		fmt.Printf("获取缓存目录失败: %v\n", err)
-		return fmt.Errorf("获取缓存目录失败: %v", err)
+		return fmt.Errorf("failed to get cache directory: %v", err)
 	}
-	fmt.Printf("缓存目录: %s\n", cachePath)
+	fmt.Printf("cache directory: %s\n", cachePath)
 
 	// 初始化上报临时目录
 	uploadTmpPath, err := utils.GetUploadTmpDir(rootPath)
 	if err != nil {
-		fmt.Printf("获取上报临时目录失败: %v\n", err)
-		return fmt.Errorf("获取上报临时目录失败: %v", err)
+		return fmt.Errorf("failed to get upload temporary directory: %v", err)
 	}
-	fmt.Printf("上报临时目录: %s\n", uploadTmpPath)
+	fmt.Printf("upload temporary directory: %s\n", uploadTmpPath)
 
 	return nil
 }

@@ -43,7 +43,7 @@ func NewStorageManager(cacheDir string, logger logger.Logger) (SotrageInterface,
 	codebasePath := filepath.Join(cacheDir, "codebase")
 	if _, err := os.Stat(codebasePath); os.IsNotExist(err) {
 		if err := os.MkdirAll(codebasePath, 0755); err != nil {
-			return nil, fmt.Errorf("无法创建codebase目录: %v", err)
+			return nil, fmt.Errorf("failed to create codebase directory: %v", err)
 		}
 	}
 
@@ -91,7 +91,7 @@ func (cm *StorageManager) GetCodebaseConfig(codebaseId string) (*CodebaseConfig,
 func (cm *StorageManager) loadAllConfigs() {
 	files, err := os.ReadDir(cm.codebasePath)
 	if err != nil {
-		cm.logger.Error("读取codebase目录失败: %v", err)
+		cm.logger.Error("failed to read codebase directory: %v", err)
 		return
 	}
 
@@ -102,7 +102,7 @@ func (cm *StorageManager) loadAllConfigs() {
 
 		config, err := cm.loadCodebaseConfig(file.Name())
 		if err != nil {
-			cm.logger.Error("加载codebase文件 %s 失败: %v", file.Name(), err)
+			cm.logger.Error("failed to load codebase file %s: %v", file.Name(), err)
 			continue
 		}
 		cm.codebaseConfigs[file.Name()] = config
@@ -111,7 +111,7 @@ func (cm *StorageManager) loadAllConfigs() {
 
 // loadCodebaseConfig 加载codebase 配置文件
 func (cm *StorageManager) loadCodebaseConfig(codebaseId string) (*CodebaseConfig, error) {
-	cm.logger.Info("加载codebase文件内容: %s", codebaseId)
+	cm.logger.Info("loading codebase file content: %s", codebaseId)
 
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
@@ -121,22 +121,22 @@ func (cm *StorageManager) loadCodebaseConfig(codebaseId string) (*CodebaseConfig
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("codebase文件不存在: %s", filePath)
+			return nil, fmt.Errorf("codebase file does not exist: %s", filePath)
 		}
-		return nil, fmt.Errorf("读取codebase文件失败: %v", err)
+		return nil, fmt.Errorf("failed to read codebase file: %v", err)
 	}
 
 	var config CodebaseConfig
 	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("解析codebase文件失败: %v", err)
+		return nil, fmt.Errorf("failed to parse codebase file: %v", err)
 	}
 
 	if config.CodebaseId != codebaseId {
-		return nil, fmt.Errorf("coebaseId不匹配: 期望 %s，实际 %s",
+		return nil, fmt.Errorf("codebaseId mismatch: expected %s, got %s",
 			codebaseId, config.CodebaseId)
 	}
 
-	cm.logger.Info("成功加载codebase文件，上次同步时间: %s",
+	cm.logger.Info("codebase file loaded successfully, last sync time: %s",
 		config.LastSync.Format(time.RFC3339))
 
 	return &config, nil
@@ -145,32 +145,32 @@ func (cm *StorageManager) loadCodebaseConfig(codebaseId string) (*CodebaseConfig
 // SaveCodebaseConfig 保存codebase 配置
 func (cm *StorageManager) SaveCodebaseConfig(config *CodebaseConfig) error {
 	if config == nil {
-		return fmt.Errorf("codebase配置为空: %v", config)
+		return fmt.Errorf("codebase config is empty: %v", config)
 	}
-	cm.logger.Info("保存codebase配置: %s", config.CodebasePath)
+	cm.logger.Info("saving codebase config: %s", config.CodebasePath)
 
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
-		return fmt.Errorf("序列化配置失败: %v", err)
+		return fmt.Errorf("failed to serialize config: %v", err)
 	}
 
 	filePath := filepath.Join(cm.codebasePath, config.CodebaseId)
 	if err := os.WriteFile(filePath, data, 0644); err != nil {
-		return fmt.Errorf("写入配置文件失败: %v", err)
+		return fmt.Errorf("failed to write config file: %v", err)
 	}
 
 	// 原子性更新内存配置
 	cm.codebaseConfigs[config.CodebaseId] = config
-	cm.logger.Info("codebase配置保存成功, path: %s, codebaseId: %s", filePath, config.CodebaseId)
+	cm.logger.Info("codebase config saved successfully, path: %s, codebaseId: %s", filePath, config.CodebaseId)
 	return nil
 }
 
 // DeleteCodebaseConfig 删除codebase 配置
 func (cm *StorageManager) DeleteCodebaseConfig(codebaseId string) error {
-	cm.logger.Info("删除codebase配置: %s", codebaseId)
+	cm.logger.Info("deleting codebase config: %s", codebaseId)
 
 	filePath := filepath.Join(cm.codebasePath, codebaseId)
 
@@ -182,21 +182,21 @@ func (cm *StorageManager) DeleteCodebaseConfig(codebaseId string) error {
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		if exists {
 			delete(cm.codebaseConfigs, codebaseId)
-			cm.logger.Info("codebase配置已删除: %s (仅内存)", codebaseId)
+			cm.logger.Info("codebase config deleted: %s (memory only)", codebaseId)
 		}
 		return nil
 	}
 
 	if err := os.Remove(filePath); err != nil {
-		return fmt.Errorf("删除配置文件失败: %v", err)
+		return fmt.Errorf("failed to delete codebase file: %v", err)
 	}
 
 	// 文件删除成功后才删除内存中的配置
 	if exists {
 		delete(cm.codebaseConfigs, codebaseId)
-		cm.logger.Info("codebase配置已删除: %s (文件+内存)", filePath)
+		cm.logger.Info("codebase config deleted: %s (file and memory)", filePath)
 	} else {
-		cm.logger.Info("codebase文件已删除: %s (仅文件)", filePath)
+		cm.logger.Info("codebase file deleted: %s (file only)", filePath)
 	}
 	return nil
 }
