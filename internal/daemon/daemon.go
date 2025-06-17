@@ -74,15 +74,15 @@ func (d *Daemon) Start() {
 				d.logger.Info("config check task stopped")
 				return
 			case <-ticker.C:
-				d.checkAndUpdateConfig()
+				d.checkAndLoadConfig()
 			}
 		}
 	}()
 }
 
-// checkAndUpdateConfig 检查并更新客户端配置
-func (d *Daemon) checkAndUpdateConfig() {
-	d.logger.Info("starting client config update check")
+// checkAndLoadConfig 检查并加载最新客户端配置
+func (d *Daemon) checkAndLoadConfig() {
+	d.logger.Info("starting client config load check")
 
 	// 获取最新客户端配置
 	newConfig, err := d.httpSync.GetClientConfig()
@@ -110,11 +110,11 @@ func (d *Daemon) checkAndUpdateConfig() {
 		}()
 	}
 
-	// 更新其他配置
-	d.scheduler.Update(d.ctx)
+	// 加载最新配置
+	d.scheduler.LoadConfig(d.ctx)
 
 	d.schedWG.Wait()
-	d.logger.Info("client config update completed")
+	d.logger.Info("client config load completed")
 }
 
 // configChanged 检查配置是否有变化

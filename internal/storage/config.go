@@ -34,7 +34,7 @@ var DefaultIgnorePatterns = []string{
 	"*.pyc", "*.class", "*.o", "*.obj",
 	"*.log", "*.tmp", "*.bak", "*.backup",
 	"logs/", "temp/", "tmp/", "node_modules/",
-	"vendor/", "bin/", "dist/", "build/",
+	"bin/", "dist/", "build/",
 	"__pycache__/", "venv/", "target/",
 }
 

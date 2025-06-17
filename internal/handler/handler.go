@@ -4,6 +4,7 @@ package handler
 import (
 	"context"
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	api "codebase-syncer/api"
+	"codebase-syncer/internal/scheduler"
 	"codebase-syncer/internal/storage"
 	"codebase-syncer/internal/syncer"
 	"codebase-syncer/pkg/logger"
@@ -26,20 +28,22 @@ type AppInfo struct {
 
 // GRPCHandler gRPC服务处理
 type GRPCHandler struct {
-	appInfo  *AppInfo
-	httpSync syncer.SyncInterface
-	storage  storage.SotrageInterface
-	logger   logger.Logger
+	appInfo   *AppInfo
+	httpSync  syncer.SyncInterface
+	storage   storage.SotrageInterface
+	scheduler *scheduler.Scheduler
+	logger    logger.Logger
 	api.UnimplementedSyncServiceServer
 }
 
 // NewGRPCHandler 创建新的gRPC处理器
-func NewGRPCHandler(httpSync syncer.SyncInterface, storage storage.SotrageInterface, logger logger.Logger, appInfo *AppInfo) *GRPCHandler {
+func NewGRPCHandler(httpSync syncer.SyncInterface, storage storage.SotrageInterface, scheduler *scheduler.Scheduler, logger logger.Logger, appInfo *AppInfo) *GRPCHandler {
 	return &GRPCHandler{
-		appInfo:  appInfo,
-		httpSync: httpSync,
-		storage:  storage,
-		logger:   logger,
+		appInfo:   appInfo,
+		httpSync:  httpSync,
+		storage:   storage,
+		scheduler: scheduler,
+		logger:    logger,
 	}
 }
 
@@ -63,6 +67,7 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 		return &api.RegisterSyncResponse{Success: false, Message: "no registerable codebase found"}, nil
 	}
 
+	var codebaseConfigs []*storage.CodebaseConfig
 	var registeredCount int
 	var lastError error
 
@@ -96,10 +101,29 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 		}
 		h.logger.Info("codebase (Name: %s, Path: %s, Id: %s) registered/updated successfully", codebaseConfig.CodebaseName, codebaseConfig.CodebasePath, codebaseConfig.CodebaseId)
 		registeredCount++
+		if errGet != nil {
+			codebaseConfigs = append(codebaseConfigs, codebaseConfig)
+		}
 	}
 
 	if registeredCount == 0 && lastError != nil {
 		return &api.RegisterSyncResponse{Success: false, Message: fmt.Sprintf("all codebase registrations failed: %v", lastError)}, lastError
+	}
+
+	if len(codebaseConfigs) > 0 && h.httpSync.GetSyncConfig() != nil {
+		go func() {
+			// 定义5分钟超时
+			timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+
+			if err := h.scheduler.SyncForCodebases(timeoutCtx, codebaseConfigs); err != nil {
+				if errors.Is(err, context.DeadlineExceeded) {
+					h.logger.Warn("synchronization timeout for %d codebases", len(codebaseConfigs))
+				} else {
+					h.logger.Error("synchronization failed: %v", err)
+				}
+			}
+		}()
 	}
 
 	if registeredCount < len(codebaseConfigsToRegister) && lastError != nil {

@@ -99,12 +99,12 @@ func (s *Scheduler) Restart(ctx context.Context) {
 	go s.runScheduler(ctx, false)
 }
 
-// Update 更新调度器配置
-func (s *Scheduler) Update(ctx context.Context) {
-	s.logger.Info("preparing to update scheduler")
+// LoadConfig 更新调度器配置
+func (s *Scheduler) LoadConfig(ctx context.Context) {
+	s.logger.Info("preparing to load scheduler config")
 
 	s.updateCh <- struct{}{}
-	s.logger.Info("scheduler config update signal sent")
+	s.logger.Info("scheduler config load signal sent")
 	time.Sleep(100 * time.Millisecond) // 等待调度器更新
 
 	config := storage.GetClientConfig()
@@ -174,6 +174,7 @@ func (s *Scheduler) performSync() {
 		return
 	}
 
+	// 标记为运行中
 	s.isRunning = true
 	defer func() {
 		s.isRunning = false
@@ -200,7 +201,7 @@ func (s *Scheduler) performSync() {
 
 // performSyncForCodebase 执行单个codebase 的同步任务
 func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) {
-	s.logger.Info("starting sync task for codebase: %s", config.CodebaseId)
+	s.logger.Info("starting sync for codebase: %s", config.CodebaseId)
 	nowTime := time.Now()
 	localHashTree, err := s.fileScanner.ScanDirectory(config.CodebasePath)
 	if err != nil {
@@ -241,7 +242,7 @@ func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) {
 
 	// 处理所有文件变更
 	if err := s.processFileChanges(config, changes); err != nil {
-		s.logger.Error("sync task failed, file changes processing failed: %v", err)
+		s.logger.Error("file changes processing failed: %v", err)
 		return
 	}
 
@@ -252,7 +253,7 @@ func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) {
 		s.logger.Error("failed to save codebase config: %v", err)
 	}
 
-	s.logger.Info("sync task completed for codebase: %s, time taken: %v", config.CodebaseId, time.Since(nowTime))
+	s.logger.Info("sync completed for codebase: %s, time taken: %v", config.CodebaseId, time.Since(nowTime))
 }
 
 // processFileChanges 处理文件变更，将上传逻辑封装
@@ -383,5 +384,40 @@ func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq *syncer.UploadReq
 		return errUpload
 	}
 
+	return nil
+}
+
+// SyncForCodebases 批量同步代码库
+func (s *Scheduler) SyncForCodebases(ctx context.Context, codebaseConfig []*storage.CodebaseConfig) error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	// 防止同时执行多个同步任务
+	if s.isRunning {
+		s.logger.Info("sync task already running, skipping this sync")
+		return nil
+	}
+
+	// 标记为运行中
+	s.isRunning = true
+	defer func() {
+		s.isRunning = false
+	}()
+
+	// 检查上下文是否已取消
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	s.logger.Info("starting sync for codebases")
+	startTime := time.Now()
+	for _, config := range codebaseConfig {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		s.performSyncForCodebase(config)
+	}
+
+	s.logger.Info("sync for codebases completed, total time: %v", time.Since(startTime))
 	return nil
 }

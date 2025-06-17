@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
+	"codebase-syncer/internal/scheduler"
 	"codebase-syncer/internal/storage"
 	"codebase-syncer/internal/syncer"
 	"codebase-syncer/test/mocks"
@@ -25,8 +26,9 @@ func TestNewGRPCHandler(t *testing.T) {
 	// 创建测试所需对象
 	httpSync := &syncer.HTTPSync{}
 	storageManager := &storage.StorageManager{}
+	scheduler := &scheduler.Scheduler{}
 
-	h := NewGRPCHandler(httpSync, storageManager, mockLogger, appInfo)
+	h := NewGRPCHandler(httpSync, storageManager, scheduler, mockLogger, appInfo)
 	assert.NotNil(t, h)
 }
 
@@ -40,7 +42,8 @@ func TestIsGitRepository(t *testing.T) {
 
 	httpSync := &syncer.HTTPSync{}
 	storageManager := &storage.StorageManager{}
-	h := NewGRPCHandler(httpSync, storageManager, mockLogger, appInfo)
+	scheduler := &scheduler.Scheduler{}
+	h := NewGRPCHandler(httpSync, storageManager, scheduler, mockLogger, appInfo)
 
 	// 测试有效git仓库
 	assert.True(t, h.isGitRepository(tmpDir))
@@ -74,7 +77,8 @@ func TestFindCodebasePathsToRegister(t *testing.T) {
 
 	httpSync := &syncer.HTTPSync{}
 	storageManager := &storage.StorageManager{}
-	h := NewGRPCHandler(httpSync, storageManager, mockLogger, appInfo)
+	scheduler := &scheduler.Scheduler{}
+	h := NewGRPCHandler(httpSync, storageManager, scheduler, mockLogger, appInfo)
 
 	// 测试查找codebase路径
 	configs, err := h.findCodebasePathsToRegister(baseDir, "test-name")

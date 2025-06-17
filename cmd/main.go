@@ -71,8 +71,8 @@ func main() {
 	fileScanner := scanner.NewFileScanner(logger)
 	httpSync := syncer.NewHTTPSync(logger)
 	appInfo := &handler.AppInfo{AppName: *appName, ArchName: archName, OSName: osName, Version: version}
-	grpcHandler := handler.NewGRPCHandler(httpSync, storageManager, logger, appInfo)
 	syncScheduler := scheduler.NewScheduler(httpSync, fileScanner, storageManager, logger)
+	grpcHandler := handler.NewGRPCHandler(httpSync, storageManager, syncScheduler, logger, appInfo)
 
 	// 初始化gRPC服务端
 	lis, err := net.Listen("tcp", *grpcServer)
