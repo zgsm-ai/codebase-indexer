@@ -44,8 +44,9 @@ type HTTPSync struct {
 	logger     logger.Logger
 }
 
-func NewHTTPSync(logger logger.Logger) SyncInterface {
+func NewHTTPSync(syncConfig *SyncConfig, logger logger.Logger) SyncInterface {
 	return &HTTPSync{
+		syncConfig: syncConfig,
 		httpClient: &fasthttp.Client{
 			ReadTimeout:  60 * time.Second,
 			WriteTimeout: 60 * time.Second,
@@ -85,6 +86,11 @@ type HashItem struct {
 // 获取服务端哈希树
 func (hs *HTTPSync) FetchServerHashTree(codebasePath string) (map[string]string, error) {
 	hs.logger.Info("fetching hash tree from server: %s", codebasePath)
+
+	// 判断config中的字段是否为空
+	if hs.syncConfig == nil || hs.syncConfig.ServerURL == "" || hs.syncConfig.ClientId == "" || hs.syncConfig.Token == "" {
+		return nil, fmt.Errorf("sync config is not properly set, please check clientId, serverURL and token")
+	}
 
 	// 准备请求
 	url := fmt.Sprintf("%s%s?clientId=%s&codebasePath=%s",
@@ -140,6 +146,11 @@ type UploadReq struct {
 // UploadFile 上传文件到服务器
 func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 	hs.logger.Info("uploading file: %s", filePath)
+
+	// 判断config中的字段是否为空
+	if hs.syncConfig == nil || hs.syncConfig.ServerURL == "" || hs.syncConfig.ClientId == "" || hs.syncConfig.Token == "" {
+		return fmt.Errorf("sync config is not properly set, please check clientId, serverURL and token")
+	}
 
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -205,6 +216,11 @@ const (
 // 获取客户端配置文件
 func (hs *HTTPSync) GetClientConfig() (storage.ClientConfig, error) {
 	hs.logger.Info("fetching client config from server")
+
+	// 判断config中的字段是否为空
+	if hs.syncConfig == nil || hs.syncConfig.ServerURL == "" || hs.syncConfig.ClientId == "" || hs.syncConfig.Token == "" {
+		return storage.ClientConfig{}, fmt.Errorf("sync config is not properly set, please check clientId, serverURL and token")
+	}
 
 	// 准备请求
 	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_GET_CLIENT_CONFIG)

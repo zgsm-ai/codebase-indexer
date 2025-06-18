@@ -44,6 +44,9 @@ func main() {
 	appName := flag.String("appname", "zgsm", "app name")
 	grpcServer := flag.String("grpc", "localhost:51353", "gRPC server address")
 	logLevel := flag.String("loglevel", "info", "log level (debug, info, warn, error)")
+	clientId := flag.String("clientid", "", "client id")
+	serverEndpoint := flag.String("server", "", "server endpoint")
+	token := flag.String("token", "", "authentication token")
 	flag.Parse()
 
 	// 初始化目录
@@ -69,7 +72,11 @@ func main() {
 		return
 	}
 	fileScanner := scanner.NewFileScanner(logger)
-	httpSync := syncer.NewHTTPSync(logger)
+	var syncConfig *syncer.SyncConfig
+	if *clientId != "" && *serverEndpoint != "" && *token != "" {
+		syncConfig = &syncer.SyncConfig{ClientId: *clientId, ServerURL: *serverEndpoint, Token: *token}
+	}
+	httpSync := syncer.NewHTTPSync(syncConfig, logger)
 	appInfo := &handler.AppInfo{AppName: *appName, ArchName: archName, OSName: osName, Version: version}
 	syncScheduler := scheduler.NewScheduler(httpSync, fileScanner, storageManager, logger)
 	grpcHandler := handler.NewGRPCHandler(httpSync, storageManager, syncScheduler, logger, appInfo)
@@ -84,7 +91,7 @@ func main() {
 	api.RegisterSyncServiceServer(s, grpcHandler)
 
 	// 启动守护进程
-	daemon := daemon.NewDaemon(syncScheduler, s, lis, httpSync, logger)
+	daemon := daemon.NewDaemon(syncScheduler, s, lis, httpSync, fileScanner, logger)
 	go daemon.Start()
 
 	// 处理系统信号，优雅退出

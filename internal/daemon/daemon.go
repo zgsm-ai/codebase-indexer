@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"codebase-syncer/internal/scanner"
 	"codebase-syncer/internal/scheduler"
 	"codebase-syncer/internal/storage"
 	"codebase-syncer/internal/syncer"
@@ -17,33 +18,40 @@ import (
 )
 
 type Daemon struct {
-	scheduler  *scheduler.Scheduler
-	grpcServer *grpc.Server
-	grpcListen net.Listener
-	httpSync   syncer.SyncInterface
-	logger     logger.Logger
-	ctx        context.Context
-	cancel     context.CancelFunc
-	wg         sync.WaitGroup
-	schedWG    sync.WaitGroup // 用于等待scheduler重启
+	scheduler   *scheduler.Scheduler
+	grpcServer  *grpc.Server
+	grpcListen  net.Listener
+	httpSync    syncer.SyncInterface
+	fileScanner scanner.ScannerInterface
+	logger      logger.Logger
+	ctx         context.Context
+	cancel      context.CancelFunc
+	wg          sync.WaitGroup
+	schedWG     sync.WaitGroup // 用于等待scheduler重启
 }
 
 func NewDaemon(scheduler *scheduler.Scheduler, grpcServer *grpc.Server, grpcListen net.Listener,
-	httpSync syncer.SyncInterface, logger logger.Logger) *Daemon {
+	httpSync syncer.SyncInterface, fileScanner scanner.ScannerInterface, logger logger.Logger) *Daemon {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Daemon{
-		scheduler:  scheduler,
-		grpcServer: grpcServer,
-		grpcListen: grpcListen,
-		httpSync:   httpSync,
-		logger:     logger,
-		ctx:        ctx,
-		cancel:     cancel,
+		scheduler:   scheduler,
+		grpcServer:  grpcServer,
+		grpcListen:  grpcListen,
+		httpSync:    httpSync,
+		fileScanner: fileScanner,
+		logger:      logger,
+		ctx:         ctx,
+		cancel:      cancel,
 	}
 }
 
 func (d *Daemon) Start() {
 	d.logger.Info("daemon process started")
+
+	// 启动时主动更新一次配置
+	if d.httpSync.GetSyncConfig() != nil {
+		d.updateConfig()
+	}
 
 	// 启动gRPC服务端
 	go func() {
@@ -78,6 +86,42 @@ func (d *Daemon) Start() {
 			}
 		}
 	}()
+}
+
+// updateConfig 更新客户端配置
+func (d *Daemon) updateConfig() {
+	d.logger.Info("updating client config")
+
+	// 获取最新客户端配置
+	newConfig, err := d.httpSync.GetClientConfig()
+	if err != nil {
+		d.logger.Error("failed to get client config: %v", err)
+		return
+	}
+	d.logger.Info("latest client config retrieved: %+v", newConfig)
+
+	// 获取当前配置
+	currentConfig := storage.GetClientConfig()
+	if !configChanged(currentConfig, newConfig) {
+		d.logger.Info("client config unchanged")
+		return
+	}
+
+	// 更新存储中的配置
+	storage.SetClientConfig(newConfig)
+	// 更新scheduler配置
+	d.scheduler.SetSchedulerConfig(&scheduler.SchedulerConfig{
+		IntervalMinutes:       newConfig.Sync.IntervalMinutes,
+		RegisterExpireMinutes: newConfig.Server.RegisterExpireMinutes,
+		HashTreeExpireHours:   newConfig.Server.HashTreeExpireHours,
+	})
+	// 更新文件扫描器配置
+	d.fileScanner.SetScannerConfig(&scanner.ScannerConfig{
+		IgnorePatterns: newConfig.Sync.IgnorePatterns,
+		MaxFileSizeMB:  newConfig.Sync.MaxFileSizeMB,
+	})
+
+	d.logger.Info("client config updated")
 }
 
 // checkAndLoadConfig 检查并加载最新客户端配置
