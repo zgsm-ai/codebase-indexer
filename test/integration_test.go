@@ -82,7 +82,7 @@ func (s *IntegrationTestSuite) TestRegisterSync() {
 		wantErr bool
 	}{
 		{
-			name: "valid request",
+			name: "register valid request",
 			req: &api.RegisterSyncRequest{
 				ClientId:      "client1",
 				WorkspacePath: registerPath,
@@ -91,7 +91,7 @@ func (s *IntegrationTestSuite) TestRegisterSync() {
 			wantErr: false,
 		},
 		{
-			name: "missing client id",
+			name: "register missing client id",
 			req: &api.RegisterSyncRequest{
 				WorkspacePath: registerPath,
 				WorkspaceName: "register-test",
@@ -99,7 +99,7 @@ func (s *IntegrationTestSuite) TestRegisterSync() {
 			wantErr: true,
 		},
 		{
-			name: "empty workspace path",
+			name: "register empty workspace path",
 			req: &api.RegisterSyncRequest{
 				ClientId:      "client1",
 				WorkspacePath: "",
@@ -112,6 +112,65 @@ func (s *IntegrationTestSuite) TestRegisterSync() {
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
 			resp, err := s.handler.RegisterSync(context.Background(), tt.req)
+
+			if tt.wantErr {
+				assert.NoError(t, err)
+				assert.Contains(t, resp.Message, "invalid parameters")
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, resp)
+			}
+		})
+	}
+}
+
+func (s *IntegrationTestSuite) TestSyncCodebases() {
+	// 准备工作区目录
+	workspaceDir := filepath.Join(os.TempDir(), "sync-codebases-test")
+	err := os.MkdirAll(workspaceDir, 0755)
+	assert.NoError(s.T(), err)
+	defer os.RemoveAll(workspaceDir)
+
+	httpSync.On("GetSyncConfig").Return(&syncer.SyncConfig{ClientId: "client1"}, nil)
+	httpSync.On("FetchServerHashTree", mock.Anything).Return(map[string]string{}, nil)
+	httpSync.On("UploadFile", mock.Anything, mock.Anything).Return(nil)
+
+	tests := []struct {
+		name    string
+		req     *api.SyncCodebaseRequest
+		wantErr bool
+	}{
+		{
+			name: "sync valid request",
+			req: &api.SyncCodebaseRequest{
+				ClientId:      "client1",
+				WorkspacePath: workspaceDir,
+				WorkspaceName: "sync-codebases-test",
+			},
+			wantErr: false,
+		},
+		{
+			name: "sync missing client id",
+			req: &api.SyncCodebaseRequest{
+				WorkspacePath: workspaceDir,
+				WorkspaceName: "sync-codebases-test",
+			},
+			wantErr: true,
+		},
+		{
+			name: "sync empty workspace path",
+			req: &api.SyncCodebaseRequest{
+				ClientId:      "client1",
+				WorkspacePath: "",
+				WorkspaceName: "sync-codebases-test",
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		s.T().Run(tt.name, func(t *testing.T) {
+			resp, err := s.handler.SyncCodebase(context.Background(), tt.req)
 
 			if tt.wantErr {
 				assert.NoError(t, err)

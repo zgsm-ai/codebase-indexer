@@ -35,6 +35,7 @@ type Scheduler struct {
 	sechedulerConfig *SchedulerConfig
 	logger           logger.Logger
 	mutex            sync.Mutex
+	rwMutex          sync.RWMutex
 	isRunning        bool
 	restartCh        chan struct{} // 重启通道
 	updateCh         chan struct{} // 更新配置通道
@@ -43,21 +44,25 @@ type Scheduler struct {
 
 func NewScheduler(httpSync syncer.SyncInterface, fileScanner scanner.ScannerInterface, storageManager storage.SotrageInterface,
 	logger logger.Logger) *Scheduler {
-	defaultSchedulerConfig := &SchedulerConfig{
+	return &Scheduler{
+		httpSync:         httpSync,
+		fileScanner:      fileScanner,
+		storage:          storageManager,
+		sechedulerConfig: defaultSchedulerConfig(),
+		restartCh:        make(chan struct{}),
+		updateCh:         make(chan struct{}),
+		logger:           logger,
+	}
+}
+
+// defaultSchedulerConfig 默认的调度器配置
+func defaultSchedulerConfig() *SchedulerConfig {
+	return &SchedulerConfig{
 		IntervalMinutes:       storage.DefaultConfigSync.IntervalMinutes,
 		RegisterExpireMinutes: storage.DefaultConfigServer.RegisterExpireMinutes,
 		HashTreeExpireHours:   storage.DefaultConfigServer.HashTreeExpireHours,
 		MaxRetries:            storage.DefaultConfigSync.MaxRetries,
 		RetryIntervalSeconds:  storage.DefaultConfigSync.RetryDelaySeconds,
-	}
-	return &Scheduler{
-		httpSync:         httpSync,
-		fileScanner:      fileScanner,
-		storage:          storageManager,
-		sechedulerConfig: defaultSchedulerConfig,
-		restartCh:        make(chan struct{}),
-		updateCh:         make(chan struct{}),
-		logger:           logger,
 	}
 }
 
@@ -66,6 +71,8 @@ func (s *Scheduler) SetSchedulerConfig(config *SchedulerConfig) {
 	if config == nil {
 		return
 	}
+	s.rwMutex.Lock()
+	defer s.rwMutex.Unlock()
 	if config.IntervalMinutes > 0 && config.IntervalMinutes <= 30 {
 		s.sechedulerConfig.IntervalMinutes = config.IntervalMinutes
 	}
@@ -81,6 +88,13 @@ func (s *Scheduler) SetSchedulerConfig(config *SchedulerConfig) {
 	if config.RetryIntervalSeconds > 0 && config.RetryIntervalSeconds <= 30 {
 		s.sechedulerConfig.RetryIntervalSeconds = config.RetryIntervalSeconds
 	}
+}
+
+// GetSchedulerConfig 获取调度器配置
+func (s *Scheduler) GetSchedulerConfig() *SchedulerConfig {
+	s.rwMutex.RLock()
+	defer s.rwMutex.RUnlock()
+	return s.sechedulerConfig
 }
 
 // Start 启动调度器

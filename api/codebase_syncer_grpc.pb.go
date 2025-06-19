@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	SyncService_RegisterSync_FullMethodName     = "/codebase_syncer.SyncService/RegisterSync"
+	SyncService_SyncCodebase_FullMethodName     = "/codebase_syncer.SyncService/SyncCodebase"
 	SyncService_UnregisterSync_FullMethodName   = "/codebase_syncer.SyncService/UnregisterSync"
 	SyncService_ShareAccessToken_FullMethodName = "/codebase_syncer.SyncService/ShareAccessToken"
 	SyncService_GetVersion_FullMethodName       = "/codebase_syncer.SyncService/GetVersion"
@@ -34,6 +35,8 @@ const (
 type SyncServiceClient interface {
 	// 注册项目同步
 	RegisterSync(ctx context.Context, in *RegisterSyncRequest, opts ...grpc.CallOption) (*RegisterSyncResponse, error)
+	// 同步项目
+	SyncCodebase(ctx context.Context, in *SyncCodebaseRequest, opts ...grpc.CallOption) (*SyncCodebaseResponse, error)
 	// 注销项目同步
 	UnregisterSync(ctx context.Context, in *UnregisterSyncRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 共享 AccessToken（明文传输，服务端加密存储）
@@ -54,6 +57,16 @@ func (c *syncServiceClient) RegisterSync(ctx context.Context, in *RegisterSyncRe
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RegisterSyncResponse)
 	err := c.cc.Invoke(ctx, SyncService_RegisterSync_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *syncServiceClient) SyncCodebase(ctx context.Context, in *SyncCodebaseRequest, opts ...grpc.CallOption) (*SyncCodebaseResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SyncCodebaseResponse)
+	err := c.cc.Invoke(ctx, SyncService_SyncCodebase_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -98,6 +111,8 @@ func (c *syncServiceClient) GetVersion(ctx context.Context, in *VersionRequest, 
 type SyncServiceServer interface {
 	// 注册项目同步
 	RegisterSync(context.Context, *RegisterSyncRequest) (*RegisterSyncResponse, error)
+	// 同步项目
+	SyncCodebase(context.Context, *SyncCodebaseRequest) (*SyncCodebaseResponse, error)
 	// 注销项目同步
 	UnregisterSync(context.Context, *UnregisterSyncRequest) (*emptypb.Empty, error)
 	// 共享 AccessToken（明文传输，服务端加密存储）
@@ -116,6 +131,9 @@ type UnimplementedSyncServiceServer struct{}
 
 func (UnimplementedSyncServiceServer) RegisterSync(context.Context, *RegisterSyncRequest) (*RegisterSyncResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterSync not implemented")
+}
+func (UnimplementedSyncServiceServer) SyncCodebase(context.Context, *SyncCodebaseRequest) (*SyncCodebaseResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SyncCodebase not implemented")
 }
 func (UnimplementedSyncServiceServer) UnregisterSync(context.Context, *UnregisterSyncRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnregisterSync not implemented")
@@ -161,6 +179,24 @@ func _SyncService_RegisterSync_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SyncServiceServer).RegisterSync(ctx, req.(*RegisterSyncRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SyncService_SyncCodebase_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncCodebaseRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SyncServiceServer).SyncCodebase(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SyncService_SyncCodebase_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SyncServiceServer).SyncCodebase(ctx, req.(*SyncCodebaseRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -229,6 +265,10 @@ var SyncService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RegisterSync",
 			Handler:    _SyncService_RegisterSync_Handler,
+		},
+		{
+			MethodName: "SyncCodebase",
+			Handler:    _SyncService_SyncCodebase_Handler,
 		},
 		{
 			MethodName: "UnregisterSync",

@@ -151,7 +151,7 @@ func TestGetCodebaseConfig(t *testing.T) {
 		cm := &StorageManager{
 			codebaseConfigs: configs,
 			logger:          logger,
-			mutex:           sync.RWMutex{},
+			rwMutex:         sync.RWMutex{},
 		}
 
 		config, err := cm.GetCodebaseConfig("test1")
@@ -169,7 +169,7 @@ func TestGetCodebaseConfig(t *testing.T) {
 			codebasePath:    tempDir,
 			codebaseConfigs: make(map[string]*CodebaseConfig),
 			logger:          logger,
-			mutex:           sync.RWMutex{},
+			rwMutex:         sync.RWMutex{},
 		}
 
 		expectedConfig := &CodebaseConfig{CodebaseId: file}
@@ -189,7 +189,7 @@ func TestGetCodebaseConfig(t *testing.T) {
 			codebasePath:    tempDir,
 			codebaseConfigs: make(map[string]*CodebaseConfig),
 			logger:          logger,
-			mutex:           sync.RWMutex{},
+			rwMutex:         sync.RWMutex{},
 		}
 
 		config, err := cm.GetCodebaseConfig("test3")
@@ -206,7 +206,7 @@ func TestGetCodebaseConfig(t *testing.T) {
 			codebasePath:    tempDir,
 			codebaseConfigs: make(map[string]*CodebaseConfig),
 			logger:          logger,
-			mutex:           sync.RWMutex{},
+			rwMutex:         sync.RWMutex{},
 		}
 
 		for i := 0; i < 100; i++ {
@@ -243,7 +243,7 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 			codebasePath:    "/root", // Linux下无权限的目录
 			codebaseConfigs: make(map[string]*CodebaseConfig),
 			logger:          logger,
-			mutex:           sync.RWMutex{},
+			rwMutex:         sync.RWMutex{},
 		}
 
 		// 执行
@@ -258,7 +258,7 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 			codebasePath:    tempDir,
 			codebaseConfigs: make(map[string]*CodebaseConfig),
 			logger:          logger,
-			mutex:           sync.RWMutex{},
+			rwMutex:         sync.RWMutex{},
 		}
 
 		// 执行
@@ -279,7 +279,7 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 			codebasePath:    tempDir,
 			codebaseConfigs: make(map[string]*CodebaseConfig),
 			logger:          logger,
-			mutex:           sync.RWMutex{},
+			rwMutex:         sync.RWMutex{},
 		}
 
 		// 执行
@@ -303,7 +303,7 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 			codebasePath:    tempDir,
 			codebaseConfigs: make(map[string]*CodebaseConfig),
 			logger:          logger,
-			mutex:           sync.RWMutex{},
+			rwMutex:         sync.RWMutex{},
 		}
 
 		// 执行
@@ -336,7 +336,7 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 			codebasePath:    tempDir,
 			codebaseConfigs: make(map[string]*CodebaseConfig),
 			logger:          logger,
-			mutex:           sync.RWMutex{},
+			rwMutex:         sync.RWMutex{},
 		}
 
 		// 执行
@@ -361,7 +361,7 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 			codebasePath:    tempDir,
 			codebaseConfigs: make(map[string]*CodebaseConfig),
 			logger:          logger,
-			mutex:           sync.RWMutex{},
+			rwMutex:         sync.RWMutex{},
 		}
 
 		// 模拟调用
@@ -409,7 +409,7 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 			codebasePath:    tempDir,
 			codebaseConfigs: make(map[string]*CodebaseConfig),
 			logger:          logger,
-			mutex:           sync.RWMutex{},
+			rwMutex:         sync.RWMutex{},
 		}
 
 		// 模拟调用
@@ -434,7 +434,7 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 			codebasePath:    tempDir,
 			codebaseConfigs: make(map[string]*CodebaseConfig),
 			logger:          logger,
-			mutex:           sync.RWMutex{},
+			rwMutex:         sync.RWMutex{},
 		}
 
 		// 模拟调用
@@ -505,7 +505,7 @@ func TestSaveCodebaseConfig(t *testing.T) {
 					logger:          logger,
 					codebasePath:    tempDir,
 					codebaseConfigs: make(map[string]*CodebaseConfig),
-					mutex:           sync.RWMutex{},
+					rwMutex:         sync.RWMutex{},
 				}
 			},
 			config:  config,
@@ -518,7 +518,7 @@ func TestSaveCodebaseConfig(t *testing.T) {
 					logger:          logger,
 					codebasePath:    invalidPath,
 					codebaseConfigs: make(map[string]*CodebaseConfig),
-					mutex:           sync.RWMutex{},
+					rwMutex:         sync.RWMutex{},
 				}
 			},
 			config:      config,
@@ -582,8 +582,8 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 			codebaseConfigs: map[string]*CodebaseConfig{
 				codebaseId: {},
 			},
-			logger: logger,
-			mutex:  sync.RWMutex{},
+			logger:  logger,
+			rwMutex: sync.RWMutex{},
 		}
 		// 创建测试JSON文件内容
 		configData, _ := json.Marshal(&CodebaseConfig{
@@ -615,8 +615,8 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 			codebaseConfigs: map[string]*CodebaseConfig{
 				codebaseId: {},
 			},
-			logger: logger,
-			mutex:  sync.RWMutex{},
+			logger:  logger,
+			rwMutex: sync.RWMutex{},
 		}
 
 		// 执行删除
@@ -643,7 +643,7 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 			codebasePath:    tempDir,
 			codebaseConfigs: map[string]*CodebaseConfig{},
 			logger:          logger,
-			mutex:           sync.RWMutex{},
+			rwMutex:         sync.RWMutex{},
 		}
 
 		// 执行删除
@@ -663,7 +663,7 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 			codebasePath:    tempDir,
 			codebaseConfigs: map[string]*CodebaseConfig{},
 			logger:          logger,
-			mutex:           sync.RWMutex{},
+			rwMutex:         sync.RWMutex{},
 		}
 
 		// 执行删除
@@ -691,8 +691,8 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 			codebaseConfigs: map[string]*CodebaseConfig{
 				codebaseId: {},
 			},
-			logger: logger,
-			mutex:  sync.RWMutex{},
+			logger:  logger,
+			rwMutex: sync.RWMutex{},
 		}
 
 		// 执行删除
@@ -725,7 +725,7 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 			codebasePath:    tempDir,
 			codebaseConfigs: codebaseConfigs,
 			logger:          logger,
-			mutex:           sync.RWMutex{},
+			rwMutex:         sync.RWMutex{},
 		}
 
 		var wg sync.WaitGroup

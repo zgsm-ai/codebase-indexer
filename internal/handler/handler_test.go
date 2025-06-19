@@ -81,7 +81,7 @@ func TestFindCodebasePathsToRegister(t *testing.T) {
 	h := NewGRPCHandler(httpSync, storageManager, scheduler, mockLogger, appInfo)
 
 	// 测试查找codebase路径
-	configs, err := h.findCodebasePathsToRegister(baseDir, "test-name")
+	configs, err := h.findCodebasePaths(baseDir, "test-name")
 	assert.NoError(t, err)
 	assert.Len(t, configs, 2) // 应该找到两个git仓库
 
@@ -96,6 +96,6 @@ func TestFindCodebasePathsToRegister(t *testing.T) {
 	}
 
 	// 测试无效路径
-	_, err = h.findCodebasePathsToRegister(filepath.Join(baseDir, "nonexistent"), "test-name")
+	_, err = h.findCodebasePaths(filepath.Join(baseDir, "nonexistent"), "test-name")
 	assert.Error(t, err)
 }

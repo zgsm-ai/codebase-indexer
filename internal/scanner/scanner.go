@@ -7,8 +7,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"codebase-syncer/internal/storage"
@@ -46,34 +48,48 @@ type ScannerInterface interface {
 type FileScanner struct {
 	scannerConfig *ScannerConfig
 	logger        logger.Logger
+	rwMutex       sync.RWMutex
 }
 
 func NewFileScanner(logger logger.Logger) ScannerInterface {
-	defaultScannerConfig := &ScannerConfig{
-		IgnorePatterns: storage.DefaultIgnorePatterns,
-		MaxFileSizeMB:  storage.DefaultConfigSync.MaxFileSizeMB,
-	}
 	return &FileScanner{
-		scannerConfig: defaultScannerConfig,
+		scannerConfig: defaultScannerConfig(),
 		logger:        logger,
 	}
 }
 
-// SetScannerConfig 设置扫描器配置
-func (fs *FileScanner) SetScannerConfig(config *ScannerConfig) {
-	if config == nil {
-		return
-	}
-	if len(config.IgnorePatterns) > 0 {
-		fs.scannerConfig.IgnorePatterns = config.IgnorePatterns
-	}
-	if config.MaxFileSizeMB > 0 && config.MaxFileSizeMB <= 10 {
-		fs.scannerConfig.MaxFileSizeMB = config.MaxFileSizeMB
+// defaultScannerConfig 默认的扫描器配置
+func defaultScannerConfig() *ScannerConfig {
+	return &ScannerConfig{
+		IgnorePatterns: storage.DefaultIgnorePatterns,
+		MaxFileSizeMB:  storage.DefaultConfigSync.MaxFileSizeMB,
 	}
 }
 
+// SetScannerConfig 设置扫描器配置
+func (s *FileScanner) SetScannerConfig(config *ScannerConfig) {
+	if config == nil {
+		return
+	}
+	s.rwMutex.Lock()
+	defer s.rwMutex.Unlock()
+	if len(config.IgnorePatterns) > 0 {
+		s.scannerConfig.IgnorePatterns = config.IgnorePatterns
+	}
+	if config.MaxFileSizeMB > 0 && config.MaxFileSizeMB <= 10 {
+		s.scannerConfig.MaxFileSizeMB = config.MaxFileSizeMB
+	}
+}
+
+// GetScannerConfig 获取当前扫描器配置
+func (s *FileScanner) GetScannerConfig() *ScannerConfig {
+	s.rwMutex.RLock()
+	defer s.rwMutex.RUnlock()
+	return s.scannerConfig
+}
+
 // 计算文件哈希值
-func (fs *FileScanner) CalculateFileHash(filePath string) (string, error) {
+func (s *FileScanner) CalculateFileHash(filePath string) (string, error) {
 	startTime := time.Now()
 
 	file, err := os.Open(filePath)
@@ -88,16 +104,16 @@ func (fs *FileScanner) CalculateFileHash(filePath string) (string, error) {
 	}
 
 	hashValue := hex.EncodeToString(hash.Sum(nil))
-	fs.logger.Debug("file hash calculated for %s, time taken: %v, hash: %s",
+	s.logger.Debug("file hash calculated for %s, time taken: %v, hash: %s",
 		filePath, time.Since(startTime), hashValue)
 
 	return hashValue, nil
 }
 
 // loadIgnoreRules 加载并合并默认忽略规则和.gitignore文件中的规则
-func (fs *FileScanner) loadIgnoreRules(codebasePath string) *gitignore.GitIgnore {
+func (s *FileScanner) loadIgnoreRules(codebasePath string) *gitignore.GitIgnore {
 	// 首先使用默认规则创建ignore对象
-	currentIgnoreRules := fs.scannerConfig.IgnorePatterns
+	currentIgnoreRules := s.scannerConfig.IgnorePatterns
 	compiledIgnore := gitignore.CompileIgnoreLines(currentIgnoreRules...)
 
 	// 读取.gitignore文件，并合并
@@ -121,64 +137,72 @@ func (fs *FileScanner) loadIgnoreRules(codebasePath string) *gitignore.GitIgnore
 			compiledIgnore = gitignore.CompileIgnoreLines(append(currentIgnoreRules, lines...)...)
 		}
 	} else if !os.IsNotExist(err) {
-		fs.logger.Warn("failed to read .gitignore file %s: %v", ignoreFilePath, err)
+		s.logger.Warn("failed to read .gitignore file %s: %v", ignoreFilePath, err)
 		// 如果读取失败（非文件不存在错误），则仅使用默认规则
 	}
 	return compiledIgnore
 }
 
 // ScanDirectory 扫描目录并生成哈希树
-func (fs *FileScanner) ScanDirectory(codebasePath string) (map[string]string, error) {
-	fs.logger.Info("starting directory scan: %s", codebasePath)
+func (s *FileScanner) ScanDirectory(codebasePath string) (map[string]string, error) {
+	s.logger.Info("starting directory scan: %s", codebasePath)
 	startTime := time.Now()
 
 	hashTree := make(map[string]string)
 	var filesScanned int
 
-	ignore := fs.loadIgnoreRules(codebasePath)
+	ignore := s.loadIgnoreRules(codebasePath)
 
-	maxFileSizeMB := fs.scannerConfig.MaxFileSizeMB
+	maxFileSizeMB := s.scannerConfig.MaxFileSizeMB
 	maxFileSize := int64(maxFileSizeMB * 1024 * 1024)
-	err := filepath.Walk(codebasePath, func(path string, info os.FileInfo, err error) error {
+	// err := filepath.Walk(codebasePath, func(path string, info os.FileInfo, err error) error {
+	err := filepath.WalkDir(codebasePath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			fs.logger.Warn("error accessing file %s: %v", path, err)
+			s.logger.Warn("error accessing file %s: %v", path, err)
 			return nil // 继续扫描其他文件
 		}
 
-		if info.IsDir() {
+		// if info.IsDir() {
+		if d.IsDir() {
 			// 对于目录，检查是否应该跳过整个目录
 			relPath, _ := filepath.Rel(codebasePath, path)
 			// 如果是根目录本身 (relPath is "."), 不要因为 ".*" 规则而跳过它
 			if relPath != "." && ignore != nil && ignore.MatchesPath(relPath+"/") {
-				fs.logger.Debug("skipping ignored directory: %s", relPath)
-				return filepath.SkipDir
+				s.logger.Debug("skipping ignored directory: %s", relPath)
+				return fs.SkipDir
 			}
+			return nil
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			s.logger.Warn("error getting file info for %s: %v", path, err)
 			return nil
 		}
 
 		// 计算相对路径
 		relPath, err := filepath.Rel(codebasePath, path)
 		if err != nil {
-			fs.logger.Warn("failed to get relative path for file %s: %v", path, err)
+			s.logger.Warn("failed to get relative path for file %s: %v", path, err)
 			return nil
 		}
 
 		// 检查文件是否在.gitignore中被排除
 		if ignore != nil && ignore.MatchesPath(relPath) {
-			fs.logger.Debug("skipping file excluded by .gitignore: %s", relPath)
+			s.logger.Debug("skipping file excluded by .gitignore: %s", relPath)
 			return nil
 		}
 
 		// 检查文件大小是否超过最大限制
 		if info.Size() >= maxFileSize {
-			fs.logger.Debug("skipping file larger than %dMB: %s (size: %.2f MB)", maxFileSizeMB, relPath, float64(info.Size())/1024/1024)
+			s.logger.Debug("skipping file larger than %dMB: %s (size: %.2f MB)", maxFileSizeMB, relPath, float64(info.Size())/1024/1024)
 			return nil
 		}
 
 		// 计算文件哈希
-		hash, err := fs.CalculateFileHash(path)
+		hash, err := s.CalculateFileHash(path)
 		if err != nil {
-			fs.logger.Warn("error calculating hash for file %s: %v", path, err)
+			s.logger.Warn("error calculating hash for file %s: %v", path, err)
 			return nil
 		}
 
@@ -186,7 +210,7 @@ func (fs *FileScanner) ScanDirectory(codebasePath string) (map[string]string, er
 		filesScanned++
 
 		if filesScanned%100 == 0 {
-			fs.logger.Debug("%d files scanned", filesScanned)
+			s.logger.Debug("%d files scanned", filesScanned)
 		}
 
 		return nil
@@ -196,14 +220,14 @@ func (fs *FileScanner) ScanDirectory(codebasePath string) (map[string]string, er
 		return nil, fmt.Errorf("failed to scan directory: %v", err)
 	}
 
-	fs.logger.Info("directory scan completed, %d files scanned, time taken: %v",
+	s.logger.Info("directory scan completed, %d files scanned, time taken: %v",
 		filesScanned, time.Since(startTime))
 
 	return hashTree, nil
 }
 
 // 计算文件差异
-func (fs *FileScanner) CalculateFileChanges(local, remote map[string]string) []*FileStatus {
+func (s *FileScanner) CalculateFileChanges(local, remote map[string]string) []*FileStatus {
 	var changes []*FileStatus
 
 	// 检查新增或修改的文件

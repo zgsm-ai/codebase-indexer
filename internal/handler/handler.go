@@ -56,7 +56,7 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 		return &api.RegisterSyncResponse{Success: false, Message: "invalid parameters"}, nil
 	}
 
-	codebaseConfigsToRegister, err := h.findCodebasePathsToRegister(req.WorkspacePath, req.WorkspaceName)
+	codebaseConfigsToRegister, err := h.findCodebasePaths(req.WorkspacePath, req.WorkspaceName)
 	if err != nil {
 		h.logger.Error("failed to find codebase paths: %v", err)
 		return &api.RegisterSyncResponse{Success: false, Message: fmt.Sprintf("failed to find codebase paths: %v", err)}, nil
@@ -67,17 +67,18 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 		return &api.RegisterSyncResponse{Success: false, Message: "no registerable codebase found"}, nil
 	}
 
-	var codebaseConfigs []*storage.CodebaseConfig
+	var addCodebaseConfigs []*storage.CodebaseConfig
 	var registeredCount int
 	var lastError error
 
+	codebaseConfigs := h.storage.GetCodebaseConfigs()
 	for _, pendingConfig := range codebaseConfigsToRegister {
 		codebaseId := fmt.Sprintf("%s_%x", pendingConfig.CodebaseName, md5.Sum([]byte(pendingConfig.CodebasePath)))
 		h.logger.Info("preparing to register/update codebase: Name=%s, Path=%s, Id=%s", pendingConfig.CodebaseName, pendingConfig.CodebasePath, codebaseId)
 
-		codebaseConfig, errGet := h.storage.GetCodebaseConfig(codebaseId)
-		if errGet != nil {
-			h.logger.Warn("failed to get codebase config (Id: %s): %v, will initialize a new one", codebaseId, errGet)
+		codebaseConfig, ok := codebaseConfigs[codebaseId]
+		if !ok {
+			h.logger.Warn("failed to get codebase config (Id: %s), will initialize a new one", codebaseId)
 			codebaseConfig = &storage.CodebaseConfig{
 				ClientID:     req.ClientId,
 				CodebaseName: pendingConfig.CodebaseName,
@@ -101,8 +102,8 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 		}
 		h.logger.Info("codebase (Name: %s, Path: %s, Id: %s) registered/updated successfully", codebaseConfig.CodebaseName, codebaseConfig.CodebasePath, codebaseConfig.CodebaseId)
 		registeredCount++
-		if errGet != nil {
-			codebaseConfigs = append(codebaseConfigs, codebaseConfig)
+		if !ok {
+			addCodebaseConfigs = append(addCodebaseConfigs, codebaseConfig)
 		}
 	}
 
@@ -110,20 +111,9 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 		return &api.RegisterSyncResponse{Success: false, Message: fmt.Sprintf("all codebase registrations failed: %v", lastError)}, lastError
 	}
 
-	if len(codebaseConfigs) > 0 && h.httpSync.GetSyncConfig() != nil {
-		go func() {
-			// 定义5分钟超时
-			timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-			defer cancel()
-
-			if err := h.scheduler.SyncForCodebases(timeoutCtx, codebaseConfigs); err != nil {
-				if errors.Is(err, context.DeadlineExceeded) {
-					h.logger.Warn("synchronization timeout for %d codebases", len(codebaseConfigs))
-				} else {
-					h.logger.Error("synchronization failed: %v", err)
-				}
-			}
-		}()
+	// 同步初次注册codebase
+	if len(addCodebaseConfigs) > 0 && h.httpSync.GetSyncConfig() != nil {
+		go h.syncCodebases(addCodebaseConfigs)
 	}
 
 	if registeredCount < len(codebaseConfigsToRegister) && lastError != nil {
@@ -139,6 +129,79 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 	return &api.RegisterSyncResponse{Success: true, Message: fmt.Sprintf("%d codebases registered successfully", registeredCount)}, nil
 }
 
+// SyncCodebase 同步指定workspace下的代码库
+func (h *GRPCHandler) SyncCodebase(ctx context.Context, req *api.SyncCodebaseRequest) (*api.SyncCodebaseResponse, error) {
+	h.logger.Info("received codebase sync request: WorkspacePath=%s, WorkspaceName=%s", req.WorkspacePath, req.WorkspaceName)
+	// 检查请求参数
+	if req.ClientId == "" || req.WorkspacePath == "" || req.WorkspaceName == "" {
+		h.logger.Error("invalid codebase sync parameters")
+		return &api.SyncCodebaseResponse{Success: false, Message: "invalid parameters"}, nil
+	}
+
+	codebaseConfigsToSync, err := h.findCodebasePaths(req.WorkspacePath, req.WorkspaceName)
+	if err != nil {
+		h.logger.Error("failed to find codebase paths: %v", err)
+		return &api.SyncCodebaseResponse{Success: false, Message: fmt.Sprintf("failed to find codebase paths: %v", err)}, nil
+	}
+
+	if len(codebaseConfigsToSync) == 0 {
+		h.logger.Warn("no codebase found: %s", req.WorkspacePath)
+		return &api.SyncCodebaseResponse{Success: false, Message: "no codebase found"}, nil
+	}
+
+	var syncCodebaseConfigs []*storage.CodebaseConfig
+	var savedCount int
+	var lastError error
+
+	codebaseConfigs := h.storage.GetCodebaseConfigs()
+	for _, pendingConfig := range codebaseConfigsToSync {
+		codebaseId := fmt.Sprintf("%s_%x", pendingConfig.CodebaseName, md5.Sum([]byte(pendingConfig.CodebasePath)))
+		h.logger.Info("preparing to sync codebase: Name=%s, Path=%s, Id=%s", pendingConfig.CodebaseName, pendingConfig.CodebasePath, codebaseId)
+
+		codebaseConfig, ok := codebaseConfigs[codebaseId]
+		if !ok {
+			h.logger.Warn("codebase config not found: Id=%s", codebaseId)
+			codebaseConfig = &storage.CodebaseConfig{
+				ClientID:     req.ClientId,
+				CodebaseName: pendingConfig.CodebaseName,
+				CodebasePath: pendingConfig.CodebasePath,
+				CodebaseId:   codebaseId,
+				RegisterTime: time.Now(), // 设置注册时间为当前时间
+			}
+		} else {
+			h.logger.Info("found existing codebase config (Id: %s), will update it", codebaseId)
+			codebaseConfig.ClientID = req.ClientId
+			codebaseConfig.CodebaseName = pendingConfig.CodebaseName
+			codebaseConfig.CodebasePath = pendingConfig.CodebasePath
+			codebaseConfig.CodebaseId = codebaseId
+			codebaseConfig.RegisterTime = time.Now() // 更新注册时间为当前时间
+		}
+
+		if errSave := h.storage.SaveCodebaseConfig(codebaseConfig); errSave != nil {
+			h.logger.Error("failed to save codebase config (Name: %s, Path: %s, Id: %s): %v", codebaseConfig.CodebaseName, codebaseConfig.CodebasePath, codebaseConfig.CodebaseId, errSave)
+			lastError = errSave // 记录最后一个错误
+			continue
+		}
+		h.logger.Info("codebase (Name: %s, Path: %s, Id: %s) saved successfully", codebaseConfig.CodebaseName, codebaseConfig.CodebasePath, codebaseConfig.CodebaseId)
+		savedCount++
+		syncCodebaseConfigs = append(syncCodebaseConfigs, codebaseConfig)
+	}
+
+	if savedCount == 0 && lastError != nil {
+		return &api.SyncCodebaseResponse{Success: false, Message: fmt.Sprintf("all codebase config saved failed: %v", lastError)}, lastError
+	}
+
+	// 同步codebase
+	if len(syncCodebaseConfigs) > 0 && h.httpSync.GetSyncConfig() != nil {
+		err := h.syncCodebases(syncCodebaseConfigs)
+		if err != nil {
+			return &api.SyncCodebaseResponse{Success: false, Message: fmt.Sprintf("sync codebase failed: %v", err)}, err
+		}
+	}
+
+	return &api.SyncCodebaseResponse{Success: true, Message: "sync codebase success"}, nil
+}
+
 // UnregisterSync 注销同步
 func (h *GRPCHandler) UnregisterSync(ctx context.Context, req *api.UnregisterSyncRequest) (*emptypb.Empty, error) {
 	h.logger.Info("received workspace unregistration request: WorkspacePath=%s, WorkspaceName=%s", req.WorkspacePath, req.WorkspaceName)
@@ -148,7 +211,7 @@ func (h *GRPCHandler) UnregisterSync(ctx context.Context, req *api.UnregisterSyn
 		return &emptypb.Empty{}, fmt.Errorf("invalid parameters")
 	}
 
-	codebaseConfigsToUnregister, err := h.findCodebasePathsToRegister(req.WorkspacePath, req.WorkspaceName)
+	codebaseConfigsToUnregister, err := h.findCodebasePaths(req.WorkspacePath, req.WorkspaceName)
 	if err != nil {
 		h.logger.Error("failed to find codebase paths to unregister: %v. WorkspacePath=%s, WorkspaceName=%s", err, req.WorkspacePath, req.WorkspaceName)
 		// 即使查找失败，也尝试返回 Empty，因为注销操作的目标是清理，不应因查找阶段的错误而阻塞
@@ -231,6 +294,28 @@ func (h *GRPCHandler) GetVersion(ctx context.Context, req *api.VersionRequest) (
 	}, nil
 }
 
+// syncCodebases 主动同步代码库
+func (h *GRPCHandler) syncCodebases(codebaseConfigs []*storage.CodebaseConfig) error {
+	timeout := time.Duration(storage.DefaultConfigSync.IntervalMinutes) * time.Minute
+	if h.scheduler.GetSchedulerConfig() != nil && h.scheduler.GetSchedulerConfig().IntervalMinutes > 0 {
+		timeout = time.Duration(h.scheduler.GetSchedulerConfig().IntervalMinutes) * time.Minute
+	}
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	if err := h.scheduler.SyncForCodebases(timeoutCtx, codebaseConfigs); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			h.logger.Warn("sync timeout for %d codebases", len(codebaseConfigs))
+			return fmt.Errorf("sync timeout for %d codebases: %v", len(codebaseConfigs), err)
+		} else {
+			h.logger.Error("sync failed: %v", err)
+			return err
+		}
+	}
+
+	return nil
+}
+
 // isGitRepository 检查给定路径是否是一个 .git 仓库的根目录
 func (h *GRPCHandler) isGitRepository(path string) bool {
 	gitPath := filepath.Join(path, ".git")
@@ -244,12 +329,12 @@ func (h *GRPCHandler) isGitRepository(path string) bool {
 	return info.IsDir()
 }
 
-// findCodebasePathsToRegister 查找需要注册的codebase路径和名称
+// findCodebasePaths 查找指定路径下的codebase路径和名称
 // 1. 如果 basePath 本身是 .git 仓库，则返回它
 // 2. 如果 basePath 不是 .git 仓库，则检查其一级子目录，返回所有作为 .git 仓库的子目录
 // 3. 如果 basePath 及其一级子目录都不是 .git 仓库，则返回 basePath 本身
 // 返回的是一个包含待处理 CodebaseConfig 结构体（仅填充 CodebasePath 和 CodebaseName）的切片
-func (h *GRPCHandler) findCodebasePathsToRegister(basePath string, baseName string) ([]storage.CodebaseConfig, error) {
+func (h *GRPCHandler) findCodebasePaths(basePath string, baseName string) ([]storage.CodebaseConfig, error) {
 	var configs []storage.CodebaseConfig
 
 	if h.isGitRepository(basePath) {

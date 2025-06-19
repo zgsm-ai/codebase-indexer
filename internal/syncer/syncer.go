@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"time"
 
 	"codebase-syncer/internal/storage"
@@ -42,6 +43,7 @@ type HTTPSync struct {
 	syncConfig *SyncConfig
 	httpClient *fasthttp.Client
 	logger     logger.Logger
+	rwMutex    sync.RWMutex
 }
 
 func NewHTTPSync(syncConfig *SyncConfig, logger logger.Logger) SyncInterface {
@@ -56,10 +58,14 @@ func NewHTTPSync(syncConfig *SyncConfig, logger logger.Logger) SyncInterface {
 }
 
 func (hs *HTTPSync) SetSyncConfig(config *SyncConfig) {
+	hs.rwMutex.Lock()
+	defer hs.rwMutex.Unlock()
 	hs.syncConfig = config
 }
 
 func (hs *HTTPSync) GetSyncConfig() *SyncConfig {
+	hs.rwMutex.RLock()
+	defer hs.rwMutex.RUnlock()
 	return hs.syncConfig
 }
 
