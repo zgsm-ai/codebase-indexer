@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// verifyZipContent 验证ZIP文件内容
+// verifyZipContent validates zip file contents
 func verifyZipContent(t *testing.T, zipPath string, expected map[string]string) {
 	t.Helper()
 
@@ -59,7 +59,7 @@ func TestAddFileToZip(t *testing.T) {
 		if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
 			t.Fatal(err)
 		}
-		// 获取testFile相对于tempDir的相对路径
+		// Get testFile's relative path to tempDir
 		testFileRelPath, err := filepath.Rel(tempDir, testFile)
 		if err != nil {
 			t.Fatal(err)
@@ -117,7 +117,7 @@ func TestAddFileToZip(t *testing.T) {
 		if err := os.WriteFile(testFile, []byte("windows content"), 0644); err != nil {
 			t.Fatal(err)
 		}
-		// 获取testFile相对于tempDir的相对路径
+		// Get testFile's relative path to tempDir
 		testFileRelPath, err := filepath.Rel(tempDir, testFile)
 		if err != nil {
 			t.Fatal(err)
@@ -139,7 +139,7 @@ func TestAddFileToZip(t *testing.T) {
 			t.Fatalf("AddFileToZip failed: %v", err)
 		}
 
-		// 验证路径转换是否成功
+		// Verify path conversion
 		expectedPathInZip := "win/path/test.txt"
 		verifyZipContent(t, zipFile, map[string]string{
 			expectedPathInZip: "windows content",

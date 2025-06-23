@@ -1,44 +1,44 @@
-# 跨平台配置路径说明
+# Cross-platform Configuration Paths Explanation
 
-## XDG_CONFIG_HOME 详解
+## XDG_CONFIG_HOME Details
 
-### 什么是 XDG_CONFIG_HOME？
+### What is XDG_CONFIG_HOME?
 
-`XDG_CONFIG_HOME` 是 [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html) 标准中定义的环境变量，用于指定用户配置文件的基础目录。
+`XDG_CONFIG_HOME` is an environment variable defined in the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html) that specifies the base directory for user configuration files.
 
-### 默认值和常见路径
+### Default Values and Common Paths
 
-#### Linux 系统中的典型情况：
+#### Typical Case in Linux Systems:
 
-1. **如果设置了 XDG_CONFIG_HOME**：
+1. **If XDG_CONFIG_HOME is set**:
    ```bash
-   export XDG_CONFIG_HOME=/home/用户名/.config
-   # 或者自定义路径
+   export XDG_CONFIG_HOME=/home/username/.config
+   # or custom path
    export XDG_CONFIG_HOME=/custom/config
    ```
-   - 应用配置路径：`$XDG_CONFIG_HOME/appname`
-   - 示例：`/home/用户名/.config/zgsm`
+   - App config path: `$XDG_CONFIG_HOME/appname`
+   - Example: `/home/username/.config/zgsm`
 
-2. **如果未设置 XDG_CONFIG_HOME**（默认情况）：
-   - 按照 XDG 标准，应该默认为 `~/.config`
-   - 但我们的代码采用传统方式：`~/.appname`
-   - 示例：`/home/用户名/.zgsm`
+2. **If XDG_CONFIG_HOME is not set** (default case):
+   - According to XDG standard, should default to `~/.config`
+   - But our code uses legacy approach: `~/.appname`
+   - Example: `/home/username/.zgsm`
 
-### 各操作系统的实际路径示例
+### Example Paths on Different OSes
 
-假设应用名为 "zgsm"，用户名为 "john"：
+Assuming app name is "zgsm" and username is "john":
 
 #### Windows:
 ```
 C:\Users\john\.zgsm\
 ```
 
-#### Linux (未设置 XDG_CONFIG_HOME):
+#### Linux (XDG_CONFIG_HOME not set):
 ```
 /home/john/.zgsm/
 ```
 
-#### Linux (设置了 XDG_CONFIG_HOME=/home/john/.config):
+#### Linux (XDG_CONFIG_HOME=/home/john/.config):
 ```
 /home/john/.config/zgsm/
 ```
@@ -48,36 +48,36 @@ C:\Users\john\.zgsm\
 /Users/john/.zgsm/
 ```
 
-### 检查当前系统的 XDG_CONFIG_HOME
+### Checking XDG_CONFIG_HOME on Current System
 
-在 Linux 终端中运行：
+Run in Linux terminal:
 ```bash
 echo $XDG_CONFIG_HOME
 ```
 
-如果输出为空，说明未设置；如果有输出，则显示当前设置的路径。
+If output is empty, it means not set; if there's output, it shows the currently set path.
 
-### 常见的 XDG 目录
+### Common XDG Directories
 
-- `XDG_CONFIG_HOME`: 配置文件 (默认 `~/.config`)
-- `XDG_DATA_HOME`: 数据文件 (默认 `~/.local/share`)
-- `XDG_CACHE_HOME`: 缓存文件 (默认 `~/.cache`)
-- `XDG_STATE_HOME`: 状态文件 (默认 `~/.local/state`)
+- `XDG_CONFIG_HOME`: Configuration files (default `~/.config`)
+- `XDG_DATA_HOME`: Data files (default `~/.local/share`)
+- `XDG_CACHE_HOME`: Cache files (default `~/.cache`)
+- `XDG_STATE_HOME`: State files (default `~/.local/state`)
 
-### 为什么使用 XDG 标准？
+### Why Use XDG Standard?
 
-1. **标准化**：遵循 Linux 桌面环境的标准
-2. **组织性**：将不同类型的文件分类存储
-3. **用户友好**：用户可以自定义配置目录位置
-4. **备份方便**：配置文件集中在特定目录
+1. **Standardization**: Follows Linux desktop environment standards
+2. **Organization**: Separates different file types
+3. **User-friendly**: Allows custom config directory locations
+4. **Easier backup**: Centralizes config files in specific directory
 
-### 我们代码的实现策略
+### Our Code Implementation Strategy
 
 ```go
-// 优先级顺序：
-// 1. 检查 XDG_CONFIG_HOME 环境变量
-// 2. 如果存在，使用 $XDG_CONFIG_HOME/appname
-// 3. 如果不存在，使用传统的 ~/.appname
+// Priority order:
+// 1. Check XDG_CONFIG_HOME environment variable
+// 2. If exists, use $XDG_CONFIG_HOME/appname
+// 3. If not exists, use legacy ~/.appname
 ```
 
-这种实现方式既支持现代的 XDG 标准，又保持了与传统应用的兼容性。
+This implementation supports both modern XDG standard and maintains compatibility with traditional applications.

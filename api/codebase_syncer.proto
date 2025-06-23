@@ -3,88 +3,88 @@ syntax = "proto3";
 package codebase_syncer;
 option go_package = "./;codebase_syncer";
 
-// 导入必要的proto包
+// Import required proto packages
 import "google/protobuf/empty.proto";
 
-// Token 共享请求（，加密存储）
-// 共享 AccessToken 请求（包含 server_endpoint）
+// Token sharing request (encrypted storage)
+// Share AccessToken request (includes server_endpoint)
 message ShareAccessTokenRequest {
-    string client_id = 1;        // 客户ID
-    string access_token = 2;     // Token
-    string server_endpoint = 3;  // 云端服务端点
+    string client_id = 1;        // Client ID
+    string access_token = 2;     // Access Token
+    string server_endpoint = 3;  // Cloud service endpoint
 }
 
-// 共享 Token 响应
+// Token sharing response
 message ShareAccessTokenResponse {
     bool success = 1;
     string message = 2;
 }
 
-// 注册项目同步
+// Register project sync
 message RegisterSyncRequest {
-    string client_id = 1;        // 客户ID
-    string workspace_path = 2;     // 工作区路径
-    string workspace_name = 3;     // 工作区名称
+    string client_id = 1;        // Client ID
+    string workspace_path = 2;     // Workspace path
+    string workspace_name = 3;     // Workspace name
 }
 
-// 注册项目同步响应
+// Register sync response
 message RegisterSyncResponse {
-    bool success = 1;           // 是否成功
-    string message = 2;         // 消息
+    bool success = 1;           // Success flag
+    string message = 2;         // Message
 }
 
-// 同步项目请求
+// Sync project request
 message SyncCodebaseRequest {
-    string client_id = 1;        // 客户ID
-    string workspace_path = 2;     // 工作区路径
-    string workspace_name = 3;     // 工作区名称
+    string client_id = 1;        // Client ID
+    string workspace_path = 2;     // Workspace path
+    string workspace_name = 3;     // Workspace name
 }
 
-// 同步项目响应
+// Sync project response
 message SyncCodebaseResponse {
-    bool success = 1;           // 是否成功
-    string message = 2;         // 消息
+    bool success = 1;           // Success flag
+    string message = 2;         // Message
 }
 
-// 注销项目同步
+// Unregister project sync
 message UnregisterSyncRequest {
-    string client_id = 1;        // 客户ID
-    string workspace_path = 2;     // 工作区路径
-    string workspace_name = 3;     // 工作区名称
+    string client_id = 1;        // Client ID
+    string workspace_path = 2;     // Workspace path
+    string workspace_name = 3;     // Workspace name
 }
 
-// 版本信息请求
+// Version information request
 message VersionRequest {
-    string client_id = 1;  // 客户ID
+    string client_id = 1;  // Client ID
 }
 
-// 版本信息响应
+// Version information response
 message VersionResponse {
     message Data {
-        string version = 1;  // 版本号
-        string app_name = 2;  // 应用名称
-        string os_name = 3;  // 操作系统名称
-        string arch_name = 4;  // 架构名称
+        string version = 1;  // Version number
+        string app_name = 2;  // Application name
+        string os_name = 3;  // OS name
+        string arch_name = 4;  // Architecture name
     }
-    bool success = 1;           // 是否成功
-    string message = 2;         // 消息
-    Data data = 3;              // 数据
+    bool success = 1;           // Success flag
+    string message = 2;         // Message
+    Data data = 3;              // Data
 }
 
-// 同步服务定义
+// Sync service definition
 service SyncService {
-    // 注册项目同步
+    // Register project sync
     rpc RegisterSync(RegisterSyncRequest) returns (RegisterSyncResponse);
 
-    // 同步项目
+    // Sync project
     rpc SyncCodebase(SyncCodebaseRequest) returns (SyncCodebaseResponse);
     
-    // 注销项目同步
+    // Unregister project sync
     rpc UnregisterSync(UnregisterSyncRequest) returns (google.protobuf.Empty);
     
-    // 共享 AccessToken（明文传输，服务端加密存储）
+    // Share AccessToken (plain text transmission, server-side encrypted storage)
     rpc ShareAccessToken(ShareAccessTokenRequest) returns (ShareAccessTokenResponse);
 
-    // 获取应用名称和版本信息
+    // Get application name and version information
     rpc GetVersion(VersionRequest) returns (VersionResponse);
 }

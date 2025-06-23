@@ -1,4 +1,4 @@
-// utils/file.go - 文件处理相关函数
+// utils/file.go - File handling utilities
 package utils
 
 import (
@@ -9,7 +9,7 @@ import (
 	"runtime"
 )
 
-// AddFileToZip 将文件添加到zip中
+// AddFileToZip adds a file to zip archive
 func AddFileToZip(zipWriter *zip.Writer, fileRelPath string, basePath string) error {
 	file, err := os.Open(filepath.Join(basePath, fileRelPath))
 	if err != nil {

@@ -1,4 +1,4 @@
-// syncer/syncer.go - HTTP同步实现
+// syncer/syncer.go - HTTP sync implementation
 package syncer
 
 import (
@@ -19,7 +19,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-// 服务端API路径
+// Server API paths
 const (
 	API_UPLOAD_FILE       = "/codebase-indexer/api/v1/files/upload"
 	API_GET_CODEBASE_HASH = "/codebase-indexer/api/v1/codebases/hash"
@@ -89,16 +89,16 @@ type HashItem struct {
 	Hash string `json:"hash"`
 }
 
-// 获取服务端哈希树
+// Fetch server hash tree
 func (hs *HTTPSync) FetchServerHashTree(codebasePath string) (map[string]string, error) {
 	hs.logger.Info("fetching hash tree from server: %s", codebasePath)
 
-	// 判断config中的字段是否为空
+	// Check if config fields are empty
 	if hs.syncConfig == nil || hs.syncConfig.ServerURL == "" || hs.syncConfig.ClientId == "" || hs.syncConfig.Token == "" {
 		return nil, fmt.Errorf("sync config is not properly set, please check clientId, serverURL and token")
 	}
 
-	// 准备请求
+	// Prepare the request
 	url := fmt.Sprintf("%s%s?clientId=%s&codebasePath=%s",
 		hs.syncConfig.ServerURL, API_GET_CODEBASE_HASH, hs.syncConfig.ClientId, codebasePath)
 
@@ -119,7 +119,7 @@ func (hs *HTTPSync) FetchServerHashTree(codebasePath string) (map[string]string,
 		return nil, fmt.Errorf("failed to send request: %v", err)
 	}
 
-	// 处理响应
+	// Process the response
 	if resp.StatusCode() != fasthttp.StatusOK {
 		return nil, fmt.Errorf("failed to get hash tree, status: %d, response: %s",
 			resp.StatusCode(), string(resp.Body()))
@@ -149,11 +149,11 @@ type UploadReq struct {
 	CodebaseName string `json:"codebaseName"`
 }
 
-// UploadFile 上传文件到服务器
+// UploadFile uploads file to server
 func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 	hs.logger.Info("uploading file: %s", filePath)
 
-	// 判断config中的字段是否为空
+	// Check if config fields are empty
 	if hs.syncConfig == nil || hs.syncConfig.ServerURL == "" || hs.syncConfig.ClientId == "" || hs.syncConfig.Token == "" {
 		return fmt.Errorf("sync config is not properly set, please check clientId, serverURL and token")
 	}
@@ -167,7 +167,7 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
-	// 添加zip文件
+	// Add zip file
 	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
 	if err != nil {
 		return fmt.Errorf("failed to create form file: %v", err)
@@ -177,7 +177,7 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 		return fmt.Errorf("failed to copy file content: %v", err)
 	}
 
-	// 添加表单字段
+	// Add form fields
 	writer.WriteField("clientId", uploadReq.ClientId)
 	writer.WriteField("codebasePath", uploadReq.CodebasePath)
 	writer.WriteField("codebaseName", uploadReq.CodebaseName)
@@ -214,21 +214,21 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 	return nil
 }
 
-// 客户端配置文件URI
+// Client config file URI
 const (
 	API_GET_CLIENT_CONFIG = "/codebaseSyncer_cli_tools/config.json"
 )
 
-// 获取客户端配置文件
+// Get client configuration
 func (hs *HTTPSync) GetClientConfig() (storage.ClientConfig, error) {
 	hs.logger.Info("fetching client config from server")
 
-	// 判断config中的字段是否为空
+	// Check if config fields are empty
 	if hs.syncConfig == nil || hs.syncConfig.ServerURL == "" || hs.syncConfig.ClientId == "" || hs.syncConfig.Token == "" {
 		return storage.ClientConfig{}, fmt.Errorf("sync config is not properly set, please check clientId, serverURL and token")
 	}
 
-	// 准备请求
+	// Prepare the request
 	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_GET_CLIENT_CONFIG)
 
 	req := fasthttp.AcquireRequest()
@@ -248,7 +248,7 @@ func (hs *HTTPSync) GetClientConfig() (storage.ClientConfig, error) {
 		return storage.ClientConfig{}, fmt.Errorf("failed to send request: %v", err)
 	}
 
-	// 处理响应
+	// Process the response
 	if resp.StatusCode() != fasthttp.StatusOK {
 		return storage.ClientConfig{}, fmt.Errorf("failed to get client config, status: %d, response: %s",
 			resp.StatusCode(), string(resp.Body()))

@@ -1,4 +1,4 @@
-// scheduler/scheduler.go - 调度管理器
+// scheduler/scheduler.go - Scheduler Manager
 package scheduler
 
 import (
@@ -21,11 +21,11 @@ import (
 )
 
 type SchedulerConfig struct {
-	IntervalMinutes       int // 同步间隔，单位：分钟
-	RegisterExpireMinutes int // 注册过期时间，单位：分钟
-	HashTreeExpireHours   int // 哈希树过期时间，单位：小时
-	MaxRetries            int // 最大重试次数
-	RetryIntervalSeconds  int // 重试间隔，单位：秒
+	IntervalMinutes       int // Sync interval in minutes
+	RegisterExpireMinutes int // Registration expiration time in minutes
+	HashTreeExpireHours   int // Hash tree expiration time in hours
+	MaxRetries            int // Maximum retry count
+	RetryIntervalSeconds  int // Retry interval in seconds
 }
 
 type Scheduler struct {
@@ -37,8 +37,8 @@ type Scheduler struct {
 	mutex            sync.Mutex
 	rwMutex          sync.RWMutex
 	isRunning        bool
-	restartCh        chan struct{} // 重启通道
-	updateCh         chan struct{} // 更新配置通道
+	restartCh        chan struct{} // Restart channel
+	updateCh         chan struct{} // Config update channel
 	currentTicker    *time.Ticker
 }
 
@@ -55,7 +55,7 @@ func NewScheduler(httpSync syncer.SyncInterface, fileScanner scanner.ScannerInte
 	}
 }
 
-// defaultSchedulerConfig 默认的调度器配置
+// defaultSchedulerConfig Default scheduler configuration
 func defaultSchedulerConfig() *SchedulerConfig {
 	return &SchedulerConfig{
 		IntervalMinutes:       storage.DefaultConfigSync.IntervalMinutes,
@@ -66,7 +66,7 @@ func defaultSchedulerConfig() *SchedulerConfig {
 	}
 }
 
-// SetSchedulerConfig 设置调度器配置
+// SetSchedulerConfig Set scheduler configuration
 func (s *Scheduler) SetSchedulerConfig(config *SchedulerConfig) {
 	if config == nil {
 		return
@@ -90,39 +90,39 @@ func (s *Scheduler) SetSchedulerConfig(config *SchedulerConfig) {
 	}
 }
 
-// GetSchedulerConfig 获取调度器配置
+// GetSchedulerConfig Get scheduler configuration
 func (s *Scheduler) GetSchedulerConfig() *SchedulerConfig {
 	s.rwMutex.RLock()
 	defer s.rwMutex.RUnlock()
 	return s.sechedulerConfig
 }
 
-// Start 启动调度器
+// Start Start the scheduler
 func (s *Scheduler) Start(ctx context.Context) {
 	go s.runScheduler(ctx, true)
 }
 
-// Restart 重启调度器
+// Restart Restart the scheduler
 func (s *Scheduler) Restart(ctx context.Context) {
 	s.logger.Info("preparing to restart scheduler")
 
 	s.restartCh <- struct{}{}
 	s.logger.Info("scheduler restart signal sent")
-	time.Sleep(100 * time.Millisecond) // 等待调度器重启
+	time.Sleep(100 * time.Millisecond) // Wait for scheduler restart
 
 	go s.runScheduler(ctx, false)
 }
 
-// LoadConfig 更新调度器配置
+// LoadConfig Update scheduler configuration
 func (s *Scheduler) LoadConfig(ctx context.Context) {
 	s.logger.Info("preparing to load scheduler config")
 
 	s.updateCh <- struct{}{}
 	s.logger.Info("scheduler config load signal sent")
-	time.Sleep(100 * time.Millisecond) // 等待调度器更新
+	time.Sleep(100 * time.Millisecond) // Wait for scheduler update
 
 	config := storage.GetClientConfig()
-	// 更新scheduler配置
+	// Update scheduler configuration
 	schedulerConfig := &SchedulerConfig{
 		IntervalMinutes:       config.Sync.IntervalMinutes,
 		RegisterExpireMinutes: config.Server.RegisterExpireMinutes,
@@ -132,7 +132,7 @@ func (s *Scheduler) LoadConfig(ctx context.Context) {
 	}
 	s.SetSchedulerConfig(schedulerConfig)
 
-	// 更新scanner配置
+	// Update scanner configuration
 	scannerConfig := &scanner.ScannerConfig{
 		IgnorePatterns: config.Sync.IgnorePatterns,
 		MaxFileSizeMB:  config.Sync.MaxFileSizeMB,
@@ -140,18 +140,18 @@ func (s *Scheduler) LoadConfig(ctx context.Context) {
 	s.fileScanner.SetScannerConfig(scannerConfig)
 }
 
-// runScheduler 实际运行调度器循环
+// runScheduler Actually run the scheduler loop
 func (s *Scheduler) runScheduler(parentCtx context.Context, initial bool) {
 	syncInterval := time.Duration(s.sechedulerConfig.IntervalMinutes) * time.Minute
 
 	s.logger.Info("starting sync scheduler with interval: %v", syncInterval)
 
-	// 立即执行一次同步
+	// Perform immediate sync if this is the initial run
 	if initial && s.httpSync.GetSyncConfig() != nil {
 		s.performSync()
 	}
 
-	// 设置定时器
+	// Setup ticker
 	s.currentTicker = time.NewTicker(syncInterval)
 	defer s.currentTicker.Stop()
 
@@ -177,18 +177,18 @@ func (s *Scheduler) runScheduler(parentCtx context.Context, initial bool) {
 	}
 }
 
-// performSync 执行同步
+// performSync Perform sync operation
 func (s *Scheduler) performSync() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	// 防止同时执行多个同步任务
+	// Prevent multiple sync tasks from running concurrently
 	if s.isRunning {
 		s.logger.Info("sync task already running, skipping this run")
 		return
 	}
 
-	// 标记为运行中
+	// Mark as running
 	s.isRunning = true
 	defer func() {
 		s.isRunning = false
@@ -213,7 +213,7 @@ func (s *Scheduler) performSync() {
 	s.logger.Info("sync task completed, total time: %v", time.Since(startTime))
 }
 
-// performSyncForCodebase 执行单个codebase 的同步任务
+// performSyncForCodebase Perform sync task for single codebase
 func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) {
 	s.logger.Info("starting sync for codebase: %s", config.CodebaseId)
 	nowTime := time.Now()
@@ -223,7 +223,7 @@ func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) {
 		return
 	}
 
-	// 获取codebase哈希树
+	// Get codebase hash tree
 	var serverHashTree map[string]string
 	if len(config.HashTree) > 0 && config.LastSync.Add(time.Duration(s.sechedulerConfig.HashTreeExpireHours)*time.Hour).After(nowTime) {
 		serverHashTree = config.HashTree
@@ -232,10 +232,10 @@ func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) {
 		serverHashTree, err = s.httpSync.FetchServerHashTree(config.CodebasePath)
 		if err != nil {
 			s.logger.Warn("failed to get hash tree from server: %v", err)
-			// 没有服务器哈希树，使用空哈希树进行全量同步
+			// No server hash tree available, use empty hash tree for full sync
 			serverHashTree = make(map[string]string)
 		} else {
-			// 更新codebase哈希树
+			// Update codebase hash tree
 			s.logger.Info("fetched server hash tree successfully, updating codebase config")
 			config.HashTree = serverHashTree
 			config.LastSync = nowTime
@@ -245,7 +245,7 @@ func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) {
 		}
 	}
 
-	// 比较哈希树，找出变更
+	// Compare hash trees to find changes
 	changes := s.fileScanner.CalculateFileChanges(localHashTree, serverHashTree)
 	if len(changes) == 0 {
 		s.logger.Info("no file changes detected, sync completed")
@@ -254,13 +254,13 @@ func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) {
 
 	s.logger.Info("detected %d file changes", len(changes))
 
-	// 处理所有文件变更
+	// Process all file changes
 	if err := s.processFileChanges(config, changes); err != nil {
 		s.logger.Error("file changes processing failed: %v", err)
 		return
 	}
 
-	// 更新本地哈希树并保存配置
+	// Update local hash tree and save configuration
 	config.HashTree = localHashTree
 	config.LastSync = nowTime
 	if err := s.storage.SaveCodebaseConfig(config); err != nil {
@@ -270,15 +270,15 @@ func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) {
 	s.logger.Info("sync completed for codebase: %s, time taken: %v", config.CodebaseId, time.Since(nowTime))
 }
 
-// processFileChanges 处理文件变更，将上传逻辑封装
+// processFileChanges Process file changes and encapsulate upload logic
 func (s *Scheduler) processFileChanges(config *storage.CodebaseConfig, changes []*scanner.FileStatus) error {
-	// 创建包含所有变更（新增和修改的文件）的zip文件
+	// Create zip with all changed files (new and modified)
 	zipPath, err := s.createChangesZip(config, changes)
 	if err != nil {
 		return fmt.Errorf("failed to create zip file: %v", err)
 	}
 
-	// 上传zip文件
+	// Upload zip file
 	uploadReq := &syncer.UploadReq{
 		ClientId:     config.ClientID,
 		CodebasePath: config.CodebasePath,
@@ -300,7 +300,7 @@ type SyncMetadata struct {
 	Timestamp    int64             `json:"timestamp"`
 }
 
-// createChangesZip 创建包含文件变更和元数据的zip文件
+// createChangesZip Create zip file containing file changes and metadata
 func (s *Scheduler) createChangesZip(config *storage.CodebaseConfig, changes []*scanner.FileStatus) (string, error) {
 	zipDir := filepath.Join(utils.UploadTmpDir, "zip")
 	if err := os.MkdirAll(zipDir, 0755); err != nil {
@@ -317,7 +317,7 @@ func (s *Scheduler) createChangesZip(config *storage.CodebaseConfig, changes []*
 	zipWriter := zip.NewWriter(zipFile)
 	defer zipWriter.Close()
 
-	// 创建SyncMetadata
+	// Create SyncMetadata
 	metadata := &SyncMetadata{
 		ClientId:     config.ClientID,
 		CodebaseName: config.CodebaseName,
@@ -333,16 +333,16 @@ func (s *Scheduler) createChangesZip(config *storage.CodebaseConfig, changes []*
 		}
 		metadata.FileList[filePath] = change.Status
 
-		// 只将新增和修改的文件添加到zip包
+		// Only add new and modified files to zip
 		if change.Status == scanner.FILE_STATUS_ADDED || change.Status == scanner.FILE_STATUS_MODIFIED {
 			if err := utils.AddFileToZip(zipWriter, change.Path, config.CodebasePath); err != nil {
-				// 继续尝试添加其他文件，但记录错误
+				// Continue trying to add other files but log error
 				s.logger.Warn("failed to add file to zip: %s, error: %v", change.Path, err)
 			}
 		}
 	}
 
-	// 添加metadata文件到zip
+	// Add metadata file to zip
 	metadataJson, err := json.Marshal(metadata)
 	if err != nil {
 		return "", err
@@ -385,7 +385,7 @@ func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq *syncer.UploadReq
 		}
 	}
 
-	// 上报结束后，无论成功与否，都尝试删除本地的zip文件
+	// After reporting, try to delete local zip file regardless of success
 	if zipPath != "" {
 		if err := os.Remove(zipPath); err != nil {
 			s.logger.Warn("failed to delete temp zip file: %s, error: %v", zipPath, err)
@@ -401,24 +401,24 @@ func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq *syncer.UploadReq
 	return nil
 }
 
-// SyncForCodebases 批量同步代码库
+// SyncForCodebases Batch sync codebases
 func (s *Scheduler) SyncForCodebases(ctx context.Context, codebaseConfig []*storage.CodebaseConfig) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	// 防止同时执行多个同步任务
+	// Prevent multiple sync tasks running concurrently
 	if s.isRunning {
 		s.logger.Info("sync task already running, skipping this sync")
 		return nil
 	}
 
-	// 标记为运行中
+	// Mark as running
 	s.isRunning = true
 	defer func() {
 		s.isRunning = false
 	}()
 
-	// 检查上下文是否已取消
+	// Check if context was cancelled
 	if err := ctx.Err(); err != nil {
 		return err
 	}

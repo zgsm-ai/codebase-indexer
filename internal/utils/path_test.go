@@ -8,7 +8,7 @@ import (
 )
 
 func TestGetRootDir(t *testing.T) {
-	// 保存原始环境
+	// Save original environment
 	originalEnv := map[string]string{
 		"USERPROFILE":     os.Getenv("USERPROFILE"),
 		"APPDATA":         os.Getenv("APPDATA"),
@@ -22,7 +22,7 @@ func TestGetRootDir(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		// 测试当前平台下的正常路径处理
+		// Test normal path handling for current platform
 		{
 			name:    "basic path test",
 			appName: "testapp",
@@ -32,7 +32,7 @@ func TestGetRootDir(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 设置环境
+			// Set test environment
 			for k, v := range tt.env {
 				os.Setenv(k, v)
 			}
@@ -41,24 +41,24 @@ func TestGetRootDir(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetRootDir() error = %v, wantErr %v", err, tt.wantErr)
 			} else if !tt.wantErr {
-				// 验证目录是否创建
+				// Verify directory creation
 				if _, err := os.Stat(got); os.IsNotExist(err) {
 					t.Errorf("GetRootDir() = %v, path does not exist", got)
 				}
-				// 验证全局变量
+				// Verify global variables
 				if AppRootDir != got {
 					t.Errorf("AppRootDir = %v, want %v", AppRootDir, got)
 				}
 			}
 
-			// 恢复环境
+			// Restore environment
 			for k := range tt.env {
 				os.Unsetenv(k)
 			}
 		})
 	}
 
-	// 恢复全局环境
+	// Restore global environment
 	for k, v := range originalEnv {
 		os.Setenv(k, v)
 	}
@@ -94,25 +94,25 @@ func TestGetLogDir(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 准备测试环境
+			// Prepare test environment
 			if tt.prepareFunc != nil {
 				if err := tt.prepareFunc(tt.rootPath); err != nil {
 					t.Fatalf("prepare failed: %v", err)
 				}
 			}
 
-			// 执行测试
+			// Run test
 			got, err := GetLogDir(tt.rootPath)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetLogDir() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if err == nil {
-				// 验证返回值
+				// Verify return value
 				if _, err := os.Stat(got); os.IsNotExist(err) {
 					t.Errorf("GetLogDir() = %v, path does not exist", got)
 				}
-				// 验证目录权限 (Windows 不严格执行权限检查)
+				// Verify directory permissions (Windows doesn't enforce strict permissions)
 				if runtime.GOOS != "windows" {
 					if fi, err := os.Stat(got); err == nil {
 						if fi.Mode().Perm() != 0755 {
@@ -120,13 +120,13 @@ func TestGetLogDir(t *testing.T) {
 						}
 					}
 				}
-				// 验证全局变量
+				// Verify global variables
 				if LogsDir != got {
 					t.Errorf("LogDir global variable = %v, want %v", LogsDir, got)
 				}
 			}
 
-			// 清理
+			// Clean up
 			if tt.cleanupFunc != nil {
 				tt.cleanupFunc(tt.rootPath)
 			}
@@ -163,7 +163,7 @@ func TestGetCacheDir(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 准备测试环境
+			// Set up test environment
 			if tt.prepareFunc != nil {
 				if err := tt.prepareFunc(tt.rootPath); err != nil {
 					t.Fatalf("prepare failed: %v", err)
@@ -176,11 +176,11 @@ func TestGetCacheDir(t *testing.T) {
 				return
 			}
 			if err == nil {
-				// 验证返回值
+				// Verify return value
 				if _, err := os.Stat(got); os.IsNotExist(err) {
 					t.Errorf("GetCacheDir() = %v, path does not exist", got)
 				}
-				// 验证目录权限
+				// Verify directory permissions
 				if runtime.GOOS != "windows" {
 					if fi, err := os.Stat(got); err == nil {
 						if fi.Mode().Perm() != 0755 {
@@ -188,13 +188,13 @@ func TestGetCacheDir(t *testing.T) {
 						}
 					}
 				}
-				// 验证全局变量
+				// Verify global variables
 				if CacheDir != got {
 					t.Errorf("CacheDir global variable = %v, want %v", CacheDir, got)
 				}
 			}
 
-			// 清理
+			// Clean up
 			if tt.cleanupFunc != nil {
 				tt.cleanupFunc(tt.rootPath)
 			}
@@ -231,7 +231,7 @@ func TestGetUploadTmpDir(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 准备测试环境
+			// Prepare test environment
 			if tt.prepareFunc != nil {
 				if err := tt.prepareFunc(tt.rootPath); err != nil {
 					t.Fatalf("prepare failed: %v", err)
@@ -244,11 +244,11 @@ func TestGetUploadTmpDir(t *testing.T) {
 				return
 			}
 			if err == nil {
-				// 验证返回值
+				// Verify return value
 				if _, err := os.Stat(got); os.IsNotExist(err) {
 					t.Errorf("GetUploadTmpDir() = %v, path does not exist", got)
 				}
-				// 验证目录权限
+				// Verify directory permissions
 				if runtime.GOOS != "windows" {
 					if fi, err := os.Stat(got); err == nil {
 						if fi.Mode().Perm() != 0755 {
@@ -256,13 +256,13 @@ func TestGetUploadTmpDir(t *testing.T) {
 						}
 					}
 				}
-				// 验证全局变量
+				// Verify global variables
 				if UploadTmpDir != got {
 					t.Errorf("UploadTmpDir global variable = %v, want %v", UploadTmpDir, got)
 				}
 			}
 
-			// 清理
+			// Clean up
 			if tt.cleanupFunc != nil {
 				tt.cleanupFunc(tt.rootPath)
 			}

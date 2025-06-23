@@ -18,7 +18,7 @@ var (
 	}
 )
 
-// MockLogger 是用于测试的mock logger
+// MockLogger is a mock logger for testing
 type MockLogger struct {
 	t *testing.T
 }
@@ -33,7 +33,7 @@ func TestCalculateFileHash(t *testing.T) {
 	logger := &MockLogger{t}
 	fs := NewFileScanner(logger)
 
-	t.Run("calculate file hash", func(t *testing.T) {
+	t.Run("Calculate file hash", func(t *testing.T) {
 		tempDir := t.TempDir()
 		testFile := filepath.Join(tempDir, "test.txt")
 		content := "test content"
@@ -44,7 +44,7 @@ func TestCalculateFileHash(t *testing.T) {
 		assert.NotEmpty(t, hash)
 	})
 
-	t.Run("handle nonexistent file", func(t *testing.T) {
+	t.Run("Handle nonexistent file", func(t *testing.T) {
 		_, err := fs.CalculateFileHash("nonexistent.txt")
 		assert.Error(t, err)
 	})
@@ -54,19 +54,19 @@ func TestLoadIgnoreRules(t *testing.T) {
 	logger := &MockLogger{t}
 	fs := &FileScanner{scannerConfig: scannerConfig, logger: logger}
 
-	t.Run("use default rules only", func(t *testing.T) {
+	t.Run("Use default rules only", func(t *testing.T) {
 		tempDir := t.TempDir()
 		ignore := fs.loadIgnoreRules(tempDir)
 		require.NotNil(t, ignore)
 
-		// 测试默认规则
+		// Test default rules
 		assert.True(t, ignore.MatchesPath("node_modules/file"))
 		assert.True(t, ignore.MatchesPath("dist/index.js"))
 		assert.True(t, ignore.MatchesPath(".git/config"))
 		assert.False(t, ignore.MatchesPath("src/main.go"))
 	})
 
-	t.Run("merge gitignore rules", func(t *testing.T) {
+	t.Run("Merge gitignore rules", func(t *testing.T) {
 		tempDir := t.TempDir()
 		gitignoreContent := "/build\n*.log\n"
 		require.NoError(t, os.WriteFile(
@@ -76,10 +76,10 @@ func TestLoadIgnoreRules(t *testing.T) {
 		ignore := fs.loadIgnoreRules(tempDir)
 		require.NotNil(t, ignore)
 
-		assert.True(t, ignore.MatchesPath("build/main.go"))     // .gitignore规则
-		assert.True(t, ignore.MatchesPath("src/main.log"))      // .gitignore规则
-		assert.True(t, ignore.MatchesPath("node_modules/file")) // 默认规则
-		assert.False(t, ignore.MatchesPath("src/main.go"))      // 不应匹配
+		assert.True(t, ignore.MatchesPath("build/main.go"))     // .gitignore rule
+		assert.True(t, ignore.MatchesPath("src/main.log"))      // .gitignore rule
+		assert.True(t, ignore.MatchesPath("node_modules/file")) // Default rule
+		assert.False(t, ignore.MatchesPath("src/main.go"))      // Should not match
 	})
 }
 
@@ -90,7 +90,7 @@ func TestScanDirectory(t *testing.T) {
 	setupTestDir := func(t *testing.T) string {
 		tempDir := t.TempDir()
 
-		// 创建测试文件结构
+		// Create test file structure
 		dirs := []string{"src", filepath.Join("src", "pkg"), "build", "dist", "node_modules"}
 		for _, dir := range dirs {
 			require.NoError(t, os.MkdirAll(filepath.Join(tempDir, dir), 0755))
@@ -112,18 +112,18 @@ func TestScanDirectory(t *testing.T) {
 		return tempDir
 	}
 
-	t.Run("scan directory and filter files", func(t *testing.T) {
+	t.Run("Scan directory and filter files", func(t *testing.T) {
 		codebasePath := setupTestDir(t)
 		hashTree, err := fs.ScanDirectory(codebasePath)
 		require.NoError(t, err)
 
-		// 验证包含的文件
+		// Verify included files
 		_, ok := hashTree[filepath.Join("src", "main.go")]
 		assert.True(t, ok, "should include src/main.go")
 		_, ok = hashTree[filepath.Join("src", "pkg", "utils.go")]
 		assert.True(t, ok, "should include src/pkg/utils.go")
 
-		// 验证排除的文件
+		// Verify excluded files
 		_, ok = hashTree[filepath.Join("build", "main.exe")]
 		assert.False(t, ok, "should exclude build/main.exe")
 
@@ -131,7 +131,7 @@ func TestScanDirectory(t *testing.T) {
 		assert.False(t, ok, "should exclude node_modules/module")
 	})
 
-	t.Run("windows path compatibility", func(t *testing.T) {
+	t.Run("Windows path compatibility", func(t *testing.T) {
 		if runtime.GOOS != "windows" {
 			t.Skip("skip: only run on Windows system")
 		}
@@ -139,7 +139,7 @@ func TestScanDirectory(t *testing.T) {
 		hashTree, err := fs.ScanDirectory(codebasePath)
 		require.NoError(t, err)
 
-		// 使用Windows风格路径验证
+		// Verify with Windows-style paths
 		_, ok := hashTree["src\\main.go"]
 		assert.True(t, ok, "should recognize Windows path format")
 	})
@@ -151,7 +151,7 @@ func benchmarkScanDirectory(t *testing.T, fileCount int) (*MockLogger, ScannerIn
 
 	tempDir := t.TempDir()
 
-	// 创建子目录和文件
+	// Create subdirectories and files
 	for i := 0; i < fileCount/10; i++ {
 		subDir := filepath.Join(tempDir, "dir"+strconv.Itoa(i))
 		require.NoError(t, os.MkdirAll(subDir, 0755))
@@ -166,9 +166,9 @@ func benchmarkScanDirectory(t *testing.T, fileCount int) (*MockLogger, ScannerIn
 }
 
 func BenchmarkScanDirectory_10000Files(b *testing.B) {
-	t := &testing.T{} // 创建临时testing.T实例
+	t := &testing.T{} // Create temp testing.T instance
 	logger, fs, tempDir := benchmarkScanDirectory(t, 10000)
-	_ = logger // 避免未使用变量警告
+	_ = logger // Avoid unused variable warning
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -186,10 +186,10 @@ func TestCalculateFileChanges(t *testing.T) {
 	logger := &MockLogger{t}
 	fs := NewFileScanner(logger)
 
-	t.Run("detect file changes", func(t *testing.T) {
+	t.Run("Detect file changes", func(t *testing.T) {
 		local := map[string]string{
 			"added.txt":    "hash1",
-			"modified.txt": "hash2", // 与remote中不同
+			"modified.txt": "hash2", // Different from remote
 		}
 
 		remote := map[string]string{
@@ -199,10 +199,10 @@ func TestCalculateFileChanges(t *testing.T) {
 
 		changes := fs.CalculateFileChanges(local, remote)
 
-		// 验证变化
+		// Verify changes
 		assert.Equal(t, 3, len(changes))
 
-		// 验证新增文件
+		// Verify added file
 		var added *FileStatus
 		for _, c := range changes {
 			if c.Path == "added.txt" {
@@ -213,7 +213,7 @@ func TestCalculateFileChanges(t *testing.T) {
 		require.NotNil(t, added)
 		assert.Equal(t, FILE_STATUS_ADDED, added.Status)
 
-		// 验证修改文件
+		// Verify modified file
 		var modified *FileStatus
 		for _, c := range changes {
 			if c.Path == "modified.txt" {
@@ -224,7 +224,7 @@ func TestCalculateFileChanges(t *testing.T) {
 		require.NotNil(t, modified)
 		assert.Equal(t, FILE_STATUS_MODIFIED, modified.Status)
 
-		// 验证删除文件
+		// Verify deleted file
 		var deleted *FileStatus
 		for _, c := range changes {
 			if c.Path == "deleted.txt" {

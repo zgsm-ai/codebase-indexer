@@ -39,27 +39,27 @@ var appInfo = &handler.AppInfo{
 }
 
 func (s *IntegrationTestSuite) SetupTest() {
-	// 使用真实对象进行测试
+	// Use real objects for testing
 	rootPath := os.TempDir()
 	logPath, err := utils.GetLogDir(rootPath)
 	if err != nil {
 		s.T().Fatalf("failed to get log directory: %v", err)
 	}
-	fmt.Printf("log目录: %s\n", logPath)
+	fmt.Printf("log directory: %s\n", logPath)
 
-	// 初始化缓存目录
+	// Initialize cache directory
 	cachePath, err := utils.GetCacheDir(rootPath)
 	if err != nil {
 		s.T().Fatalf("failed to get cache directory: %v", err)
 	}
-	fmt.Printf("缓存目录: %s\n", cachePath)
+	fmt.Printf("cache directory: %s\n", cachePath)
 
-	// 初始化上报临时目录
+	// Initialize upload temporary directory
 	uploadTmpPath, err := utils.GetUploadTmpDir(rootPath)
 	if err != nil {
 		s.T().Fatalf("failed to get upload temp directory: %v", err)
 	}
-	fmt.Printf("上报临时目录: %s\n", uploadTmpPath)
+	fmt.Printf("upload temp directory: %s\n", uploadTmpPath)
 
 	logger, err := logger.NewLogger(logPath, "info")
 	if err != nil {
@@ -125,7 +125,7 @@ func (s *IntegrationTestSuite) TestRegisterSync() {
 }
 
 func (s *IntegrationTestSuite) TestSyncCodebases() {
-	// 准备工作区目录
+	// Prepare workspace directory
 	workspaceDir := filepath.Join(os.TempDir(), "sync-codebases-test")
 	err := os.MkdirAll(workspaceDir, 0755)
 	assert.NoError(s.T(), err)
@@ -188,7 +188,7 @@ func (s *IntegrationTestSuite) TestUnregisterSync() {
 	err := os.MkdirAll(workspaceDir, 0755)
 	assert.NoError(s.T(), err)
 	defer os.RemoveAll(workspaceDir)
-	// 1. 先注册工作区
+	// 1. Register workspace first
 	registerReq := &api.RegisterSyncRequest{
 		ClientId:      "test-client",
 		WorkspacePath: workspaceDir,
@@ -197,7 +197,7 @@ func (s *IntegrationTestSuite) TestUnregisterSync() {
 	_, err = s.handler.RegisterSync(context.Background(), registerReq)
 	assert.NoError(s.T(), err)
 
-	// 2. 正常注销
+	// 2. Normal unregistration
 	req := &api.UnregisterSyncRequest{
 		ClientId:      "test-client",
 		WorkspacePath: workspaceDir,
@@ -208,7 +208,7 @@ func (s *IntegrationTestSuite) TestUnregisterSync() {
 }
 
 func (s *IntegrationTestSuite) TestUnregisterSyncInvalidParams() {
-	// 测试缺少必要参数的情况
+	// Test missing required parameters
 	testCases := []struct {
 		name string
 		req  *api.UnregisterSyncRequest
@@ -299,7 +299,7 @@ func (s *IntegrationTestSuite) TestFullIntegrationFlow() {
 	httpSync.On("GetSyncConfig", mock.Anything).Return(&syncer.SyncConfig{})
 	httpSync.On("FetchServerHashTree", mock.Anything).Return(map[string]string{}, nil)
 	httpSync.On("Sync", mock.Anything, mock.Anything).Return(nil)
-	// 提前创建工作区目录
+	// Create workspace directory in advance
 	workspaceDir := filepath.Join(os.TempDir(), "test-workspace")
 	err := os.MkdirAll(workspaceDir, 0755)
 	assert.NoError(s.T(), err)
@@ -346,13 +346,13 @@ func (s *IntegrationTestSuite) TestSchedulerOperations() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// 测试调度器是否可以正常启动和停止
+	// Test if scheduler can start and stop normally
 	go s.scheduler.Start(ctx)
 	time.Sleep(100 * time.Millisecond)
 }
 
 func (s *IntegrationTestSuite) TestSyncForCodebases() {
-	// 准备测试数据
+	// Prepare test data
 	ctx := context.Background()
 	workspaceDir := filepath.Join(os.TempDir(), "sync-test")
 	workspaceDir2 := filepath.Join(os.TempDir(), "sync-test2")
@@ -363,7 +363,7 @@ func (s *IntegrationTestSuite) TestSyncForCodebases() {
 	defer os.RemoveAll(workspaceDir)
 	defer os.RemoveAll(workspaceDir2)
 
-	// 1. 注册测试工作区
+	// 1. Register test workspace
 	registerReq := &api.RegisterSyncRequest{
 		ClientId:      "test-client",
 		WorkspacePath: workspaceDir,
@@ -371,7 +371,7 @@ func (s *IntegrationTestSuite) TestSyncForCodebases() {
 	}
 	_, err = s.handler.RegisterSync(ctx, registerReq)
 	assert.NoError(s.T(), err)
-	// 注册第二个工作区
+	// Register second workspace
 	registerReq2 := &api.RegisterSyncRequest{
 		ClientId:      "test-client",
 		WorkspacePath: workspaceDir2,
@@ -380,7 +380,7 @@ func (s *IntegrationTestSuite) TestSyncForCodebases() {
 	_, err = s.handler.RegisterSync(ctx, registerReq2)
 	assert.NoError(s.T(), err)
 
-	// 2. 获取codebase配置
+	// 2. Get codebase configuration
 	codebaseConfigs := []*storage.CodebaseConfig{
 		{
 			ClientID:     "test-client",
@@ -396,18 +396,18 @@ func (s *IntegrationTestSuite) TestSyncForCodebases() {
 		},
 	}
 
-	// 3. 测试批量同步
+	// 3. Test batch sync
 	err = s.scheduler.SyncForCodebases(ctx, codebaseConfigs)
 	assert.NoError(s.T(), err)
 
-	// 4. 测试空配置情况
+	// 4. Test empty configuration
 	err = s.scheduler.SyncForCodebases(ctx, []*storage.CodebaseConfig{})
 	assert.NoError(s.T(), err)
 }
 
 func (s *IntegrationTestSuite) TestSyncForCodebasesWithContextCancellation() {
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // 立即取消
+	cancel() // Cancel immediately
 
 	workspaceDir := filepath.Join(os.TempDir(), "sync-cancel-test")
 	err := os.MkdirAll(workspaceDir, 0755)
@@ -431,7 +431,7 @@ func (s *IntegrationTestSuite) TestSyncForCodebasesWithContextCancellation() {
 		},
 	}
 
-	// 期望取消执行
+	// Expected cancellation
 	err = s.scheduler.SyncForCodebases(ctx, codebaseConfigs)
 	assert.Error(s.T(), err)
 	assert.Contains(s.T(), err.Error(), "context canceled")

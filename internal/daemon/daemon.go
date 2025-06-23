@@ -1,4 +1,4 @@
-// daemon/daemon.go - 守护进程
+// daemon/daemon.go - Daemon process
 package daemon
 
 import (
@@ -27,7 +27,7 @@ type Daemon struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
-	schedWG     sync.WaitGroup // 用于等待scheduler重启
+	schedWG     sync.WaitGroup // Used to wait for scheduler restart
 }
 
 func NewDaemon(scheduler *scheduler.Scheduler, grpcServer *grpc.Server, grpcListen net.Listener,
@@ -45,15 +45,16 @@ func NewDaemon(scheduler *scheduler.Scheduler, grpcServer *grpc.Server, grpcList
 	}
 }
 
+// Start starts the daemon process
 func (d *Daemon) Start() {
 	d.logger.Info("daemon process started")
 
-	// 启动时主动更新一次配置
+	// Update configuration on startup
 	if d.httpSync.GetSyncConfig() != nil {
 		d.updateConfig()
 	}
 
-	// 启动gRPC服务端
+	// Start gRPC server
 	go func() {
 		d.logger.Info("starting gRPC server, listening on: %s", d.grpcListen.Addr().String())
 		if err := d.grpcServer.Serve(d.grpcListen); err != nil {
@@ -62,14 +63,14 @@ func (d *Daemon) Start() {
 		}
 	}()
 
-	// 启动同步任务
+	// Start sync task
 	d.wg.Add(1)
 	go func() {
 		defer d.wg.Done()
 		d.scheduler.Start(d.ctx)
 	}()
 
-	// 启动配置检查任务
+	// Start config check task
 	d.wg.Add(1)
 	go func() {
 		defer d.wg.Done()
@@ -88,11 +89,11 @@ func (d *Daemon) Start() {
 	}()
 }
 
-// updateConfig 更新客户端配置
+// updateConfig updates client configuration
 func (d *Daemon) updateConfig() {
 	d.logger.Info("updating client config")
 
-	// 获取最新客户端配置
+	// Get latest client configuration
 	newConfig, err := d.httpSync.GetClientConfig()
 	if err != nil {
 		d.logger.Error("failed to get client config: %v", err)
@@ -100,22 +101,22 @@ func (d *Daemon) updateConfig() {
 	}
 	d.logger.Info("latest client config retrieved: %+v", newConfig)
 
-	// 获取当前配置
+	// Get current configuration
 	currentConfig := storage.GetClientConfig()
 	if !configChanged(currentConfig, newConfig) {
 		d.logger.Info("client config unchanged")
 		return
 	}
 
-	// 更新存储中的配置
+	// Update storage configuration
 	storage.SetClientConfig(newConfig)
-	// 更新scheduler配置
+	// Update scheduler configuration
 	d.scheduler.SetSchedulerConfig(&scheduler.SchedulerConfig{
 		IntervalMinutes:       newConfig.Sync.IntervalMinutes,
 		RegisterExpireMinutes: newConfig.Server.RegisterExpireMinutes,
 		HashTreeExpireHours:   newConfig.Server.HashTreeExpireHours,
 	})
-	// 更新文件扫描器配置
+	// Update file scanner configuration
 	d.fileScanner.SetScannerConfig(&scanner.ScannerConfig{
 		IgnorePatterns: newConfig.Sync.IgnorePatterns,
 		MaxFileSizeMB:  newConfig.Sync.MaxFileSizeMB,
@@ -124,11 +125,11 @@ func (d *Daemon) updateConfig() {
 	d.logger.Info("client config updated")
 }
 
-// checkAndLoadConfig 检查并加载最新客户端配置
+// checkAndLoadConfig checks and loads latest client configuration
 func (d *Daemon) checkAndLoadConfig() {
 	d.logger.Info("starting client config load check")
 
-	// 获取最新客户端配置
+	// Get latest client configuration
 	newConfig, err := d.httpSync.GetClientConfig()
 	if err != nil {
 		d.logger.Error("failed to get client config: %v", err)
@@ -136,16 +137,16 @@ func (d *Daemon) checkAndLoadConfig() {
 	}
 	d.logger.Info("latest client config retrieved: %+v", newConfig)
 
-	// 获取当前配置
+	// Get current configuration
 	currentConfig := storage.GetClientConfig()
 	if !configChanged(currentConfig, newConfig) {
 		d.logger.Info("client config unchanged")
 		return
 	}
 
-	// 更新存储中的配置
+	// Update stored configuration
 	storage.SetClientConfig(newConfig)
-	// 检查是否需要重启scheduler
+	// Check if scheduler needs restart
 	if currentConfig.Sync.IntervalMinutes != newConfig.Sync.IntervalMinutes {
 		d.schedWG.Add(1)
 		go func() {
@@ -154,14 +155,14 @@ func (d *Daemon) checkAndLoadConfig() {
 		}()
 	}
 
-	// 加载最新配置
+	// Load latest configuration
 	d.scheduler.LoadConfig(d.ctx)
 
 	d.schedWG.Wait()
 	d.logger.Info("client config load completed")
 }
 
-// configChanged 检查配置是否有变化
+// configChanged checks if configuration has changed
 func configChanged(current, new storage.ClientConfig) bool {
 	return current.Server.RegisterExpireMinutes != new.Server.RegisterExpireMinutes ||
 		current.Server.HashTreeExpireHours != new.Server.HashTreeExpireHours ||
@@ -172,7 +173,7 @@ func configChanged(current, new storage.ClientConfig) bool {
 		!equalIgnorePatterns(current.Sync.IgnorePatterns, new.Sync.IgnorePatterns)
 }
 
-// equalIgnorePatterns 比较忽略模式是否相同
+// equalIgnorePatterns compares whether ignore patterns are same
 func equalIgnorePatterns(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -185,6 +186,7 @@ func equalIgnorePatterns(a, b []string) bool {
 	return true
 }
 
+// Stop stops the daemon process
 func (d *Daemon) Stop() {
 	d.logger.Info("stopping daemon process...")
 	d.cancel()

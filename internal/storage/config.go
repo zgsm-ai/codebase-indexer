@@ -1,4 +1,4 @@
-// config.go - 客户端配置管理
+// config.go - Client configuration management
 
 package storage
 
@@ -15,21 +15,21 @@ type ConfigSync struct {
 	IgnorePatterns    []string `json:"ignorePatterns"`
 }
 
-// 客户端配置文件结构
+// Client configuration file structure
 type ClientConfig struct {
 	Server ConfigServer `json:"server"`
 	Sync   ConfigSync   `json:"sync"`
 }
 
 var DefaultConfigServer = ConfigServer{
-	RegisterExpireMinutes: 30, // 默认注册有效期30分钟
-	HashTreeExpireHours:   24, // 默认哈希树有效期24小时
+	RegisterExpireMinutes: 30, // Default registration validity period in minutes
+	HashTreeExpireHours:   24, // Default hash tree validity period in hours
 }
 
 var DefaultIgnorePatterns = []string{
-	// 过滤所有以点开头的文件和目录
+	// Filter all files and directories starting with dot
 	".*",
-	// 保留其他非点开头的特定文件类型和目录
+	// Keep other specific file types and directories not starting with dot
 	"*.swp", "*.swo",
 	"*.pyc", "*.class", "*.o", "*.obj",
 	"*.log", "*.tmp", "*.bak", "*.backup",
@@ -45,28 +45,28 @@ var DefaultIgnorePatterns = []string{
 }
 
 var DefaultConfigSync = ConfigSync{
-	IntervalMinutes:   5,                     // 默认同步间隔5分钟
-	MaxFileSizeMB:     1,                     // 默认最大文件大小1MB
-	MaxRetries:        3,                     // 默认最大重试次数3次
-	RetryDelaySeconds: 5,                     // 默认重试间隔5秒
-	IgnorePatterns:    DefaultIgnorePatterns, // 默认忽略模式
+	IntervalMinutes:   5,                     // Default sync interval in minutes
+	MaxFileSizeMB:     1,                     // Default maximum file size in MB
+	MaxRetries:        3,                     // Default maximum retry count
+	RetryDelaySeconds: 5,                     // Default retry delay in seconds
+	IgnorePatterns:    DefaultIgnorePatterns, // Default ignore patterns
 }
 
-// 默认客户端配置
+// Default client configuration
 var DefaultClientConfig = ClientConfig{
 	Server: DefaultConfigServer,
 	Sync:   DefaultConfigSync,
 }
 
-// 全局客户端配置
+// Global client configuration
 var clientConfig ClientConfig
 
-// 获取客户端配置
+// Get client configuration
 func GetClientConfig() ClientConfig {
 	return clientConfig
 }
 
-// 设置客户端配置
+// Set client configuration
 func SetClientConfig(config ClientConfig) {
 	clientConfig = config
 }

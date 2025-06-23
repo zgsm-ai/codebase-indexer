@@ -1,4 +1,4 @@
-// storage/storage.go - 配置和临时文件存储
+// storage/storage.go - Configuration and temporary file storage
 package storage
 
 import (
@@ -12,7 +12,7 @@ import (
 	"codebase-syncer/pkg/logger"
 )
 
-// codebase配置
+// Codebase configuration
 type CodebaseConfig struct {
 	ClientID     string            `json:"clientId"`
 	CodebaseName string            `json:"codebaseName"`
@@ -32,14 +32,14 @@ type SotrageInterface interface {
 
 type StorageManager struct {
 	codebasePath    string
-	codebaseConfigs map[string]*CodebaseConfig // 存储所有codebase 配置
+	codebaseConfigs map[string]*CodebaseConfig // Stores all codebase configurations
 	logger          logger.Logger
 	rwMutex         sync.RWMutex
 }
 
-// NewStorageManager 创建一个新的配置管理器
+// NewStorageManager creates a new configuration manager
 func NewStorageManager(cacheDir string, logger logger.Logger) (SotrageInterface, error) {
-	// 确保codebase目录存在
+	// Make sure codebase directory exists
 	codebasePath := filepath.Join(cacheDir, "codebase")
 	if _, err := os.Stat(codebasePath); os.IsNotExist(err) {
 		if err := os.MkdirAll(codebasePath, 0755); err != nil {
@@ -47,7 +47,7 @@ func NewStorageManager(cacheDir string, logger logger.Logger) (SotrageInterface,
 		}
 	}
 
-	// 初始化 codebaseConfigs map
+	// Initialize codebaseConfigs map
 	sm := &StorageManager{
 		codebasePath:    codebasePath,
 		logger:          logger,
@@ -58,15 +58,15 @@ func NewStorageManager(cacheDir string, logger logger.Logger) (SotrageInterface,
 	return sm, nil
 }
 
-// GetCodebaseConfigs 获取所有项目配置
+// GetCodebaseConfigs retrieves all project configurations
 func (s *StorageManager) GetCodebaseConfigs() map[string]*CodebaseConfig {
 	s.rwMutex.RLock()
 	defer s.rwMutex.RUnlock()
 	return s.codebaseConfigs
 }
 
-// GetCodebaseConfig 加载codebase 配置
-// 优先从内存配置中查找，找不到再从文件系统加载
+// GetCodebaseConfig loads codebase configuration
+// First checks in memory, if not found then loads from filesystem
 func (s *StorageManager) GetCodebaseConfig(codebaseId string) (*CodebaseConfig, error) {
 	s.rwMutex.RLock()
 	config, exists := s.codebaseConfigs[codebaseId]
@@ -76,7 +76,7 @@ func (s *StorageManager) GetCodebaseConfig(codebaseId string) (*CodebaseConfig, 
 		return config, nil
 	}
 
-	// 内存中没有查到，尝试从文件加载
+	// Not found in memory, try loading from file
 	config, err := s.loadCodebaseConfig(codebaseId)
 	if err != nil {
 		return nil, err
@@ -89,7 +89,7 @@ func (s *StorageManager) GetCodebaseConfig(codebaseId string) (*CodebaseConfig, 
 	return config, nil
 }
 
-// 加载所有codebase 配置文件
+// Load all codebase configuration files
 func (s *StorageManager) loadAllConfigs() {
 	files, err := os.ReadDir(s.codebasePath)
 	if err != nil {
@@ -111,7 +111,7 @@ func (s *StorageManager) loadAllConfigs() {
 	}
 }
 
-// loadCodebaseConfig 加载codebase 配置文件
+// loadCodebaseConfig loads a codebase configuration file
 func (s *StorageManager) loadCodebaseConfig(codebaseId string) (*CodebaseConfig, error) {
 	s.logger.Info("loading codebase file content: %s", codebaseId)
 
@@ -144,7 +144,7 @@ func (s *StorageManager) loadCodebaseConfig(codebaseId string) (*CodebaseConfig,
 	return &config, nil
 }
 
-// SaveCodebaseConfig 保存codebase 配置
+// SaveCodebaseConfig saves codebase configuration
 func (s *StorageManager) SaveCodebaseConfig(config *CodebaseConfig) error {
 	if config == nil {
 		return fmt.Errorf("codebase config is empty: %v", config)
@@ -164,13 +164,13 @@ func (s *StorageManager) SaveCodebaseConfig(config *CodebaseConfig) error {
 		return fmt.Errorf("failed to write config file: %v", err)
 	}
 
-	// 原子性更新内存配置
+	// Atomically update in-memory configuration
 	s.codebaseConfigs[config.CodebaseId] = config
 	s.logger.Info("codebase config saved successfully, path: %s, codebaseId: %s", filePath, config.CodebaseId)
 	return nil
 }
 
-// DeleteCodebaseConfig 删除codebase 配置
+// DeleteCodebaseConfig deletes codebase configuration
 func (s *StorageManager) DeleteCodebaseConfig(codebaseId string) error {
 	s.logger.Info("deleting codebase config: %s", codebaseId)
 
@@ -193,7 +193,7 @@ func (s *StorageManager) DeleteCodebaseConfig(codebaseId string) error {
 		return fmt.Errorf("failed to delete codebase file: %v", err)
 	}
 
-	// 文件删除成功后才删除内存中的配置
+	// Only delete in-memory config after file deletion succeeds
 	if exists {
 		delete(s.codebaseConfigs, codebaseId)
 		s.logger.Info("codebase config deleted: %s (file and memory)", filePath)

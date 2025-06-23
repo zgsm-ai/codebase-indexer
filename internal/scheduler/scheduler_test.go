@@ -18,10 +18,6 @@ import (
 )
 
 var (
-	mockLogger       = &mocks.MockLogger{}
-	mockStorage      = &mocks.MockStorageManager{}
-	mockHttpSync     = &mocks.MockHTTPSync{}
-	mockFileScanner  = &mocks.MockScanner{}
 	sechedulerConfig = &SchedulerConfig{
 		IntervalMinutes:       5,
 		RegisterExpireMinutes: 30,
@@ -32,6 +28,12 @@ var (
 )
 
 func TestPerformSync(t *testing.T) {
+	var (
+		mockLogger      = &mocks.MockLogger{}
+		mockStorage     = &mocks.MockStorageManager{}
+		mockHttpSync    = &mocks.MockHTTPSync{}
+		mockFileScanner = &mocks.MockScanner{}
+	)
 	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
 
 	s := &Scheduler{
@@ -74,6 +76,12 @@ func TestPerformSync(t *testing.T) {
 }
 
 func TestPerformSyncForCodebase(t *testing.T) {
+	var (
+		mockLogger      = &mocks.MockLogger{}
+		mockStorage     = &mocks.MockStorageManager{}
+		mockHttpSync    = &mocks.MockHTTPSync{}
+		mockFileScanner = &mocks.MockScanner{}
+	)
 	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
 	mockLogger.On("Error", mock.Anything, mock.Anything).Return()
 
@@ -98,12 +106,18 @@ func TestPerformSyncForCodebase(t *testing.T) {
 
 		s.performSyncForCodebase(config)
 
-		mockLogger.AssertCalled(t, "Info", "starting sync task for codebase: %s", mock.Anything)
+		mockLogger.AssertCalled(t, "Info", "starting sync for codebase: %s", mock.Anything)
 		mockLogger.AssertCalled(t, "Error", "failed to scan local directory (%s): %v", mock.Anything, mock.Anything)
 	})
 }
 
 func TestProcessFileChanges(t *testing.T) {
+	var (
+		mockLogger      = &mocks.MockLogger{}
+		mockStorage     = &mocks.MockStorageManager{}
+		mockHttpSync    = &mocks.MockHTTPSync{}
+		mockFileScanner = &mocks.MockScanner{}
+	)
 	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
 	mockLogger.On("Warn", mock.Anything, mock.Anything).Return()
 	mockLogger.On("Error", mock.Anything, mock.Anything).Return()
@@ -142,7 +156,7 @@ func TestProcessFileChanges(t *testing.T) {
 
 	t.Run("CreateChangesZipError", func(t *testing.T) {
 		tmpFile := filepath.Join(os.TempDir(), "file")
-		// 构造tmpFile为文件，保证创建zip文件失败
+		// Make tmpFile a file to ensure zip creation fails
 		file, err := os.Create(tmpFile)
 		if err != nil {
 			t.Fatal(err)
@@ -193,6 +207,12 @@ func TestProcessFileChanges(t *testing.T) {
 }
 
 func TestCreateChangesZip(t *testing.T) {
+	var (
+		mockLogger      = &mocks.MockLogger{}
+		mockStorage     = &mocks.MockStorageManager{}
+		mockHttpSync    = &mocks.MockHTTPSync{}
+		mockFileScanner = &mocks.MockScanner{}
+	)
 	mockLogger.On("Warn", mock.Anything, mock.Anything).Return()
 
 	s := &Scheduler{
@@ -227,6 +247,12 @@ func TestCreateChangesZip(t *testing.T) {
 }
 
 func TestUploadChangesZip(t *testing.T) {
+	var (
+		mockLogger      = &mocks.MockLogger{}
+		mockStorage     = &mocks.MockStorageManager{}
+		mockHttpSync    = &mocks.MockHTTPSync{}
+		mockFileScanner = &mocks.MockScanner{}
+	)
 	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
 	mockLogger.On("Warn", mock.Anything, mock.Anything).Return()
 

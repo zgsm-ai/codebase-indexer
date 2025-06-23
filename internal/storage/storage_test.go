@@ -21,27 +21,27 @@ type MockLogger struct {
 }
 
 func (m *MockLogger) Debug(format string, v ...interface{}) {
-	fmt.Printf("[MOCK DEBUG] %s\n", fmt.Sprintf(format, v...)) // 输出日志
+	fmt.Printf("[MOCK DEBUG] %s\n", fmt.Sprintf(format, v...)) // Log output
 	m.Called(format, v)
 }
 
 func (m *MockLogger) Info(format string, v ...interface{}) {
-	fmt.Printf("[MOCK INFO] %s\n", fmt.Sprintf(format, v...)) // 输出日志
+	fmt.Printf("[MOCK INFO] %s\n", fmt.Sprintf(format, v...)) // Log output
 	m.Called(format, v)
 }
 
 func (m *MockLogger) Warn(format string, v ...interface{}) {
-	fmt.Printf("[MOCK WARN] %s\n", fmt.Sprintf(format, v...)) // 输出日志
+	fmt.Printf("[MOCK WARN] %s\n", fmt.Sprintf(format, v...)) // Log output
 	m.Called(format, v)
 }
 
 func (m *MockLogger) Error(format string, v ...interface{}) {
-	fmt.Printf("[MOCK ERROR] %s\n", fmt.Sprintf(format, v...)) // 输出日志
+	fmt.Printf("[MOCK ERROR] %s\n", fmt.Sprintf(format, v...)) // Log output
 	m.Called(format, v)
 }
 
 func (m *MockLogger) Fatal(format string, v ...interface{}) {
-	fmt.Printf("[MOCK FATAL] %s\n", fmt.Sprintf(format, v...)) // 输出日志
+	fmt.Printf("[MOCK FATAL] %s\n", fmt.Sprintf(format, v...)) // Log output
 	m.Called(format, v)
 }
 
@@ -49,11 +49,11 @@ func TestNewStorageManager(t *testing.T) {
 	logger := &MockLogger{}
 
 	t.Run("create new directory", func(t *testing.T) {
-		// 设置临时目录
+		// Set up temp directory
 		tempDir := t.TempDir()
 		codebasePath := filepath.Join(tempDir, "codebase")
 
-		// 确保目录不存在
+		// Make sure directory doesn't exist
 		if _, err := os.Stat(codebasePath); !os.IsNotExist(err) {
 			t.Fatalf("test directory should not exist: %v", err)
 		}
@@ -62,14 +62,14 @@ func TestNewStorageManager(t *testing.T) {
 		assert.NoError(t, err)
 		require.NotNil(t, sm)
 
-		// 验证目录是否创建
+		// Verify directory was created
 		if _, statErr := os.Stat(codebasePath); os.IsNotExist(statErr) {
 			t.Fatalf("codebase directory should be created: %v", statErr)
 		}
 	})
 
 	t.Run("directory exists", func(t *testing.T) {
-		// 预先创建目录
+		// Pre-create directory
 		tempDir := t.TempDir()
 		codebasePath := filepath.Join(tempDir, "codebase")
 		if err := os.Mkdir(codebasePath, 0755); err != nil {
@@ -77,15 +77,15 @@ func TestNewStorageManager(t *testing.T) {
 		}
 
 		sm, err := NewStorageManager(tempDir, logger)
-		// 验证没有错误
+		// Verify no error
 		assert.NoError(t, err)
 		require.NotNil(t, sm)
 	})
 
 	t.Run("directory creation failed", func(t *testing.T) {
-		// 创建一个临时根目录用于测试
+		// Create temp root dir for testing
 		rootDir := t.TempDir()
-		// 将 cacheDir 设置为一个文件的路径，而不是目录
+		// Set cacheDir to a file path instead of directory
 		fileAsCacheDirPath := filepath.Join(rootDir, "thisIsAFileNotADirectory")
 		if err := os.WriteFile(fileAsCacheDirPath, []byte("I am a file"), 0644); err != nil {
 			t.Fatalf("failed to create file as cacheDir: %v", err)
@@ -93,9 +93,9 @@ func TestNewStorageManager(t *testing.T) {
 
 		sm, err := NewStorageManager(fileAsCacheDirPath, logger)
 
-		// 验证返回了错误，并且 sm 为 nil
+		// Verify error returned and sm is nil
 		assert.Error(t, err)
-		if err != nil { // 确保 err 不是 nil 才调用 err.Error()
+		if err != nil { // Ensure err is not nil before calling err.Error()
 			assert.Contains(t, err.Error(), "failed to create codebase directory")
 		}
 		assert.Nil(t, sm)
@@ -110,7 +110,7 @@ func TestGetCodebaseConfigs(t *testing.T) {
 
 		configs := cm.GetCodebaseConfigs()
 		assert.Empty(t, configs)
-		assert.NotNil(t, configs) // 确保不是 nil
+		assert.NotNil(t, configs) // Ensure not nil
 	})
 
 	t.Run("with config data", func(t *testing.T) {
@@ -132,9 +132,9 @@ func TestGetCodebaseConfigs(t *testing.T) {
 		}
 
 		configs := cm.GetCodebaseConfigs()
-		configs["test"] = &CodebaseConfig{} // 修改返回的 map
+		configs["test"] = &CodebaseConfig{} // Modify the returned map
 
-		// 验证修改是否影响了原始数据
+		// Verify if modification affected original data
 		assert.NotEmpty(t, cm.codebaseConfigs)
 		assert.Equal(t, cm.codebaseConfigs, configs)
 	})
@@ -238,15 +238,15 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 	logger.On("Error", mock.Anything, mock.Anything).Return()
 
 	t.Run("directory read failed", func(t *testing.T) {
-		// 无权限目录
+		// No-permission directory
 		cm := &StorageManager{
-			codebasePath:    "/root", // Linux下无权限的目录
+			codebasePath:    "/root", // No-permission dir on Linux
 			codebaseConfigs: make(map[string]*CodebaseConfig),
 			logger:          logger,
 			rwMutex:         sync.RWMutex{},
 		}
 
-		// 执行
+		// Execute
 		cm.loadAllConfigs()
 
 		logger.AssertCalled(t, "Error", "failed to read codebase directory: %v", mock.Anything)
@@ -261,16 +261,16 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 			rwMutex:         sync.RWMutex{},
 		}
 
-		// 执行
+		// Execute
 		cm.loadAllConfigs()
 
-		// 验证
+		// Verify
 		assert.Empty(t, cm.codebaseConfigs)
 	})
 
 	t.Run("with subdirectories", func(t *testing.T) {
 		tempDir := t.TempDir()
-		// 创建子目录
+		// Create subdirectory
 		if err := os.Mkdir(filepath.Join(tempDir, "subdir"), 0755); err != nil {
 			t.Fatalf("failed to create test subdirectory: %v", err)
 		}
@@ -282,16 +282,16 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 			rwMutex:         sync.RWMutex{},
 		}
 
-		// 执行
+		// Execute
 		cm.loadAllConfigs()
 
-		// 验证
+		// Verify
 		assert.Empty(t, cm.codebaseConfigs)
 	})
 
 	t.Run("load config files successfully", func(t *testing.T) {
 		tempDir := t.TempDir()
-		// 创建测试文件
+		// Create test files
 		testFiles := []string{"config1", "config2"}
 		for _, f := range testFiles {
 			if err := os.WriteFile(filepath.Join(tempDir, f), []byte(`{"codebaseId": "`+f+`"}`), 0644); err != nil {
@@ -306,10 +306,10 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 			rwMutex:         sync.RWMutex{},
 		}
 
-		// 执行
+		// Execute
 		cm.loadAllConfigs()
 
-		// 验证
+		// Verify
 		assert.Equal(t, len(testFiles), len(cm.codebaseConfigs))
 
 		logger.AssertCalled(t, "Info", "loading codebase file content: %s", mock.Anything)
@@ -318,7 +318,7 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 
 	t.Run("partial files load failed", func(t *testing.T) {
 		tempDir := t.TempDir()
-		// 创建测试文件
+		// Create test files
 		testFiles := []string{"good", "bad"}
 		for _, f := range testFiles {
 			if strings.HasSuffix(f, "bad") {
@@ -339,10 +339,10 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 			rwMutex:         sync.RWMutex{},
 		}
 
-		// 执行
+		// Execute
 		cm.loadAllConfigs()
 
-		// 验证
+		// Verify
 		assert.Equal(t, 1, len(cm.codebaseConfigs))
 
 		logger.AssertCalled(t, "Info", "loading codebase file content: %s", mock.Anything)
@@ -364,10 +364,10 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 			rwMutex:         sync.RWMutex{},
 		}
 
-		// 模拟调用
+		// Mock call
 		config, err := cm.loadCodebaseConfig("nonexistent.json")
 
-		// 验证
+		// Verify
 		assert.Nil(t, config)
 		assert.ErrorContains(t, err, "codebase file does not exist")
 
@@ -387,10 +387,10 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 			logger:          logger,
 		}
 
-		// 模拟调用
+		// Mock call
 		config, err := cm.loadCodebaseConfig("invalid")
 
-		// 验证
+		// Verify
 		assert.Nil(t, config)
 		assert.ErrorContains(t, err, "failed to parse codebase file")
 
@@ -412,10 +412,10 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 			rwMutex:         sync.RWMutex{},
 		}
 
-		// 模拟调用
+		// Mock call
 		config, err := cm.loadCodebaseConfig("mismatch")
 
-		// 验证
+		// Verify
 		assert.Nil(t, config)
 		assert.ErrorContains(t, err, "codebaseId mismatch")
 
@@ -437,10 +437,10 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 			rwMutex:         sync.RWMutex{},
 		}
 
-		// 模拟调用
+		// Mock call
 		config, err := cm.loadCodebaseConfig("valid.json")
 
-		// 验证
+		// Verify
 		assert.NoError(t, err)
 		assert.NotNil(t, config)
 		assert.Equal(t, "valid.json", config.CodebaseId)
@@ -531,7 +531,7 @@ func TestSaveCodebaseConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cm := tt.prepare()
 			if cm.codebasePath == invalidPath {
-				// 创建测试目录，确保创建同名文件时报错
+				// Create test directory to trigger file creation error
 				err := os.MkdirAll(filepath.Join(cm.codebasePath, tt.config.CodebaseId), 0755)
 				assert.NoError(t, err)
 				defer os.RemoveAll(filepath.Join(cm.codebasePath, tt.config.CodebaseId))
@@ -572,7 +572,7 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 		codebaseId := "test1"
 		filePath := filepath.Join(tempDir, codebaseId)
 
-		// 创建测试文件
+		// Create test file
 		if err := os.WriteFile(filePath, []byte{}, 0644); err != nil {
 			t.Fatal(err)
 		}
@@ -585,22 +585,22 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 			logger:  logger,
 			rwMutex: sync.RWMutex{},
 		}
-		// 创建测试JSON文件内容
+		// Create test JSON file content
 		configData, _ := json.Marshal(&CodebaseConfig{
 			CodebaseId: codebaseId,
 			LastSync:   time.Now(),
 		})
 		os.WriteFile(filePath, configData, 0644)
 
-		// 执行删除
+		// Execute deletion
 		err := cm.DeleteCodebaseConfig(codebaseId)
 		assert.NoError(t, err)
 
-		// 验证文件已删除
+		// Verify file was deleted
 		_, err = os.Stat(filePath)
 		assert.True(t, os.IsNotExist(err))
 
-		// 验证内存中的配置已删除
+		// Verify in-memory config was deleted
 		assert.Nil(t, cm.codebaseConfigs[codebaseId])
 
 		logger.AssertCalled(t, "Info", "codebase config deleted: %s (file and memory)", mock.Anything)
@@ -619,11 +619,11 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 			rwMutex: sync.RWMutex{},
 		}
 
-		// 执行删除
+		// Execute deletion
 		err := cm.DeleteCodebaseConfig(codebaseId)
 		assert.NoError(t, err)
 
-		// 验证内存中的配置已删除
+		// Verify in-memory config was deleted
 		assert.Nil(t, cm.codebaseConfigs[codebaseId])
 
 		logger.AssertCalled(t, "Info", "codebase config deleted: %s (memory only)", mock.Anything)
@@ -634,7 +634,7 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 		codebaseId := "test3"
 		filePath := filepath.Join(tempDir, codebaseId)
 
-		// 创建测试文件
+		// Create test file
 		if err := os.WriteFile(filePath, []byte{}, 0644); err != nil {
 			t.Fatal(err)
 		}
@@ -646,11 +646,11 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 			rwMutex:         sync.RWMutex{},
 		}
 
-		// 执行删除
+		// Execute deletion
 		err := cm.DeleteCodebaseConfig(codebaseId)
 		assert.NoError(t, err)
 
-		// 验证文件已删除
+		// Verify file was deleted
 		_, err = os.Stat(filePath)
 		assert.True(t, os.IsNotExist(err))
 
@@ -666,7 +666,7 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 			rwMutex:         sync.RWMutex{},
 		}
 
-		// 执行删除
+		// Execute deletion
 		err := cm.DeleteCodebaseConfig("nonexistent")
 		assert.NoError(t, err)
 	})
@@ -676,7 +676,7 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 		codebaseId := "test4"
 		filePath := filepath.Join(tempDir, codebaseId)
 
-		// 创建并保持打开的文件（模拟删除失败）
+		// Create and keep file open (simulates deletion failure)
 		file, err := os.Create(filePath)
 		if err != nil {
 			t.Fatal("failed to create test file:", err)
@@ -695,12 +695,12 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 			rwMutex: sync.RWMutex{},
 		}
 
-		// 执行删除
+		// Execute deletion
 		err = cm.DeleteCodebaseConfig(codebaseId)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to delete codebase file")
 
-		// 验证内存配置未被删除
+		// Verify in-memory config was not deleted
 		assert.NotNil(t, cm.codebaseConfigs[codebaseId])
 	})
 
@@ -710,7 +710,7 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 		filePaths := make([]string, codebaseCount)
 		codebaseConfigs := make(map[string]*CodebaseConfig, codebaseCount)
 
-		// 创建测试文件和内存配置
+		// Create test files and in-memory configs
 		for i := 0; i < codebaseCount; i++ {
 			codebaseId := fmt.Sprintf("concurrent-%d", i)
 			filePath := filepath.Join(tempDir, codebaseId)
@@ -739,13 +739,13 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 		}
 		wg.Wait()
 
-		// 验证所有文件已被删除
+		// Verify all files were deleted
 		for _, filePath := range filePaths {
 			_, err := os.Stat(filePath)
 			assert.True(t, os.IsNotExist(err))
 		}
 
-		// 验证内存中的配置已全部删除
+		// Verify all in-memory configs were deleted
 		assert.Empty(t, cm.codebaseConfigs)
 	})
 }

@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v6.31.0
-// source: codebase_syncer.proto
+// source: api/codebase_syncer.proto
 
 package codebase_syncer
 
@@ -31,17 +31,17 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// 同步服务定义
+// Sync service definition
 type SyncServiceClient interface {
-	// 注册项目同步
+	// Register project sync
 	RegisterSync(ctx context.Context, in *RegisterSyncRequest, opts ...grpc.CallOption) (*RegisterSyncResponse, error)
-	// 同步项目
+	// Sync project
 	SyncCodebase(ctx context.Context, in *SyncCodebaseRequest, opts ...grpc.CallOption) (*SyncCodebaseResponse, error)
-	// 注销项目同步
+	// Unregister project sync
 	UnregisterSync(ctx context.Context, in *UnregisterSyncRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// 共享 AccessToken（明文传输，服务端加密存储）
+	// Share AccessToken (plain text transmission, server-side encrypted storage)
 	ShareAccessToken(ctx context.Context, in *ShareAccessTokenRequest, opts ...grpc.CallOption) (*ShareAccessTokenResponse, error)
-	// 获取应用名称和版本信息
+	// Get application name and version information
 	GetVersion(ctx context.Context, in *VersionRequest, opts ...grpc.CallOption) (*VersionResponse, error)
 }
 
@@ -107,17 +107,17 @@ func (c *syncServiceClient) GetVersion(ctx context.Context, in *VersionRequest, 
 // All implementations must embed UnimplementedSyncServiceServer
 // for forward compatibility.
 //
-// 同步服务定义
+// Sync service definition
 type SyncServiceServer interface {
-	// 注册项目同步
+	// Register project sync
 	RegisterSync(context.Context, *RegisterSyncRequest) (*RegisterSyncResponse, error)
-	// 同步项目
+	// Sync project
 	SyncCodebase(context.Context, *SyncCodebaseRequest) (*SyncCodebaseResponse, error)
-	// 注销项目同步
+	// Unregister project sync
 	UnregisterSync(context.Context, *UnregisterSyncRequest) (*emptypb.Empty, error)
-	// 共享 AccessToken（明文传输，服务端加密存储）
+	// Share AccessToken (plain text transmission, server-side encrypted storage)
 	ShareAccessToken(context.Context, *ShareAccessTokenRequest) (*ShareAccessTokenResponse, error)
-	// 获取应用名称和版本信息
+	// Get application name and version information
 	GetVersion(context.Context, *VersionRequest) (*VersionResponse, error)
 	mustEmbedUnimplementedSyncServiceServer()
 }
@@ -284,5 +284,5 @@ var SyncService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "codebase_syncer.proto",
+	Metadata: "api/codebase_syncer.proto",
 }

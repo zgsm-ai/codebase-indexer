@@ -36,12 +36,12 @@ type logger struct {
 
 // NewLogger Create new logger instance
 func NewLogger(logsDir, level string) (Logger, error) {
-	// 确保logs目录是有效的可写路径
+	// Ensure logs directory is valid and writable
 	if logsDir == "" || strings.Contains(logsDir, "\x00") {
 		return nil, fmt.Errorf("invalid log directory path")
 	}
 
-	// 尝试创建目录来验证是否有写入权限
+	// Try to create directory to verify write permission
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create log directory: %v", err)
 	}
@@ -54,7 +54,7 @@ func NewLogger(logsDir, level string) (Logger, error) {
 	file.Close()
 	os.Remove(testFile)
 
-	// 设置日志输出到文件和控制台
+	// Configure log output to both file and console
 	fileWriter := zapcore.AddSync(&lumberjack.Logger{
 		Filename:   filepath.Join(logsDir, "codebase-syncer.log"),
 		MaxSize:    50, // megabytes
@@ -64,7 +64,7 @@ func NewLogger(logsDir, level string) (Logger, error) {
 		LocalTime:  true,
 	})
 
-	// 配置日志编码器
+	// Setup log encoder configuration
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:        "time",
 		LevelKey:       "level",
@@ -79,7 +79,7 @@ func NewLogger(logsDir, level string) (Logger, error) {
 		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
 
-	// 设置日志级别
+	// Set the log level
 	logLevel, exists := logLevelMap[strings.ToLower(level)]
 	if !exists {
 		logLevel = zapcore.InfoLevel

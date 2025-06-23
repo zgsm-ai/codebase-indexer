@@ -1,4 +1,4 @@
-// cmd/main.go - 程序入口
+// cmd/main.go - Program entry
 package main
 
 import (
@@ -40,7 +40,7 @@ func main() {
 		fmt.Printf("Version: %s\n", version)
 	}
 
-	// 解析命令行参数
+	// Parse command line arguments
 	appName := flag.String("appname", "zgsm", "app name")
 	grpcServer := flag.String("grpc", "localhost:51353", "gRPC server address")
 	logLevel := flag.String("loglevel", "info", "log level (debug, info, warn, error)")
@@ -49,15 +49,15 @@ func main() {
 	token := flag.String("token", "", "authentication token")
 	flag.Parse()
 
-	// 初始化目录
+	// Initialize directories
 	if err := initDir(*appName); err != nil {
 		fmt.Printf("failed to initialize directory: %v\n", err)
 		return
 	}
-	// 初始化配置
+	// Initialize configuration
 	initConfig()
 
-	// 初始化日志系统
+	// Initialize logging system
 	logger, err := logger.NewLogger(utils.LogsDir, *logLevel)
 	if err != nil {
 		fmt.Printf("failed to initialize logging system: %v\n", err)
@@ -65,7 +65,7 @@ func main() {
 	}
 	logger.Info("OS: %s, Arch: %s, App: %s, Version: %s, Starting...", osName, archName, *appName, version)
 
-	// 初始化各模块
+	// Initialize all modules
 	storageManager, err := storage.NewStorageManager(utils.CacheDir, logger)
 	if err != nil {
 		logger.Fatal("failed to initialize storage manager: %v", err)
@@ -81,7 +81,7 @@ func main() {
 	syncScheduler := scheduler.NewScheduler(httpSync, fileScanner, storageManager, logger)
 	grpcHandler := handler.NewGRPCHandler(httpSync, storageManager, syncScheduler, logger, appInfo)
 
-	// 初始化gRPC服务端
+	// Initialize gRPC server
 	lis, err := net.Listen("tcp", *grpcServer)
 	if err != nil {
 		logger.Fatal("failed to listen: %v", err)
@@ -90,11 +90,11 @@ func main() {
 	s := grpc.NewServer()
 	api.RegisterSyncServiceServer(s, grpcHandler)
 
-	// 启动守护进程
+	// Start daemon process
 	daemon := daemon.NewDaemon(syncScheduler, s, lis, httpSync, fileScanner, logger)
 	go daemon.Start()
 
-	// 处理系统信号，优雅退出
+	// Handle system signals for graceful shutdown
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
@@ -104,30 +104,30 @@ func main() {
 	logger.Info("client has been successfully closed")
 }
 
-// initDir 初始化目录
+// initDir initializes directories
 func initDir(appName string) error {
-	// 初始化根目录
+	// Initialize root directory
 	rootPath, err := utils.GetRootDir(appName)
 	if err != nil {
 		return fmt.Errorf("failed to get root directory: %v", err)
 	}
 	fmt.Printf("root directory: %s\n", rootPath)
 
-	// 初始化日志目录
+	// Initialize log directory
 	logPath, err := utils.GetLogDir(rootPath)
 	if err != nil {
 		return fmt.Errorf("failed to get log directory: %v", err)
 	}
 	fmt.Printf("log directory: %s\n", logPath)
 
-	// 初始化缓存目录
+	// Initialize cache directory
 	cachePath, err := utils.GetCacheDir(rootPath)
 	if err != nil {
 		return fmt.Errorf("failed to get cache directory: %v", err)
 	}
 	fmt.Printf("cache directory: %s\n", cachePath)
 
-	// 初始化上报临时目录
+	// Initialize upload temp directory
 	uploadTmpPath, err := utils.GetUploadTmpDir(rootPath)
 	if err != nil {
 		return fmt.Errorf("failed to get upload temporary directory: %v", err)
@@ -137,8 +137,8 @@ func initDir(appName string) error {
 	return nil
 }
 
-// initConfig 初始化配置
+// initConfig initializes configuration
 func initConfig() {
-	// 设置客户端默认配置
+	// Set client default configuration
 	storage.SetClientConfig(storage.DefaultClientConfig)
 }

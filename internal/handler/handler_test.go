@@ -14,7 +14,6 @@ import (
 	"codebase-syncer/test/mocks"
 )
 
-var mockLogger = &mocks.MockLogger{}
 var appInfo = &AppInfo{
 	AppName:  "test-app",
 	OSName:   "windows",
@@ -23,7 +22,8 @@ var appInfo = &AppInfo{
 }
 
 func TestNewGRPCHandler(t *testing.T) {
-	// 创建测试所需对象
+	var mockLogger = &mocks.MockLogger{}
+	// Create test objects
 	httpSync := &syncer.HTTPSync{}
 	storageManager := &storage.StorageManager{}
 	scheduler := &scheduler.Scheduler{}
@@ -33,10 +33,11 @@ func TestNewGRPCHandler(t *testing.T) {
 }
 
 func TestIsGitRepository(t *testing.T) {
-	// 创建临时目录
+	var mockLogger = &mocks.MockLogger{}
+	// Create temporary directory
 	tmpDir := t.TempDir()
 
-	// 创建.git目录
+	// Create .git directory
 	err := os.Mkdir(filepath.Join(tmpDir, ".git"), 0755)
 	assert.NoError(t, err)
 
@@ -45,13 +46,13 @@ func TestIsGitRepository(t *testing.T) {
 	scheduler := &scheduler.Scheduler{}
 	h := NewGRPCHandler(httpSync, storageManager, scheduler, mockLogger, appInfo)
 
-	// 测试有效git仓库
+	// Test valid git repository
 	assert.True(t, h.isGitRepository(tmpDir))
 
-	// 测试无效路径
+	// Test invalid path
 	assert.False(t, h.isGitRepository(filepath.Join(tmpDir, "nonexistent")))
 
-	// 测试非git目录
+	// Test non-git directory
 	nonGitDir := filepath.Join(tmpDir, "not-git")
 	err = os.Mkdir(nonGitDir, 0755)
 	assert.NoError(t, err)
@@ -59,12 +60,13 @@ func TestIsGitRepository(t *testing.T) {
 }
 
 func TestFindCodebasePathsToRegister(t *testing.T) {
+	var mockLogger = &mocks.MockLogger{}
 	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
 	mockLogger.On("Error", mock.Anything, mock.Anything).Return()
-	// 创建测试目录结构
+	// Create test directory structure
 	baseDir := t.TempDir()
 
-	// 创建子目录结构
+	// Create subdirectory structure
 	subDir1 := filepath.Join(baseDir, "repo1")
 	subDir2 := filepath.Join(baseDir, "repo2")
 	nonRepoDir := filepath.Join(baseDir, "notrepo")
@@ -80,12 +82,12 @@ func TestFindCodebasePathsToRegister(t *testing.T) {
 	scheduler := &scheduler.Scheduler{}
 	h := NewGRPCHandler(httpSync, storageManager, scheduler, mockLogger, appInfo)
 
-	// 测试查找codebase路径
+	// Test finding codebase paths
 	configs, err := h.findCodebasePaths(baseDir, "test-name")
 	assert.NoError(t, err)
-	assert.Len(t, configs, 2) // 应该找到两个git仓库
+	assert.Len(t, configs, 2) // Should find two git repositories
 
-	// 验证返回的配置
+	// Verify returned configurations
 	for _, config := range configs {
 		switch config.CodebaseName {
 		case "repo1":
@@ -95,7 +97,7 @@ func TestFindCodebasePathsToRegister(t *testing.T) {
 		}
 	}
 
-	// 测试无效路径
+	// Test invalid path
 	_, err = h.findCodebasePaths(filepath.Join(baseDir, "nonexistent"), "test-name")
 	assert.Error(t, err)
 }

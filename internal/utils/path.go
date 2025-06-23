@@ -1,4 +1,4 @@
-// utils/path.go - 路径处理
+// utils/path.go - Path handling utilities
 package utils
 
 import (
@@ -16,20 +16,20 @@ var (
 	UploadTmpDir = "./.zgsm/tmp"
 )
 
-// GetRootDir 获取跨平台的根目录
-// 返回类似 Windows: %USERPROFILE%/.zgsm, Linux/macOS: ~/.zgsm 的路径
+// GetRootDir gets cross-platform root directory
+// Returns paths like Windows: %USERPROFILE%/.zgsm, Linux/macOS: ~/.zgsm
 func GetRootDir(appName string) (string, error) {
 	var rootDir string
 
 	switch runtime.GOOS {
 	case "windows":
-		// Windows: 使用 %USERPROFILE% 或 %APPDATA%
+		// Windows: Use %USERPROFILE% or %APPDATA%
 		if userProfile := os.Getenv("USERPROFILE"); userProfile != "" {
 			rootDir = filepath.Join(userProfile, "."+appName)
 		} else if appData := os.Getenv("APPDATA"); appData != "" {
 			rootDir = filepath.Join(appData, appName)
 		} else {
-			// 备用方案：使用当前用户目录
+			// Fallback: Use current user home directory
 			homeDir, err := os.UserHomeDir()
 			if err != nil {
 				return "", err
@@ -37,29 +37,29 @@ func GetRootDir(appName string) (string, error) {
 			rootDir = filepath.Join(homeDir, "."+appName)
 		}
 	case "darwin":
-		// macOS: 使用 ~/Library/Application Support/ 或 ~/.appname
+		// macOS: Use ~/Library/Application Support/ or ~/.appname
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			return "", err
 		}
-		// 可以选择使用标准的 macOS 应用支持目录
+		// Option 1: Use standard macOS application support directory
 		// rootDir = filepath.Join(homeDir, "Library", "Application Support", appName)
-		// 或者使用简单的隐藏目录
+		// Option 2: Use simple hidden directory
 		rootDir = filepath.Join(homeDir, "."+appName)
 	default:
-		// Linux 和其他 Unix-like 系统
-		// XDG Base Directory Specification 标准
-		// XDG_CONFIG_HOME: 用户配置文件的基础目录
-		// - 如果设置了 XDG_CONFIG_HOME，通常是 ~/.config
-		// - 如果未设置，默认为 ~/.config
-		// - 最终路径示例: ~/.config/appname 或 /home/用户名/.config/appname
+		// Linux and other Unix-like systems
+		// XDG Base Directory Specification standard
+		// XDG_CONFIG_HOME: Base directory for user config files
+		// - If XDG_CONFIG_HOME is set, typically ~/.config
+		// - If not set, defaults to ~/.config
+		// - Example paths: ~/.config/appname or /home/username/.config/appname
 		if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
-			// 用户自定义了 XDG_CONFIG_HOME，使用该路径
-			// 例如: XDG_CONFIG_HOME=/custom/config -> /custom/config/appname
+			// User customized XDG_CONFIG_HOME, use this path
+			// Example: XDG_CONFIG_HOME=/custom/config -> /custom/config/appname
 			rootDir = filepath.Join(xdgConfig, appName)
 		} else {
-			// 未设置 XDG_CONFIG_HOME，使用传统的隐藏目录方式
-			// 例如: ~/.appname 或 /home/用户名/.appname
+			// XDG_CONFIG_HOME not set, use traditional hidden directory
+			// Example: ~/.appname or /home/username/.appname
 			homeDir, err := os.UserHomeDir()
 			if err != nil {
 				return "", err
@@ -68,7 +68,7 @@ func GetRootDir(appName string) (string, error) {
 		}
 	}
 
-	// 确保配置目录存在
+	// Ensure config directory exists
 	if err := os.MkdirAll(rootDir, 0755); err != nil {
 		return "", err
 	}
@@ -78,14 +78,14 @@ func GetRootDir(appName string) (string, error) {
 	return rootDir, nil
 }
 
-// GetLogDir 获取日志目录
+// GetLogDir gets log directory
 func GetLogDir(rootPath string) (string, error) {
 	if _, err := os.Stat(rootPath); os.IsNotExist(err) {
 		return "", fmt.Errorf("root path %s does not exist", rootPath)
 	}
 
 	logPath := filepath.Join(rootPath, "logs")
-	// 确保配置目录存在
+	// Ensure config directory exists
 	if err := os.MkdirAll(logPath, 0755); err != nil {
 		return "", err
 	}
@@ -95,14 +95,14 @@ func GetLogDir(rootPath string) (string, error) {
 	return logPath, nil
 }
 
-// GetCacheDir 获取缓存目录
+// GetCacheDir gets cache directory
 func GetCacheDir(rootPath string) (string, error) {
 	if _, err := os.Stat(rootPath); os.IsNotExist(err) {
 		return "", fmt.Errorf("root path %s does not exist", rootPath)
 	}
 
 	cachePath := filepath.Join(rootPath, "cache")
-	// 确保配置目录存在
+	// Ensure config directory exists
 	if err := os.MkdirAll(cachePath, 0755); err != nil {
 		return "", err
 	}
@@ -112,14 +112,14 @@ func GetCacheDir(rootPath string) (string, error) {
 	return cachePath, nil
 }
 
-// GetUploadTmpDir 获取上传临时目录
+// GetUploadTmpDir gets temporary upload directory
 func GetUploadTmpDir(rootPath string) (string, error) {
 	if _, err := os.Stat(rootPath); os.IsNotExist(err) {
 		return "", fmt.Errorf("root path %s does not exist", rootPath)
 	}
 
 	tmpPath := filepath.Join(rootPath, "tmp")
-	// 确保配置目录存在
+	// Ensure config directory exists
 	if err := os.MkdirAll(tmpPath, 0755); err != nil {
 		return "", err
 	}
@@ -129,16 +129,16 @@ func GetUploadTmpDir(rootPath string) (string, error) {
 	return tmpPath, nil
 }
 
-// CleanUploadTmpDir 清空上传临时目录
+// CleanUploadTmpDir cleans temporary upload directory
 func CleanUploadTmpDir() error {
 	return os.RemoveAll(UploadTmpDir)
 }
 
-// 将Windows路径转为Unix路径
+// Convert Windows path to Unix path
 func WindowsAbsolutePathToUnix(path string) string {
-	// 转换路径分隔符
+	// Convert path separators
 	unixPath := filepath.ToSlash(path)
-	// 处理Windows盘符(D:\)转换为Unix风格(/d/)
+	// Handle Windows drive letters (D:\) converting to Unix style (/d/)
 	if len(unixPath) > 1 && unixPath[1] == ':' {
 		drive := string(unixPath[0])
 		return "/" + strings.ToLower(drive) + unixPath[2:]
@@ -146,8 +146,9 @@ func WindowsAbsolutePathToUnix(path string) string {
 	return unixPath
 }
 
+// Convert Unix path to Windows path
 func UnixAbsolutePathToWindows(path string) string {
-	// 处理Unix风格路径(/d/)转换为Windows盘符(D:\)
+	// Handle Unix style paths (/d/) converting to Windows drive letters (D:\)
 	if len(path) > 1 && path[0] == '/' {
 		drive := string(path[1])
 		if len(path) > 2 && path[2] == '/' {
