@@ -1,0 +1,9 @@
+# IDEs
+.vscode
+.idea
+
+# Builds
+bin
+
+# logs
+logs
