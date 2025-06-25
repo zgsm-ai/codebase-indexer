@@ -47,7 +47,7 @@ MAIN_PACKAGE_PATH="cmd/main.go" # Adjust if your main package is elsewhere
 LD_FLAGS="-s -w -X main.version=$APP_VERSION -X main.osName=$TARGET_OS -X main.archName=$TARGET_ARCH"
 
 # Determine output filename
-OUTPUT_FILENAME="codebaseSyncer-${TARGET_OS}-${TARGET_ARCH}-${APP_VERSION}"
+OUTPUT_FILENAME="shenma-${TARGET_OS}-${TARGET_ARCH}-${APP_VERSION}"
 if [ "$TARGET_OS" = "windows" ]; then
   OUTPUT_FILENAME="${OUTPUT_FILENAME}.exe"
 fi

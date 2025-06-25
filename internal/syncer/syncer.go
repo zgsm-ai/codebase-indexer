@@ -216,7 +216,7 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 
 // Client config file URI
 const (
-	API_GET_CLIENT_CONFIG = "/codebase-syncer/api/v1/config.json"
+	API_GET_CLIENT_CONFIG = "/shenma/api/v1/config/codebase-syncer-config.json"
 )
 
 // Get client configuration
