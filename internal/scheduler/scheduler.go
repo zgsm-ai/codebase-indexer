@@ -20,6 +20,12 @@ import (
 	"codebase-syncer/pkg/logger"
 )
 
+const (
+	statusUnauthorized       = "401" // HTTP 401 Unauthorized
+	statusTooManyRequests    = "429" // HTTP 429 Too Many Requests
+	statusServiceUnavailable = "503" // HTTP 503 Service Unavailable
+)
+
 type SchedulerConfig struct {
 	IntervalMinutes       int // Sync interval in minutes
 	RegisterExpireMinutes int // Registration expiration time in minutes
@@ -275,7 +281,7 @@ func (s *Scheduler) processFileChanges(config *storage.CodebaseConfig, changes [
 	// Create zip with all changed files (new and modified)
 	zipPath, err := s.createChangesZip(config, changes)
 	if err != nil {
-		return fmt.Errorf("failed to create zip file: %v", err)
+		return fmt.Errorf("failed to create changes zip: %v", err)
 	}
 
 	// Upload zip file
@@ -286,7 +292,7 @@ func (s *Scheduler) processFileChanges(config *storage.CodebaseConfig, changes [
 	}
 	err = s.uploadChangesZip(zipPath, uploadReq)
 	if err != nil {
-		return fmt.Errorf("failed to upload zip file: %v", err)
+		return fmt.Errorf("failed to upload changes zip: %v", err)
 	}
 
 	return nil
@@ -374,8 +380,8 @@ func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq *syncer.UploadReq
 			s.logger.Info("zip file uploaded successfully")
 			break
 		}
-		if strings.Contains(errUpload.Error(), "429") || strings.Contains(errUpload.Error(), "503") {
-			s.logger.Warn("upload rate limited, aborting retry")
+		if isAbortRetryError(errUpload) {
+			s.logger.Warn("upload failed with abort retry error")
 			break
 		}
 		s.logger.Warn("failed to upload zip file (attempt %d/%d): %v", i+1, maxRetries, errUpload)
@@ -399,6 +405,18 @@ func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq *syncer.UploadReq
 	}
 
 	return nil
+}
+
+// isAbortRetryError checks if the error indicates we should abort retrying
+func isAbortRetryError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errorStr := err.Error()
+	return strings.Contains(errorStr, statusUnauthorized) ||
+		strings.Contains(errorStr, statusTooManyRequests) ||
+		strings.Contains(errorStr, statusServiceUnavailable)
 }
 
 // SyncForCodebases Batch sync codebases

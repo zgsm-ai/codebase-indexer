@@ -48,7 +48,7 @@ var DefaultConfigSync = ConfigSync{
 	IntervalMinutes:   5,                     // Default sync interval in minutes
 	MaxFileSizeMB:     1,                     // Default maximum file size in MB
 	MaxRetries:        3,                     // Default maximum retry count
-	RetryDelaySeconds: 5,                     // Default retry delay in seconds
+	RetryDelaySeconds: 3,                     // Default retry delay in seconds
 	IgnorePatterns:    DefaultIgnorePatterns, // Default ignore patterns
 }
 

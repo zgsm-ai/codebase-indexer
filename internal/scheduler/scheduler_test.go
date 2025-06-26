@@ -178,7 +178,7 @@ func TestProcessFileChanges(t *testing.T) {
 		err = s.processFileChanges(config, changes)
 
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to create zip file")
+		assert.Contains(t, err.Error(), "failed to create changes zip")
 	})
 
 	t.Run("UploadChangesZipError", func(t *testing.T) {
@@ -202,7 +202,7 @@ func TestProcessFileChanges(t *testing.T) {
 		err := s.processFileChanges(config, changes)
 
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to upload zip file")
+		assert.Contains(t, err.Error(), "failed to upload changes zip")
 	})
 }
 
@@ -289,4 +289,45 @@ func TestUploadChangesZip(t *testing.T) {
 		mockLogger.AssertCalled(t, "Info", "zip file uploaded successfully", mock.Anything)
 		mockHttpSync.AssertExpectations(t)
 	})
+}
+
+func TestIsAbortRetryError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "NilError",
+			err:      nil,
+			expected: false,
+		},
+		{
+			name:     "UnauthorizedError",
+			err:      errors.New("401 Unauthorized"),
+			expected: true,
+		},
+		{
+			name:     "TooManyRequestsError",
+			err:      errors.New("429 Too Many Requests"),
+			expected: true,
+		},
+		{
+			name:     "ServiceUnavailableError",
+			err:      errors.New("503 Service Unavailable"),
+			expected: true,
+		},
+		{
+			name:     "OtherError",
+			err:      errors.New("some other error"),
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isAbortRetryError(tt.err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

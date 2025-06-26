@@ -71,6 +71,7 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 	var registeredCount int
 	var lastError error
 
+	nowTime := time.Now()
 	codebaseConfigs := h.storage.GetCodebaseConfigs()
 	for _, pendingConfig := range codebaseConfigsToRegister {
 		codebaseId := fmt.Sprintf("%s_%x", pendingConfig.CodebaseName, md5.Sum([]byte(pendingConfig.CodebasePath)))
@@ -84,7 +85,7 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 				CodebaseName: pendingConfig.CodebaseName,
 				CodebasePath: pendingConfig.CodebasePath,
 				CodebaseId:   codebaseId,
-				RegisterTime: time.Now(), // Set registration time to now
+				RegisterTime: nowTime, // Set registration time to now
 			}
 		} else {
 			h.logger.Info("found existing codebase config (Id: %s), will update it", codebaseId)
@@ -92,7 +93,7 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 			codebaseConfig.CodebaseName = pendingConfig.CodebaseName
 			codebaseConfig.CodebasePath = pendingConfig.CodebasePath
 			codebaseConfig.CodebaseId = codebaseId
-			codebaseConfig.RegisterTime = time.Now() // Update registration time to now
+			codebaseConfig.RegisterTime = nowTime // Update registration time to now
 		}
 
 		if errSave := h.storage.SaveCodebaseConfig(codebaseConfig); errSave != nil {
@@ -153,6 +154,7 @@ func (h *GRPCHandler) SyncCodebase(ctx context.Context, req *api.SyncCodebaseReq
 	var savedCount int
 	var lastError error
 
+	nowTime := time.Now()
 	codebaseConfigs := h.storage.GetCodebaseConfigs()
 	for _, pendingConfig := range codebaseConfigsToSync {
 		codebaseId := fmt.Sprintf("%s_%x", pendingConfig.CodebaseName, md5.Sum([]byte(pendingConfig.CodebasePath)))
@@ -166,7 +168,7 @@ func (h *GRPCHandler) SyncCodebase(ctx context.Context, req *api.SyncCodebaseReq
 				CodebaseName: pendingConfig.CodebaseName,
 				CodebasePath: pendingConfig.CodebasePath,
 				CodebaseId:   codebaseId,
-				RegisterTime: time.Now(), // Set register time to now
+				RegisterTime: nowTime, // Set register time to now
 			}
 		} else {
 			h.logger.Info("found existing codebase config (Id: %s), will update it", codebaseId)
@@ -174,7 +176,18 @@ func (h *GRPCHandler) SyncCodebase(ctx context.Context, req *api.SyncCodebaseReq
 			codebaseConfig.CodebaseName = pendingConfig.CodebaseName
 			codebaseConfig.CodebasePath = pendingConfig.CodebasePath
 			codebaseConfig.CodebaseId = codebaseId
-			codebaseConfig.RegisterTime = time.Now() // Update registration time to now
+			codebaseConfig.RegisterTime = nowTime // Update registration time to now
+		}
+
+		// get server hash tree
+		serverHashTree, err := h.httpSync.FetchServerHashTree(codebaseConfig.CodebasePath)
+		if err != nil {
+			h.logger.Warn("failed to get hash tree from server: %v", err)
+		} else {
+			// Update codebase hash tree
+			h.logger.Info("fetched server hash tree successfully")
+			codebaseConfig.HashTree = serverHashTree
+			codebaseConfig.LastSync = nowTime
 		}
 
 		if errSave := h.storage.SaveCodebaseConfig(codebaseConfig); errSave != nil {
