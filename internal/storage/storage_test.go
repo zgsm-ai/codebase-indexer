@@ -557,7 +557,7 @@ func TestSaveCodebaseConfig(t *testing.T) {
 					t.Errorf("memory config not saved")
 				}
 
-				logger.AssertCalled(t, "Info", "codebase config saved successfully, path: %s, codebaseId: %s", mock.Anything, mock.Anything)
+				logger.AssertCalled(t, "Info", "codebase config saved successfully, path: %s", mock.Anything)
 			}
 		})
 	}

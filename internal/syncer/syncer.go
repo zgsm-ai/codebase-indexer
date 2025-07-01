@@ -50,8 +50,9 @@ func NewHTTPSync(syncConfig *SyncConfig, logger logger.Logger) SyncInterface {
 	return &HTTPSync{
 		syncConfig: syncConfig,
 		httpClient: &fasthttp.Client{
-			ReadTimeout:  60 * time.Second,
-			WriteTimeout: 60 * time.Second,
+			MaxIdleConnDuration: 90 * time.Second,
+			ReadTimeout:         60 * time.Second,
+			WriteTimeout:        60 * time.Second,
 		},
 		logger: logger,
 	}
@@ -114,7 +115,7 @@ func (hs *HTTPSync) FetchServerHashTree(codebasePath string) (map[string]string,
 	req.Header.SetContentType("application/json")
 	req.Header.Set("Authorization", "Bearer "+hs.syncConfig.Token)
 
-	hs.logger.Debug("sending hash tree request to: %s", url)
+	hs.logger.Info("sending hash tree request to: %s", url)
 	if err := hs.httpClient.Do(req, resp); err != nil {
 		return nil, fmt.Errorf("failed to send request: %v", err)
 	}
@@ -143,6 +144,15 @@ func (hs *HTTPSync) FetchServerHashTree(codebasePath string) (map[string]string,
 	return hashTree, nil
 }
 
+type writeCounter struct {
+	n int64
+}
+
+func (wc *writeCounter) Write(p []byte) (int, error) {
+	wc.n += int64(len(p))
+	return len(p), nil
+}
+
 type UploadReq struct {
 	ClientId     string `json:"clientId"`
 	CodebasePath string `json:"codebasePath"`
@@ -164,7 +174,20 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 	}
 	defer file.Close()
 
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to get file info: %v", err)
+	}
+	fileSize := fileInfo.Size()
+
 	body := &bytes.Buffer{}
+	counter := &writeCounter{}
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		hs.logger.Info("upload stats - file: %s, size: %d bytes, uploaded: %d bytes (%.1f%%), duration: %v, speed: %.2f KB/s",
+			filePath, fileSize, counter.n, float64(counter.n)/float64(fileSize)*100, duration, float64(counter.n)/1024/duration.Seconds())
+	}()
 	writer := multipart.NewWriter(body)
 
 	// Add zip file
@@ -173,7 +196,7 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 		return fmt.Errorf("failed to create form file: %v", err)
 	}
 
-	if _, err := io.Copy(part, file); err != nil {
+	if _, err := io.Copy(io.MultiWriter(part, counter), file); err != nil {
 		return fmt.Errorf("failed to copy file content: %v", err)
 	}
 
@@ -201,7 +224,7 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 	req.Header.Set("Authorization", "Bearer "+hs.syncConfig.Token)
 	req.SetBody(body.Bytes())
 
-	hs.logger.Debug("sending file upload request to: %s", url)
+	hs.logger.Info("sending file upload request to: %s", url)
 	if err := hs.httpClient.Do(req, resp); err != nil {
 		return fmt.Errorf("failed to send request: %v", err)
 	}
@@ -243,7 +266,7 @@ func (hs *HTTPSync) GetClientConfig() (storage.ClientConfig, error) {
 	req.Header.SetContentType("application/json")
 	req.Header.Set("Authorization", "Bearer "+hs.syncConfig.Token)
 
-	hs.logger.Debug("sending client config request to: %s", url)
+	hs.logger.Info("sending client config request to: %s", url)
 	if err := hs.httpClient.Do(req, resp); err != nil {
 		return storage.ClientConfig{}, fmt.Errorf("failed to send request: %v", err)
 	}

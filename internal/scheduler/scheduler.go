@@ -200,11 +200,15 @@ func (s *Scheduler) performSync() {
 		s.isRunning = false
 	}()
 
-	s.logger.Info("starting sync task")
-	startTime := time.Now()
-
 	syncConfigTimeout := time.Duration(s.sechedulerConfig.RegisterExpireMinutes) * time.Minute
 	codebaseConfigs := s.storage.GetCodebaseConfigs()
+	if len(codebaseConfigs) == 0 {
+		s.logger.Info("no codebase configs found, skipping sync")
+		return
+	}
+
+	s.logger.Info("starting sync task")
+	startTime := time.Now()
 	for _, config := range codebaseConfigs {
 		if config.RegisterTime.IsZero() || time.Since(config.RegisterTime) > syncConfigTimeout {
 			s.logger.Info("codebase %s registration expired, deleting config, skipping sync", config.CodebaseId)
@@ -318,6 +322,16 @@ func (s *Scheduler) createChangesZip(config *storage.CodebaseConfig, changes []*
 	if err != nil {
 		return "", err
 	}
+	// Ensure cleanup of temporary zip file in case of error
+	cleanup := func() {
+		if err != nil {
+			if _, statErr := os.Stat(zipPath); statErr == nil {
+				_ = os.Remove(zipPath)
+				s.logger.Info("temp zip file deleted successfully: %s", zipPath)
+			}
+		}
+	}
+	defer cleanup()
 	defer zipFile.Close()
 
 	zipWriter := zip.NewWriter(zipFile)
@@ -360,7 +374,8 @@ func (s *Scheduler) createChangesZip(config *storage.CodebaseConfig, changes []*
 		return "", err
 	}
 
-	if _, err := metadataWriter.Write(metadataJson); err != nil {
+	_, err = metadataWriter.Write(metadataJson)
+	if err != nil {
 		return "", err
 	}
 

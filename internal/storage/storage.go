@@ -166,7 +166,7 @@ func (s *StorageManager) SaveCodebaseConfig(config *CodebaseConfig) error {
 
 	// Atomically update in-memory configuration
 	s.codebaseConfigs[config.CodebaseId] = config
-	s.logger.Info("codebase config saved successfully, path: %s, codebaseId: %s", filePath, config.CodebaseId)
+	s.logger.Info("codebase config saved successfully, path: %s", filePath)
 	return nil
 }
 

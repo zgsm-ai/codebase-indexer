@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	// version will be set by the linker during build
+	// set by the linker during build
 	osName   string
 	archName string
 	version  string
