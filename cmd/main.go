@@ -79,7 +79,7 @@ func main() {
 	httpSync := syncer.NewHTTPSync(syncConfig, logger)
 	appInfo := &handler.AppInfo{AppName: *appName, ArchName: archName, OSName: osName, Version: version}
 	syncScheduler := scheduler.NewScheduler(httpSync, fileScanner, storageManager, logger)
-	grpcHandler := handler.NewGRPCHandler(httpSync, storageManager, syncScheduler, logger, appInfo)
+	grpcHandler := handler.NewGRPCHandler(httpSync, fileScanner, storageManager, syncScheduler, logger, appInfo)
 
 	// Initialize gRPC server
 	lis, err := net.Listen("tcp", *grpcServer)

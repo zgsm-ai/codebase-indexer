@@ -119,7 +119,8 @@ func (d *Daemon) updateConfig() {
 	// Update file scanner configuration
 	d.fileScanner.SetScannerConfig(&scanner.ScannerConfig{
 		IgnorePatterns: newConfig.Sync.IgnorePatterns,
-		MaxFileSizeMB:  newConfig.Sync.MaxFileSizeMB,
+		// MaxFileSizeMB:  newConfig.Sync.MaxFileSizeMB,
+		MaxFileSizeKB: newConfig.Sync.MaxFileSizeKB,
 	})
 
 	d.logger.Info("client config updated")
@@ -167,7 +168,8 @@ func configChanged(current, new storage.ClientConfig) bool {
 	return current.Server.RegisterExpireMinutes != new.Server.RegisterExpireMinutes ||
 		current.Server.HashTreeExpireHours != new.Server.HashTreeExpireHours ||
 		current.Sync.IntervalMinutes != new.Sync.IntervalMinutes ||
-		current.Sync.MaxFileSizeMB != new.Sync.MaxFileSizeMB ||
+		// current.Sync.MaxFileSizeMB != new.Sync.MaxFileSizeMB ||
+		current.Sync.MaxFileSizeKB != new.Sync.MaxFileSizeKB ||
 		current.Sync.MaxRetries != new.Sync.MaxRetries ||
 		current.Sync.RetryDelaySeconds != new.Sync.RetryDelaySeconds ||
 		!equalIgnorePatterns(current.Sync.IgnorePatterns, new.Sync.IgnorePatterns)

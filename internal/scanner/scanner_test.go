@@ -14,7 +14,8 @@ import (
 var (
 	scannerConfig = &ScannerConfig{
 		IgnorePatterns: []string{".git", ".idea", "node_modules/", "vendor/", "dist/", "build/"},
-		MaxFileSizeMB:  10,
+		// MaxFileSizeMB:  10,
+		MaxFileSizeKB: 100,
 	}
 )
 
@@ -56,7 +57,7 @@ func TestLoadIgnoreRules(t *testing.T) {
 
 	t.Run("Use default rules only", func(t *testing.T) {
 		tempDir := t.TempDir()
-		ignore := fs.loadIgnoreRules(tempDir)
+		ignore := fs.LoadIgnoreRules(tempDir)
 		require.NotNil(t, ignore)
 
 		// Test default rules
@@ -73,7 +74,7 @@ func TestLoadIgnoreRules(t *testing.T) {
 			filepath.Join(tempDir, ".gitignore"),
 			[]byte(gitignoreContent), 0644))
 
-		ignore := fs.loadIgnoreRules(tempDir)
+		ignore := fs.LoadIgnoreRules(tempDir)
 		require.NotNil(t, ignore)
 
 		assert.True(t, ignore.MatchesPath("build/main.go"))     // .gitignore rule

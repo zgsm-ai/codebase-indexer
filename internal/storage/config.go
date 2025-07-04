@@ -8,8 +8,9 @@ type ConfigServer struct {
 }
 
 type ConfigSync struct {
-	IntervalMinutes   int      `json:"intervalMinutes"`
-	MaxFileSizeMB     int      `json:"maxFileSizeMB"`
+	IntervalMinutes int `json:"intervalMinutes"`
+	// MaxFileSizeMB     int      `json:"maxFileSizeMB"`
+	MaxFileSizeKB     int      `json:"maxFileSizeKB"`
 	MaxRetries        int      `json:"maxRetries"`
 	RetryDelaySeconds int      `json:"retryDelaySeconds"`
 	IgnorePatterns    []string `json:"ignorePatterns"`
@@ -45,8 +46,9 @@ var DefaultIgnorePatterns = []string{
 }
 
 var DefaultConfigSync = ConfigSync{
-	IntervalMinutes:   5,                     // Default sync interval in minutes
-	MaxFileSizeMB:     1,                     // Default maximum file size in MB
+	IntervalMinutes: 5, // Default sync interval in minutes
+	// MaxFileSizeMB:     1,                     // Default maximum file size in MB
+	MaxFileSizeKB:     100,                   // Default maximum file size in KB
 	MaxRetries:        3,                     // Default maximum retry count
 	RetryDelaySeconds: 3,                     // Default retry delay in seconds
 	IgnorePatterns:    DefaultIgnorePatterns, // Default ignore patterns

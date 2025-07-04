@@ -141,7 +141,8 @@ func (s *Scheduler) LoadConfig(ctx context.Context) {
 	// Update scanner configuration
 	scannerConfig := &scanner.ScannerConfig{
 		IgnorePatterns: config.Sync.IgnorePatterns,
-		MaxFileSizeMB:  config.Sync.MaxFileSizeMB,
+		// MaxFileSizeMB:  config.Sync.MaxFileSizeMB,
+		MaxFileSizeKB: config.Sync.MaxFileSizeKB,
 	}
 	s.fileScanner.SetScannerConfig(scannerConfig)
 }
@@ -217,20 +218,20 @@ func (s *Scheduler) performSync() {
 			}
 			continue
 		}
-		s.performSyncForCodebase(config)
+		_ = s.performSyncForCodebase(config)
 	}
 
 	s.logger.Info("sync task completed, total time: %v", time.Since(startTime))
 }
 
 // performSyncForCodebase Perform sync task for single codebase
-func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) {
+func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) error {
 	s.logger.Info("starting sync for codebase: %s", config.CodebaseId)
 	nowTime := time.Now()
 	localHashTree, err := s.fileScanner.ScanDirectory(config.CodebasePath)
 	if err != nil {
-		s.logger.Error("failed to scan local directory (%s): %v", config.CodebasePath, err)
-		return
+		s.logger.Error("failed to scan directory (%s): %v", config.CodebasePath, err)
+		return fmt.Errorf("scan directory (%s) failed: %v", config.CodebasePath, err)
 	}
 
 	// Get codebase hash tree
@@ -259,7 +260,7 @@ func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) {
 	changes := s.fileScanner.CalculateFileChanges(localHashTree, serverHashTree)
 	if len(changes) == 0 {
 		s.logger.Info("no file changes detected, sync completed")
-		return
+		return nil
 	}
 
 	s.logger.Info("detected %d file changes", len(changes))
@@ -267,7 +268,7 @@ func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) {
 	// Process all file changes
 	if err := s.processFileChanges(config, changes); err != nil {
 		s.logger.Error("file changes processing failed: %v", err)
-		return
+		return fmt.Errorf("file changes processing failed: %v", err)
 	}
 
 	// Update local hash tree and save configuration
@@ -275,9 +276,11 @@ func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) {
 	config.LastSync = nowTime
 	if err := s.storage.SaveCodebaseConfig(config); err != nil {
 		s.logger.Error("failed to save codebase config: %v", err)
+		return fmt.Errorf("save codebase config failed: %v", err)
 	}
 
 	s.logger.Info("sync completed for codebase: %s, time taken: %v", config.CodebaseId, time.Since(nowTime))
+	return nil
 }
 
 // processFileChanges Process file changes and encapsulate upload logic
@@ -395,7 +398,11 @@ func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq *syncer.UploadReq
 			s.logger.Info("zip file uploaded successfully")
 			break
 		}
-		if isAbortRetryError(errUpload) {
+		// if utils.IsAbortRetryError(errUpload) {
+		// 	s.logger.Warn("upload failed with abort retry error")
+		// 	break
+		// }
+		if !isTimeoutError(errUpload) {
 			s.logger.Warn("upload failed with abort retry error")
 			break
 		}
@@ -420,6 +427,15 @@ func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq *syncer.UploadReq
 	}
 
 	return nil
+}
+
+// isTimeoutError checks if the error indicates a timeout
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	return strings.Contains(err.Error(), "timeout")
 }
 
 // isAbortRetryError checks if the error indicates we should abort retrying
@@ -456,13 +472,21 @@ func (s *Scheduler) SyncForCodebases(ctx context.Context, codebaseConfig []*stor
 		return err
 	}
 
+	errs := make([]error, 0)
 	s.logger.Info("starting sync for codebases")
 	startTime := time.Now()
 	for _, config := range codebaseConfig {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		s.performSyncForCodebase(config)
+		err := s.performSyncForCodebase(config)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("sync for codebases completed with errors: %v", errs)
 	}
 
 	s.logger.Info("sync for codebases completed, total time: %v", time.Since(startTime))

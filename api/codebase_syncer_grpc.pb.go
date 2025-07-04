@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v6.31.0
-// source: api/codebase_syncer.proto
+// source: codebase_syncer.proto
 
 package codebase_syncer
 
@@ -25,6 +25,7 @@ const (
 	SyncService_UnregisterSync_FullMethodName   = "/codebase_syncer.SyncService/UnregisterSync"
 	SyncService_ShareAccessToken_FullMethodName = "/codebase_syncer.SyncService/ShareAccessToken"
 	SyncService_GetVersion_FullMethodName       = "/codebase_syncer.SyncService/GetVersion"
+	SyncService_CheckIgnoreFile_FullMethodName  = "/codebase_syncer.SyncService/CheckIgnoreFile"
 )
 
 // SyncServiceClient is the client API for SyncService service.
@@ -43,6 +44,8 @@ type SyncServiceClient interface {
 	ShareAccessToken(ctx context.Context, in *ShareAccessTokenRequest, opts ...grpc.CallOption) (*ShareAccessTokenResponse, error)
 	// Get application name and version information
 	GetVersion(ctx context.Context, in *VersionRequest, opts ...grpc.CallOption) (*VersionResponse, error)
+	// Check ignore file
+	CheckIgnoreFile(ctx context.Context, in *CheckIgnoreFileRequest, opts ...grpc.CallOption) (*SyncCodebaseResponse, error)
 }
 
 type syncServiceClient struct {
@@ -103,6 +106,16 @@ func (c *syncServiceClient) GetVersion(ctx context.Context, in *VersionRequest, 
 	return out, nil
 }
 
+func (c *syncServiceClient) CheckIgnoreFile(ctx context.Context, in *CheckIgnoreFileRequest, opts ...grpc.CallOption) (*SyncCodebaseResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SyncCodebaseResponse)
+	err := c.cc.Invoke(ctx, SyncService_CheckIgnoreFile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SyncServiceServer is the server API for SyncService service.
 // All implementations must embed UnimplementedSyncServiceServer
 // for forward compatibility.
@@ -119,6 +132,8 @@ type SyncServiceServer interface {
 	ShareAccessToken(context.Context, *ShareAccessTokenRequest) (*ShareAccessTokenResponse, error)
 	// Get application name and version information
 	GetVersion(context.Context, *VersionRequest) (*VersionResponse, error)
+	// Check ignore file
+	CheckIgnoreFile(context.Context, *CheckIgnoreFileRequest) (*SyncCodebaseResponse, error)
 	mustEmbedUnimplementedSyncServiceServer()
 }
 
@@ -143,6 +158,9 @@ func (UnimplementedSyncServiceServer) ShareAccessToken(context.Context, *ShareAc
 }
 func (UnimplementedSyncServiceServer) GetVersion(context.Context, *VersionRequest) (*VersionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetVersion not implemented")
+}
+func (UnimplementedSyncServiceServer) CheckIgnoreFile(context.Context, *CheckIgnoreFileRequest) (*SyncCodebaseResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CheckIgnoreFile not implemented")
 }
 func (UnimplementedSyncServiceServer) mustEmbedUnimplementedSyncServiceServer() {}
 func (UnimplementedSyncServiceServer) testEmbeddedByValue()                     {}
@@ -255,6 +273,24 @@ func _SyncService_GetVersion_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SyncService_CheckIgnoreFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckIgnoreFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SyncServiceServer).CheckIgnoreFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SyncService_CheckIgnoreFile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SyncServiceServer).CheckIgnoreFile(ctx, req.(*CheckIgnoreFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SyncService_ServiceDesc is the grpc.ServiceDesc for SyncService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -282,7 +318,11 @@ var SyncService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetVersion",
 			Handler:    _SyncService_GetVersion_Handler,
 		},
+		{
+			MethodName: "CheckIgnoreFile",
+			Handler:    _SyncService_CheckIgnoreFile_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "api/codebase_syncer.proto",
+	Metadata: "codebase_syncer.proto",
 }

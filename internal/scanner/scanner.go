@@ -35,12 +35,15 @@ type FileStatus struct {
 
 type ScannerConfig struct {
 	IgnorePatterns []string // List of ignore patterns
-	MaxFileSizeMB  int      // File size limit in MB
+	// MaxFileSizeMB  int      // File size limit in MB
+	MaxFileSizeKB int // File size limit in KB
 }
 
 type ScannerInterface interface {
 	SetScannerConfig(config *ScannerConfig)
+	GetScannerConfig() *ScannerConfig
 	CalculateFileHash(filePath string) (string, error)
+	LoadIgnoreRules(codebasePath string) *gitignore.GitIgnore
 	ScanDirectory(codebasePath string) (map[string]string, error)
 	CalculateFileChanges(local, remote map[string]string) []*FileStatus
 }
@@ -62,7 +65,8 @@ func NewFileScanner(logger logger.Logger) ScannerInterface {
 func defaultScannerConfig() *ScannerConfig {
 	return &ScannerConfig{
 		IgnorePatterns: storage.DefaultIgnorePatterns,
-		MaxFileSizeMB:  storage.DefaultConfigSync.MaxFileSizeMB,
+		// MaxFileSizeMB:  storage.DefaultConfigSync.MaxFileSizeMB,
+		MaxFileSizeKB: storage.DefaultConfigSync.MaxFileSizeKB,
 	}
 }
 
@@ -76,8 +80,11 @@ func (s *FileScanner) SetScannerConfig(config *ScannerConfig) {
 	if len(config.IgnorePatterns) > 0 {
 		s.scannerConfig.IgnorePatterns = config.IgnorePatterns
 	}
-	if config.MaxFileSizeMB > 0 && config.MaxFileSizeMB <= 10 {
-		s.scannerConfig.MaxFileSizeMB = config.MaxFileSizeMB
+	// if config.MaxFileSizeMB > 0 && config.MaxFileSizeMB <= 10 {
+	// 	s.scannerConfig.MaxFileSizeMB = config.MaxFileSizeMB
+	// }
+	if config.MaxFileSizeKB > 10 && config.MaxFileSizeKB <= 500 {
+		s.scannerConfig.MaxFileSizeKB = config.MaxFileSizeKB
 	}
 }
 
@@ -111,7 +118,7 @@ func (s *FileScanner) CalculateFileHash(filePath string) (string, error) {
 }
 
 // Load and combine default ignore rules with .gitignore rules
-func (s *FileScanner) loadIgnoreRules(codebasePath string) *gitignore.GitIgnore {
+func (s *FileScanner) LoadIgnoreRules(codebasePath string) *gitignore.GitIgnore {
 	// First create ignore object with default rules
 	currentIgnoreRules := s.scannerConfig.IgnorePatterns
 	compiledIgnore := gitignore.CompileIgnoreLines(currentIgnoreRules...)
@@ -150,10 +157,12 @@ func (s *FileScanner) ScanDirectory(codebasePath string) (map[string]string, err
 	hashTree := make(map[string]string)
 	var filesScanned int
 
-	ignore := s.loadIgnoreRules(codebasePath)
+	ignore := s.LoadIgnoreRules(codebasePath)
 
-	maxFileSizeMB := s.scannerConfig.MaxFileSizeMB
-	maxFileSize := int64(maxFileSizeMB * 1024 * 1024)
+	// maxFileSizeMB := s.scannerConfig.MaxFileSizeMB
+	// maxFileSize := int64(maxFileSizeMB * 1024 * 1024)
+	maxFileSizeKB := s.scannerConfig.MaxFileSizeKB
+	maxFileSize := int64(maxFileSizeKB * 1024)
 	err := filepath.WalkDir(codebasePath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			s.logger.Warn("error accessing file %s: %v", path, err)
@@ -192,7 +201,7 @@ func (s *FileScanner) ScanDirectory(codebasePath string) (map[string]string, err
 
 		// Verify file size doesn't exceed max limit
 		if info.Size() >= maxFileSize {
-			s.logger.Debug("skipping file larger than %dMB: %s (size: %.2f MB)", maxFileSizeMB, relPath, float64(info.Size())/1024/1024)
+			s.logger.Debug("skipping file larger than %dKB: %s (size: %.2f KB)", maxFileSizeKB, relPath, float64(info.Size())/1024)
 			return nil
 		}
 

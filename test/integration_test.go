@@ -71,7 +71,7 @@ func (s *IntegrationTestSuite) SetupTest() {
 	}
 	fileScanner := scanner.NewFileScanner(logger)
 	s.scheduler = scheduler.NewScheduler(httpSync, fileScanner, storageManager, logger)
-	s.handler = handler.NewGRPCHandler(httpSync, storageManager, s.scheduler, logger, appInfo)
+	s.handler = handler.NewGRPCHandler(httpSync, fileScanner, storageManager, s.scheduler, logger, appInfo)
 }
 
 func (s *IntegrationTestSuite) TestRegisterSync() {
@@ -292,6 +292,95 @@ func (s *IntegrationTestSuite) TestTokenSharing() {
 	resp, err := s.handler.ShareAccessToken(context.Background(), req)
 	assert.NoError(s.T(), err)
 	assert.True(s.T(), resp.Success)
+}
+
+func (s *IntegrationTestSuite) TestCheckIgnoreFile() {
+	// Prepare workspace directory
+	workspaceDir := filepath.Join(os.TempDir(), "check-ignore-test")
+	err := os.MkdirAll(workspaceDir, 0755)
+	assert.NoError(s.T(), err)
+	defer os.RemoveAll(workspaceDir)
+
+	// Create test files
+	normalFile := filepath.Join(workspaceDir, "normal.txt")
+	err = os.WriteFile(normalFile, []byte("normal content"), 0644)
+	assert.NoError(s.T(), err)
+
+	largeFile := filepath.Join(workspaceDir, "large.txt")
+	err = os.WriteFile(largeFile, make([]byte, 110*1024), 0644) // 110KB
+	assert.NoError(s.T(), err)
+
+	ignoredFile := filepath.Join(workspaceDir, "ignored.txt")
+	err = os.WriteFile(ignoredFile, []byte("ignored content"), 0644)
+	assert.NoError(s.T(), err)
+
+	// Create .gitignore file
+	gitignoreFile := filepath.Join(workspaceDir, ".gitignore")
+	err = os.WriteFile(gitignoreFile, []byte("ignored.txt\n"), 0644)
+	assert.NoError(s.T(), err)
+
+	tests := []struct {
+		name        string
+		req         *api.CheckIgnoreFileRequest
+		wantCode    string
+		wantMessage string
+	}{
+		{
+			name: "invalid parameters",
+			req: &api.CheckIgnoreFileRequest{
+				ClientId:      "",
+				WorkspacePath: "",
+				WorkspaceName: "",
+				FilePaths:     []string{},
+			},
+			wantCode:    "0001",
+			wantMessage: "invalid parameters",
+		},
+		{
+			name: "file size exceeded",
+			req: &api.CheckIgnoreFileRequest{
+				ClientId:      "test-client",
+				WorkspacePath: workspaceDir,
+				WorkspaceName: "check-ignore-test",
+				FilePaths:     []string{largeFile},
+			},
+			wantCode:    "2001",
+			wantMessage: "file size exceeded limit",
+		},
+		{
+			name: "ignored file found",
+			req: &api.CheckIgnoreFileRequest{
+				ClientId:      "test-client",
+				WorkspacePath: workspaceDir,
+				WorkspaceName: "check-ignore-test",
+				FilePaths:     []string{ignoredFile},
+			},
+			wantCode:    "2002",
+			wantMessage: "ignore file found",
+		},
+		{
+			name: "normal case",
+			req: &api.CheckIgnoreFileRequest{
+				ClientId:      "test-client",
+				WorkspacePath: workspaceDir,
+				WorkspaceName: "check-ignore-test",
+				FilePaths:     []string{normalFile},
+			},
+			wantCode:    "0",
+			wantMessage: "no ignored files found",
+		},
+	}
+
+	for _, tt := range tests {
+		s.T().Run(tt.name, func(t *testing.T) {
+			resp, err := s.handler.CheckIgnoreFile(context.Background(), tt.req)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantCode, resp.Code)
+			if tt.wantMessage != "" {
+				assert.Contains(t, resp.Message, tt.wantMessage)
+			}
+		})
+	}
 }
 
 func (s *IntegrationTestSuite) TestFullIntegrationFlow() {

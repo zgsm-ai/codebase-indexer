@@ -13,9 +13,11 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	api "codebase-syncer/api"
+	"codebase-syncer/internal/scanner"
 	"codebase-syncer/internal/scheduler"
 	"codebase-syncer/internal/storage"
 	"codebase-syncer/internal/syncer"
+	"codebase-syncer/internal/utils"
 	"codebase-syncer/pkg/logger"
 )
 
@@ -28,28 +30,30 @@ type AppInfo struct {
 
 // GRPCHandler handles gRPC services
 type GRPCHandler struct {
-	appInfo   *AppInfo
-	httpSync  syncer.SyncInterface
-	storage   storage.SotrageInterface
-	scheduler *scheduler.Scheduler
-	logger    logger.Logger
+	appInfo     *AppInfo
+	httpSync    syncer.SyncInterface
+	fileScanner scanner.ScannerInterface
+	storage     storage.SotrageInterface
+	scheduler   *scheduler.Scheduler
+	logger      logger.Logger
 	api.UnimplementedSyncServiceServer
 }
 
 // NewGRPCHandler creates a new gRPC handler
-func NewGRPCHandler(httpSync syncer.SyncInterface, storage storage.SotrageInterface, scheduler *scheduler.Scheduler, logger logger.Logger, appInfo *AppInfo) *GRPCHandler {
+func NewGRPCHandler(httpSync syncer.SyncInterface, fileScanner scanner.ScannerInterface, storage storage.SotrageInterface, scheduler *scheduler.Scheduler, logger logger.Logger, appInfo *AppInfo) *GRPCHandler {
 	return &GRPCHandler{
-		appInfo:   appInfo,
-		httpSync:  httpSync,
-		storage:   storage,
-		scheduler: scheduler,
-		logger:    logger,
+		appInfo:     appInfo,
+		httpSync:    httpSync,
+		fileScanner: fileScanner,
+		storage:     storage,
+		scheduler:   scheduler,
+		logger:      logger,
 	}
 }
 
 // RegisterSync registers sync service
 func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncRequest) (*api.RegisterSyncResponse, error) {
-	h.logger.Info("received workspace registration request: WorkspacePath=%s, WorkspaceName=%s", req.WorkspacePath, req.WorkspaceName)
+	h.logger.Info("workspace registration request: WorkspacePath=%s, WorkspaceName=%s", req.WorkspacePath, req.WorkspaceName)
 	// Check request parameters
 	if req.ClientId == "" || req.WorkspacePath == "" || req.WorkspaceName == "" {
 		h.logger.Error("invalid workspace registration parameters")
@@ -58,13 +62,13 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 
 	codebaseConfigsToRegister, err := h.findCodebasePaths(req.WorkspacePath, req.WorkspaceName)
 	if err != nil {
-		h.logger.Error("failed to find codebase paths: %v", err)
+		h.logger.Error("failed to find codebase paths to register: %v", err)
 		return &api.RegisterSyncResponse{Success: false, Message: fmt.Sprintf("failed to find codebase paths: %v", err)}, nil
 	}
 
 	if len(codebaseConfigsToRegister) == 0 {
-		h.logger.Warn("no registerable codebase path found: %s", req.WorkspacePath)
-		return &api.RegisterSyncResponse{Success: false, Message: "no registerable codebase found"}, nil
+		h.logger.Warn("no codebase found to register: %s", req.WorkspacePath)
+		return &api.RegisterSyncResponse{Success: false, Message: "no codebase found"}, nil
 	}
 
 	var addCodebaseConfigs []*storage.CodebaseConfig
@@ -132,22 +136,22 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 
 // SyncCodebase syncs codebases under specified workspace
 func (h *GRPCHandler) SyncCodebase(ctx context.Context, req *api.SyncCodebaseRequest) (*api.SyncCodebaseResponse, error) {
-	h.logger.Info("received codebase sync request: WorkspacePath=%s, WorkspaceName=%s", req.WorkspacePath, req.WorkspaceName)
+	h.logger.Info("codebase sync request: WorkspacePath=%s, WorkspaceName=%s", req.WorkspacePath, req.WorkspaceName)
 	// Check request parameters
 	if req.ClientId == "" || req.WorkspacePath == "" || req.WorkspaceName == "" {
 		h.logger.Error("invalid codebase sync parameters")
-		return &api.SyncCodebaseResponse{Success: false, Message: "invalid parameters"}, nil
+		return &api.SyncCodebaseResponse{Success: false, Code: "0001", Message: "invalid parameters"}, nil
 	}
 
 	codebaseConfigsToSync, err := h.findCodebasePaths(req.WorkspacePath, req.WorkspaceName)
 	if err != nil {
-		h.logger.Error("failed to find codebase paths: %v", err)
-		return &api.SyncCodebaseResponse{Success: false, Message: fmt.Sprintf("failed to find codebase paths: %v", err)}, nil
+		h.logger.Error("failed to find codebase paths to sync: %v", err)
+		return &api.SyncCodebaseResponse{Success: false, Code: "0010", Message: fmt.Sprintf("failed to find codebase paths: %v", err)}, nil
 	}
 
 	if len(codebaseConfigsToSync) == 0 {
-		h.logger.Warn("no codebase found: %s", req.WorkspacePath)
-		return &api.SyncCodebaseResponse{Success: false, Message: "no codebase found"}, nil
+		h.logger.Warn("no codebase found to sync: %s", req.WorkspacePath)
+		return &api.SyncCodebaseResponse{Success: false, Code: "0010", Message: "no codebase found"}, nil
 	}
 
 	var syncCodebaseConfigs []*storage.CodebaseConfig
@@ -201,23 +205,35 @@ func (h *GRPCHandler) SyncCodebase(ctx context.Context, req *api.SyncCodebaseReq
 	}
 
 	if savedCount == 0 && lastError != nil {
-		return &api.SyncCodebaseResponse{Success: false, Message: fmt.Sprintf("all codebase config saved failed: %v", lastError)}, lastError
+		return &api.SyncCodebaseResponse{Success: false, Code: "0010", Message: fmt.Sprintf("all codebase config saved failed: %v", lastError)}, lastError
 	}
 
 	// Sync codebases
 	if len(syncCodebaseConfigs) > 0 && h.httpSync.GetSyncConfig() != nil {
 		err := h.syncCodebases(syncCodebaseConfigs)
 		if err != nil {
-			return &api.SyncCodebaseResponse{Success: false, Message: fmt.Sprintf("sync codebase failed: %v", err)}, err
+			if utils.IsUnauthorizedError(err) {
+				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodeUnauthorized, Message: fmt.Sprintf("sync codebase failed: %v", err)}, err
+			}
+			if utils.IsPageNotFoundError(err) {
+				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodePageNotFound, Message: fmt.Sprintf("sync codebase failed: %v", err)}, err
+			}
+			if utils.IsTooManyRequestsError(err) {
+				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodeTooManyRequests, Message: fmt.Sprintf("sync codebase failed: %v", err)}, err
+			}
+			if utils.IsServiceUnavailableError(err) {
+				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodeServiceUnavailable, Message: fmt.Sprintf("sync codebase failed: %v", err)}, err
+			}
+			return &api.SyncCodebaseResponse{Success: false, Code: "1001", Message: fmt.Sprintf("sync codebase failed: %v", err)}, err
 		}
 	}
 
-	return &api.SyncCodebaseResponse{Success: true, Message: "sync codebase success"}, nil
+	return &api.SyncCodebaseResponse{Success: true, Code: "0", Message: "sync codebase success"}, nil
 }
 
 // UnregisterSync unregisters sync service
 func (h *GRPCHandler) UnregisterSync(ctx context.Context, req *api.UnregisterSyncRequest) (*emptypb.Empty, error) {
-	h.logger.Info("received workspace unregistration request: WorkspacePath=%s, WorkspaceName=%s", req.WorkspacePath, req.WorkspaceName)
+	h.logger.Info("workspace unregistration request: WorkspacePath=%s, WorkspaceName=%s", req.WorkspacePath, req.WorkspaceName)
 	// Validate request parameters
 	if req.ClientId == "" || req.WorkspacePath == "" || req.WorkspaceName == "" {
 		h.logger.Error("invalid workspace unregistration parameters")
@@ -226,13 +242,13 @@ func (h *GRPCHandler) UnregisterSync(ctx context.Context, req *api.UnregisterSyn
 
 	codebaseConfigsToUnregister, err := h.findCodebasePaths(req.WorkspacePath, req.WorkspaceName)
 	if err != nil {
-		h.logger.Error("failed to find codebase paths to unregister: %v. WorkspacePath=%s, WorkspaceName=%s", err, req.WorkspacePath, req.WorkspaceName)
+		h.logger.Error("failed to find codebase paths to unregister: %v", err)
 		// Even if lookup fails, still return Empty since unregister goal is cleanup
 		return &emptypb.Empty{}, fmt.Errorf("failed to find codebase paths to unregister: %v", err) // Or return nil error, only log
 	}
 
 	if len(codebaseConfigsToUnregister) == 0 {
-		h.logger.Warn("no matching codebase found to unregister for WorkspacePath=%s, WorkspaceName=%s", req.WorkspacePath, req.WorkspaceName)
+		h.logger.Warn("no codebase found: %s", req.WorkspacePath)
 		return &emptypb.Empty{}, nil
 	}
 
@@ -273,7 +289,7 @@ func (h *GRPCHandler) UnregisterSync(ctx context.Context, req *api.UnregisterSyn
 
 // ShareAccessToken shares auth token
 func (h *GRPCHandler) ShareAccessToken(ctx context.Context, req *api.ShareAccessTokenRequest) (*api.ShareAccessTokenResponse, error) {
-	h.logger.Info("token synchronization request received: ClientId=%s, ServerEndpoint=%s", req.ClientId, req.ServerEndpoint)
+	h.logger.Info("token synchronization request: ClientId=%s, ServerEndpoint=%s", req.ClientId, req.ServerEndpoint)
 	if req.ClientId == "" || req.ServerEndpoint == "" || req.AccessToken == "" {
 		h.logger.Error("invalid token synchronization parameters")
 		return &api.ShareAccessTokenResponse{Success: false, Message: "invalid parameters"}, nil
@@ -290,7 +306,7 @@ func (h *GRPCHandler) ShareAccessToken(ctx context.Context, req *api.ShareAccess
 
 // GetVersion retrieves application version info
 func (h *GRPCHandler) GetVersion(ctx context.Context, req *api.VersionRequest) (*api.VersionResponse, error) {
-	h.logger.Info("version information request received: ClientId=%s", req.ClientId)
+	h.logger.Info("version information request: ClientId=%s", req.ClientId)
 	if req.ClientId == "" {
 		h.logger.Error("invalid version information parameters")
 		return &api.VersionResponse{Success: false, Message: "invalid parameters"}, nil
@@ -304,6 +320,108 @@ func (h *GRPCHandler) GetVersion(ctx context.Context, req *api.VersionRequest) (
 			OsName:   h.appInfo.OSName,
 			ArchName: h.appInfo.ArchName,
 		},
+	}, nil
+}
+
+// CheckIgnoreFile checks if specified files are ignored by ignore rules or exceed size limit
+func (h *GRPCHandler) CheckIgnoreFile(ctx context.Context, req *api.CheckIgnoreFileRequest) (*api.SyncCodebaseResponse, error) {
+	const (
+		InvalidParamsCode    = "0001"
+		CodebaseFindError    = "0010"
+		FileSizeExceededCode = "2001"
+		IgnoredFileFoundCode = "2002"
+		SuccessCode          = "0"
+	)
+
+	h.logger.Info("check ignore file request: %+v", req)
+
+	// Validate input params
+	if req.ClientId == "" || req.WorkspacePath == "" || req.WorkspaceName == "" || len(req.FilePaths) == 0 {
+		h.logger.Error("invalid check ignore file parameters")
+		return &api.SyncCodebaseResponse{
+			Success: false,
+			Code:    InvalidParamsCode,
+			Message: "invalid parameters",
+		}, nil
+	}
+
+	// Find all codebases in the workspace
+	codebasesToCheck, err := h.findCodebasePaths(req.WorkspacePath, req.WorkspaceName)
+	if err != nil {
+		h.logger.Error("failed to find codebase to check: %v", err)
+		return &api.SyncCodebaseResponse{
+			Success: false,
+			Code:    CodebaseFindError,
+			Message: fmt.Sprintf("failed to find codebase: %v", err),
+		}, nil
+	}
+
+	if len(codebasesToCheck) == 0 {
+		h.logger.Warn("no codebase found to check: %s", req.WorkspacePath)
+		return &api.SyncCodebaseResponse{
+			Success: false,
+			Code:    CodebaseFindError,
+			Message: "no codebase found in workspace",
+		}, nil
+	}
+
+	// Check ignore files
+	maxFileSizeKB := h.fileScanner.GetScannerConfig().MaxFileSizeKB
+	maxFileSize := int64(maxFileSizeKB * 1024)
+	for _, config := range codebasesToCheck {
+		ignore := h.fileScanner.LoadIgnoreRules(config.CodebasePath)
+		if ignore == nil {
+			h.logger.Warn("no ignore file found for codebase: %s", config.CodebasePath)
+			continue
+		}
+
+		for _, filePath := range req.FilePaths {
+			// Check if the file is in this codebase
+			relPath, err := filepath.Rel(config.CodebasePath, filePath)
+			if err != nil {
+				h.logger.Debug("file path %s is not in codebase %s: %v", filePath, config.CodebasePath, err)
+				continue
+			}
+
+			// Check file size and ignore rules
+			checkPath := relPath
+			fileInfo, err := os.Stat(filePath)
+			if err != nil {
+				h.logger.Warn("failed to get file info: %s, %v", filePath, err)
+				continue
+			}
+
+			// If directory, append "/" and skip size check
+			if fileInfo.IsDir() {
+				checkPath = relPath + "/"
+			} else if fileInfo.Size() > maxFileSize {
+				// For regular files, check size limit
+				fileSizeKB := float64(fileInfo.Size()) / 1024
+				h.logger.Info("file size exceeded limit: %s (%.2fKB)", filePath, fileSizeKB)
+				return &api.SyncCodebaseResponse{
+					Success: false,
+					Code:    FileSizeExceededCode,
+					Message: fmt.Sprintf("file size exceeded limit: %s (%.2fKB)", filePath, fileSizeKB),
+				}, nil
+			}
+
+			// Check ignore rules
+			if ignore.MatchesPath(checkPath) {
+				h.logger.Info("ignore file found: %s in codebase %s", checkPath, config.CodebasePath)
+				return &api.SyncCodebaseResponse{
+					Success: false,
+					Code:    IgnoredFileFoundCode,
+					Message: "ignore file found:" + filePath,
+				}, nil
+			}
+		}
+	}
+
+	h.logger.Info("no ignored files found", "numFiles", len(req.FilePaths))
+	return &api.SyncCodebaseResponse{
+		Success: true,
+		Code:    SuccessCode,
+		Message: "no ignored files found",
 	}, nil
 }
 
@@ -356,7 +474,6 @@ func (h *GRPCHandler) findCodebasePaths(basePath string, baseName string) ([]sto
 		return configs, nil
 	}
 
-	h.logger.Info("path %s is not a git repository, checking its subdirectories", basePath)
 	subDirs, err := os.ReadDir(basePath)
 	if err != nil {
 		h.logger.Error("failed to read directory %s: %v", basePath, err)
@@ -368,7 +485,6 @@ func (h *GRPCHandler) findCodebasePaths(basePath string, baseName string) ([]sto
 		if entry.IsDir() {
 			subDirPath := filepath.Join(basePath, entry.Name())
 			if h.isGitRepository(subDirPath) {
-				h.logger.Info("found git repository in subdirectory: %s (name: %s)", subDirPath, entry.Name())
 				configs = append(configs, storage.CodebaseConfig{CodebasePath: subDirPath, CodebaseName: entry.Name()})
 				foundSubRepo = true
 			}
@@ -376,9 +492,10 @@ func (h *GRPCHandler) findCodebasePaths(basePath string, baseName string) ([]sto
 	}
 
 	if !foundSubRepo {
-		h.logger.Info("no git repositories found in subdirectories of %s, using %s itself as codebase", basePath, basePath)
 		configs = append(configs, storage.CodebaseConfig{CodebasePath: basePath, CodebaseName: baseName})
 	}
+
+	h.logger.Info("found %d codebase paths under %s: %+v", len(configs), basePath, configs)
 
 	return configs, nil
 }

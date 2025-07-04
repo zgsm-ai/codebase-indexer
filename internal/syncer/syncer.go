@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"codebase-syncer/internal/storage"
+	"codebase-syncer/internal/utils"
 	"codebase-syncer/pkg/logger"
 
 	"github.com/valyala/fasthttp"
@@ -52,10 +53,31 @@ func NewHTTPSync(syncConfig *SyncConfig, logger logger.Logger) SyncInterface {
 		httpClient: &fasthttp.Client{
 			MaxIdleConnDuration: 90 * time.Second,
 			ReadTimeout:         60 * time.Second,
-			WriteTimeout:        60 * time.Second,
+			WriteTimeout:        utils.BaseWriteTimeoutSeconds * time.Second,
+			MaxConnsPerHost:     500,
 		},
 		logger: logger,
 	}
+}
+
+// Calculate dynamic timeout (in seconds)
+func (hs *HTTPSync) calculateTimeout(fileSize int64) time.Duration {
+	fileSizeMB := float64(fileSize) / (1024 * 1024)
+	baseTimeout := utils.BaseWriteTimeoutSeconds * time.Second
+
+	// Files ≤30MB use fixed 120s timeout
+	if fileSizeMB <= 30 {
+		return baseTimeout
+	}
+
+	// Files >30MB: 120s + (file size MB - 30)*4s
+	totalTimeout := baseTimeout + time.Duration(fileSizeMB-30)*4*time.Second
+
+	// Maximum does not exceed 10 minutes
+	if totalTimeout > 600*time.Second {
+		return 600 * time.Second
+	}
+	return totalTimeout
 }
 
 func (hs *HTTPSync) SetSyncConfig(config *SyncConfig) {
@@ -161,6 +183,7 @@ type UploadReq struct {
 
 // UploadFile uploads file to server
 func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
+	mu := sync.Mutex{}
 	hs.logger.Info("uploading file: %s", filePath)
 
 	// Check if config fields are empty
@@ -179,12 +202,24 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 		return fmt.Errorf("failed to get file info: %v", err)
 	}
 	fileSize := fileInfo.Size()
+	// TODO: Temporarily hardcode file size limit, will be changed to remote configuration management in the future
+	if fileSize > 100*1024*1024 {
+		return fmt.Errorf("file size exceeds 100MB")
+	}
+
+	// 设置动态超时
+	timeout := hs.calculateTimeout(fileSize)
+	mu.Lock()
+	hs.httpClient.WriteTimeout = timeout
+	mu.Unlock()
 
 	body := &bytes.Buffer{}
 	counter := &writeCounter{}
 	startTime := time.Now()
 	defer func() {
+		mu.Lock()
 		duration := time.Since(startTime)
+		mu.Unlock()
 		hs.logger.Info("upload stats - file: %s, size: %d bytes, uploaded: %d bytes (%.1f%%), duration: %v, speed: %.2f KB/s",
 			filePath, fileSize, counter.n, float64(counter.n)/float64(fileSize)*100, duration, float64(counter.n)/1024/duration.Seconds())
 	}()

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
+	"codebase-syncer/internal/scanner"
 	"codebase-syncer/internal/scheduler"
 	"codebase-syncer/internal/storage"
 	"codebase-syncer/internal/syncer"
@@ -25,10 +26,11 @@ func TestNewGRPCHandler(t *testing.T) {
 	var mockLogger = &mocks.MockLogger{}
 	// Create test objects
 	httpSync := &syncer.HTTPSync{}
+	fileScanner := &scanner.FileScanner{}
 	storageManager := &storage.StorageManager{}
 	scheduler := &scheduler.Scheduler{}
 
-	h := NewGRPCHandler(httpSync, storageManager, scheduler, mockLogger, appInfo)
+	h := NewGRPCHandler(httpSync, fileScanner, storageManager, scheduler, mockLogger, appInfo)
 	assert.NotNil(t, h)
 }
 
@@ -42,9 +44,10 @@ func TestIsGitRepository(t *testing.T) {
 	assert.NoError(t, err)
 
 	httpSync := &syncer.HTTPSync{}
+	fileScanner := &scanner.FileScanner{}
 	storageManager := &storage.StorageManager{}
 	scheduler := &scheduler.Scheduler{}
-	h := NewGRPCHandler(httpSync, storageManager, scheduler, mockLogger, appInfo)
+	h := NewGRPCHandler(httpSync, fileScanner, storageManager, scheduler, mockLogger, appInfo)
 
 	// Test valid git repository
 	assert.True(t, h.isGitRepository(tmpDir))
@@ -78,9 +81,10 @@ func TestFindCodebasePathsToRegister(t *testing.T) {
 	os.Mkdir(filepath.Join(subDir2, ".git"), 0755)
 
 	httpSync := &syncer.HTTPSync{}
+	fileScanner := &scanner.FileScanner{}
 	storageManager := &storage.StorageManager{}
 	scheduler := &scheduler.Scheduler{}
-	h := NewGRPCHandler(httpSync, storageManager, scheduler, mockLogger, appInfo)
+	h := NewGRPCHandler(httpSync, fileScanner, storageManager, scheduler, mockLogger, appInfo)
 
 	// Test finding codebase paths
 	configs, err := h.findCodebasePaths(baseDir, "test-name")

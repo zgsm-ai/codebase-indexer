@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.6
 // 	protoc        v6.31.0
-// source: api/codebase_syncer.proto
+// source: codebase_syncer.proto
 
 package codebase_syncer
 
@@ -35,7 +35,7 @@ type ShareAccessTokenRequest struct {
 
 func (x *ShareAccessTokenRequest) Reset() {
 	*x = ShareAccessTokenRequest{}
-	mi := &file_api_codebase_syncer_proto_msgTypes[0]
+	mi := &file_codebase_syncer_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47,7 +47,7 @@ func (x *ShareAccessTokenRequest) String() string {
 func (*ShareAccessTokenRequest) ProtoMessage() {}
 
 func (x *ShareAccessTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_codebase_syncer_proto_msgTypes[0]
+	mi := &file_codebase_syncer_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -60,7 +60,7 @@ func (x *ShareAccessTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShareAccessTokenRequest.ProtoReflect.Descriptor instead.
 func (*ShareAccessTokenRequest) Descriptor() ([]byte, []int) {
-	return file_api_codebase_syncer_proto_rawDescGZIP(), []int{0}
+	return file_codebase_syncer_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *ShareAccessTokenRequest) GetClientId() string {
@@ -95,7 +95,7 @@ type ShareAccessTokenResponse struct {
 
 func (x *ShareAccessTokenResponse) Reset() {
 	*x = ShareAccessTokenResponse{}
-	mi := &file_api_codebase_syncer_proto_msgTypes[1]
+	mi := &file_codebase_syncer_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -107,7 +107,7 @@ func (x *ShareAccessTokenResponse) String() string {
 func (*ShareAccessTokenResponse) ProtoMessage() {}
 
 func (x *ShareAccessTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_codebase_syncer_proto_msgTypes[1]
+	mi := &file_codebase_syncer_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -120,7 +120,7 @@ func (x *ShareAccessTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShareAccessTokenResponse.ProtoReflect.Descriptor instead.
 func (*ShareAccessTokenResponse) Descriptor() ([]byte, []int) {
-	return file_api_codebase_syncer_proto_rawDescGZIP(), []int{1}
+	return file_codebase_syncer_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *ShareAccessTokenResponse) GetSuccess() bool {
@@ -149,7 +149,7 @@ type RegisterSyncRequest struct {
 
 func (x *RegisterSyncRequest) Reset() {
 	*x = RegisterSyncRequest{}
-	mi := &file_api_codebase_syncer_proto_msgTypes[2]
+	mi := &file_codebase_syncer_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -161,7 +161,7 @@ func (x *RegisterSyncRequest) String() string {
 func (*RegisterSyncRequest) ProtoMessage() {}
 
 func (x *RegisterSyncRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_codebase_syncer_proto_msgTypes[2]
+	mi := &file_codebase_syncer_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -174,7 +174,7 @@ func (x *RegisterSyncRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterSyncRequest.ProtoReflect.Descriptor instead.
 func (*RegisterSyncRequest) Descriptor() ([]byte, []int) {
-	return file_api_codebase_syncer_proto_rawDescGZIP(), []int{2}
+	return file_codebase_syncer_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *RegisterSyncRequest) GetClientId() string {
@@ -209,7 +209,7 @@ type RegisterSyncResponse struct {
 
 func (x *RegisterSyncResponse) Reset() {
 	*x = RegisterSyncResponse{}
-	mi := &file_api_codebase_syncer_proto_msgTypes[3]
+	mi := &file_codebase_syncer_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -221,7 +221,7 @@ func (x *RegisterSyncResponse) String() string {
 func (*RegisterSyncResponse) ProtoMessage() {}
 
 func (x *RegisterSyncResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_codebase_syncer_proto_msgTypes[3]
+	mi := &file_codebase_syncer_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -234,7 +234,7 @@ func (x *RegisterSyncResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterSyncResponse.ProtoReflect.Descriptor instead.
 func (*RegisterSyncResponse) Descriptor() ([]byte, []int) {
-	return file_api_codebase_syncer_proto_rawDescGZIP(), []int{3}
+	return file_codebase_syncer_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *RegisterSyncResponse) GetSuccess() bool {
@@ -263,7 +263,7 @@ type SyncCodebaseRequest struct {
 
 func (x *SyncCodebaseRequest) Reset() {
 	*x = SyncCodebaseRequest{}
-	mi := &file_api_codebase_syncer_proto_msgTypes[4]
+	mi := &file_codebase_syncer_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -275,7 +275,7 @@ func (x *SyncCodebaseRequest) String() string {
 func (*SyncCodebaseRequest) ProtoMessage() {}
 
 func (x *SyncCodebaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_codebase_syncer_proto_msgTypes[4]
+	mi := &file_codebase_syncer_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -288,7 +288,7 @@ func (x *SyncCodebaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncCodebaseRequest.ProtoReflect.Descriptor instead.
 func (*SyncCodebaseRequest) Descriptor() ([]byte, []int) {
-	return file_api_codebase_syncer_proto_rawDescGZIP(), []int{4}
+	return file_codebase_syncer_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *SyncCodebaseRequest) GetClientId() string {
@@ -317,13 +317,14 @@ type SyncCodebaseResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"` // Success flag
 	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`  // Message
+	Code          string                 `protobuf:"bytes,3,opt,name=code,proto3" json:"code,omitempty"`        // Error code for specific error types
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SyncCodebaseResponse) Reset() {
 	*x = SyncCodebaseResponse{}
-	mi := &file_api_codebase_syncer_proto_msgTypes[5]
+	mi := &file_codebase_syncer_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -335,7 +336,7 @@ func (x *SyncCodebaseResponse) String() string {
 func (*SyncCodebaseResponse) ProtoMessage() {}
 
 func (x *SyncCodebaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_codebase_syncer_proto_msgTypes[5]
+	mi := &file_codebase_syncer_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -348,7 +349,7 @@ func (x *SyncCodebaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncCodebaseResponse.ProtoReflect.Descriptor instead.
 func (*SyncCodebaseResponse) Descriptor() ([]byte, []int) {
-	return file_api_codebase_syncer_proto_rawDescGZIP(), []int{5}
+	return file_codebase_syncer_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SyncCodebaseResponse) GetSuccess() bool {
@@ -365,6 +366,13 @@ func (x *SyncCodebaseResponse) GetMessage() string {
 	return ""
 }
 
+func (x *SyncCodebaseResponse) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
 // Unregister project sync
 type UnregisterSyncRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -377,7 +385,7 @@ type UnregisterSyncRequest struct {
 
 func (x *UnregisterSyncRequest) Reset() {
 	*x = UnregisterSyncRequest{}
-	mi := &file_api_codebase_syncer_proto_msgTypes[6]
+	mi := &file_codebase_syncer_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -389,7 +397,7 @@ func (x *UnregisterSyncRequest) String() string {
 func (*UnregisterSyncRequest) ProtoMessage() {}
 
 func (x *UnregisterSyncRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_codebase_syncer_proto_msgTypes[6]
+	mi := &file_codebase_syncer_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -402,7 +410,7 @@ func (x *UnregisterSyncRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnregisterSyncRequest.ProtoReflect.Descriptor instead.
 func (*UnregisterSyncRequest) Descriptor() ([]byte, []int) {
-	return file_api_codebase_syncer_proto_rawDescGZIP(), []int{6}
+	return file_codebase_syncer_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *UnregisterSyncRequest) GetClientId() string {
@@ -436,7 +444,7 @@ type VersionRequest struct {
 
 func (x *VersionRequest) Reset() {
 	*x = VersionRequest{}
-	mi := &file_api_codebase_syncer_proto_msgTypes[7]
+	mi := &file_codebase_syncer_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -448,7 +456,7 @@ func (x *VersionRequest) String() string {
 func (*VersionRequest) ProtoMessage() {}
 
 func (x *VersionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_codebase_syncer_proto_msgTypes[7]
+	mi := &file_codebase_syncer_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -461,7 +469,7 @@ func (x *VersionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VersionRequest.ProtoReflect.Descriptor instead.
 func (*VersionRequest) Descriptor() ([]byte, []int) {
-	return file_api_codebase_syncer_proto_rawDescGZIP(), []int{7}
+	return file_codebase_syncer_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *VersionRequest) GetClientId() string {
@@ -483,7 +491,7 @@ type VersionResponse struct {
 
 func (x *VersionResponse) Reset() {
 	*x = VersionResponse{}
-	mi := &file_api_codebase_syncer_proto_msgTypes[8]
+	mi := &file_codebase_syncer_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -495,7 +503,7 @@ func (x *VersionResponse) String() string {
 func (*VersionResponse) ProtoMessage() {}
 
 func (x *VersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_codebase_syncer_proto_msgTypes[8]
+	mi := &file_codebase_syncer_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -508,7 +516,7 @@ func (x *VersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VersionResponse.ProtoReflect.Descriptor instead.
 func (*VersionResponse) Descriptor() ([]byte, []int) {
-	return file_api_codebase_syncer_proto_rawDescGZIP(), []int{8}
+	return file_codebase_syncer_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *VersionResponse) GetSuccess() bool {
@@ -532,6 +540,75 @@ func (x *VersionResponse) GetData() *VersionResponse_Data {
 	return nil
 }
 
+// Check ignore file request
+type CheckIgnoreFileRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`                // Client ID
+	WorkspacePath string                 `protobuf:"bytes,2,opt,name=workspace_path,json=workspacePath,proto3" json:"workspace_path,omitempty"` // Workspace path
+	WorkspaceName string                 `protobuf:"bytes,3,opt,name=workspace_name,json=workspaceName,proto3" json:"workspace_name,omitempty"` // Workspace name
+	FilePaths     []string               `protobuf:"bytes,4,rep,name=file_paths,json=filePaths,proto3" json:"file_paths,omitempty"`             // File paths to check
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckIgnoreFileRequest) Reset() {
+	*x = CheckIgnoreFileRequest{}
+	mi := &file_codebase_syncer_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckIgnoreFileRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckIgnoreFileRequest) ProtoMessage() {}
+
+func (x *CheckIgnoreFileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_codebase_syncer_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckIgnoreFileRequest.ProtoReflect.Descriptor instead.
+func (*CheckIgnoreFileRequest) Descriptor() ([]byte, []int) {
+	return file_codebase_syncer_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *CheckIgnoreFileRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *CheckIgnoreFileRequest) GetWorkspacePath() string {
+	if x != nil {
+		return x.WorkspacePath
+	}
+	return ""
+}
+
+func (x *CheckIgnoreFileRequest) GetWorkspaceName() string {
+	if x != nil {
+		return x.WorkspaceName
+	}
+	return ""
+}
+
+func (x *CheckIgnoreFileRequest) GetFilePaths() []string {
+	if x != nil {
+		return x.FilePaths
+	}
+	return nil
+}
+
 type VersionResponse_Data struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`                   // Version number
@@ -544,7 +621,7 @@ type VersionResponse_Data struct {
 
 func (x *VersionResponse_Data) Reset() {
 	*x = VersionResponse_Data{}
-	mi := &file_api_codebase_syncer_proto_msgTypes[9]
+	mi := &file_codebase_syncer_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -556,7 +633,7 @@ func (x *VersionResponse_Data) String() string {
 func (*VersionResponse_Data) ProtoMessage() {}
 
 func (x *VersionResponse_Data) ProtoReflect() protoreflect.Message {
-	mi := &file_api_codebase_syncer_proto_msgTypes[9]
+	mi := &file_codebase_syncer_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -569,7 +646,7 @@ func (x *VersionResponse_Data) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VersionResponse_Data.ProtoReflect.Descriptor instead.
 func (*VersionResponse_Data) Descriptor() ([]byte, []int) {
-	return file_api_codebase_syncer_proto_rawDescGZIP(), []int{8, 0}
+	return file_codebase_syncer_proto_rawDescGZIP(), []int{8, 0}
 }
 
 func (x *VersionResponse_Data) GetVersion() string {
@@ -600,11 +677,11 @@ func (x *VersionResponse_Data) GetArchName() string {
 	return ""
 }
 
-var File_api_codebase_syncer_proto protoreflect.FileDescriptor
+var File_codebase_syncer_proto protoreflect.FileDescriptor
 
-const file_api_codebase_syncer_proto_rawDesc = "" +
+const file_codebase_syncer_proto_rawDesc = "" +
 	"\n" +
-	"\x19api/codebase_syncer.proto\x12\x0fcodebase_syncer\x1a\x1bgoogle/protobuf/empty.proto\"\x82\x01\n" +
+	"\x15codebase_syncer.proto\x12\x0fcodebase_syncer\x1a\x1bgoogle/protobuf/empty.proto\"\x82\x01\n" +
 	"\x17ShareAccessTokenRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12!\n" +
 	"\faccess_token\x18\x02 \x01(\tR\vaccessToken\x12'\n" +
@@ -622,10 +699,11 @@ const file_api_codebase_syncer_proto_rawDesc = "" +
 	"\x13SyncCodebaseRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12%\n" +
 	"\x0eworkspace_path\x18\x02 \x01(\tR\rworkspacePath\x12%\n" +
-	"\x0eworkspace_name\x18\x03 \x01(\tR\rworkspaceName\"J\n" +
+	"\x0eworkspace_name\x18\x03 \x01(\tR\rworkspaceName\"^\n" +
 	"\x14SyncCodebaseResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\x82\x01\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12\x12\n" +
+	"\x04code\x18\x03 \x01(\tR\x04code\"\x82\x01\n" +
 	"\x15UnregisterSyncRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12%\n" +
 	"\x0eworkspace_path\x18\x02 \x01(\tR\rworkspacePath\x12%\n" +
@@ -640,29 +718,36 @@ const file_api_codebase_syncer_proto_rawDesc = "" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x19\n" +
 	"\bapp_name\x18\x02 \x01(\tR\aappName\x12\x17\n" +
 	"\aos_name\x18\x03 \x01(\tR\x06osName\x12\x1b\n" +
-	"\tarch_name\x18\x04 \x01(\tR\barchName2\xd3\x03\n" +
+	"\tarch_name\x18\x04 \x01(\tR\barchName\"\xa2\x01\n" +
+	"\x16CheckIgnoreFileRequest\x12\x1b\n" +
+	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12%\n" +
+	"\x0eworkspace_path\x18\x02 \x01(\tR\rworkspacePath\x12%\n" +
+	"\x0eworkspace_name\x18\x03 \x01(\tR\rworkspaceName\x12\x1d\n" +
+	"\n" +
+	"file_paths\x18\x04 \x03(\tR\tfilePaths2\xb6\x04\n" +
 	"\vSyncService\x12[\n" +
 	"\fRegisterSync\x12$.codebase_syncer.RegisterSyncRequest\x1a%.codebase_syncer.RegisterSyncResponse\x12[\n" +
 	"\fSyncCodebase\x12$.codebase_syncer.SyncCodebaseRequest\x1a%.codebase_syncer.SyncCodebaseResponse\x12P\n" +
 	"\x0eUnregisterSync\x12&.codebase_syncer.UnregisterSyncRequest\x1a\x16.google.protobuf.Empty\x12g\n" +
 	"\x10ShareAccessToken\x12(.codebase_syncer.ShareAccessTokenRequest\x1a).codebase_syncer.ShareAccessTokenResponse\x12O\n" +
 	"\n" +
-	"GetVersion\x12\x1f.codebase_syncer.VersionRequest\x1a .codebase_syncer.VersionResponseB\x14Z\x12./;codebase_syncerb\x06proto3"
+	"GetVersion\x12\x1f.codebase_syncer.VersionRequest\x1a .codebase_syncer.VersionResponse\x12a\n" +
+	"\x0fCheckIgnoreFile\x12'.codebase_syncer.CheckIgnoreFileRequest\x1a%.codebase_syncer.SyncCodebaseResponseB\x14Z\x12./;codebase_syncerb\x06proto3"
 
 var (
-	file_api_codebase_syncer_proto_rawDescOnce sync.Once
-	file_api_codebase_syncer_proto_rawDescData []byte
+	file_codebase_syncer_proto_rawDescOnce sync.Once
+	file_codebase_syncer_proto_rawDescData []byte
 )
 
-func file_api_codebase_syncer_proto_rawDescGZIP() []byte {
-	file_api_codebase_syncer_proto_rawDescOnce.Do(func() {
-		file_api_codebase_syncer_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_api_codebase_syncer_proto_rawDesc), len(file_api_codebase_syncer_proto_rawDesc)))
+func file_codebase_syncer_proto_rawDescGZIP() []byte {
+	file_codebase_syncer_proto_rawDescOnce.Do(func() {
+		file_codebase_syncer_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_codebase_syncer_proto_rawDesc), len(file_codebase_syncer_proto_rawDesc)))
 	})
-	return file_api_codebase_syncer_proto_rawDescData
+	return file_codebase_syncer_proto_rawDescData
 }
 
-var file_api_codebase_syncer_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
-var file_api_codebase_syncer_proto_goTypes = []any{
+var file_codebase_syncer_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_codebase_syncer_proto_goTypes = []any{
 	(*ShareAccessTokenRequest)(nil),  // 0: codebase_syncer.ShareAccessTokenRequest
 	(*ShareAccessTokenResponse)(nil), // 1: codebase_syncer.ShareAccessTokenResponse
 	(*RegisterSyncRequest)(nil),      // 2: codebase_syncer.RegisterSyncRequest
@@ -672,48 +757,51 @@ var file_api_codebase_syncer_proto_goTypes = []any{
 	(*UnregisterSyncRequest)(nil),    // 6: codebase_syncer.UnregisterSyncRequest
 	(*VersionRequest)(nil),           // 7: codebase_syncer.VersionRequest
 	(*VersionResponse)(nil),          // 8: codebase_syncer.VersionResponse
-	(*VersionResponse_Data)(nil),     // 9: codebase_syncer.VersionResponse.Data
-	(*emptypb.Empty)(nil),            // 10: google.protobuf.Empty
+	(*CheckIgnoreFileRequest)(nil),   // 9: codebase_syncer.CheckIgnoreFileRequest
+	(*VersionResponse_Data)(nil),     // 10: codebase_syncer.VersionResponse.Data
+	(*emptypb.Empty)(nil),            // 11: google.protobuf.Empty
 }
-var file_api_codebase_syncer_proto_depIdxs = []int32{
-	9,  // 0: codebase_syncer.VersionResponse.data:type_name -> codebase_syncer.VersionResponse.Data
+var file_codebase_syncer_proto_depIdxs = []int32{
+	10, // 0: codebase_syncer.VersionResponse.data:type_name -> codebase_syncer.VersionResponse.Data
 	2,  // 1: codebase_syncer.SyncService.RegisterSync:input_type -> codebase_syncer.RegisterSyncRequest
 	4,  // 2: codebase_syncer.SyncService.SyncCodebase:input_type -> codebase_syncer.SyncCodebaseRequest
 	6,  // 3: codebase_syncer.SyncService.UnregisterSync:input_type -> codebase_syncer.UnregisterSyncRequest
 	0,  // 4: codebase_syncer.SyncService.ShareAccessToken:input_type -> codebase_syncer.ShareAccessTokenRequest
 	7,  // 5: codebase_syncer.SyncService.GetVersion:input_type -> codebase_syncer.VersionRequest
-	3,  // 6: codebase_syncer.SyncService.RegisterSync:output_type -> codebase_syncer.RegisterSyncResponse
-	5,  // 7: codebase_syncer.SyncService.SyncCodebase:output_type -> codebase_syncer.SyncCodebaseResponse
-	10, // 8: codebase_syncer.SyncService.UnregisterSync:output_type -> google.protobuf.Empty
-	1,  // 9: codebase_syncer.SyncService.ShareAccessToken:output_type -> codebase_syncer.ShareAccessTokenResponse
-	8,  // 10: codebase_syncer.SyncService.GetVersion:output_type -> codebase_syncer.VersionResponse
-	6,  // [6:11] is the sub-list for method output_type
-	1,  // [1:6] is the sub-list for method input_type
+	9,  // 6: codebase_syncer.SyncService.CheckIgnoreFile:input_type -> codebase_syncer.CheckIgnoreFileRequest
+	3,  // 7: codebase_syncer.SyncService.RegisterSync:output_type -> codebase_syncer.RegisterSyncResponse
+	5,  // 8: codebase_syncer.SyncService.SyncCodebase:output_type -> codebase_syncer.SyncCodebaseResponse
+	11, // 9: codebase_syncer.SyncService.UnregisterSync:output_type -> google.protobuf.Empty
+	1,  // 10: codebase_syncer.SyncService.ShareAccessToken:output_type -> codebase_syncer.ShareAccessTokenResponse
+	8,  // 11: codebase_syncer.SyncService.GetVersion:output_type -> codebase_syncer.VersionResponse
+	5,  // 12: codebase_syncer.SyncService.CheckIgnoreFile:output_type -> codebase_syncer.SyncCodebaseResponse
+	7,  // [7:13] is the sub-list for method output_type
+	1,  // [1:7] is the sub-list for method input_type
 	1,  // [1:1] is the sub-list for extension type_name
 	1,  // [1:1] is the sub-list for extension extendee
 	0,  // [0:1] is the sub-list for field type_name
 }
 
-func init() { file_api_codebase_syncer_proto_init() }
-func file_api_codebase_syncer_proto_init() {
-	if File_api_codebase_syncer_proto != nil {
+func init() { file_codebase_syncer_proto_init() }
+func file_codebase_syncer_proto_init() {
+	if File_codebase_syncer_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_codebase_syncer_proto_rawDesc), len(file_api_codebase_syncer_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_codebase_syncer_proto_rawDesc), len(file_codebase_syncer_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_api_codebase_syncer_proto_goTypes,
-		DependencyIndexes: file_api_codebase_syncer_proto_depIdxs,
-		MessageInfos:      file_api_codebase_syncer_proto_msgTypes,
+		GoTypes:           file_codebase_syncer_proto_goTypes,
+		DependencyIndexes: file_codebase_syncer_proto_depIdxs,
+		MessageInfos:      file_codebase_syncer_proto_msgTypes,
 	}.Build()
-	File_api_codebase_syncer_proto = out.File
-	file_api_codebase_syncer_proto_goTypes = nil
-	file_api_codebase_syncer_proto_depIdxs = nil
+	File_codebase_syncer_proto = out.File
+	file_codebase_syncer_proto_goTypes = nil
+	file_codebase_syncer_proto_depIdxs = nil
 }

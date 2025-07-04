@@ -104,10 +104,11 @@ func TestPerformSyncForCodebase(t *testing.T) {
 			Once()
 		mockFileScanner.On("CalculateFileChanges", mock.Anything, mock.Anything).Return([]*scanner.FileStatus{})
 
-		s.performSyncForCodebase(config)
+		err := s.performSyncForCodebase(config)
+		assert.Error(t, err)
 
 		mockLogger.AssertCalled(t, "Info", "starting sync for codebase: %s", mock.Anything)
-		mockLogger.AssertCalled(t, "Error", "failed to scan local directory (%s): %v", mock.Anything, mock.Anything)
+		mockLogger.AssertCalled(t, "Error", "failed to scan directory (%s): %v", mock.Anything, mock.Anything)
 	})
 }
 
@@ -278,7 +279,7 @@ func TestUploadChangesZip(t *testing.T) {
 		}
 
 		mockHttpSync.On("UploadFile", mock.Anything, mock.Anything).
-			Return(errors.New("failed")).
+			Return(errors.New("timeout")).
 			Times(2)
 		mockHttpSync.On("UploadFile", mock.Anything, mock.Anything).
 			Return(nil)
