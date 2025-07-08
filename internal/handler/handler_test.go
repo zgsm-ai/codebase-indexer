@@ -15,13 +15,6 @@ import (
 	"codebase-syncer/test/mocks"
 )
 
-var appInfo = &AppInfo{
-	AppName:  "test-app",
-	OSName:   "windows",
-	ArchName: "amd64",
-	Version:  "1.0.0",
-}
-
 func TestNewGRPCHandler(t *testing.T) {
 	var mockLogger = &mocks.MockLogger{}
 	// Create test objects
@@ -30,7 +23,7 @@ func TestNewGRPCHandler(t *testing.T) {
 	storageManager := &storage.StorageManager{}
 	scheduler := &scheduler.Scheduler{}
 
-	h := NewGRPCHandler(httpSync, fileScanner, storageManager, scheduler, mockLogger, appInfo)
+	h := NewGRPCHandler(httpSync, fileScanner, storageManager, scheduler, mockLogger)
 	assert.NotNil(t, h)
 }
 
@@ -47,7 +40,7 @@ func TestIsGitRepository(t *testing.T) {
 	fileScanner := &scanner.FileScanner{}
 	storageManager := &storage.StorageManager{}
 	scheduler := &scheduler.Scheduler{}
-	h := NewGRPCHandler(httpSync, fileScanner, storageManager, scheduler, mockLogger, appInfo)
+	h := NewGRPCHandler(httpSync, fileScanner, storageManager, scheduler, mockLogger)
 
 	// Test valid git repository
 	assert.True(t, h.isGitRepository(tmpDir))
@@ -84,7 +77,7 @@ func TestFindCodebasePathsToRegister(t *testing.T) {
 	fileScanner := &scanner.FileScanner{}
 	storageManager := &storage.StorageManager{}
 	scheduler := &scheduler.Scheduler{}
-	h := NewGRPCHandler(httpSync, fileScanner, storageManager, scheduler, mockLogger, appInfo)
+	h := NewGRPCHandler(httpSync, fileScanner, storageManager, scheduler, mockLogger)
 
 	// Test finding codebase paths
 	configs, err := h.findCodebasePaths(baseDir, "test-name")

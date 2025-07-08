@@ -11,7 +11,7 @@ const (
 )
 
 const (
-	BaseWriteTimeoutSeconds = 120
+	BaseWriteTimeoutSeconds = 60
 )
 
 // IsAbortRetryError checks if the error indicates we should abort retrying

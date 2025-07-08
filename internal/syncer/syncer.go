@@ -65,13 +65,13 @@ func (hs *HTTPSync) calculateTimeout(fileSize int64) time.Duration {
 	fileSizeMB := float64(fileSize) / (1024 * 1024)
 	baseTimeout := utils.BaseWriteTimeoutSeconds * time.Second
 
-	// Files ≤30MB use fixed 120s timeout
-	if fileSizeMB <= 30 {
+	// Files ≤10MB use fixed 60s timeout
+	if fileSizeMB <= 10 {
 		return baseTimeout
 	}
 
-	// Files >30MB: 120s + (file size MB - 30)*4s
-	totalTimeout := baseTimeout + time.Duration(fileSizeMB-30)*4*time.Second
+	// Files >10MB: 60s + (file size MB - 10)*5s
+	totalTimeout := baseTimeout + time.Duration(fileSizeMB-10)*5*time.Second
 
 	// Maximum does not exceed 10 minutes
 	if totalTimeout > 600*time.Second {
@@ -274,7 +274,7 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 
 // Client config file URI
 const (
-	API_GET_CLIENT_CONFIG = "/shenma/api/v1/config/codebase-syncer-config.json"
+	API_GET_CLIENT_CONFIG = "/shenma/api/v1/config/%scodebase-syncer-config.json"
 )
 
 // Get client configuration
@@ -286,8 +286,14 @@ func (hs *HTTPSync) GetClientConfig() (storage.ClientConfig, error) {
 		return storage.ClientConfig{}, fmt.Errorf("sync config is not properly set, please check clientId, serverURL and token")
 	}
 
+	uri := fmt.Sprintf(API_GET_CLIENT_CONFIG, "")
+	appInfo := storage.GetAppInfo()
+	if appInfo.Version != "" {
+		uri = fmt.Sprintf(API_GET_CLIENT_CONFIG, appInfo.Version+"/")
+	}
+
 	// Prepare the request
-	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_GET_CLIENT_CONFIG)
+	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, uri)
 
 	req := fasthttp.AcquireRequest()
 	resp := fasthttp.AcquireResponse()

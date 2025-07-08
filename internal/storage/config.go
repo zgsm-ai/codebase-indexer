@@ -8,12 +8,12 @@ type ConfigServer struct {
 }
 
 type ConfigSync struct {
-	IntervalMinutes int `json:"intervalMinutes"`
-	// MaxFileSizeMB     int      `json:"maxFileSizeMB"`
-	MaxFileSizeKB     int      `json:"maxFileSizeKB"`
-	MaxRetries        int      `json:"maxRetries"`
-	RetryDelaySeconds int      `json:"retryDelaySeconds"`
-	IgnorePatterns    []string `json:"ignorePatterns"`
+	IntervalMinutes      int      `json:"intervalMinutes"`
+	MaxFileSizeKB        int      `json:"maxFileSizeKB"`
+	MaxRetries           int      `json:"maxRetries"`
+	RetryDelaySeconds    int      `json:"retryDelaySeconds"`
+	FileIgnorePatterns   []string `json:"fileIgnorePatterns"`
+	FolderIgnorePatterns []string `json:"folderIgnorePatterns"`
 }
 
 // Client configuration file structure
@@ -23,35 +23,59 @@ type ClientConfig struct {
 }
 
 var DefaultConfigServer = ConfigServer{
-	RegisterExpireMinutes: 30, // Default registration validity period in minutes
+	RegisterExpireMinutes: 20, // Default registration validity period in minutes
 	HashTreeExpireHours:   24, // Default hash tree validity period in hours
 }
 
-var DefaultIgnorePatterns = []string{
+var DefaultFileIgnorePatterns = []string{
 	// Filter all files and directories starting with dot
 	".*",
-	// Keep other specific file types and directories not starting with dot
-	"*.swp", "*.swo",
-	"*.pyc", "*.class", "*.o", "*.obj",
+	// Keep other specific file types
 	"*.log", "*.tmp", "*.bak", "*.backup",
+	"*.swp", "*.swo", "*.ds_store",
+	"*.pyc", "*.class", "*.o",
 	"*.exe", "*.dll", "*.so", "*.dylib",
-	"*.zip", "*.tar", "*.gz", "*.rar",
-	// "*.pdf", "*.doc", "*.docx", "*.xls", "*.xlsx", "*.ppt", "*.pptx",
-	"*.jpg", "*.jpeg", "*.png", "*.gif", "*.ico", "*.svg",
-	"*.mp3", "*.mp4", "*.wav", "*.ogg", "*.flac", "*.aac", "*.wma", "*.m4a",
-	"*.sqlite", "*.db", "*.key", "*.crt", "*.cert", "*.pem",
+	"*.sqlite", "*.db", "*.cache",
+	"*.key", "*.crt", "*.cert", "*.pem",
+	// images
+	"*.jpg", "*.jpeg", "*.jpe", "*.png", "*.gif", "*.ico", "*.icns", "*.svg", "*.eps",
+	"*.bmp", "*.tif", "*.tiff", "*.tga", "*.xpm", "*.webp", "*.heif", "*.heic",
+	"*.raw", "*.arw", "*.cr2", "*.cr3", "*.nef", "*.nrw", "*.orf", "*.raf", "*.rw2", "*.rwl", "*.pef", "*.srw", "*.x3f", "*.erf", "*.kdc", "*.3fr", "*.mef", "*.mrw", "*.iiq", "*.gpr", "*.dng", // raw formats
+	// video
+	"*.mp4", "*.m4v", "*.mkv", "*.webm", "*.mov", "*.avi", "*.wmv", "*.flv",
+	// audio
+	"*.mp3", "*.wav", "*.m4a", "*.flac", "*.ogg", "*.wma", "*.weba", "*.aac", "*.pcm",
+	// compressed
+	"*.7z", "*.bz2", "*.gz", "*.gz_", "*.tgz", "*.rar", "*.tar", "*.xz",
+	"*.zip", "*.vsix", "*.iso", "*.img", "*.pkg",
+	// Fonts
+	"*.woff", "*.woff2", "*.otf", "*.ttf", "*.eot",
+	// 3d formats
+	"*.obj", "*.fbx", "*.stl", "*.3ds", "*.dae", "*.blend", "*.ply",
+	"*.glb", "*.gltf", "*.max", "*.c4d", "*.ma", "*.mb", "*.pcd",
+	// document
+	"*.pdf", "*.ai", "*.ps", "*.indd", // PDF and related formats
+	"*.doc", "*.docx", "*.xls", "*.xlsx", "*.ppt", "*.pptx",
+	"*.rtf", "*.psd", "*.pbix",
+	"*.odt", "*.ods", "*.odp", // OpenDocument formats
+}
+
+var DefaultFolderIgnorePatterns = []string{
+	// Filter all directories starting with dot
+	".*",
+	// Keep other specific directories not starting with dot
 	"logs/", "temp/", "tmp/", "node_modules/",
-	"bin/", "dist/", "build/",
+	"bin/", "dist/", "build/", "out/",
 	"__pycache__/", "venv/", "target/",
 }
 
 var DefaultConfigSync = ConfigSync{
-	IntervalMinutes: 5, // Default sync interval in minutes
-	// MaxFileSizeMB:     1,                     // Default maximum file size in MB
-	MaxFileSizeKB:     100,                   // Default maximum file size in KB
-	MaxRetries:        3,                     // Default maximum retry count
-	RetryDelaySeconds: 3,                     // Default retry delay in seconds
-	IgnorePatterns:    DefaultIgnorePatterns, // Default ignore patterns
+	IntervalMinutes:      5,                           // Default sync interval in minutes
+	MaxFileSizeKB:        50,                          // Default maximum file size in KB
+	MaxRetries:           3,                           // Default maximum retry count
+	RetryDelaySeconds:    3,                           // Default retry delay in seconds
+	FileIgnorePatterns:   DefaultFileIgnorePatterns,   // Default file ignore patterns
+	FolderIgnorePatterns: DefaultFolderIgnorePatterns, // Default folder ignore patterns
 }
 
 // Default client configuration
@@ -71,4 +95,21 @@ func GetClientConfig() ClientConfig {
 // Set client configuration
 func SetClientConfig(config ClientConfig) {
 	clientConfig = config
+}
+
+type AppInfo struct {
+	AppName  string `json:"appName"`
+	Version  string `json:"version"`
+	OSName   string `json:"osName"`
+	ArchName string `json:"archName"`
+}
+
+var appInfo AppInfo
+
+func GetAppInfo() AppInfo {
+	return appInfo
+}
+
+func SetAppInfo(info AppInfo) {
+	appInfo = info
 }

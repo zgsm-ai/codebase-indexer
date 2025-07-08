@@ -23,6 +23,7 @@ type Daemon struct {
 	grpcListen  net.Listener
 	httpSync    syncer.SyncInterface
 	fileScanner scanner.ScannerInterface
+	storage     storage.SotrageInterface
 	logger      logger.Logger
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -31,7 +32,7 @@ type Daemon struct {
 }
 
 func NewDaemon(scheduler *scheduler.Scheduler, grpcServer *grpc.Server, grpcListen net.Listener,
-	httpSync syncer.SyncInterface, fileScanner scanner.ScannerInterface, logger logger.Logger) *Daemon {
+	httpSync syncer.SyncInterface, fileScanner scanner.ScannerInterface, storage storage.SotrageInterface, logger logger.Logger) *Daemon {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Daemon{
 		scheduler:   scheduler,
@@ -39,6 +40,7 @@ func NewDaemon(scheduler *scheduler.Scheduler, grpcServer *grpc.Server, grpcList
 		grpcListen:  grpcListen,
 		httpSync:    httpSync,
 		fileScanner: fileScanner,
+		storage:     storage,
 		logger:      logger,
 		ctx:         ctx,
 		cancel:      cancel,
@@ -87,6 +89,24 @@ func (d *Daemon) Start() {
 			}
 		}
 	}()
+
+	// Start fetch server hash tree task
+	d.wg.Add(1)
+	go func() {
+		defer d.wg.Done()
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-d.ctx.Done():
+				d.logger.Info("fetch server hash task stopped")
+				return
+			case <-ticker.C:
+				d.fetchServerHashTree()
+			}
+		}
+	}()
 }
 
 // updateConfig updates client configuration
@@ -118,9 +138,9 @@ func (d *Daemon) updateConfig() {
 	})
 	// Update file scanner configuration
 	d.fileScanner.SetScannerConfig(&scanner.ScannerConfig{
-		IgnorePatterns: newConfig.Sync.IgnorePatterns,
-		// MaxFileSizeMB:  newConfig.Sync.MaxFileSizeMB,
-		MaxFileSizeKB: newConfig.Sync.MaxFileSizeKB,
+		FileIgnorePatterns:   newConfig.Sync.FileIgnorePatterns,
+		FolderIgnorePatterns: newConfig.Sync.FolderIgnorePatterns,
+		MaxFileSizeKB:        newConfig.Sync.MaxFileSizeKB,
 	})
 
 	d.logger.Info("client config updated")
@@ -168,11 +188,11 @@ func configChanged(current, new storage.ClientConfig) bool {
 	return current.Server.RegisterExpireMinutes != new.Server.RegisterExpireMinutes ||
 		current.Server.HashTreeExpireHours != new.Server.HashTreeExpireHours ||
 		current.Sync.IntervalMinutes != new.Sync.IntervalMinutes ||
-		// current.Sync.MaxFileSizeMB != new.Sync.MaxFileSizeMB ||
 		current.Sync.MaxFileSizeKB != new.Sync.MaxFileSizeKB ||
 		current.Sync.MaxRetries != new.Sync.MaxRetries ||
 		current.Sync.RetryDelaySeconds != new.Sync.RetryDelaySeconds ||
-		!equalIgnorePatterns(current.Sync.IgnorePatterns, new.Sync.IgnorePatterns)
+		!equalIgnorePatterns(current.Sync.FileIgnorePatterns, new.Sync.FileIgnorePatterns) ||
+		!equalIgnorePatterns(current.Sync.FolderIgnorePatterns, new.Sync.FolderIgnorePatterns)
 }
 
 // equalIgnorePatterns compares whether ignore patterns are same
@@ -186,6 +206,32 @@ func equalIgnorePatterns(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// fetchServerHashTree fetches the latest server hash tree
+func (d *Daemon) fetchServerHashTree() {
+	d.logger.Info("starting server hash tree fetch")
+
+	codebaseConfigs := d.storage.GetCodebaseConfigs()
+	if len(codebaseConfigs) == 0 {
+		d.logger.Warn("no codebase config, skip hash tree fetch")
+		return
+	}
+
+	for _, codebaseConfig := range codebaseConfigs {
+		hashTree, err := d.httpSync.FetchServerHashTree(codebaseConfig.CodebasePath)
+		if err != nil {
+			d.logger.Warn("failed to fetch server hash tree: %v", err)
+			continue
+		}
+		codebaseConfig.HashTree = hashTree
+		err = d.storage.SaveCodebaseConfig(codebaseConfig)
+		if err != nil {
+			d.logger.Warn("failed to save server hash tree: %v", err)
+		}
+	}
+
+	d.logger.Info("server hash tree fetch completed")
 }
 
 // Stop stops the daemon process

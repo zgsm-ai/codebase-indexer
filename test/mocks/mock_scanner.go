@@ -30,6 +30,16 @@ func (m *MockScanner) LoadIgnoreRules(codebasePath string) *gitignore.GitIgnore 
 	return args.Get(0).(*gitignore.GitIgnore)
 }
 
+func (m *MockScanner) LoadFileIgnoreRules(codebasePath string) *gitignore.GitIgnore {
+	args := m.Called(codebasePath)
+	return args.Get(0).(*gitignore.GitIgnore)
+}
+
+func (m *MockScanner) LoadFolderIgnoreRules(codebasePath string) *gitignore.GitIgnore {
+	args := m.Called(codebasePath)
+	return args.Get(0).(*gitignore.GitIgnore)
+}
+
 func (m *MockScanner) ScanDirectory(codebasePath string) (map[string]string, error) {
 	args := m.Called(codebasePath)
 	if args.Get(0) != nil {

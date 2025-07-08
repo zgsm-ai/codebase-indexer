@@ -140,9 +140,9 @@ func (s *Scheduler) LoadConfig(ctx context.Context) {
 
 	// Update scanner configuration
 	scannerConfig := &scanner.ScannerConfig{
-		IgnorePatterns: config.Sync.IgnorePatterns,
-		// MaxFileSizeMB:  config.Sync.MaxFileSizeMB,
-		MaxFileSizeKB: config.Sync.MaxFileSizeKB,
+		FileIgnorePatterns:   config.Sync.FileIgnorePatterns,
+		FolderIgnorePatterns: config.Sync.FolderIgnorePatterns,
+		MaxFileSizeKB:        config.Sync.MaxFileSizeKB,
 	}
 	s.fileScanner.SetScannerConfig(scannerConfig)
 }
@@ -398,10 +398,6 @@ func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq *syncer.UploadReq
 			s.logger.Info("zip file uploaded successfully")
 			break
 		}
-		// if utils.IsAbortRetryError(errUpload) {
-		// 	s.logger.Warn("upload failed with abort retry error")
-		// 	break
-		// }
 		if !isTimeoutError(errUpload) {
 			s.logger.Warn("upload failed with abort retry error")
 			break
@@ -436,18 +432,6 @@ func isTimeoutError(err error) bool {
 	}
 
 	return strings.Contains(err.Error(), "timeout")
-}
-
-// isAbortRetryError checks if the error indicates we should abort retrying
-func isAbortRetryError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	errorStr := err.Error()
-	return strings.Contains(errorStr, statusUnauthorized) ||
-		strings.Contains(errorStr, statusTooManyRequests) ||
-		strings.Contains(errorStr, statusServiceUnavailable)
 }
 
 // SyncForCodebases Batch sync codebases

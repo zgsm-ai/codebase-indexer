@@ -34,9 +34,9 @@ type FileStatus struct {
 }
 
 type ScannerConfig struct {
-	IgnorePatterns []string // List of ignore patterns
-	// MaxFileSizeMB  int      // File size limit in MB
-	MaxFileSizeKB int // File size limit in KB
+	FileIgnorePatterns   []string
+	FolderIgnorePatterns []string
+	MaxFileSizeKB        int // File size limit in KB
 }
 
 type ScannerInterface interface {
@@ -44,6 +44,8 @@ type ScannerInterface interface {
 	GetScannerConfig() *ScannerConfig
 	CalculateFileHash(filePath string) (string, error)
 	LoadIgnoreRules(codebasePath string) *gitignore.GitIgnore
+	LoadFileIgnoreRules(codebasePath string) *gitignore.GitIgnore
+	LoadFolderIgnoreRules(codebasePath string) *gitignore.GitIgnore
 	ScanDirectory(codebasePath string) (map[string]string, error)
 	CalculateFileChanges(local, remote map[string]string) []*FileStatus
 }
@@ -64,9 +66,9 @@ func NewFileScanner(logger logger.Logger) ScannerInterface {
 // defaultScannerConfig returns default scanner configuration
 func defaultScannerConfig() *ScannerConfig {
 	return &ScannerConfig{
-		IgnorePatterns: storage.DefaultIgnorePatterns,
-		// MaxFileSizeMB:  storage.DefaultConfigSync.MaxFileSizeMB,
-		MaxFileSizeKB: storage.DefaultConfigSync.MaxFileSizeKB,
+		FileIgnorePatterns:   storage.DefaultConfigSync.FileIgnorePatterns,
+		FolderIgnorePatterns: storage.DefaultConfigSync.FolderIgnorePatterns,
+		MaxFileSizeKB:        storage.DefaultConfigSync.MaxFileSizeKB,
 	}
 }
 
@@ -77,12 +79,12 @@ func (s *FileScanner) SetScannerConfig(config *ScannerConfig) {
 	}
 	s.rwMutex.Lock()
 	defer s.rwMutex.Unlock()
-	if len(config.IgnorePatterns) > 0 {
-		s.scannerConfig.IgnorePatterns = config.IgnorePatterns
+	if len(config.FileIgnorePatterns) > 0 {
+		s.scannerConfig.FileIgnorePatterns = config.FileIgnorePatterns
 	}
-	// if config.MaxFileSizeMB > 0 && config.MaxFileSizeMB <= 10 {
-	// 	s.scannerConfig.MaxFileSizeMB = config.MaxFileSizeMB
-	// }
+	if len(config.FolderIgnorePatterns) > 0 {
+		s.scannerConfig.FolderIgnorePatterns = config.FolderIgnorePatterns
+	}
 	if config.MaxFileSizeKB > 10 && config.MaxFileSizeKB <= 500 {
 		s.scannerConfig.MaxFileSizeKB = config.MaxFileSizeKB
 	}
@@ -120,33 +122,66 @@ func (s *FileScanner) CalculateFileHash(filePath string) (string, error) {
 // Load and combine default ignore rules with .gitignore rules
 func (s *FileScanner) LoadIgnoreRules(codebasePath string) *gitignore.GitIgnore {
 	// First create ignore object with default rules
-	currentIgnoreRules := s.scannerConfig.IgnorePatterns
+	fileIngoreRules := s.scannerConfig.FileIgnorePatterns
+	folderIgnoreRules := s.scannerConfig.FolderIgnorePatterns
+	currentIgnoreRules := append(fileIngoreRules, folderIgnoreRules...)
 	compiledIgnore := gitignore.CompileIgnoreLines(currentIgnoreRules...)
 
 	// Read and merge .gitignore file
+	gitignoreRules := s.loadGitignore(codebasePath)
+	if len(gitignoreRules) > 0 {
+		compiledIgnore = gitignore.CompileIgnoreLines(append(gitignoreRules, currentIgnoreRules...)...)
+	}
+
+	return compiledIgnore
+}
+
+// LoadFileIgnoreRules loads file ignore rules from configuration and merges with .gitignore
+func (s *FileScanner) LoadFileIgnoreRules(codebasePath string) *gitignore.GitIgnore {
+	// First create ignore object with default rules
+	currentIgnoreRules := s.scannerConfig.FileIgnorePatterns
+	compiledIgnore := gitignore.CompileIgnoreLines(currentIgnoreRules...)
+
+	// Read and merge .gitignore file
+	gitignoreRules := s.loadGitignore(codebasePath)
+	if len(gitignoreRules) > 0 {
+		compiledIgnore = gitignore.CompileIgnoreLines(append(gitignoreRules, currentIgnoreRules...)...)
+	}
+
+	return compiledIgnore
+}
+
+// LoadFolderIgnoreRules loads folder ignore rules from configuration and merges with .gitignore
+func (s *FileScanner) LoadFolderIgnoreRules(codebasePath string) *gitignore.GitIgnore {
+	// First create ignore object with default rules
+	currentIgnoreRules := s.scannerConfig.FolderIgnorePatterns
+	compiledIgnore := gitignore.CompileIgnoreLines(currentIgnoreRules...)
+
+	// Read and merge .gitignore file
+	gitignoreRules := s.loadGitignore(codebasePath)
+	if len(gitignoreRules) > 0 {
+		compiledIgnore = gitignore.CompileIgnoreLines(append(gitignoreRules, currentIgnoreRules...)...)
+	}
+
+	return compiledIgnore
+}
+
+// loadGitignore reads .gitignore file and returns list of ignore patterns
+func (s *FileScanner) loadGitignore(codebasePath string) []string {
+	var ignores []string
 	ignoreFilePath := filepath.Join(codebasePath, ".gitignore")
 	if content, err := os.ReadFile(ignoreFilePath); err == nil {
-		// Merge .gitignore rules
-		var lines []string
 		for _, line := range bytes.Split(content, []byte{'\n'}) {
 			// Skip empty lines and comments
 			trimmedLine := bytes.TrimSpace(line)
 			if len(trimmedLine) > 0 && !bytes.HasPrefix(trimmedLine, []byte{'#'}) {
-				lines = append(lines, string(trimmedLine))
+				ignores = append(ignores, string(trimmedLine))
 			}
 		}
-		if len(lines) > 0 {
-			// Append .gitignore rules after default rules
-			// Note: Order matters here - later rules have higher priority
-			// More specific rules (e.g. !important_file.txt) override general ones (e.g. *.txt)
-			// go-gitignore handles standard .gitignore priority rules
-			compiledIgnore = gitignore.CompileIgnoreLines(append(currentIgnoreRules, lines...)...)
-		}
-	} else if !os.IsNotExist(err) {
-		s.logger.Warn("failed to read .gitignore file %s: %v", ignoreFilePath, err)
-		// If read fails (not a file-not-exist error), use default rules only
+	} else {
+		s.logger.Warn("Failed to read .gitignore file: %v", err)
 	}
-	return compiledIgnore
+	return ignores
 }
 
 // ScanDirectory scans directory and generates hash tree
@@ -157,33 +192,15 @@ func (s *FileScanner) ScanDirectory(codebasePath string) (map[string]string, err
 	hashTree := make(map[string]string)
 	var filesScanned int
 
-	ignore := s.LoadIgnoreRules(codebasePath)
+	fileIgnore := s.LoadFileIgnoreRules(codebasePath)
+	folderIgnore := s.LoadFolderIgnoreRules(codebasePath)
 
-	// maxFileSizeMB := s.scannerConfig.MaxFileSizeMB
-	// maxFileSize := int64(maxFileSizeMB * 1024 * 1024)
 	maxFileSizeKB := s.scannerConfig.MaxFileSizeKB
 	maxFileSize := int64(maxFileSizeKB * 1024)
 	err := filepath.WalkDir(codebasePath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			s.logger.Warn("error accessing file %s: %v", path, err)
 			return nil // Continue scanning other files
-		}
-
-		if d.IsDir() {
-			// For directories, check if we should skip entire dir
-			relPath, _ := filepath.Rel(codebasePath, path)
-			// Don't skip root dir (relPath=".") due to ".*" rules
-			if relPath != "." && ignore != nil && ignore.MatchesPath(relPath+"/") {
-				s.logger.Debug("skipping ignored directory: %s", relPath)
-				return fs.SkipDir
-			}
-			return nil
-		}
-
-		info, err := d.Info()
-		if err != nil {
-			s.logger.Warn("error getting file info for %s: %v", path, err)
-			return nil
 		}
 
 		// Calculate relative path
@@ -193,9 +210,25 @@ func (s *FileScanner) ScanDirectory(codebasePath string) (map[string]string, err
 			return nil
 		}
 
-		// Check if file is excluded by .gitignore
-		if ignore != nil && ignore.MatchesPath(relPath) {
-			s.logger.Debug("skipping file excluded by .gitignore: %s", relPath)
+		if d.IsDir() {
+			// For directories, check if we should skip entire dir
+			// Don't skip root dir (relPath=".") due to ".*" rules
+			if relPath != "." && folderIgnore != nil && folderIgnore.MatchesPath(relPath+"/") {
+				s.logger.Debug("skipping ignored directory: %s", relPath)
+				return fs.SkipDir
+			}
+			return nil
+		}
+
+		// Check if file is excluded by ignore
+		if fileIgnore != nil && fileIgnore.MatchesPath(relPath) {
+			s.logger.Debug("skipping file excluded by ignore: %s", relPath)
+			return nil
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			s.logger.Warn("error getting file info for %s: %v", path, err)
 			return nil
 		}
 

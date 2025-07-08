@@ -21,16 +21,8 @@ import (
 	"codebase-syncer/pkg/logger"
 )
 
-type AppInfo struct {
-	AppName  string `json:"appName"`
-	Version  string `json:"version"`
-	OSName   string `json:"osName"`
-	ArchName string `json:"archName"`
-}
-
 // GRPCHandler handles gRPC services
 type GRPCHandler struct {
-	appInfo     *AppInfo
 	httpSync    syncer.SyncInterface
 	fileScanner scanner.ScannerInterface
 	storage     storage.SotrageInterface
@@ -40,9 +32,8 @@ type GRPCHandler struct {
 }
 
 // NewGRPCHandler creates a new gRPC handler
-func NewGRPCHandler(httpSync syncer.SyncInterface, fileScanner scanner.ScannerInterface, storage storage.SotrageInterface, scheduler *scheduler.Scheduler, logger logger.Logger, appInfo *AppInfo) *GRPCHandler {
+func NewGRPCHandler(httpSync syncer.SyncInterface, fileScanner scanner.ScannerInterface, storage storage.SotrageInterface, scheduler *scheduler.Scheduler, logger logger.Logger) *GRPCHandler {
 	return &GRPCHandler{
-		appInfo:     appInfo,
 		httpSync:    httpSync,
 		fileScanner: fileScanner,
 		storage:     storage,
@@ -105,7 +96,6 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 			lastError = errSave // Record the last error
 			continue
 		}
-		h.logger.Info("codebase (Name: %s, Path: %s, Id: %s) registered/updated successfully", codebaseConfig.CodebaseName, codebaseConfig.CodebasePath, codebaseConfig.CodebaseId)
 		registeredCount++
 		if !ok {
 			addCodebaseConfigs = append(addCodebaseConfigs, codebaseConfig)
@@ -184,22 +174,11 @@ func (h *GRPCHandler) SyncCodebase(ctx context.Context, req *api.SyncCodebaseReq
 			codebaseConfig.RegisterTime = nowTime // Update registration time to now
 		}
 
-		// get server hash tree
-		serverHashTree, err := h.httpSync.FetchServerHashTree(codebaseConfig.CodebasePath)
-		if err != nil {
-			h.logger.Warn("failed to get hash tree from server: %v", err)
-		} else {
-			// Update codebase hash tree
-			codebaseConfig.HashTree = serverHashTree
-			codebaseConfig.LastSync = nowTime
-		}
-
 		if errSave := h.storage.SaveCodebaseConfig(codebaseConfig); errSave != nil {
 			h.logger.Error("failed to save codebase config (Name: %s, Path: %s, Id: %s): %v", codebaseConfig.CodebaseName, codebaseConfig.CodebasePath, codebaseConfig.CodebaseId, errSave)
 			lastError = errSave // Record last error
 			continue
 		}
-		h.logger.Info("codebase (Name: %s, Path: %s, Id: %s) saved successfully", codebaseConfig.CodebaseName, codebaseConfig.CodebasePath, codebaseConfig.CodebaseId)
 		savedCount++
 		syncCodebaseConfigs = append(syncCodebaseConfigs, codebaseConfig)
 	}
@@ -267,7 +246,6 @@ func (h *GRPCHandler) UnregisterSync(ctx context.Context, req *api.UnregisterSyn
 			lastError = errDelete // Record the last error
 			continue
 		}
-		h.logger.Info("codebase (Name: %s, Path: %s, Id: %s) unregistered successfully", config.CodebaseName, config.CodebasePath, codebaseId)
 		unregisteredCount++
 	}
 
@@ -317,14 +295,16 @@ func (h *GRPCHandler) GetVersion(ctx context.Context, req *api.VersionRequest) (
 		h.logger.Error("invalid version information parameters")
 		return &api.VersionResponse{Success: false, Message: "invalid parameters"}, nil
 	}
+	appInfo := storage.GetAppInfo()
+
 	return &api.VersionResponse{
 		Success: true,
 		Message: "ok",
 		Data: &api.VersionResponse_Data{
-			AppName:  h.appInfo.AppName,
-			Version:  h.appInfo.Version,
-			OsName:   h.appInfo.OSName,
-			ArchName: h.appInfo.ArchName,
+			AppName:  appInfo.AppName,
+			Version:  appInfo.Version,
+			OsName:   appInfo.OSName,
+			ArchName: appInfo.ArchName,
 		},
 	}, nil
 }

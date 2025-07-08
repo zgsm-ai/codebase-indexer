@@ -55,7 +55,7 @@ func main() {
 		return
 	}
 	// Initialize configuration
-	initConfig()
+	initConfig(*appName)
 
 	// Initialize logging system
 	logger, err := logger.NewLogger(utils.LogsDir, *logLevel)
@@ -77,9 +77,8 @@ func main() {
 		syncConfig = &syncer.SyncConfig{ClientId: *clientId, ServerURL: *serverEndpoint, Token: *token}
 	}
 	httpSync := syncer.NewHTTPSync(syncConfig, logger)
-	appInfo := &handler.AppInfo{AppName: *appName, ArchName: archName, OSName: osName, Version: version}
 	syncScheduler := scheduler.NewScheduler(httpSync, fileScanner, storageManager, logger)
-	grpcHandler := handler.NewGRPCHandler(httpSync, fileScanner, storageManager, syncScheduler, logger, appInfo)
+	grpcHandler := handler.NewGRPCHandler(httpSync, fileScanner, storageManager, syncScheduler, logger)
 
 	// Initialize gRPC server
 	lis, err := net.Listen("tcp", *grpcServer)
@@ -91,7 +90,7 @@ func main() {
 	api.RegisterSyncServiceServer(s, grpcHandler)
 
 	// Start daemon process
-	daemon := daemon.NewDaemon(syncScheduler, s, lis, httpSync, fileScanner, logger)
+	daemon := daemon.NewDaemon(syncScheduler, s, lis, httpSync, fileScanner, storageManager, logger)
 	go daemon.Start()
 
 	// Handle system signals for graceful shutdown
@@ -138,7 +137,15 @@ func initDir(appName string) error {
 }
 
 // initConfig initializes configuration
-func initConfig() {
+func initConfig(appName string) {
+	// Set app info
+	appInfo := storage.AppInfo{
+		AppName:  appName,
+		ArchName: archName,
+		OSName:   osName,
+		Version:  version,
+	}
+	storage.SetAppInfo(appInfo)
 	// Set client default configuration
 	storage.SetClientConfig(storage.DefaultClientConfig)
 }

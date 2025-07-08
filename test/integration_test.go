@@ -31,7 +31,7 @@ type IntegrationTestSuite struct {
 }
 
 var httpSync = new(mocks.MockHTTPSync)
-var appInfo = &handler.AppInfo{
+var appInfo = storage.AppInfo{
 	AppName:  "test-app",
 	OSName:   "windows",
 	ArchName: "amd64",
@@ -61,6 +61,8 @@ func (s *IntegrationTestSuite) SetupTest() {
 	}
 	fmt.Printf("upload temp directory: %s\n", uploadTmpPath)
 
+	storage.SetAppInfo(appInfo)
+
 	logger, err := logger.NewLogger(logPath, "info")
 	if err != nil {
 		s.T().Fatalf("failed to initialize logger: %v", err)
@@ -71,7 +73,7 @@ func (s *IntegrationTestSuite) SetupTest() {
 	}
 	fileScanner := scanner.NewFileScanner(logger)
 	s.scheduler = scheduler.NewScheduler(httpSync, fileScanner, storageManager, logger)
-	s.handler = handler.NewGRPCHandler(httpSync, fileScanner, storageManager, s.scheduler, logger, appInfo)
+	s.handler = handler.NewGRPCHandler(httpSync, fileScanner, storageManager, s.scheduler, logger)
 }
 
 func (s *IntegrationTestSuite) TestRegisterSync() {
