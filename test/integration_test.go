@@ -207,43 +207,6 @@ func (s *IntegrationTestSuite) TestUnregisterSync() {
 	assert.NoError(s.T(), err)
 }
 
-func (s *IntegrationTestSuite) TestUnregisterSyncInvalidParams() {
-	// Test missing required parameters
-	testCases := []struct {
-		name string
-		req  *api.UnregisterSyncRequest
-	}{
-		{
-			name: "missing ClientId",
-			req: &api.UnregisterSyncRequest{
-				WorkspacePath: "/tmp/test",
-				WorkspaceName: "test",
-			},
-		},
-		{
-			name: "missing WorkspacePath",
-			req: &api.UnregisterSyncRequest{
-				ClientId:      "test-client",
-				WorkspaceName: "test",
-			},
-		},
-		{
-			name: "missing WorkspaceName",
-			req: &api.UnregisterSyncRequest{
-				ClientId:      "test-client",
-				WorkspacePath: "/tmp/test",
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		s.T().Run(tc.name, func(t *testing.T) {
-			_, err := s.handler.UnregisterSync(context.Background(), tc.req)
-			assert.Error(t, err)
-		})
-	}
-}
-
 func (s *IntegrationTestSuite) TestHandlerVersion() {
 	tests := []struct {
 		name     string

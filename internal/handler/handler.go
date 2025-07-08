@@ -83,7 +83,7 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 
 		codebaseConfig, ok := codebaseConfigs[codebaseId]
 		if !ok {
-			h.logger.Warn("failed to get codebase config (Id: %s), will initialize a new one", codebaseId)
+			h.logger.Warn("failed to get codebase config (Id: %s), will register", codebaseId)
 			codebaseConfig = &storage.CodebaseConfig{
 				ClientID:     req.ClientId,
 				CodebaseName: pendingConfig.CodebaseName,
@@ -113,7 +113,8 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 	}
 
 	if registeredCount == 0 && lastError != nil {
-		return &api.RegisterSyncResponse{Success: false, Message: fmt.Sprintf("all codebase registrations failed: %v", lastError)}, lastError
+		h.logger.Error("all codebase config saves failed: %v", lastError)
+		return &api.RegisterSyncResponse{Success: false, Message: fmt.Sprintf("all codebase registrations failed: %v", lastError)}, nil
 	}
 
 	// Sync newly registered codebases
@@ -166,7 +167,7 @@ func (h *GRPCHandler) SyncCodebase(ctx context.Context, req *api.SyncCodebaseReq
 
 		codebaseConfig, ok := codebaseConfigs[codebaseId]
 		if !ok {
-			h.logger.Warn("codebase config not found: Id=%s", codebaseId)
+			h.logger.Warn("codebase config not found: Id=%s, will register", codebaseId)
 			codebaseConfig = &storage.CodebaseConfig{
 				ClientID:     req.ClientId,
 				CodebaseName: pendingConfig.CodebaseName,
@@ -189,7 +190,6 @@ func (h *GRPCHandler) SyncCodebase(ctx context.Context, req *api.SyncCodebaseReq
 			h.logger.Warn("failed to get hash tree from server: %v", err)
 		} else {
 			// Update codebase hash tree
-			h.logger.Info("fetched server hash tree successfully")
 			codebaseConfig.HashTree = serverHashTree
 			codebaseConfig.LastSync = nowTime
 		}
@@ -205,29 +205,32 @@ func (h *GRPCHandler) SyncCodebase(ctx context.Context, req *api.SyncCodebaseReq
 	}
 
 	if savedCount == 0 && lastError != nil {
-		return &api.SyncCodebaseResponse{Success: false, Code: "0010", Message: fmt.Sprintf("all codebase config saved failed: %v", lastError)}, lastError
+		h.logger.Error("all codebase config saves failed: %v", lastError)
+		return &api.SyncCodebaseResponse{Success: false, Code: "0010", Message: fmt.Sprintf("all codebase config saved failed: %v", lastError)}, nil
 	}
 
 	// Sync codebases
 	if len(syncCodebaseConfigs) > 0 && h.httpSync.GetSyncConfig() != nil {
 		err := h.syncCodebases(syncCodebaseConfigs)
 		if err != nil {
+			h.logger.Error("failed to sync codebases: %v", err)
 			if utils.IsUnauthorizedError(err) {
-				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodeUnauthorized, Message: fmt.Sprintf("sync codebase failed: %v", err)}, err
+				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodeUnauthorized, Message: fmt.Sprintf("sync codebase failed: %v", err)}, nil
 			}
 			if utils.IsPageNotFoundError(err) {
-				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodePageNotFound, Message: fmt.Sprintf("sync codebase failed: %v", err)}, err
+				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodePageNotFound, Message: fmt.Sprintf("sync codebase failed: %v", err)}, nil
 			}
 			if utils.IsTooManyRequestsError(err) {
-				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodeTooManyRequests, Message: fmt.Sprintf("sync codebase failed: %v", err)}, err
+				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodeTooManyRequests, Message: fmt.Sprintf("sync codebase failed: %v", err)}, nil
 			}
 			if utils.IsServiceUnavailableError(err) {
-				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodeServiceUnavailable, Message: fmt.Sprintf("sync codebase failed: %v", err)}, err
+				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodeServiceUnavailable, Message: fmt.Sprintf("sync codebase failed: %v", err)}, nil
 			}
-			return &api.SyncCodebaseResponse{Success: false, Code: "1001", Message: fmt.Sprintf("sync codebase failed: %v", err)}, err
+			return &api.SyncCodebaseResponse{Success: false, Code: "1001", Message: fmt.Sprintf("sync codebase failed: %v", err)}, nil
 		}
 	}
 
+	h.logger.Info("sync codebase success")
 	return &api.SyncCodebaseResponse{Success: true, Code: "0", Message: "sync codebase success"}, nil
 }
 
@@ -237,14 +240,14 @@ func (h *GRPCHandler) UnregisterSync(ctx context.Context, req *api.UnregisterSyn
 	// Validate request parameters
 	if req.ClientId == "" || req.WorkspacePath == "" || req.WorkspaceName == "" {
 		h.logger.Error("invalid workspace unregistration parameters")
-		return &emptypb.Empty{}, fmt.Errorf("invalid parameters")
+		return &emptypb.Empty{}, nil
 	}
 
 	codebaseConfigsToUnregister, err := h.findCodebasePaths(req.WorkspacePath, req.WorkspaceName)
 	if err != nil {
 		h.logger.Error("failed to find codebase paths to unregister: %v", err)
 		// Even if lookup fails, still return Empty since unregister goal is cleanup
-		return &emptypb.Empty{}, fmt.Errorf("failed to find codebase paths to unregister: %v", err) // Or return nil error, only log
+		return &emptypb.Empty{}, nil // return nil error, only log
 	}
 
 	if len(codebaseConfigsToUnregister) == 0 {
@@ -275,15 +278,18 @@ func (h *GRPCHandler) UnregisterSync(ctx context.Context, req *api.UnregisterSyn
 		h.logger.Info("all %d matching codebases unregistered successfully", unregisteredCount)
 	} else {
 		// This case should ideally be caught by the len check at the beginning
-		h.logger.Info("no codebases to unregister or found: WorkspacePath=%s, WorkspaceName=%s", req.WorkspacePath, req.WorkspaceName)
+		h.logger.Warn("no codebase found: %s", req.WorkspacePath)
+		return &emptypb.Empty{}, nil
 	}
 
 	// UnregisterSync usually returns Empty & nil error, unless serious error
 	// If all failed and there were things to delete, may return error
 	if lastError != nil && unregisteredCount == 0 && len(codebaseConfigsToUnregister) > 0 {
-		return &emptypb.Empty{}, fmt.Errorf("all codebase unregistrations failed: %v", lastError)
+		h.logger.Error("all codebase unregistrations failed: %v", lastError)
+		return &emptypb.Empty{}, nil
 	}
 
+	h.logger.Info("unregistered %d codebase(s)", unregisteredCount)
 	return &emptypb.Empty{}, nil
 }
 
@@ -417,7 +423,7 @@ func (h *GRPCHandler) CheckIgnoreFile(ctx context.Context, req *api.CheckIgnoreF
 		}
 	}
 
-	h.logger.Info("no ignored files found", "numFiles", len(req.FilePaths))
+	h.logger.Info("no ignored files found, numFiles: %d", len(req.FilePaths))
 	return &api.SyncCodebaseResponse{
 		Success: true,
 		Code:    SuccessCode,
