@@ -12,13 +12,13 @@ import (
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	api "codebase-syncer/api"
-	"codebase-syncer/internal/scanner"
-	"codebase-syncer/internal/scheduler"
-	"codebase-syncer/internal/storage"
-	"codebase-syncer/internal/syncer"
-	"codebase-syncer/internal/utils"
-	"codebase-syncer/pkg/logger"
+	api "codebase-indexer/api"
+	"codebase-indexer/internal/scanner"
+	"codebase-indexer/internal/scheduler"
+	"codebase-indexer/internal/storage"
+	"codebase-indexer/internal/syncer"
+	"codebase-indexer/internal/utils"
+	"codebase-indexer/pkg/logger"
 )
 
 // GRPCHandler handles gRPC services

@@ -8,11 +8,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"codebase-syncer/internal/scanner"
-	"codebase-syncer/internal/scheduler"
-	"codebase-syncer/internal/storage"
-	"codebase-syncer/internal/syncer"
-	"codebase-syncer/test/mocks"
+	"codebase-indexer/internal/scanner"
+	"codebase-indexer/internal/scheduler"
+	"codebase-indexer/internal/storage"
+	"codebase-indexer/internal/syncer"
+	"codebase-indexer/test/mocks"
 )
 
 func TestNewGRPCHandler(t *testing.T) {

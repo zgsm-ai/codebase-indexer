@@ -56,7 +56,7 @@ func NewLogger(logsDir, level string) (Logger, error) {
 
 	// Configure log output to both file and console
 	fileWriter := zapcore.AddSync(&lumberjack.Logger{
-		Filename:   filepath.Join(logsDir, "codebase-syncer.log"),
+		Filename:   filepath.Join(logsDir, "codebase-indexer.log"),
 		MaxSize:    10, // megabytes
 		MaxBackups: 1,  // backups
 		MaxAge:     7,  // days

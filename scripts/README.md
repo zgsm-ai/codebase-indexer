@@ -1,6 +1,6 @@
 # Scripts Directory
 
-This directory contains utility scripts related to the `codebase-syncer` project. These scripts are designed to automate common development tasks, such as building the application for different platforms.
+This directory contains utility scripts related to the `codebase-indexer` project. These scripts are designed to automate common development tasks, such as building the application for different platforms.
 
 ## Available Scripts
 

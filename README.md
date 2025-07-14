@@ -1,135 +1,56 @@
-# codebase-syncer
+# codebase-indexer
 
-## Project Introduction
-A codebase sync client tool for synchronizing local code changes to remote servers. Implements incremental sync using file hash comparison, supports scheduled sync and manual sync, remote configuration management, and multi-platform operation.
+<div align="center">
 
-## Features
+[English](./README.md) | [简体中文](./README_zh.md)
 
-- File hash comparison: Uses SHA256 algorithm to compare file differences
-- Incremental sync: Only uploads changed files
-- Configuration management: Supports both local and server-side configurations
-- Multi-platform support: Windows/Linux/macOS
+A powerful code indexing context retrieval service for AI programming assistants.
 
-## Architecture Design
+[![Go Report Card](https://goreportcard.com/badge/github.com/zgsm-ai/codebase-indexer)](https://goreportcard.com/report/github.com/zgsm-ai/codebase-indexer)
+[![Go Reference](https://pkg.go.dev/badge/github.com/zgsm-ai/codebase-indexer.svg)](https://pkg.go.dev/github.com/zgsm-ai/codebase-indexer)
+[![License](https://img.shields.io/github/license/zgsm-ai/codebase-indexer)](LICENSE)
 
-### Core Modules
+</div>
 
-1. **Scanner** - File scanner
-   - Recursively scans code directories
-   - Calculates file hashes 
-   - Applies .gitignore rules
-   - Detects file changes
+## Overview
 
-2. **Syncer** - Synchronizer
-   - HTTP file upload
-   - Gets server file hash tree  
-   - Manages incremental sync
+codebase-indexer is the context module of [ZGSM (ZhuGe Smart Mind) AI Programming Assistant](https://github.com/zgsm-ai/zgsm) which running on client. It provides powerful codebase indexing capabilities to support  code call graph relationship retrieval for AI programming systems.
 
-3. **Storage** - Storage management
-   - Local cache management
-   - Configuration persistence
-   - File metadata storage
+### Key Features
 
-4. **Scheduler** - Task scheduling
-   - Triggers scheduled scans
-   - Manages sync task queue
-   - Retry mechanism
+- 📊 Code call graph analysis and retrieval
+- 🌐 Multi-language support
 
-5. **Daemon** - Daemon process  
-   - gRPC service management
-   - Graceful start/stop control
-   - System signal handling
+## Requirements
 
-### Interface Definitions
+- Go 1.24.0 or higher
 
-1. **gRPC Interfaces** (defined in api/codebase_syncer.proto)
-   - Register project sync (RegisterSync)
-   - Sync codebase (SyncCodebase)
-   - Unregister project sync (UnregisterSync)
-   - Share access token (ShareAccessToken)
-   - Get version info (GetVersion)
+## Quick Start
 
-2. **HTTP Interfaces** (defined in internal/syncer/syncer.go)
-   - Fetch server hash tree (FetchServerHashTree)
-   - Upload file to server (UploadFile)
-   - Get client config (GetClientConfig)
+### Installation
 
-## Usage Instructions
+```bash
+# Clone the repository
+git clone https://github.com/zgsm-ai/codebase-indexer.git
+cd codebase-indexer
 
-### Startup Parameters
-
-```sh
-./codebase-syncer \
-  --appname myapp \          # Application name
-  --grpc localhost:51353 \   # gRPC service address
-  --loglevel info \          # Log level
-  --clientid CLIENT_ID \     # Client ID
-  --server SERVER_URL \      # Server URL
-  --token AUTH_TOKEN \       # Authentication token
-```
-
-### Configuration File
-
-Example configuration:
-```json
-{
-  "server": {
-    "registerExpireMinutes": 30,
-    "hashTreeExpireHours": 24
-  },
-  "sync": {
-    "intervalMinutes": 3,
-    "maxFileSizeMB": 1,
-    "maxRetries": 3,
-    "retryDelaySeconds": 5,
-    "ignorePatterns": [
-     ".*",
-     "*.swp", "*.swo",
-     "*.pyc", "*.class", "*.o", "*.obj",
-     "*.log", "*.tmp", "*.bak", "*.backup",
-     "*.exe", "*.dll", "*.so", "*.dylib",
-     "logs/", "temp/", "tmp/", "node_modules/",
-     "bin/", "dist/", "build/",
-     "__pycache__/", "venv/", "target/"
-    ]
-  }
-}
-```
-
-### Build & Run
-
-Build project:
-```sh
-./scripts/build.sh ${os} ${arch} ${version}
-```
-
-Package all:
-```sh
-./scripts/package_all.sh ${version}
-```
-
-## Development Guide
-
-### Dependency Management
-
-```sh
+# Install dependencies
 go mod tidy
 ```
 
-### Code Generation
+### Running
 
-Update gRPC protocol:
-```sh
-protoc --go_out=api --go-grpc_out=api api/codebase_syncer.proto
+```bash
+# Build the project
+make build
 ```
 
-### Testing
+## License
 
-Unit tests:
-```sh
-go test ./...
-```
+This project is licensed under the [Apache 2.0 License](LICENSE).
 
-Integration tests:  
-```sh
-go test -tags=integration ./test
+## Acknowledgments
+
+This project builds upon the excellent work of:
+
+- [Tree-sitter](https://github.com/tree-sitter) - For providing robust parsing capabilities

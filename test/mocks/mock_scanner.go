@@ -1,7 +1,7 @@
 package mocks
 
 import (
-	"codebase-syncer/internal/scanner"
+	"codebase-indexer/internal/scanner"
 
 	gitignore "github.com/sabhiram/go-gitignore"
 	"github.com/stretchr/testify/mock"

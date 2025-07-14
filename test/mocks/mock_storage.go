@@ -1,7 +1,7 @@
 package mocks
 
 import (
-	"codebase-syncer/internal/storage"
+	"codebase-indexer/internal/storage"
 
 	"github.com/stretchr/testify/mock"
 )

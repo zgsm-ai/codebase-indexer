@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"codebase-syncer/internal/storage"
-	"codebase-syncer/pkg/logger"
+	"codebase-indexer/internal/storage"
+	"codebase-indexer/pkg/logger"
 
 	gitignore "github.com/sabhiram/go-gitignore"
 )

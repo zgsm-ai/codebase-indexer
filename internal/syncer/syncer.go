@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"codebase-syncer/internal/storage"
-	"codebase-syncer/internal/utils"
-	"codebase-syncer/pkg/logger"
+	"codebase-indexer/internal/storage"
+	"codebase-indexer/internal/utils"
+	"codebase-indexer/pkg/logger"
 
 	"github.com/valyala/fasthttp"
 )
@@ -274,7 +274,7 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 
 // Client config file URI
 const (
-	API_GET_CLIENT_CONFIG = "/shenma/api/v1/config/%scodebase-syncer-config.json"
+	API_GET_CLIENT_CONFIG = "/shenma/api/v1/config/%scodebase-indexer-config.json"
 )
 
 // Get client configuration

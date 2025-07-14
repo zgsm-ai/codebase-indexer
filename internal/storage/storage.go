@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"codebase-syncer/pkg/logger"
+	"codebase-indexer/pkg/logger"
 )
 
 // Codebase configuration

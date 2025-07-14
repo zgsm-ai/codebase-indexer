@@ -7,12 +7,12 @@ import (
 	"sync"
 	"time"
 
-	"codebase-syncer/internal/scanner"
-	"codebase-syncer/internal/scheduler"
-	"codebase-syncer/internal/storage"
-	"codebase-syncer/internal/syncer"
-	"codebase-syncer/internal/utils"
-	"codebase-syncer/pkg/logger"
+	"codebase-indexer/internal/scanner"
+	"codebase-indexer/internal/scheduler"
+	"codebase-indexer/internal/storage"
+	"codebase-indexer/internal/syncer"
+	"codebase-indexer/internal/utils"
+	"codebase-indexer/pkg/logger"
 
 	"google.golang.org/grpc"
 )

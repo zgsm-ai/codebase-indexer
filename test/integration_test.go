@@ -13,15 +13,15 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	api "codebase-syncer/api"
-	"codebase-syncer/internal/handler"
-	"codebase-syncer/internal/scanner"
-	"codebase-syncer/internal/scheduler"
-	"codebase-syncer/internal/storage"
-	"codebase-syncer/internal/syncer"
-	"codebase-syncer/internal/utils"
-	"codebase-syncer/pkg/logger"
-	"codebase-syncer/test/mocks"
+	api "codebase-indexer/api"
+	"codebase-indexer/internal/handler"
+	"codebase-indexer/internal/scanner"
+	"codebase-indexer/internal/scheduler"
+	"codebase-indexer/internal/storage"
+	"codebase-indexer/internal/syncer"
+	"codebase-indexer/internal/utils"
+	"codebase-indexer/pkg/logger"
+	"codebase-indexer/test/mocks"
 )
 
 type IntegrationTestSuite struct {

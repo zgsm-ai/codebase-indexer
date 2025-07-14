@@ -397,7 +397,7 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 		logger.AssertCalled(t, "Info", "loading codebase file content: %s", mock.Anything)
 	})
 
-	t.Run("CodebaseId mismatch", func(t *testing.T) {
+	t.Run("ClientId mismatch", func(t *testing.T) {
 		tempDir := t.TempDir()
 		filePath := filepath.Join(tempDir, "mismatch")
 		testData := `{"codebaseId":"other-id","lastSync":"2025-01-01T00:00:00Z"}`

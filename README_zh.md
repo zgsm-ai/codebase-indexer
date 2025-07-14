@@ -1,137 +1,57 @@
-# codebase-syncer
+# codebase-indexer
 
-## 项目介绍
-codebase-syncer 是一个代码库同步客户端工具，用于将本地代码变更同步到远程服务端。通过文件哈希值比对实现增量同步，支持定时同步和主动同步，支持远程配置管理，支持多平台运行。
+<div align="center">
 
-## 功能特性
+[English](./README.md) | [简体中文](./README_zh.md)
 
-- 文件哈希比对：使用SHA256算法比对文件差异
-- 增量同步：仅上传变更文件
-- 配置管理：支持本地和服务端配置
-- 多平台支持：Windows/Linux/macOS
+强大的 AI 编程助手代码索引和上下文检索服务
 
-## 架构设计
+[![Go Report Card](https://goreportcard.com/badge/github.com/zgsm-ai/codebase-indexer)](https://goreportcard.com/report/github.com/zgsm-ai/codebase-indexer)
+[![Go Reference](https://pkg.go.dev/badge/github.com/zgsm-ai/codebase-indexer.svg)](https://pkg.go.dev/github.com/zgsm-ai/codebase-indexer)
+[![License](https://img.shields.io/github/license/zgsm-ai/codebase-indexer)](LICENSE)
 
-### 核心模块
+</div>
 
-1. **Scanner** - 文件扫描器
-   - 递归扫描代码目录
-   - 计算文件哈希值
-   - 应用.gitignore规则
-   - 检测文件变更
+## 项目概述
 
-2. **Syncer** - 同步器
-   - HTTP文件上传
-   - 获取服务端文件哈希树
-   - 增量同步管理
+codebase-indexer 是诸葛神码 AI 编程助手的上下文模块，提供代码库索引功能，支持 代码调用链图关系检索。
 
-3. **Storage** - 存储管理
-   - 本地缓存管理
-   - 配置持久化
-   - 文件元数据存储
+### 主要特性
 
-4. **Scheduler** - 任务调度
-   - 定时扫描触发
-   - 同步任务队列管理
-   - 重试机制
+- 📊 代码调用关系图分析与检索
+- 🌐 多编程语言支持
 
-5. **Daemon** - 守护进程
-   - gRPC服务管理
-   - 优雅启停控制
-   - 系统信号处理
+## 环境要求
 
-### 接口定义
+- Go 1.24.0 或更高版本
 
-1. **gRPC接口** (定义在api/codebase_syncer.proto)
-   - 注册项目同步 (RegisterSync)
-   - 同步项目 (SyncCodebase)
-   - 注销项目同步 (UnregisterSync)
-   - 共享AccessToken (ShareAccessToken)
-   - 获取应用版本信息 (GetVersion)
+## 快速开始
 
-2. **HTTP接口** (定义在internal/syncer/syncer.go)
-   - 获取服务端文件哈希树 (FetchServerHashTree)
-   - 上传文件到服务器 (UploadFile)
-   - 获取客户端配置文件 (GetClientConfig)
+### 安装
 
-## 使用说明
+```bash
+# 克隆仓库
+git clone https://github.com/zgsm-ai/codebase-indexer.git
+cd codebase-indexer
 
-### 启动参数
-
-```sh
-./codebase-syncer \
-  --appname myapp \          # 应用名称
-  --grpc localhost:51353 \   # gRPC服务地址
-  --loglevel info \          # 日志级别
-  --clientid CLIENT_ID \     # 客户端ID
-  --server SERVER_URL \      # 服务端地址
-  --token AUTH_TOKEN \       # 认证令牌
-```
-
-### 配置文件
-
-示例配置：
-```json
-{
-  "server": {
-    "registerExpireMinutes": 30,
-    "hashTreeExpireHours": 24
-  },
-  "sync": {
-    "intervalMinutes": 3,
-    "maxFileSizeMB": 1,
-    "maxRetries": 3,
-    "retryDelaySeconds": 5,
-    "ignorePatterns": [
-     ".*",
-     "*.swp", "*.swo",
-     "*.pyc", "*.class", "*.o", "*.obj",
-     "*.log", "*.tmp", "*.bak", "*.backup",
-     "*.exe", "*.dll", "*.so", "*.dylib",
-     "logs/", "temp/", "tmp/", "node_modules/",
-     "bin/", "dist/", "build/",
-     "__pycache__/", "venv/", "target/"
-    ]
-  }
-}
-
-```
-
-### 构建运行
-
-构建项目：
-```sh
-./scripts/build.sh ${os} ${arch} ${version}
-```
-
-一键打包：
-```sh
-./scripts/package_all.sh ${version}
-```
-
-## 开发指南
-
-### 依赖管理
-
-```sh
+# 安装依赖
 go mod tidy
 ```
 
-### 代码生成
+### 运行
 
-更新gRPC协议：
-```sh
-protoc --go_out=api --go-grpc_out=api api/codebase_syncer.proto
+```bash
+# 构建项目
+make build
+
 ```
 
-### 测试运行
+## 许可证
 
-单元测试：
-```sh
-go test ./...
-```
+本项目采用 [Apache 2.0 许可证](LICENSE)。
 
-集成测试：
-```sh
-go test -tags=integration ./test
-```
+## 致谢
+
+本项目基于以下优秀项目的工作：
+
+- [Tree-sitter](https://github.com/tree-sitter) - 提供强大的解析功能

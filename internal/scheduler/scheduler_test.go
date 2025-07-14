@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"codebase-syncer/internal/scanner"
-	"codebase-syncer/internal/storage"
-	"codebase-syncer/internal/syncer"
-	"codebase-syncer/internal/utils"
-	"codebase-syncer/test/mocks"
+	"codebase-indexer/internal/scanner"
+	"codebase-indexer/internal/storage"
+	"codebase-indexer/internal/syncer"
+	"codebase-indexer/internal/utils"
+	"codebase-indexer/test/mocks"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
