@@ -1,10 +1,12 @@
 package resolver
 
 import (
-	treesitter "github.com/tree-sitter/go-tree-sitter"
+	gotreesitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 const EmptyString = ""
+
+const identifier = "identifier"
 
 // ElementType 表示代码元素类型，使用字符串字面量作为枚举值
 type ElementType string
@@ -39,7 +41,7 @@ const (
 	ElementTypeAnnotation          ElementType = "annotation"
 )
 
-// 类型映射表 - captureName -> ElementType（使用ElementType字符串值作为键）
+// TypeMappings 类型映射表 - captureName -> ElementType（使用ElementType字符串值作为键）
 var TypeMappings = map[string]ElementType{
 	string(ElementTypeNamespace):           ElementTypeNamespace,
 	string(ElementTypePackage):             ElementTypePackage,
@@ -81,6 +83,35 @@ const (
 	ScopeProject  Scope = "project"
 )
 
+type ResolveContext struct {
+	Language    Language
+	CaptureName string
+	CaptureNode *gotreesitter.Node
+	SourceFile  *SourceFile
+	ProjectInfo *ProjectInfo
+}
+
+type SourceFile struct {
+	ClientId     string
+	CodebasePath string
+	CodebaseName string
+	Name         string
+	Path         string
+	Content      []byte
+	Language     string
+}
+
+// ToElementType 将字符串映射为ElementType
+func ToElementType(captureName string) ElementType {
+	if captureName == EmptyString {
+		return ElementTypeUndefined
+	}
+	if et, exists := TypeMappings[captureName]; exists {
+		return et
+	}
+	return ElementTypeUndefined
+}
+
 // Language represents a programming language.
 type Language string
 
@@ -100,21 +131,3 @@ const (
 	Kotlin     Language = "kotlin"
 	Scala      Language = "scala"
 )
-
-type ResolveContext struct {
-	Language    Language
-	CaptureName string
-	CaptureNode *treesitter.Node
-	SourceFile  *SourceFile
-	ProjectInfo *ProjectInfo
-}
-
-type SourceFile struct {
-	ClientId     string
-	CodebasePath string
-	CodebaseName string
-	Name         string
-	Path         string
-	Content      []byte
-	Language     string
-}

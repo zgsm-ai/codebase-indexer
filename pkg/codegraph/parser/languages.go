@@ -1,7 +1,7 @@
 package parser
 
 import (
-	"codebase-indexer/pkg/codegraph/parser/resolver"
+	"codebase-indexer/pkg/codegraph/resolver"
 	sitterkotlin "github.com/tree-sitter-grammars/tree-sitter-kotlin/bindings/go"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	sittercsharp "github.com/tree-sitter/tree-sitter-c-sharp/bindings/go"

@@ -1,23 +1,23 @@
 package resolver
 
 import (
-	"codebase-indexer/pkg/codegraph/parser/utils"
+	"codebase-indexer/pkg/codegraph/utils"
 	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
 )
 
-type CResolver struct {
+type CppResolver struct {
 }
 
-var _ ElementResolver = &CResolver{}
+var _ ElementResolver = &CppResolver{}
 
-func (r *CResolver) Resolve(ctx context.Context, element Element, rc *ResolveContext) error {
-	return resolve(ctx, r, element, rc)
+func (c *CppResolver) Resolve(ctx context.Context, element Element, rc *ResolveContext) error {
+	return resolve(ctx, c, element, rc)
 }
 
-func (r *CResolver) resolveImport(ctx context.Context, element Import, rc *ResolveContext) error {
+func (c *CppResolver) resolveImport(ctx context.Context, element Import, rc *ResolveContext) error {
 	if element.Name == EmptyString {
 		return fmt.Errorf("import is empty")
 	}
@@ -70,32 +70,32 @@ func (r *CResolver) resolveImport(ctx context.Context, element Import, rc *Resol
 	return fmt.Errorf("cannot find file which import belongs to: %s", importName)
 }
 
-func (r *CResolver) resolvePackage(ctx context.Context, element Package, rc *ResolveContext) error {
+func (c *CppResolver) resolvePackage(ctx context.Context, element Package, rc *ResolveContext) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (r *CResolver) resolveFunction(ctx context.Context, element Function, rc *ResolveContext) error {
+func (c *CppResolver) resolveFunction(ctx context.Context, element Function, rc *ResolveContext) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (r *CResolver) resolveMethod(ctx context.Context, element Method, rc *ResolveContext) error {
+func (c *CppResolver) resolveMethod(ctx context.Context, element Method, rc *ResolveContext) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (r *CResolver) resolveClass(ctx context.Context, element Class, rc *ResolveContext) error {
+func (c *CppResolver) resolveClass(ctx context.Context, element Class, rc *ResolveContext) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (r *CResolver) resolveVariable(ctx context.Context, element Variable, rc *ResolveContext) error {
+func (c *CppResolver) resolveVariable(ctx context.Context, element Variable, rc *ResolveContext) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (r *CResolver) resolveInterface(ctx context.Context, element Interface, rc *ResolveContext) error {
+func (c *CppResolver) resolveInterface(ctx context.Context, element Interface, rc *ResolveContext) error {
 	//TODO implement me
 	panic("implement me")
 }

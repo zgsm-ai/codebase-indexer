@@ -1,12 +1,13 @@
 package parser
 
 import (
-	"codebase-indexer/pkg/codegraph/parser/resolver"
-	"codebase-indexer/pkg/codegraph/parser/utils"
+	"codebase-indexer/pkg/codegraph/resolver"
+	"codebase-indexer/pkg/codegraph/utils"
 	"codebase-indexer/pkg/logger"
 	"context"
 	"fmt"
 	sitter "github.com/tree-sitter/go-tree-sitter"
+	"strings"
 )
 
 type SourceFileParser struct {
@@ -132,22 +133,23 @@ func (p *SourceFileParser) processNode(
 	rootIndex := match.Captures[0].Index
 	rootCaptureName := captureNames[rootIndex]
 
-	rootElement := initRootElement(rootCaptureName)
-
-	rootElement.SetRootIndex(rootIndex)
+	rootElement := newRootElement(rootCaptureName, rootIndex)
 
 	for _, capture := range match.Captures {
-		if capture.Node.IsMissing() || capture.Node.IsError() {
+		node := capture.Node
+		if node.IsMissing() || node.IsError() {
 			p.logger.Debug("tree_sitter base_processor capture node %s is missing or error",
-				capture.Node.Kind())
+				node.Kind())
 			continue
 		}
 		captureName := captureNames[capture.Index] // index not in order
 
+		p.setRootElement(rootElement, &capture, captureName, sourceFile.Content)
+
 		resolveCtx := &resolver.ResolveContext{
 			Language:    language,
 			CaptureName: captureName,
-			CaptureNode: &capture.Node,
+			CaptureNode: &node,
 			SourceFile:  sourceFile,
 			ProjectInfo: projectInfo,
 		}
@@ -162,32 +164,34 @@ func (p *SourceFileParser) processNode(
 	return rootElement, nil
 }
 
-// findIdentifierNode 递归遍历语法树节点，查找类型为"identifier"的节点
-func findIdentifierNode(node *sitter.Node) *sitter.Node {
-	if node == nil {
-		return nil
-	}
-	// 检查当前节点是否为identifier类型
-	if node.Kind() == identifier {
-		return node
+func (p *SourceFileParser) setRootElement(
+	rootElement resolver.Element,
+	capture *sitter.QueryCapture,
+	captureName string,
+	content []byte) {
+	node := capture.Node
+	// 设置range
+	if capture.Index == rootElement.GetRootIndex() { // root capture: @package @function @class etc
+		// rootNode
+		rootElement.SetRange([]int32{
+			int32(node.StartPosition().Row),
+			int32(node.StartPosition().Column),
+			int32(node.StartPosition().Row),
+			int32(node.StartPosition().Column),
+		})
 	}
 
-	// 遍历所有子节点
-	for i := uint(0); i < node.ChildCount(); i++ {
-		child := node.Child(i)
-		if child == nil {
-			continue
+	// 设置name
+	if rootElement.GetName() == EmptyString && IsElementNameCapture(rootElement.GetType(), captureName) {
+		// 取root节点的name，比如definition.function.name
+		// 获取名称 ,go import 带双引号
+		name := strings.ReplaceAll(node.Utf8Text(content), DoubleQuote, EmptyString)
+		if name == EmptyString {
+			// TODO 日志
+			fmt.Printf("tree_sitter base_processor name_node %s %v name not found", captureName, rootElement.GetRange())
 		}
-
-		// 递归查找子节点中的identifier
-		result := findIdentifierNode(child)
-		if result != nil {
-			return result // 找到则立即返回
-		}
+		rootElement.SetName(name)
 	}
-
-	// 未找到identifier节点
-	return nil
 }
 
 func isSamePosition(source []int32, target []int32) bool {

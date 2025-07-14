@@ -1,7 +1,6 @@
 package parser
 
 import (
-	"codebase-indexer/pkg/codegraph/parser/resolver"
 	"embed"
 	"fmt"
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -16,8 +15,8 @@ const defSubdir = "def"
 const baseSubDir = "base"
 const queryExt = ".scm"
 
-var DefinitionQueries = make(map[resolver.Language]string)
-var BaseQueries = make(map[resolver.Language]string)
+var DefinitionQueries = make(map[Language]string)
+var BaseQueries = make(map[Language]string)
 
 func init() {
 	if err := loadScm(); err != nil {
@@ -68,6 +67,6 @@ func loadLanguageScm(lang *TreeSitterParser, scmDir string, sitterLang *sitter.L
 	return baseQueryContent, nil
 }
 
-func makeQueryPath(lang resolver.Language, subdir string) string {
+func makeQueryPath(lang Language, subdir string) string {
 	return filepath.ToSlash(filepath.Join(queryDir, subdir, string(lang)+queryExt))
 }

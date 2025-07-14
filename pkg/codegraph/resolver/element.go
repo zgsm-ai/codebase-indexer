@@ -5,8 +5,12 @@ type Element interface {
 	GetName() string
 	GetType() ElementType
 	GetRange() []int32
+	GetContent() []byte
+	GetRootIndex() uint32
+	SetName(name string)
+	SetType(et ElementType)
+	SetRange(range_ []int32)
 	SetContent(content []byte)
-	SetRootIndex(rootIndex uint32)
 }
 
 // BaseElement 提供接口的基础实现，其他类型嵌入该结构体
@@ -18,15 +22,29 @@ type BaseElement struct {
 	Range            []int32
 }
 
+func NewBaseElement(rootCaptureIndex uint32) *BaseElement {
+	return &BaseElement{
+		rootCaptureIndex: rootCaptureIndex,
+	}
+}
+
 func (e *BaseElement) GetName() string      { return e.Name }
 func (e *BaseElement) GetType() ElementType { return e.Type }
 func (e *BaseElement) GetRange() []int32    { return e.Range }
+func (e *BaseElement) GetContent() []byte   { return e.Content }
+func (e *BaseElement) GetRootIndex() uint32 { return e.rootCaptureIndex }
+func (e *BaseElement) SetName(name string) {
+	e.Name = name
+}
+func (e *BaseElement) SetType(et ElementType) {
+	e.Type = et
+}
+func (e *BaseElement) SetRange(range_ []int32) {
+	e.Range = range_
+}
 
 func (e *BaseElement) SetContent(content []byte) {
 	e.Content = content
-}
-func (e *BaseElement) SetRootIndex(rootCaptureIndex uint32) {
-	e.rootCaptureIndex = rootCaptureIndex
 }
 
 // Import 表示导入语句

@@ -1,7 +1,7 @@
 package resolver
 
 import (
-	"codebase-indexer/pkg/codegraph/parser/utils"
+	"codebase-indexer/pkg/codegraph/utils"
 	"path/filepath"
 	"strings"
 )
