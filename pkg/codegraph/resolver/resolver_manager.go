@@ -10,11 +10,11 @@ import (
 )
 
 type ResolveContext struct {
-	Language    lang.Language
-	CaptureName string
-	CaptureNode *treesitter.Node
-	SourceFile  *types.SourceFile
-	ProjectInfo *project.ProjectInfo
+	Language     lang.Language
+	Match        *treesitter.QueryMatch
+	CaptureNames []string // 通过Match.Capture.Index获取captureName
+	SourceFile   *types.SourceFile
+	ProjectInfo  *project.ProjectInfo
 }
 
 // 解析器管理器

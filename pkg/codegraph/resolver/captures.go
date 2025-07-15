@@ -1,4 +1,4 @@
-package parser
+package resolver
 
 import (
 	"codebase-indexer/pkg/codegraph/types"

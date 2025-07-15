@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	sitter "github.com/tree-sitter/go-tree-sitter"
-	"strings"
 )
 
 type SourceFileParser struct {
@@ -146,64 +145,23 @@ func (p *SourceFileParser) processNode(
 	rootElement := newRootElement(rootCaptureName, rootIndex)
 
 	resolvedElements := make([]resolver.Element, 0)
-	for _, capture := range match.Captures {
-		node := capture.Node
-		if node.IsMissing() || node.IsError() {
-			p.logger.Debug("tree_sitter base_processor capture node %s is missing or error",
-				node.Kind())
-			continue
-		}
-		captureName := captureNames[capture.Index] // index not in order
 
-		p.updateRootElement(rootElement, &capture, captureName, sourceFile.Content)
-
-		resolveCtx := &resolver.ResolveContext{
-			Language:    language,
-			CaptureName: captureName,
-			CaptureNode: &node,
-			SourceFile:  sourceFile,
-			ProjectInfo: projectInfo,
-		}
-
-		elements, err := p.resolverManager.Resolve(ctx, rootElement, resolveCtx)
-		if err != nil {
-			// TODO full_name（import）、 find identifier recur (variable)、parameters/arguments
-			p.logger.Debug("parse capture node %s err: %v", captureName, err)
-		}
-		resolvedElements = append(resolvedElements, elements...)
+	resolveCtx := &resolver.ResolveContext{
+		Language:     language,
+		Match:        match,
+		CaptureNames: captureNames,
+		SourceFile:   sourceFile,
+		ProjectInfo:  projectInfo,
 	}
+
+	elements, err := p.resolverManager.Resolve(ctx, rootElement, resolveCtx)
+	if err != nil {
+		// TODO full_name（import）、 find identifier recur (variable)、parameters/arguments
+		p.logger.Debug("parse match err: %v", err)
+	}
+	resolvedElements = append(resolvedElements, elements...)
 
 	return resolvedElements, nil
-}
-
-func (p *SourceFileParser) updateRootElement(
-	rootElement resolver.Element,
-	capture *sitter.QueryCapture,
-	captureName string,
-	content []byte) {
-	node := capture.Node
-	// 设置range
-	if capture.Index == rootElement.GetRootIndex() { // root capture: @package @function @class etc
-		// rootNode
-		rootElement.SetRange([]int32{
-			int32(node.StartPosition().Row),
-			int32(node.StartPosition().Column),
-			int32(node.EndPosition().Row),
-			int32(node.EndPosition().Column),
-		})
-	}
-
-	// 设置name TODO 这里这里去掉，在 resolve中处理名字
-	if rootElement.GetName() == types.EmptyString && IsElementNameCapture(rootElement.GetType(), captureName) {
-		// 取root节点的name，比如definition.function.name
-		// 获取名称 ,go import 带双引号
-		name := strings.ReplaceAll(node.Utf8Text(content), types.DoubleQuote, types.EmptyString)
-		if name == types.EmptyString {
-			// TODO 日志
-			fmt.Printf("tree_sitter base_processor name_node %s %v name not found", captureName, rootElement.GetRange())
-		}
-		rootElement.SetName(name)
-	}
 }
 
 func isSamePosition(source []int32, target []int32) bool {
