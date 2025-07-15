@@ -1,12 +1,12 @@
-package resolver
+package types
 
-import (
-	gotreesitter "github.com/tree-sitter/go-tree-sitter"
+const (
+	EmptyString = ""
+	DoubleQuote = "\""
+	Comma       = ","
+	Identifier  = "identifier"
+	Dot         = "."
 )
-
-const EmptyString = ""
-
-const identifier = "identifier"
 
 // ElementType 表示代码元素类型，使用字符串字面量作为枚举值
 type ElementType string
@@ -83,14 +83,6 @@ const (
 	ScopeProject  Scope = "project"
 )
 
-type ResolveContext struct {
-	Language    Language
-	CaptureName string
-	CaptureNode *gotreesitter.Node
-	SourceFile  *SourceFile
-	ProjectInfo *ProjectInfo
-}
-
 type SourceFile struct {
 	ClientId     string
 	CodebasePath string
@@ -98,7 +90,6 @@ type SourceFile struct {
 	Name         string
 	Path         string
 	Content      []byte
-	Language     string
 }
 
 // ToElementType 将字符串映射为ElementType
@@ -111,23 +102,3 @@ func ToElementType(captureName string) ElementType {
 	}
 	return ElementTypeUndefined
 }
-
-// Language represents a programming language.
-type Language string
-
-const (
-	Java       Language = "java"
-	Python     Language = "python"
-	Go         Language = "go"
-	JavaScript Language = "javascript"
-	TypeScript Language = "typescript"
-	TSX        Language = "tsx"
-	Rust       Language = "rust"
-	C          Language = "c"
-	CPP        Language = "cpp"
-	CSharp     Language = "csharp"
-	Ruby       Language = "ruby"
-	PHP        Language = "php"
-	Kotlin     Language = "kotlin"
-	Scala      Language = "scala"
-)

@@ -6,7 +6,7 @@ package resolver
 //}
 //
 //func (r *RustResolver) Resolve(importStmt *Import, currentFilePath string, config *ProjectInfo) error {
-//	if importStmt.Name == EmptyString {
+//	if importStmt.Name == types.EmptyString {
 //		return fmt.Errorf("import is empty")
 //	}
 //
@@ -31,7 +31,7 @@ package resolver
 //	foundPaths := []string{}
 //
 //	// 尝试查找.rs文件或模块目录
-//	for _, relDir := range config.Dirs {
+//	for _, relDir := range config.dirs {
 //		relPath := ToUnixPath(filepath.Join(relDir, modulePath+".rs"))
 //		if containsFileIndex(config, relPath) {
 //			foundPaths = append(foundPaths, relPath)

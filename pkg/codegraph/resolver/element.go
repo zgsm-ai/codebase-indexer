@@ -1,14 +1,16 @@
 package resolver
 
+import "codebase-indexer/pkg/codegraph/types"
+
 // Element 定义所有代码元素的接口
 type Element interface {
 	GetName() string
-	GetType() ElementType
+	GetType() types.ElementType
 	GetRange() []int32
 	GetContent() []byte
 	GetRootIndex() uint32
 	SetName(name string)
-	SetType(et ElementType)
+	SetType(et types.ElementType)
 	SetRange(range_ []int32)
 	SetContent(content []byte)
 }
@@ -17,7 +19,8 @@ type Element interface {
 type BaseElement struct {
 	Name             string
 	rootCaptureIndex uint32
-	Type             ElementType
+	Scope            types.Scope
+	Type             types.ElementType
 	Content          []byte
 	Range            []int32
 }
@@ -28,15 +31,15 @@ func NewBaseElement(rootCaptureIndex uint32) *BaseElement {
 	}
 }
 
-func (e *BaseElement) GetName() string      { return e.Name }
-func (e *BaseElement) GetType() ElementType { return e.Type }
-func (e *BaseElement) GetRange() []int32    { return e.Range }
-func (e *BaseElement) GetContent() []byte   { return e.Content }
-func (e *BaseElement) GetRootIndex() uint32 { return e.rootCaptureIndex }
+func (e *BaseElement) GetName() string            { return e.Name }
+func (e *BaseElement) GetType() types.ElementType { return e.Type }
+func (e *BaseElement) GetRange() []int32          { return e.Range }
+func (e *BaseElement) GetContent() []byte         { return e.Content }
+func (e *BaseElement) GetRootIndex() uint32       { return e.rootCaptureIndex }
 func (e *BaseElement) SetName(name string) {
 	e.Name = name
 }
-func (e *BaseElement) SetType(et ElementType) {
+func (e *BaseElement) SetType(et types.ElementType) {
 	e.Type = et
 }
 func (e *BaseElement) SetRange(range_ []int32) {

@@ -1,7 +1,7 @@
 package parser
 
 import (
-	"codebase-indexer/pkg/codegraph/resolver"
+	"codebase-indexer/pkg/codegraph/types"
 	"strings"
 )
 
@@ -32,7 +32,7 @@ var (
 )
 
 // IsElementNameCapture 名称捕获
-func IsElementNameCapture(elementType resolver.ElementType, captureName string) bool {
+func IsElementNameCapture(elementType types.ElementType, captureName string) bool {
 	return IsNameCapture(captureName) &&
 		captureName == string(elementType)+dotName
 }

@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"codebase-indexer/pkg/codegraph/types"
 	"context"
 	"fmt"
 	"golang.org/x/tools/go/packages"
@@ -12,12 +13,12 @@ type GoResolver struct {
 
 var _ ElementResolver = &GoResolver{}
 
-func (r *GoResolver) Resolve(ctx context.Context, element Element, rc *ResolveContext) error {
+func (r *GoResolver) Resolve(ctx context.Context, element Element, rc *ResolveContext) ([]Element, error) {
 	return resolve(ctx, r, element, rc)
 }
 
-func (r *GoResolver) resolveImport(ctx context.Context, element Import, rc *ResolveContext) error {
-	if element.Name == EmptyString {
+func (r *GoResolver) resolveImport(ctx context.Context, element *Import, rc *ResolveContext) ([]Element, error) {
+	if element.Name == types.EmptyString {
 		return fmt.Errorf("import is empty")
 	}
 
@@ -29,14 +30,14 @@ func (r *GoResolver) resolveImport(ctx context.Context, element Import, rc *Reso
 		fmt.Printf("import_resolver import %s is stantdard lib, skip\n", importName)
 		return nil
 	}
-	pc := rc.ProjectInfo
+	pj := rc.ProjectInfo
 	// 移除mod，如果有
 	relPath := importName
-	if strings.HasPrefix(importName, pc.SourceRoot) {
-		relPath = strings.TrimPrefix(importName, pc.SourceRoot+"/")
+	if strings.HasPrefix(importName, pj.GetSourceRoot()) {
+		relPath = strings.TrimPrefix(importName, pj.GetSourceRoot()+"/")
 	}
 
-	if len(pc.fileSet) == 0 {
+	if pj.IsEmpty() {
 		fmt.Println("not support project file list, use default resolve")
 		element.FilePaths = []string{relPath}
 		return nil
@@ -44,14 +45,14 @@ func (r *GoResolver) resolveImport(ctx context.Context, element Import, rc *Reso
 
 	// 尝试匹配 .go 文件
 	relPathWithExt := relPath + ".go"
-	if pc.containsFileIndex(relPathWithExt) {
+	if pj.ContainsFileIndex(relPathWithExt) {
 		element.FilePaths = []string{relPathWithExt}
 		return nil
 	}
 
 	// 匹配包目录下所有 .go 文件
 
-	filesInDir := pc.findFilesInDirIndex(relPath, ".go")
+	filesInDir := pj.FindFilesInDirIndex(relPath, ".go")
 	if len(filesInDir) > 0 {
 		element.FilePaths = append(element.FilePaths, filesInDir...)
 	}
@@ -63,32 +64,32 @@ func (r *GoResolver) resolveImport(ctx context.Context, element Import, rc *Reso
 	return fmt.Errorf("cannot find file which import belongs to: %s", importName)
 }
 
-func (r *GoResolver) resolvePackage(ctx context.Context, element Package, rc *ResolveContext) error {
+func (r *GoResolver) resolvePackage(ctx context.Context, element *Package, rc *ResolveContext) ([]Element, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (r *GoResolver) resolveFunction(ctx context.Context, element Function, rc *ResolveContext) error {
+func (r *GoResolver) resolveFunction(ctx context.Context, element *Function, rc *ResolveContext) ([]Element, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (r *GoResolver) resolveMethod(ctx context.Context, element Method, rc *ResolveContext) error {
+func (r *GoResolver) resolveMethod(ctx context.Context, element *Method, rc *ResolveContext) ([]Element, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (r *GoResolver) resolveClass(ctx context.Context, element Class, rc *ResolveContext) error {
+func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *ResolveContext) ([]Element, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (r *GoResolver) resolveVariable(ctx context.Context, element Variable, rc *ResolveContext) error {
+func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc *ResolveContext) ([]Element, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (r *GoResolver) resolveInterface(ctx context.Context, element Interface, rc *ResolveContext) error {
+func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, rc *ResolveContext) ([]Element, error) {
 	//TODO implement me
 	panic("implement me")
 }

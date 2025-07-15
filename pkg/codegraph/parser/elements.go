@@ -1,47 +1,49 @@
 package parser
 
 import (
+	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/resolver"
+	"codebase-indexer/pkg/codegraph/types"
 )
 
-type ParsedSource struct {
+type FileSymbolTable struct {
 	Path     string
 	Package  *resolver.Package
 	Imports  []*resolver.Import
-	Language resolver.Language
+	Language lang.Language
 	Elements []resolver.Element
 }
 
 func newRootElement(elementTypeValue string, rootIndex uint32) resolver.Element {
-	elementType := resolver.ToElementType(elementTypeValue)
+	elementType := types.ToElementType(elementTypeValue)
 	base := resolver.NewBaseElement(rootIndex)
 	switch elementType {
-	case resolver.ElementTypePackage:
-		base.Type = resolver.ElementTypePackage
+	case types.ElementTypePackage:
+		base.Type = types.ElementTypePackage
 		return &resolver.Package{BaseElement: base}
-	case resolver.ElementTypeImport:
-		base.Type = resolver.ElementTypeImport
+	case types.ElementTypeImport:
+		base.Type = types.ElementTypeImport
 		return &resolver.Import{BaseElement: base}
-	case resolver.ElementTypeFunction:
-		base.Type = resolver.ElementTypeFunction
+	case types.ElementTypeFunction:
+		base.Type = types.ElementTypeFunction
 		return &resolver.Function{BaseElement: base}
-	case resolver.ElementTypeClass:
-		base.Type = resolver.ElementTypeClass
+	case types.ElementTypeClass:
+		base.Type = types.ElementTypeClass
 		return &resolver.Class{BaseElement: base}
-	case resolver.ElementTypeMethod:
-		base.Type = resolver.ElementTypeMethod
+	case types.ElementTypeMethod:
+		base.Type = types.ElementTypeMethod
 		return &resolver.Method{BaseElement: base}
-	case resolver.ElementTypeFunctionCall:
-		base.Type = resolver.ElementTypeFunctionCall
+	case types.ElementTypeFunctionCall:
+		base.Type = types.ElementTypeFunctionCall
 		return &resolver.Call{BaseElement: base}
-	case resolver.ElementTypeMethodCall:
-		base.Type = resolver.ElementTypeMethodCall
+	case types.ElementTypeMethodCall:
+		base.Type = types.ElementTypeMethodCall
 		return &resolver.Call{BaseElement: base}
-	case resolver.ElementTypeInterface:
-		base.Type = resolver.ElementTypeInterface
+	case types.ElementTypeInterface:
+		base.Type = types.ElementTypeInterface
 		return &resolver.Interface{BaseElement: base}
 	default:
-		base.Type = resolver.ElementTypeUndefined
+		base.Type = types.ElementTypeUndefined
 		return base
 	}
 }

@@ -1,4 +1,4 @@
-package parser
+package lang
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 )
 
 var ErrFileExtNotFound = errors.New("file extension not found")
-var ErrLangConfNotFound = errors.New("langConf not found")
+var ErrLanguageParserNotFound = errors.New("tree_sitter language parser not found")
 var ErrQueryNotFound = errors.New("query not found")
 
 // Custom errors
@@ -29,5 +29,5 @@ func IsRealQueryErr(err error) bool {
 }
 
 func IsNotSupportedFileError(err error) bool {
-	return errors.Is(err, ErrFileExtNotFound) || errors.Is(err, ErrLangConfNotFound)
+	return errors.Is(err, ErrFileExtNotFound) || errors.Is(err, ErrLanguageParserNotFound)
 }

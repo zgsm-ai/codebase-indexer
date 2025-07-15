@@ -1,7 +1,8 @@
-package parser
+package lang
 
 import (
-	"codebase-indexer/pkg/codegraph/resolver"
+	"codebase-indexer/pkg/codegraph/types"
+	"fmt"
 	sitterkotlin "github.com/tree-sitter-grammars/tree-sitter-kotlin/bindings/go"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	sittercsharp "github.com/tree-sitter/tree-sitter-c-sharp/bindings/go"
@@ -19,9 +20,29 @@ import (
 	"path/filepath"
 )
 
+// Language represents a programming language.
+type Language string
+
+const (
+	Java       Language = "java"
+	Python     Language = "python"
+	Go         Language = "go"
+	JavaScript Language = "javascript"
+	TypeScript Language = "typescript"
+	TSX        Language = "tsx"
+	Rust       Language = "rust"
+	C          Language = "c"
+	CPP        Language = "cpp"
+	CSharp     Language = "csharp"
+	Ruby       Language = "ruby"
+	PHP        Language = "php"
+	Kotlin     Language = "kotlin"
+	Scala      Language = "scala"
+)
+
 // TreeSitterParser holds the configuration for a language
 type TreeSitterParser struct {
-	Language       resolver.Language
+	Language       Language
 	SitterLanguage func() *sitter.Language
 	SupportedExts  []string
 }
@@ -29,98 +50,98 @@ type TreeSitterParser struct {
 // treeSitterParsers 定义了所有支持的语言配置
 var treeSitterParsers = []*TreeSitterParser{
 	{
-		Language: resolver.Go,
+		Language: Go,
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sittergo.Language())
 		},
 		SupportedExts: []string{".go"},
 	},
 	{
-		Language: resolver.Java,
+		Language: Java,
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sitterjava.Language())
 		},
 		SupportedExts: []string{".java"},
 	},
 	{
-		Language: resolver.Python,
+		Language: Python,
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sitterpython.Language())
 		},
 		SupportedExts: []string{".py"},
 	},
 	{
-		Language: resolver.JavaScript,
+		Language: JavaScript,
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sitterjavascript.Language())
 		},
 		SupportedExts: []string{".js", ".jsx"},
 	},
 	{
-		Language: resolver.TypeScript,
+		Language: TypeScript,
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sittertypescript.LanguageTypescript())
 		},
 		SupportedExts: []string{".ts"},
 	},
 	{
-		Language: resolver.TSX,
+		Language: TSX,
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sittertypescript.LanguageTSX())
 		},
 		SupportedExts: []string{".tsx"},
 	},
 	{
-		Language: resolver.Rust,
+		Language: Rust,
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sitterrust.Language())
 		},
 		SupportedExts: []string{".rs"},
 	},
 	{
-		Language: resolver.C,
+		Language: C,
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sitterc.Language())
 		},
 		SupportedExts: []string{".c", ".h"},
 	},
 	{
-		Language: resolver.CPP,
+		Language: CPP,
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sittercpp.Language())
 		},
 		SupportedExts: []string{".cpp", ".cc", ".cxx", ".hpp"},
 	},
 	{
-		Language: resolver.CSharp,
+		Language: CSharp,
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sittercsharp.Language())
 		},
 		SupportedExts: []string{".cs"},
 	},
 	{
-		Language: resolver.Ruby,
+		Language: Ruby,
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sitterruby.Language())
 		},
 		SupportedExts: []string{".rb"},
 	},
 	{
-		Language: resolver.PHP,
+		Language: PHP,
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sitterphp.LanguagePHP())
 		},
 		SupportedExts: []string{".php", ".phtml"},
 	},
 	{
-		Language: resolver.Kotlin,
+		Language: Kotlin,
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sitterkotlin.Language())
 		},
 		SupportedExts: []string{".kt", ".kts"},
 	},
 	{
-		Language: resolver.Scala,
+		Language: Scala,
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sitterscala.Language())
 		},
@@ -133,26 +154,50 @@ func GetTreeSitterParsers() []*TreeSitterParser {
 	return treeSitterParsers
 }
 
-// getTreeSitterParserByExt 根据文件扩展名获取语言配置
-func getTreeSitterParserByExt(ext string) *TreeSitterParser {
-	for _, config := range treeSitterParsers {
-		for _, supportedExt := range config.SupportedExts {
+// getSitterParserByExt 根据文件扩展名获取语言配置
+func getSitterParserByExt(ext string) *TreeSitterParser {
+	for _, tp := range treeSitterParsers {
+		for _, supportedExt := range tp.SupportedExts {
 			if supportedExt == ext {
-				return config
+				return tp
 			}
 		}
 	}
 	return nil
 }
 
-func GetTreeSitterParserByFilePath(path string) (*TreeSitterParser, error) {
+func InferLanguage(path string) (Language, error) {
 	ext := filepath.Ext(path)
-	if ext == "" {
+	if ext == types.EmptyString {
+		return types.EmptyString, ErrFileExtNotFound
+	}
+	langConf := getSitterParserByExt(ext)
+	if langConf == nil {
+		return types.EmptyString, ErrLanguageParserNotFound
+	}
+	return langConf.Language, nil
+}
+
+func GetSitterParserByFilePath(path string) (*TreeSitterParser, error) {
+	ext := filepath.Ext(path)
+	if ext == types.EmptyString {
 		return nil, ErrFileExtNotFound
 	}
-	langConf := getTreeSitterParserByExt(ext)
+	langConf := getSitterParserByExt(ext)
 	if langConf == nil {
-		return nil, ErrLangConfNotFound
+		return nil, ErrLanguageParserNotFound
 	}
 	return langConf, nil
+}
+
+func GetSitterParserByLanguage(language Language) (*TreeSitterParser, error) {
+	if language == types.EmptyString {
+		return nil, fmt.Errorf("get tree_sitter parser by language: language is empty")
+	}
+	for _, parser := range treeSitterParsers {
+		if parser.Language == language {
+			return parser, nil
+		}
+	}
+	return nil, ErrLanguageParserNotFound
 }
