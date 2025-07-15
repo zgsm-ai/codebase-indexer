@@ -101,3 +101,8 @@ func (c *CppResolver) resolveInterface(ctx context.Context, element *Interface, 
 	//TODO implement me
 	panic("implement me")
 }
+
+func (c *CppResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
+	//TODO implement me
+	panic("implement me")
+}

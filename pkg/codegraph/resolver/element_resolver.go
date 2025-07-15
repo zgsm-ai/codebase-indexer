@@ -14,6 +14,7 @@ type ElementResolver interface {
 	resolveClass(ctx context.Context, element *Class, rc *ResolveContext) ([]Element, error)
 	resolveVariable(ctx context.Context, element *Variable, rc *ResolveContext) ([]Element, error)
 	resolveInterface(ctx context.Context, element *Interface, rc *ResolveContext) ([]Element, error)
+	resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error)
 }
 
 func resolve(ctx context.Context, b ElementResolver, element Element, rc *ResolveContext) ([]Element, error) {
@@ -32,6 +33,8 @@ func resolve(ctx context.Context, b ElementResolver, element Element, rc *Resolv
 		return b.resolveVariable(ctx, element.(*Variable), rc)
 	case *Interface:
 		return b.resolveInterface(ctx, element.(*Interface), rc)
+	case *Call:
+		return b.resolveCall(ctx, element.(*Call), rc)
 	default:
 		return nil, fmt.Errorf("element_resover not supported element %v", element)
 	}

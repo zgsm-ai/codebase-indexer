@@ -125,3 +125,8 @@ func (py *PythonResolver) resolveInterface(ctx context.Context, element *Interfa
 	//TODO implement me
 	panic("implement me")
 }
+
+func (py *PythonResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
+	//TODO implement me
+	panic("implement me")
+}

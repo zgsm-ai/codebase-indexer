@@ -108,3 +108,8 @@ func (ts *TypeScriptResolver) resolveInterface(ctx context.Context, element *Int
 	//TODO implement me
 	panic("implement me")
 }
+
+func (ts *TypeScriptResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
+	//TODO implement me
+	panic("implement me")
+}

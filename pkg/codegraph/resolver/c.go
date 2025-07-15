@@ -102,3 +102,8 @@ func (r *CResolver) resolveInterface(ctx context.Context, element *Interface, rc
 	//TODO implement me
 	panic("implement me")
 }
+
+func (r *CResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
+	//TODO implement me
+	panic("implement me")
+}

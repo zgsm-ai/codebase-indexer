@@ -96,3 +96,8 @@ func (j *JavaResolver) resolveInterface(ctx context.Context, element *Interface,
 	//TODO implement me
 	panic("implement me")
 }
+
+func (j *JavaResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
+	//TODO implement me
+	panic("implement me")
+}

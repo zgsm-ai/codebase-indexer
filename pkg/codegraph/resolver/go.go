@@ -96,6 +96,11 @@ func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, r
 	panic("implement me")
 }
 
+func (r *GoResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (g *GoResolver) isStandardLibrary(pkgPath string) (bool, error) {
 	cfg := &packages.Config{
 		Mode: packages.NeedName,
