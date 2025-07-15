@@ -18,19 +18,19 @@ type ElementResolver interface {
 
 func resolve(ctx context.Context, b ElementResolver, element Element, rc *ResolveContext) ([]Element, error) {
 	switch element.(type) {
-	case Import:
+	case *Import:
 		return b.resolveImport(ctx, element.(*Import), rc)
-	case Package:
+	case *Package:
 		return b.resolvePackage(ctx, element.(*Package), rc)
-	case Function:
+	case *Function:
 		return b.resolveFunction(ctx, element.(*Function), rc)
-	case Method:
+	case *Method:
 		return b.resolveMethod(ctx, element.(*Method), rc)
-	case Class:
+	case *Class:
 		return b.resolveClass(ctx, element.(*Class), rc)
-	case Variable:
+	case *Variable:
 		return b.resolveVariable(ctx, element.(*Variable), rc)
-	case Interface:
+	case *Interface:
 		return b.resolveInterface(ctx, element.(*Interface), rc)
 	default:
 		return nil, fmt.Errorf("element_resover not supported element %v", element)

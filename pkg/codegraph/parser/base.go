@@ -18,9 +18,10 @@ type SourceFileParser struct {
 	resolverManager *resolver.ResolverManager
 }
 
-func NewSourceFileParser() *SourceFileParser {
+func NewSourceFileParser(logger logger.Logger) *SourceFileParser {
 	resolveManager := resolver.NewResolverManager()
 	return &SourceFileParser{
+		logger:          logger,
 		resolverManager: resolveManager,
 	}
 }
@@ -187,8 +188,8 @@ func (p *SourceFileParser) updateRootElement(
 		rootElement.SetRange([]int32{
 			int32(node.StartPosition().Row),
 			int32(node.StartPosition().Column),
-			int32(node.StartPosition().Row),
-			int32(node.StartPosition().Column),
+			int32(node.EndPosition().Row),
+			int32(node.EndPosition().Column),
 		})
 	}
 

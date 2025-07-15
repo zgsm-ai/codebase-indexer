@@ -19,16 +19,18 @@ func (r *GoResolver) Resolve(ctx context.Context, element Element, rc *ResolveCo
 
 func (r *GoResolver) resolveImport(ctx context.Context, element *Import, rc *ResolveContext) ([]Element, error) {
 	if element.Name == types.EmptyString {
-		return fmt.Errorf("import is empty")
+		return nil, fmt.Errorf("import is empty")
 	}
 
 	element.FilePaths = []string{}
 	importName := element.Name
 
+	elements := []Element{element}
+
 	// 标准库，直接排除
 	if yes, _ := r.isStandardLibrary(importName); yes {
 		fmt.Printf("import_resolver import %s is stantdard lib, skip\n", importName)
-		return nil
+		return elements, nil
 	}
 	pj := rc.ProjectInfo
 	// 移除mod，如果有
@@ -40,14 +42,14 @@ func (r *GoResolver) resolveImport(ctx context.Context, element *Import, rc *Res
 	if pj.IsEmpty() {
 		fmt.Println("not support project file list, use default resolve")
 		element.FilePaths = []string{relPath}
-		return nil
+		return elements, nil
 	}
 
 	// 尝试匹配 .go 文件
 	relPathWithExt := relPath + ".go"
 	if pj.ContainsFileIndex(relPathWithExt) {
 		element.FilePaths = []string{relPathWithExt}
-		return nil
+		return elements, nil
 	}
 
 	// 匹配包目录下所有 .go 文件
@@ -58,10 +60,10 @@ func (r *GoResolver) resolveImport(ctx context.Context, element *Import, rc *Res
 	}
 
 	if len(element.FilePaths) > 0 {
-		return nil
+		return elements, nil
 	}
 
-	return fmt.Errorf("cannot find file which import belongs to: %s", importName)
+	return nil, fmt.Errorf("cannot find file which import belongs to: %s", importName)
 }
 
 func (r *GoResolver) resolvePackage(ctx context.Context, element *Package, rc *ResolveContext) ([]Element, error) {
