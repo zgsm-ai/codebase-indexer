@@ -86,8 +86,10 @@ type Call struct {
 // Class 表示类
 type Class struct {
 	*BaseElement
-	Fields  []*Field
-	Methods []*Method
+	SuperClasses    []string
+	SuperInterfaces []string
+	Fields          []*Field
+	Methods         []*Method
 }
 
 type Field struct {
@@ -103,7 +105,8 @@ type Parameter struct {
 
 type Interface struct {
 	*BaseElement
-	Methods []*Declaration
+	SuperInterfaces []string
+	Methods         []*Declaration
 }
 
 type Declaration struct {
