@@ -7,13 +7,13 @@
   (import_spec_list
     (import_spec
       name: (package_identifier) * @import.alias
-      path: (interpreted_string_literal) @import.name
+      path: (interpreted_string_literal) @import.path
       )
     ) *
 
   (import_spec
     name: (package_identifier) * @import.alias
-    path: (interpreted_string_literal) @import.name
+    path: (interpreted_string_literal) @import.path
     ) *
   ) @import
 
