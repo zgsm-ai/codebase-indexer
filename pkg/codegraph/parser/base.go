@@ -141,11 +141,8 @@ func (p *SourceFileParser) processNode(
 	} // root node
 	rootIndex := match.Captures[0].Index
 	rootCaptureName := captureNames[rootIndex]
-
 	rootElement := newRootElement(rootCaptureName, rootIndex)
-
 	resolvedElements := make([]resolver.Element, 0)
-
 	resolveCtx := &resolver.ResolveContext{
 		Language:     language,
 		Match:        match,
@@ -153,7 +150,7 @@ func (p *SourceFileParser) processNode(
 		SourceFile:   sourceFile,
 		ProjectInfo:  projectInfo,
 	}
-
+	
 	elements, err := p.resolverManager.Resolve(ctx, rootElement, resolveCtx)
 	if err != nil {
 		// TODO full_name（import）、 find identifier recur (variable)、parameters/arguments

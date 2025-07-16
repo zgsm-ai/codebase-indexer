@@ -9,17 +9,25 @@
   ) @import
 
 
+
 ;; Class declarations
 (class_declaration
-  name: (identifier) @name) @definition.class
+  name: (identifier) @definition.class.name
+  (superclass (type_identifier) @definition.class.extends)?
+  (super_interfaces
+    (type_list (type_identifier) @definition.class.implements)*
+  )?
+) @definition.class
 
 ;; Interface declarations
 (interface_declaration
-  name: (identifier) @name) @definition.interface
+  name: (identifier) @definition.interface.name) @definition.interface
 
 
-;; Method declarations
+
 (method_declaration
+  (modifiers) @definition.method.modifier
+  type: (_) @definition.method.return_type
   name: (identifier) @definition.method.name
   parameters: (formal_parameters) @definition.method.parameters
   ) @definition.method
@@ -34,12 +42,16 @@
 
 ;; Enum declarations
 (enum_declaration
-  name: (identifier) @name) @definition.enum
+  name: (identifier) @definition.enum.name) @definition.enum
 
 ;; Field declarations
 (field_declaration
+  (modifiers)? @definition.field.modifiers
+  type: (_) @definition.field.type
   declarator: (variable_declarator
-                name: (identifier) @name)) @definition.field
+    name: (identifier) @definition.field.name
+  )
+) @definition.field
 
 ;; Constant field declarations (static final)
 (field_declaration
