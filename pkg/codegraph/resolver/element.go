@@ -77,10 +77,17 @@ type Method struct {
 	Declaration
 }
 
+// Call 函数调用
 type Call struct {
 	*BaseElement
 	Owner      string
 	Parameters []*Parameter
+}
+
+// Reference 结构体、类的引用
+type Reference struct {
+	Owner string // 包名
+	*BaseElement
 }
 
 // Class 表示类

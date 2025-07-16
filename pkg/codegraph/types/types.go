@@ -39,6 +39,7 @@ const (
 	ElementTypeParameter           ElementType = "definition.parameter"
 	ElementTypeComment             ElementType = "comment"
 	ElementTypeAnnotation          ElementType = "annotation"
+	ElementTypeReference           ElementType = "reference"
 )
 
 // TypeMappings 类型映射表 - captureName -> ElementType（使用ElementType字符串值作为键）
