@@ -27,7 +27,7 @@ func NewSourceFileParser(logger logger.Logger) *SourceFileParser {
 
 func (p *SourceFileParser) Parse(ctx context.Context,
 	sourceFile *types.SourceFile,
-	projectInfo *project.ProjectInfo) (*FileSymbolTable, error) {
+	projectInfo *project.ProjectInfo) (*FileElementTable, error) {
 	// Extract file extension
 	langParser, err := lang.GetSitterParserByFilePath(sourceFile.Path)
 	if err != nil {
@@ -119,7 +119,7 @@ func (p *SourceFileParser) Parse(ctx context.Context,
 	//TODO 顺序解析，对于使用在前，定义在后的类型，未进行处理，比如函数、方法、全局变量。需要再进行二次解析。
 
 	// 返回结构信息，包含处理后的定义
-	return &FileSymbolTable{
+	return &FileElementTable{
 		Path:     sourceFile.Path,
 		Package:  sourcePackage,
 		Imports:  imports,

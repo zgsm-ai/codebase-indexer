@@ -6,9 +6,9 @@ import (
 	"context"
 )
 
-type ProjectSymbolTable struct {
-	ProjectInfo      *project.ProjectInfo
-	FileSymbolTables []*parser.FileSymbolTable
+type ProjectElementTable struct {
+	ProjectInfo       *project.ProjectInfo
+	FileElementTables []*parser.FileElementTable
 }
 
 type DependencyAnalyzer struct {
@@ -18,7 +18,8 @@ func NewDependencyAnalyzer() *DependencyAnalyzer {
 	return &DependencyAnalyzer{}
 }
 
-func (da *DependencyAnalyzer) Analyze(ctx context.Context, projectSymbolTable *ProjectSymbolTable) error {
-
+func (da *DependencyAnalyzer) Analyze(ctx context.Context, projectSymbolTable *ProjectElementTable) error {
+	// 1、遍历所有文件，构建符号表
+	//var projectSymbols
 	return nil
 }

@@ -6,7 +6,7 @@ import (
 	"codebase-indexer/pkg/codegraph/types"
 )
 
-type FileSymbolTable struct {
+type FileElementTable struct {
 	Path     string
 	Package  *resolver.Package
 	Imports  []*resolver.Import
