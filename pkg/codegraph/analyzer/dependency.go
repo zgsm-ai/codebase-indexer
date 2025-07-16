@@ -20,4 +20,5 @@ func NewDependencyAnalyzer() *DependencyAnalyzer {
 
 func (da *DependencyAnalyzer) Analyze(ctx context.Context, projectSymbolTable *ProjectSymbolTable) error {
 
+	return nil
 }
