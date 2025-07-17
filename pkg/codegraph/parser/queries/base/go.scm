@@ -55,21 +55,17 @@
   parameters: (parameter_list) @definition.method.parameters
   ) @definition.method
 
-(type_declaration (type_spec name: (type_identifier) @definition.interface.name type: (interface_type))) @definition.interface
+(type_declaration (type_spec name: (type_identifier) @definition.interface.name type: (interface_type) @definition.interface.type)) @definition.interface
 
-(type_declaration (type_spec name: (type_identifier) @definition.struct.name type: (struct_type))) @definition.struct
+(type_declaration (type_spec name: (type_identifier) @definition.struct.name type: (struct_type) @definition.struct.type)) @definition.struct
 
 (type_declaration (type_spec name: (type_identifier) @definition.type_alias.name type: (type_identifier))) @definition.type_alias
 
 
-(source_file (const_declaration (const_spec name: (identifier) @constant.name)) @constant)
+(const_declaration (const_spec name: (identifier) @constant.name)) @constant
 
 
 ;; function/method_call
 (call_expression
-  function: (selector_expression
-              operand: (identifier) @call.function.owner
-              field: (field_identifier) @call.function.name
-              )
   arguments: (argument_list) @call.function.arguments
   ) @call.function

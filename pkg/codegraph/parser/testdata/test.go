@@ -3,10 +3,12 @@ package main
 import (
 	"fmt"
 	"math"
-	"os"
+	aa "os"
+	"strings"
+	"codebase-indexer/pkg/codegraph/types"
 )
-import "strings"
 
+type.SourceFile
 // 全局变量
 var globalVar int = 42
 
@@ -14,10 +16,12 @@ var globalVar int = 42
 type Person struct {
 	Name string
 	Age  int
+	a    []int
 }
 
 // 接口定义
 type Shape interface {
+	Brea(a,b int,c string)(d,f int) 
 	Area() float64
 }
 
@@ -29,6 +33,10 @@ func add(a, b int) int {
 // 方法定义
 func (p Person) SayHello() {
 	fmt.Printf("Hello, my name is %s\n", strings.TrimSpace(p.Name))
+}
+
+func (p Person) SayHello2(name1, name2 string) (string, string) {
+	return name1, name2
 }
 
 // 实现接口
@@ -45,10 +53,15 @@ func main() {
 	var x int
 	x = 10
 	y := 20
-
+	aa := &Person{Name: "Alice", Age: 30}
 	// 常量
 	const pi = 3.14159
 
+	var(
+		a int
+		b int
+		c int
+	)
 	// 数组
 	arr := [3]int{1, 2, 3}
 
@@ -118,4 +131,10 @@ func main() {
 	for val := range ch {
 		fmt.Printf("Received from channel: %d\n", val)
 	}
+
+	var G int
+	var(
+		a int
+		b int
+	)
 }

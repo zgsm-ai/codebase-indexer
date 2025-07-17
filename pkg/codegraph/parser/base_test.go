@@ -45,6 +45,87 @@ func TestGoBaseParse(t *testing.T) {
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			res, err := parser.Parse(context.Background(), tt.sourceFile, prj)
+			if res != nil {
+				if res.Package != nil {
+					fmt.Printf("  name: %s\n", res.Package.BaseElement.GetName())
+					fmt.Printf("  Content: %s\n", res.Package.BaseElement.GetContent())
+					fmt.Printf("  RootIndex: %v\n", res.Package.BaseElement.GetRootIndex())
+				}
+
+				if res.Imports != nil {
+					fmt.Println("\nImports详情:")
+					for i, imp := range res.Imports {
+						fmt.Printf("[%d]\n", i)
+						if imp != nil {
+							fmt.Printf("  name: %s\n", imp.BaseElement.GetName())
+							fmt.Printf("  Content: %s\n", imp.BaseElement.GetContent())
+							fmt.Printf("  RootIndex: %v\n", imp.BaseElement.GetRootIndex())
+							fmt.Printf("  type: %s\n", imp.BaseElement.GetType())
+							fmt.Printf("  Alias: %s\n", imp.Alias)
+							fmt.Printf("  FilePaths: %v\n", imp.FilePaths)
+
+						}
+					}
+				}
+
+				if res.Elements != nil {
+					fmt.Println("\nElements详情:")
+					for i, elem := range res.Elements {
+						if elem == nil {
+							continue
+						}
+						fmt.Printf("[%d] %s (Type: %v)\n", i, elem.GetName(), elem.GetType())
+						fmt.Printf("  Range: %v\n", elem.GetRange())
+
+						if base, ok := elem.(*resolver.BaseElement); ok {
+							fmt.Printf("  Content: %s\n", string(base.Content))
+						}
+
+						// 根据元素类型打印详细信息
+						switch v := elem.(type) {
+						case *resolver.Function:
+							fmt.Printf("    详细内容(Function) 名称: %s, 作用域: %s, 返回类型: %s, 参数数量: %d\n",
+								v.Declaration.Name, v.Scope, v.ReturnType, len(v.Parameters))
+							fmt.Printf("  Parameters: %v\n", v.Parameters)
+							fmt.Printf("  ReturnType: %s\n", v.ReturnType)
+						case *resolver.Method:
+							fmt.Printf("    详细内容(Method) 名称: %s, 拥有者: %s, 作用域: %s, 返回类型: %s, 参数数量: %d\n",
+								v.Declaration.Name, v.Owner, v.Scope, v.ReturnType, len(v.Parameters))
+							fmt.Printf("  Parameters: %v\n", v.Parameters)
+							fmt.Printf("  ReturnType: %s\n", v.ReturnType)
+						case *resolver.Call:
+							fmt.Printf("    详细内容(Call) 名称: %s, 所有者: %s, 参数数量: %d\n",
+								elem.GetName(), v.Owner, len(v.Parameters))
+							for _, param := range v.Parameters {
+								fmt.Printf("    参数: %s, 类型: %s\n", param.Name, param.Type)
+							}
+						case *resolver.Package:
+							fmt.Printf("    详细内容(Package) 名称: %s\n", elem.GetName())
+						case *resolver.Import:
+							fmt.Printf("    详细内容(Import) 源: %s, 别名: %s\n", v.Source, v.Alias)
+						case *resolver.Class:
+							fmt.Printf("    详细内容(Class) 名称: %s, 作用域: %s, 字段数量: %d, 方法数量: %d\n",
+								elem.GetName(), v.Scope, len(v.Fields), len(v.Methods))
+							for _, field := range v.Fields {
+								fmt.Println(field.Modifier, field.Type, field.Name)
+							}
+						case *resolver.Interface:
+							fmt.Printf("    详细内容(Interface) 名称: %s, 作用域: %s, 方法数量: %d\n",
+								elem.GetName(), v.Scope, len(v.Methods))
+							for _, method := range v.Methods {
+								fmt.Printf("    方法: %s, 参数: %v, 返回类型: %s\n",
+									method.Name, method.Parameters, method.ReturnType)
+							}
+						case *resolver.Variable:
+							fmt.Printf("    详细内容(Variable) 名称: %s, 类型: %s, 作用域: %s, 范围: %v, 内容: %s\n",
+								elem.GetName(), elem.GetType(), v.Scope, elem.GetRange(), string(elem.GetContent()))
+
+						default:
+							fmt.Printf("    详细内容(其他类型) 类型: %T\n", elem)
+						}
+					}
+				}
+			}
 			assert.ErrorIs(t, err, tt.wantErr)
 			assert.NotNil(t, res)
 			assert.NotNil(t, res.Package)

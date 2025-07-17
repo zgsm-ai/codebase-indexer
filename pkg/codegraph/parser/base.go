@@ -9,6 +9,7 @@ import (
 	"codebase-indexer/pkg/logger"
 	"context"
 	"fmt"
+
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
@@ -141,8 +142,11 @@ func (p *SourceFileParser) processNode(
 	} // root node
 	rootIndex := match.Captures[0].Index
 	rootCaptureName := captureNames[rootIndex]
+
 	rootElement := newRootElement(rootCaptureName, rootIndex)
+
 	resolvedElements := make([]resolver.Element, 0)
+
 	resolveCtx := &resolver.ResolveContext{
 		Language:     language,
 		Match:        match,
