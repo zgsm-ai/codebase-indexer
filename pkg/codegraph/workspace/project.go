@@ -1,4 +1,4 @@
-package project
+package workspace
 
 import (
 	"codebase-indexer/pkg/codegraph/lang"

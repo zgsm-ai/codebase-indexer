@@ -2,10 +2,10 @@ package parser
 
 import (
 	"codebase-indexer/pkg/codegraph/lang"
-	"codebase-indexer/pkg/codegraph/project"
 	"codebase-indexer/pkg/codegraph/resolver"
 	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/codegraph/utils"
+	"codebase-indexer/pkg/codegraph/workspace"
 	"codebase-indexer/pkg/logger"
 	"context"
 	"fmt"
@@ -27,7 +27,7 @@ func NewSourceFileParser(logger logger.Logger) *SourceFileParser {
 
 func (p *SourceFileParser) Parse(ctx context.Context,
 	sourceFile *types.SourceFile,
-	projectInfo *project.ProjectInfo) (*FileElementTable, error) {
+	projectInfo *workspace.ProjectInfo) (*FileElementTable, error) {
 	// Extract file extension
 	langParser, err := lang.GetSitterParserByFilePath(sourceFile.Path)
 	if err != nil {
@@ -134,7 +134,7 @@ func (p *SourceFileParser) processNode(
 	match *sitter.QueryMatch,
 	captureNames []string,
 	sourceFile *types.SourceFile,
-	projectInfo *project.ProjectInfo) ([]resolver.Element, error) {
+	projectInfo *workspace.ProjectInfo) ([]resolver.Element, error) {
 
 	if len(match.Captures) == 0 || len(captureNames) == 0 {
 		return nil, lang.ErrNoCaptures
@@ -150,7 +150,7 @@ func (p *SourceFileParser) processNode(
 		SourceFile:   sourceFile,
 		ProjectInfo:  projectInfo,
 	}
-	
+
 	elements, err := p.resolverManager.Resolve(ctx, rootElement, resolveCtx)
 	if err != nil {
 		// TODO full_name（import）、 find identifier recur (variable)、parameters/arguments

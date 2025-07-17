@@ -6,6 +6,7 @@ const (
 	Comma       = ","
 	Identifier  = "identifier"
 	Dot         = "."
+	LF          = "\n"
 )
 
 // ElementType 表示代码元素类型，使用字符串字面量作为枚举值

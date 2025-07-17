@@ -3,9 +3,9 @@ package parser
 import (
 	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/codegraph/lang"
-	"codebase-indexer/pkg/codegraph/project"
 	"codebase-indexer/pkg/codegraph/resolver"
 	"codebase-indexer/pkg/codegraph/types"
+	"codebase-indexer/pkg/codegraph/workspace"
 	"codebase-indexer/pkg/logger"
 	"context"
 	"fmt"
@@ -27,7 +27,7 @@ func initLogger() logger.Logger {
 func TestGoBaseParse(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := project.NewProjectInfo(lang.Go, "github.com/hashicorp", []string{"pkg/go-uuid/uuid.go"})
+	prj := workspace.NewProjectInfo(lang.Go, "github.com/hashicorp", []string{"pkg/go-uuid/uuid.go"})
 	testCases := []struct {
 		name       string
 		sourceFile *types.SourceFile
@@ -58,7 +58,7 @@ func TestGoBaseParse(t *testing.T) {
 func TestJavaBaseParse(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := project.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata", []string{"com/example/test/TestClass.java"})
+	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata", []string{"com/example/test/TestClass.java"})
 	testCases := []struct {
 		name       string
 		sourceFile *types.SourceFile
@@ -108,7 +108,6 @@ func TestJavaBaseParse(t *testing.T) {
 					fmt.Println(variable.GetName())
 					fmt.Println(variable.GetType())
 				}
-				
 
 			}
 		})

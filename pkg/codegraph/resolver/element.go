@@ -23,7 +23,25 @@ type BaseElement struct {
 	Type             types.ElementType
 	Content          []byte
 	Range            []int32
+	Relations        []*Relation // 与该节点有关的节点
 }
+
+type Relation struct {
+	ElementName  string       // 符号名
+	ElementPath  string       // 符号路径
+	Range        []int32      // [开始行，开始列，结束行，结束列]
+	RelationType RelationType // 符号关系， 定义、引用、继承、实现
+}
+
+type RelationType int
+
+const (
+	RelationTypeUndefined RelationType = iota
+	RelationTypeDefine
+	RelationTypeReference
+	RelationTypeInherit
+	RelationTypeImplement
+)
 
 func NewBaseElement(rootCaptureIndex uint32) *BaseElement {
 	return &BaseElement{

@@ -2,8 +2,8 @@ package resolver
 
 import (
 	"codebase-indexer/pkg/codegraph/lang"
-	"codebase-indexer/pkg/codegraph/project"
 	"codebase-indexer/pkg/codegraph/types"
+	"codebase-indexer/pkg/codegraph/workspace"
 	"context"
 	"fmt"
 	treesitter "github.com/tree-sitter/go-tree-sitter"
@@ -14,7 +14,7 @@ type ResolveContext struct {
 	Match        *treesitter.QueryMatch
 	CaptureNames []string // 通过Match.Capture.Index获取captureName
 	SourceFile   *types.SourceFile
-	ProjectInfo  *project.ProjectInfo
+	ProjectInfo  *workspace.ProjectInfo
 }
 
 // 解析器管理器
