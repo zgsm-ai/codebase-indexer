@@ -155,3 +155,34 @@ public class Main {
         new Thread(runnable).start();
     }
 }
+
+public interface ComplexInterface<T, R> extends java.io.Serializable {
+
+    // 常量 
+    int DEFAULT_SIZE = 10;
+    public static final String INTERFACE_NAME = "ComplexInterface";
+
+    // 抽象方法
+    R process(T input, int count, String description);
+
+    // 泛型方法
+    <E> List<E> convertToList(E[] array, int start, int end);
+
+    // 默认方法
+    default void printInfo(T input, boolean verbose, double value) {
+        System.out.println("Input: " + input + ", verbose: " + verbose + ", value: " + value);
+    }
+
+    // 静态方法
+    public static void showInterfaceName() {
+        System.out.println("Interface: " + INTERFACE_NAME);
+    }
+
+    // 带有可变参数的抽象方法
+    void logMessages(String... messages);
+
+    // 嵌套接口
+    // interface InnerInterface {
+    //     void doSomething();
+    // }
+}

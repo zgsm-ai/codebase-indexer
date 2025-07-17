@@ -64,7 +64,6 @@ func (j *JavaResolver) resolveImport(ctx context.Context, element *Import, rc *R
 
 	// 处理静态导入，有则会移除，没有就不会动
 	importName = strings.TrimPrefix(importName, "static ")
-	fmt.Println("import name:", importName)
 	// 处理包导入
 	if strings.HasSuffix(importName, ".*") {
 		pkgPath := strings.ReplaceAll(strings.TrimSuffix(importName, ".*"), ".", "/")
@@ -97,7 +96,7 @@ func (j *JavaResolver) resolvePackage(ctx context.Context, element *Package, rc 
 			element.BaseElement.Name = content
 		}
 	}
-	element.BaseElement.Scope = types.ScopePackage
+	element.BaseElement.Scope = types.ScopeProject
 	element.BaseElement.Type = types.ElementTypePackage
 	element.BaseElement.Content = rc.SourceFile.Content
 	element.BaseElement.Range = []int32{
@@ -137,7 +136,7 @@ func (j *JavaResolver) resolveClass(ctx context.Context, element *Class, rc *Res
 			element.SuperInterfaces = append(element.SuperInterfaces, content)
 		}
 	}
-	element.BaseElement.Scope = types.ScopeClass
+	element.BaseElement.Scope = types.ScopePackage
 	element.BaseElement.Type = types.ElementTypeClass
 	element.BaseElement.Content = rc.SourceFile.Content
 	element.BaseElement.Range = []int32{
@@ -148,13 +147,24 @@ func (j *JavaResolver) resolveClass(ctx context.Context, element *Class, rc *Res
 	}
 
 	cls := parseClassNode(&rc.Match.Captures[0].Node, rc.SourceFile.Content, element.BaseElement.Name)
+	for _, field := range cls.Fields {
+		if field.Modifier == types.EmptyString {
+			field.Modifier = types.PackagePrivate
+		}
+	}
 	element.Fields = cls.Fields
+	for _, method := range cls.Methods {
+		if method.Declaration.Modifier == types.EmptyString {
+			method.Declaration.Modifier = types.PackagePrivate
+		}
+	}
 	element.Methods = cls.Methods
 	return []Element{element}, nil
 }
 
 func (j *JavaResolver) resolveVariable(ctx context.Context, element *Variable, rc *ResolveContext) ([]Element, error) {
-	//TODO implement me
+
+	var refs = []*Reference{}
 	for _, cap := range rc.Match.Captures {
 		captureName := rc.CaptureNames[cap.Index]
 		if cap.Node.IsMissing() || cap.Node.IsError() {
@@ -165,10 +175,28 @@ func (j *JavaResolver) resolveVariable(ctx context.Context, element *Variable, r
 		switch types.ToElementType(captureName) {
 		case types.ElementTypeLocalVariableName:
 			element.BaseElement.Name = content
+		case types.ElementTypeLocalVariableValue:
+			// 有可能是字面量，也有可能是类的创建，和方法调用
+			// 字面量不处理，方法调用由resolveCall处理，只处理类的创建
+			val := parseLocalVariableValue(&cap.Node, rc.SourceFile.Content)
+			ref := &Reference{
+				BaseElement: &BaseElement{
+					Name:    val,
+					Type:    types.ElementTypeReference,
+					Content: rc.SourceFile.Content,
+					Range: []int32{
+						int32(cap.Node.StartPosition().Row),
+						int32(cap.Node.StartPosition().Column),
+						int32(cap.Node.EndPosition().Row),
+						int32(cap.Node.EndPosition().Column),
+					},
+				},
+				Owner: val, // 待定
+			}
+			refs = append(refs, ref)
 		}
 	}
-	// TODO 作用是什么？
-	// element.BaseElement.Scope = types.ScopeLocal
+	element.BaseElement.Scope = types.ScopeFunction
 	element.BaseElement.Type = types.ElementTypeLocalVariable
 	element.BaseElement.Content = rc.SourceFile.Content
 	element.BaseElement.Range = []int32{
@@ -177,18 +205,75 @@ func (j *JavaResolver) resolveVariable(ctx context.Context, element *Variable, r
 		int32(rc.Match.Captures[0].Node.EndPosition().Row),
 		int32(rc.Match.Captures[0].Node.EndPosition().Column),
 	}
-	return []Element{element}, nil
+	elems := []Element{element}
+	for _, ref := range refs {
+		// 触发自动转换，将ref转换为Element
+		elems = append(elems, ref)
+	}
+	// append不能直接使用进行转换，是go的设计限制
+	// elems=append(elems,refs...)
+	return elems, nil
 }
 
 func (j *JavaResolver) resolveInterface(ctx context.Context, element *Interface, rc *ResolveContext) ([]Element, error) {
-	//TODO implement me
-	panic("implement me")
+	for _, cap := range rc.Match.Captures {
+		captureName := rc.CaptureNames[cap.Index]
+		if cap.Node.IsMissing() || cap.Node.IsError() {
+			continue
+		}
+		content := cap.Node.Utf8Text(rc.SourceFile.Content)
+		switch types.ToElementType(captureName) {
+		case types.ElementTypeInterfaceName:
+			element.BaseElement.Name = content
+		case types.ElementTypeInterfaceExtends:
+			element.SuperInterfaces = append(element.SuperInterfaces, content)
+		}
+		element.BaseElement.Scope = types.ScopePackage
+		element.BaseElement.Type = types.ElementTypeInterface
+		element.BaseElement.Content = rc.SourceFile.Content
+		element.BaseElement.Range = []int32{
+			int32(rc.Match.Captures[0].Node.StartPosition().Row),
+			int32(rc.Match.Captures[0].Node.StartPosition().Column),
+			int32(rc.Match.Captures[0].Node.EndPosition().Row),
+			int32(rc.Match.Captures[0].Node.EndPosition().Column),
+		}
+	}
+	cls := parseClassNode(&rc.Match.Captures[0].Node, rc.SourceFile.Content, element.BaseElement.Name)
+	for _, method := range cls.Methods {
+		if method.Declaration.Modifier == types.EmptyString {
+			method.Declaration.Modifier = types.PublicAbstract
+		}
+		element.Methods = append(element.Methods, &method.Declaration)
+	}
+	return []Element{element}, nil
 }
 
 func (j *JavaResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
 	//TODO implement me
-	// panic("implement me")
-	return nil, fmt.Errorf("not implemented")
+	for _, cap := range rc.Match.Captures {
+		captureName := rc.CaptureNames[cap.Index]
+		if cap.Node.IsMissing() || cap.Node.IsError() {
+			return nil, fmt.Errorf("call is missing or error")
+		}
+		content := cap.Node.Utf8Text(rc.SourceFile.Content)
+		switch types.ToElementType(captureName) {
+		case types.ElementTypeCallName:
+			element.BaseElement.Name = content
+		// case types.ElementTypeCallArguments :
+		// 	element.Parameters = parseParameters(content)
+		case types.ElementTypeCallOwner:
+			element.Owner = content
+		}
+	}
+	element.BaseElement.Type = types.ElementTypeMethodCall
+	element.BaseElement.Content = rc.SourceFile.Content
+	element.BaseElement.Range = []int32{
+		int32(rc.Match.Captures[0].Node.StartPosition().Row),
+		int32(rc.Match.Captures[0].Node.StartPosition().Column),
+		int32(rc.Match.Captures[0].Node.EndPosition().Row),
+		int32(rc.Match.Captures[0].Node.EndPosition().Column),
+	}
+	return []Element{element}, nil
 }
 
 func parseClassNode(node *sitter.Node, content []byte, className string) *Class {
@@ -200,8 +285,11 @@ func parseClassNode(node *sitter.Node, content []byte, className string) *Class 
 		switch kind {
 		case types.NodeKindField:
 			field := parseFieldNode(child, content)
+			if field.Modifier == types.EmptyString {
+				field.Modifier = types.PackagePrivate
+			}
 			class.Fields = append(class.Fields, field)
-		case types.NodeKindMethod:
+		case types.NodeKindMethod, types.NodeKindConstructor:
 			method := parseMethodNode(child, content)
 			method.Owner = className
 			class.Methods = append(class.Methods, method)
@@ -243,7 +331,11 @@ func parseMethodNode(node *sitter.Node, content []byte) *Method {
 		case types.NodeKindIdentifier:
 			method.Declaration.Name = content
 		case types.NodeKindModifier:
-			method.Declaration.Modifier = content
+			// @Override\n  @Resource \n  public -> @Override @Resource public
+			lines := strings.Split(content, "\n")
+			joined := strings.Join(lines, " ")                       // 把多行拼成一行（以空格连接）
+			cleaned := strings.Fields(joined)                        // 按空白字符切分成词
+			method.Declaration.Modifier = strings.Join(cleaned, " ") // 再重新拼接成整洁字符串
 		case types.NodeKindFormalParameters:
 			method.Declaration.Parameters = parseParameters(content)
 		default:
@@ -255,11 +347,15 @@ func parseMethodNode(node *sitter.Node, content []byte) *Method {
 	return method
 }
 func parseParameters(content string) []Parameter {
-	// 参数格式 (int a, Function<String, Integer> func, Runnable r, int... nums, List<String[]> arrs)
+	// 参数格式 (int a, Function<String, Integer> func, Runnable r, List<String[]> arrs,int... nums)
 	var params []Parameter
+	// 容错处理：如果没有左括号，尝试从开头解析
+	start := 0
+	if len(content) > 0 && content[0] == '(' {
+		// 去掉第一个(
+		start = 1
+	}
 	level := 0
-	// 去掉第一个(
-	start := 1
 	for i, c := range content {
 		switch c {
 		case '<':
@@ -278,8 +374,12 @@ func parseParameters(content string) []Parameter {
 	}
 	// 最后一个参数
 	if start < len(content) {
-		// 去掉最后一个)
-		paramStr := strings.TrimSpace(content[start : len(content)-1])
+		// 预防没有右括号的情况
+		end := len(content)
+		if end > 0 && content[end-1] == ')' {
+			end = end - 1
+		}
+		paramStr := strings.TrimSpace(content[start:end])
 		if paramStr != "" {
 			params = append(params, parseSingleParameter(paramStr))
 		}
@@ -303,4 +403,22 @@ func parseSingleParameter(paramStr string) Parameter {
 		Name: strings.TrimSpace(name),
 		Type: strings.TrimSpace(typ),
 	}
+}
+
+func parseLocalVariableValue(node *sitter.Node, content []byte) string {
+	for i := uint(0); i < node.ChildCount(); i++ {
+		child := node.Child(i)
+		switch types.ToNodeKind(child.Kind()) {
+		case types.NodeKindTypeIdentifier:
+			// new Person("Alice", 30);
+			// new HashMap<>()
+			return child.Utf8Text(content)
+
+		case types.NodeKindScopedTypeIdentifier:
+			// new com.example.test.Person("Alice", 30);
+			return child.Utf8Text(content)
+		}
+
+	}
+	return ""
 }

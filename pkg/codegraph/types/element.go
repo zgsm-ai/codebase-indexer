@@ -7,6 +7,8 @@ const (
 	Identifier  = "identifier"
 	Dot         = "."
 	LF          = "\n"
+	PackagePrivate = "package-private"
+	PublicAbstract = "public abstract"
 )
 
 // ElementType 表示代码元素类型，使用字符串字面量作为枚举值
@@ -28,6 +30,7 @@ const (
 	ElementTypeInterface           ElementType = "definition.interface"
 	ElementTypeInterfaceName       ElementType = "definition.interface.name"
 	ElementTypeInterfaceType       ElementType = "definition.interface.type"
+	ElementTypeInterfaceExtends    ElementType = "definition.interface.extends"
 	ElementTypeStruct              ElementType = "definition.struct"
 	ElementTypeStructName          ElementType = "definition.struct.name"
 	ElementTypeStructType          ElementType = "definition.struct.type"
@@ -39,6 +42,9 @@ const (
 	ElementTypeFunctionName        ElementType = "definition.function.name"
 	ElementTypeFunctionParameters  ElementType = "definition.function.parameters"
 	ElementTypeMethodCall          ElementType = "call.method"
+	ElementTypeCallArguments       ElementType = "call.method.arguments"
+	ElementTypeCallOwner           ElementType = "call.method.owner"
+	ElementTypeCallName            ElementType = "call.method.name"	
 	ElementTypeFunctionCall        ElementType = "call.function"
 	ElementTypeFunctionOwner       ElementType = "call.function.owner"
 	ElementTypeFunctionArguments   ElementType = "call.function.arguments"
@@ -54,6 +60,7 @@ const (
 	ElementTypeGlobalVariable      ElementType = "global_variable"
 	ElementTypeLocalVariable       ElementType = "local_variable"
 	ElementTypeLocalVariableName   ElementType = "local_variable.name"
+	ElementTypeLocalVariableValue  ElementType = "local_variable.value"
 	ElementTypeVariable            ElementType = "variable"
 	ElementTypeConstant            ElementType = "constant"
 	ElementTypeMacro               ElementType = "macro"
@@ -80,6 +87,8 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeClassExtends):        ElementTypeClassExtends,
 	string(ElementTypeClassImplements):     ElementTypeClassImplements,
 	string(ElementTypeInterface):           ElementTypeInterface,
+	string(ElementTypeInterfaceName):       ElementTypeInterfaceName,
+	string(ElementTypeInterfaceExtends):    ElementTypeInterfaceExtends,
 	string(ElementTypeStruct):              ElementTypeStruct,
 	string(ElementTypeEnum):                ElementTypeEnum,
 	string(ElementTypeUnion):               ElementTypeUnion,
@@ -90,11 +99,15 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeFunctionDeclaration): ElementTypeFunctionDeclaration,
 	string(ElementTypeMethod):              ElementTypeMethod,
 	string(ElementTypeMethodCall):          ElementTypeMethodCall,
+	string(ElementTypeCallArguments):       ElementTypeCallArguments,
+	string(ElementTypeCallOwner):           ElementTypeCallOwner,
+	string(ElementTypeCallName):            ElementTypeCallName,
 	string(ElementTypeConstructor):         ElementTypeConstructor,
 	string(ElementTypeDestructor):          ElementTypeDestructor,
 	string(ElementTypeGlobalVariable):      ElementTypeGlobalVariable,
 	string(ElementTypeLocalVariable):       ElementTypeLocalVariable,
 	string(ElementTypeLocalVariableName):   ElementTypeLocalVariableName,
+	string(ElementTypeLocalVariableValue):  ElementTypeLocalVariableValue,
 	string(ElementTypeVariable):            ElementTypeVariable,
 	string(ElementTypeConstant):            ElementTypeConstant,
 	string(ElementTypeMacro):               ElementTypeMacro,
@@ -131,6 +144,7 @@ const (
 	NodeKindFieldList          NodeKind = "field_declaration_list"
 	NodeKindField              NodeKind = "field_declaration"
 	NodeKindMethod             NodeKind = "method_declaration"
+	NodeKindConstructor        NodeKind = "constructor_declaration"
 	NodeKindVariableDeclarator NodeKind = "variable_declarator"
 	NodeKindModifier           NodeKind = "modifiers"
 	NodeKindIdentifier         NodeKind = "identifier"
@@ -153,6 +167,7 @@ const (
 var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindField):              NodeKindField,
 	string(NodeKindMethod):             NodeKindMethod,
+	string(NodeKindConstructor):        NodeKindConstructor,
 	string(NodeKindUndefined):          NodeKindUndefined,
 	string(NodeKindVariableDeclarator): NodeKindVariableDeclarator,
 	string(NodeKindModifier):           NodeKindModifier,
@@ -184,6 +199,7 @@ var NodeKindTypeMappings = map[NodeKind]struct{}{
 	NodeKindTypeIdentifier:       {},
 	NodeKindScopedTypeIdentifier: {},
 	NodeKindWildcard:             {},
+	NodeKindConstructor:          {},
 }
 
 func ToNodeKind(kind string) NodeKind {

@@ -21,8 +21,10 @@
 
 ;; Interface declarations
 (interface_declaration
-  name: (identifier) @definition.interface.name) @definition.interface
-
+  name: (identifier) @definition.interface.name
+  (super_interfaces
+    (type_list (type_identifier) @definition.interface.extends)*
+  )?) @definition.interface
 
 
 (method_declaration
@@ -80,10 +82,12 @@
 
 ;; 局部变量
 (local_variable_declaration
+  type: (_) @local_variable.type
   declarator: (variable_declarator
                 name: (identifier) @local_variable.name
-                )
-  ) @local_variable
+                value: (_) @local_variable.value
+             )
+) @local_variable
 
 ;; 方法调用
 (method_invocation
