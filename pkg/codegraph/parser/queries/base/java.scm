@@ -12,15 +12,18 @@
 
 ;; Class declarations
 (class_declaration
+  (modifiers)? @definition.class.modifiers
   name: (identifier) @definition.class.name
   (superclass (type_identifier) @definition.class.extends)?
   (super_interfaces
-    (type_list (type_identifier) @definition.class.implements)*
+    (type_list) @definition.class.implements
   )?
 ) @definition.class
 
+
 ;; Interface declarations
 (interface_declaration
+  (modifiers)? @definition.interface.modifiers
   name: (identifier) @definition.interface.name
   (super_interfaces
     (type_list (type_identifier) @definition.interface.extends)*
@@ -50,9 +53,9 @@
 (field_declaration
   (modifiers)? @definition.field.modifiers
   type: (_) @definition.field.type
-  declarator: (variable_declarator
+  (variable_declarator
     name: (identifier) @definition.field.name
-  )
+  )+
 ) @definition.field
 
 ;; Constant field declarations (static final)

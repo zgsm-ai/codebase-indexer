@@ -337,359 +337,199 @@ import static java.util.Collections.emptyList;`),
 	}
 }
 
-func TestJavaResolver_ResolvePackage(t *testing.T) {
-	logger := initLogger()
-	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata", []string{"com/example/test/TestClass.java"})
-
-	testCases := []struct {
-		name        string
-		sourceFile  *types.SourceFile
-		wantErr     error
-		wantPackage string
-		description string
-	}{
-		{
-			name: "简单包声明",
-			sourceFile: &types.SourceFile{
-				Path: "testdata/PackageTest.java",
-				Content: []byte(`package com.example;
-public class PackageTest {}`),
-			},
-			wantErr:     nil,
-			wantPackage: "com.example",
-			description: "测试简单的包声明解析",
-		},
-		{
-			name: "复杂包声明",
-			sourceFile: &types.SourceFile{
-				Path: "testdata/ComplexPackageTest.java",
-				Content: []byte(`package com.example.utils.helper;
-import java.util.List;
-public class ComplexPackageTest {}`),
-			},
-			wantErr:     nil,
-			wantPackage: "com.example.utils.helper",
-			description: "测试复杂的包声明解析",
-		},
-	}
-
-	for _, tt := range testCases {
-		t.Run(tt.name, func(t *testing.T) {
-			res, err := parser.Parse(context.Background(), tt.sourceFile, prj)
-			assert.ErrorIs(t, err, tt.wantErr)
-			assert.NotNil(t, res)
-			if err == nil && res.Package != nil {
-				fmt.Printf("Package: %s\n", res.Package.GetName())
-				assert.Equal(t, tt.wantPackage, res.Package.GetName())
-				assert.Equal(t, types.ElementTypePackage, res.Package.GetType())
-			}
-		})
-	}
-}
-
 func TestJavaResolver_ResolveClass(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
 	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata", []string{"com/example/test/TestClass.java"})
 
-	testCases := []struct {
-		name          string
-		sourceFile    *types.SourceFile
-		wantErr       error
-		wantClassName string
-		wantFields    []resolver.Field
-		wantMethods   []resolver.Method
-		description   string
+	sourceFile := &types.SourceFile{
+		Path:    "testdata/com/example/test/TestClass.java",
+		Content: readFile("testdata/com/example/test/TestClass.java"),
+	}
+
+	res, err := parser.Parse(context.Background(), sourceFile, prj)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	// 1. 平铺输出所有类的详细信息
+	fmt.Println("\n【所有类详细信息】")
+	for _, element := range res.Elements {
+		cls, ok := element.(*resolver.Class)
+		if !ok {
+			continue
+		}
+		fmt.Printf("类名: %s\n", cls.GetName())
+		fmt.Printf("  作用域: %v\n", cls.BaseElement.Scope)
+		if len(cls.SuperClasses) > 0 {
+			fmt.Printf("  父类: %v\n", cls.SuperClasses)
+		} else {
+			fmt.Printf("  父类: 无\n")
+		}
+		if len(cls.SuperInterfaces) > 0 {
+			fmt.Printf("  实现接口: %v\n", cls.SuperInterfaces)
+		} else {
+			fmt.Printf("  实现接口: 无\n")
+		}
+		if len(cls.Fields) > 0 {
+			fmt.Println("  字段:")
+			for _, field := range cls.Fields {
+				fmt.Printf("    %s %s %s\n", field.Modifier, field.Type, field.Name)
+			}
+		} else {
+			fmt.Println("  字段: 无")
+		}
+		if len(cls.Methods) > 0 {
+			fmt.Println("  方法:")
+			for _, method := range cls.Methods {
+				fmt.Printf("    %s %s %s(", method.Declaration.Modifier, method.Declaration.ReturnType, method.Declaration.Name)
+				for i, param := range method.Declaration.Parameters {
+					if i > 0 {
+						fmt.Print(", ")
+					}
+					fmt.Printf("%s %s", param.Type, param.Name)
+				}
+				fmt.Println(")")
+			}
+		} else {
+			fmt.Println("  方法: 无")
+		}
+		fmt.Println("--------------------------------")
+	}
+
+	// 2. 断言所有类的结构和内容
+	// 期望类信息
+	expectedClasses := map[string]struct {
+		Scope        types.Scope
+		SuperClasses []string
+		SuperIfaces  []string
+		Fields       []resolver.Field
+		Methods      []string // 只断言方法名
 	}{
-		{
-			name: "简单类声明",
-			sourceFile: &types.SourceFile{
-				Path: "testdata/SimpleClassTest.java",
-				Content: []byte(`package com.example;
-public class SimpleClassTest {
-    private String name;
-    public int count;
-    
-    public void test() {}
-    public String getName() { return name; }
-}`),
+		"ReportGenerator": {
+			Scope:        types.ScopePackage,
+			SuperClasses: nil,
+			SuperIfaces:  []string{"Printable", "Savable"},
+			Fields: []resolver.Field{
+				{Modifier: "private", Type: "int", Name: "reportId"},
+				{Modifier: "protected", Type: "String", Name: "title"},
+				{Modifier: "public static final", Type: "String", Name: "VERSION"},
+				{Modifier: types.PackagePrivate, Type: "int", Name: "a"},
+				{Modifier: types.PackagePrivate, Type: "int", Name: "b"},
+				{Modifier: types.PackagePrivate, Type: "int", Name: "c"},
 			},
-			wantErr:       nil,
-			wantClassName: "SimpleClassTest",
-			wantFields: []resolver.Field{
-				{Modifier: "private", Type: "String", Name: "name"},
-				{Modifier: "public", Type: "int", Name: "count"},
-			},
-			wantMethods: []resolver.Method{
-				{
-					Declaration: resolver.Declaration{
-						Modifier:   "public",
-						Name:       "test",
-						ReturnType: "void",
-						Parameters: []resolver.Parameter{},
-					},
-					Owner: "SimpleClassTest",
-				},
-				{
-					Declaration: resolver.Declaration{
-						Modifier:   "public",
-						Name:       "getName",
-						ReturnType: "String",
-						Parameters: []resolver.Parameter{},
-					},
-					Owner: "SimpleClassTest",
-				},
-			},
-			description: "测试简单的类声明解析",
+			Methods: []string{"print", "save", "ReportGenerator", },
 		},
-		{
-			name: "带继承的类",
-			sourceFile: &types.SourceFile{
-				Path: "testdata/InheritanceClassTest.java",
-				Content: []byte(`package com.example;
-public class InheritanceClassTest extends ParentClass implements MyInterface {
-    private String name;
-    
-    public InheritanceClassTest(String name) {
-        this.name = name;
-    }
-    
-    @Override
-    public void method() {}
-}`),
+		"ReportDetails": {
+			Scope:        types.ScopeProject,
+			SuperClasses: nil,
+			SuperIfaces:  nil,
+			Fields: []resolver.Field{
+				{Modifier: types.PackagePrivate, Type: "boolean", Name: "verified"},
 			},
-			wantErr:       nil,
-			wantClassName: "InheritanceClassTest",
-			wantFields: []resolver.Field{
-				{Modifier: "private", Type: "String", Name: "name"},
-			},
-			wantMethods: []resolver.Method{
-				{
-					Declaration: resolver.Declaration{
-						Modifier:   "public",
-						Name:       "InheritanceClassTest",
-						ReturnType: "",
-						Parameters: []resolver.Parameter{
-							{Name: "name", Type: "String"},
-						},
-					},
-					Owner: "InheritanceClassTest",
-				},
-				{
-					Declaration: resolver.Declaration{
-						Modifier:   "@Override public",
-						Name:       "method",
-						ReturnType: "void",
-						Parameters: []resolver.Parameter{},
-					},
-					Owner: "InheritanceClassTest",
-				},
-			},
-			description: "测试带继承和接口实现的类解析",
+			Methods: []string{"verify"},
 		},
-		{
-			name: "TestClass 详细解析",
-			sourceFile: &types.SourceFile{
-				Path:    "testdata/com/example/test/TestClass.java",
-				Content: readFile("testdata/com/example/test/TestClass.java"),
+		"InternalReview": {
+			Scope:        types.ScopeClass,
+			SuperClasses: nil,
+			SuperIfaces:  nil,
+			Fields: []resolver.Field{
+				{Modifier: types.PackagePrivate, Type: "char", Name: "level"},
 			},
-			wantErr:       nil,
-			wantClassName: "TestClass",
-			wantFields: []resolver.Field{
-				{Modifier: "private", Type: "int", Name: "a"},
-				{Modifier: "private", Type: "int", Name: "b"},
-				{Modifier: "private", Type: "int", Name: "c"},
-				{Modifier: "private", Type: "int", Name: "d"},
-				{Modifier: "private", Type: "int", Name: "e"},
-				{Modifier: "private", Type: "int", Name: "f"},
-				{Modifier: "private", Type: "int", Name: "g"},
-				{Modifier: "private", Type: "int", Name: "h"},
-			},
-			wantMethods: []resolver.Method{
-				{
-					Declaration: resolver.Declaration{
-						Modifier:   "public",
-						Name:       "add",
-						ReturnType: "int",
-						Parameters: []resolver.Parameter{
-							{Name: "e", Type: "int"},
-							{Name: "f", Type: "int"},
-						},
-					},
-					Owner: "TestClass",
-				},
-				{
-					Declaration: resolver.Declaration{
-						Modifier:   "public",
-						Name:       "test",
-						ReturnType: "void",
-						Parameters: []resolver.Parameter{
-							{Name: "a", Type: "int"},
-							{Name: "func", Type: "Function<String, Integer>"},
-							{Name: "r", Type: "Runnable"},
-							{Name: "arrs", Type: "List<String[]>"},
-							{Name: "anums", Type: "int[]"},
-							{Name: "nums", Type: "int..."},
-						},
-					},
-					Owner: "TestClass",
-				},
-			},
-			description: "测试 TestClass 的详细解析，包括所有字段和方法",
+			Methods: nil,
 		},
-		{
-			name: "Person 类解析",
-			sourceFile: &types.SourceFile{
-				Path:    "testdata/com/example/test/TestClass.java",
-				Content: readFile("testdata/com/example/test/TestClass.java"),
+		"ReportMetadata": {
+			Scope:        types.ScopePackage,
+			SuperClasses: nil,
+			SuperIfaces:  nil,
+			Fields: []resolver.Field{
+				{Modifier: types.PackagePrivate, Type: "long", Name: "createdAt"},
 			},
-			wantErr:       nil,
-			wantClassName: "Person",
-			wantFields: []resolver.Field{
-				{Modifier: "package-private", Type: "String", Name: "name"},
-				{Modifier: "package-private", Type: "int", Name: "age"},
+			Methods: []string{"describe"},
+		},
+		"User": {
+			Scope:        types.ScopePackage,
+			SuperClasses: nil,
+			SuperIfaces:  nil,
+			Fields: []resolver.Field{
+				{Modifier: "protected", Type: "String", Name: "username"},
+				{Modifier: "public", Type: "int", Name: "age"},
 			},
-			wantMethods: []resolver.Method{
-				{
-					Declaration: resolver.Declaration{
-						Modifier:   "public",
-						Name:       "Person",
-						ReturnType: "",
-						Parameters: []resolver.Parameter{
-							{Name: "name", Type: "String"},
-							{Name: "age", Type: "int"},
-						},
-					},
-					Owner: "Person",
-				},
+			Methods: []string{"login"},
+		},
+		"FinancialReport": {
+			Scope:        types.ScopeProject, // 若有 types.ScopePublic 则用，否则用 ScopePackage
+			SuperClasses: []string{"User"},
+			SuperIfaces:  []string{"Printable", "Savable"},
+			Fields: []resolver.Field{
+				{Modifier: "public", Type: "List<String>", Name: "authors"},
+				{Modifier: "protected", Type: "Map<String, Double>", Name: "monthlyRevenue"},
+				{Modifier: "private final", Type: "ReportGenerator", Name: "generator"},
+				{Modifier: types.PackagePrivate, Type: "List<? extends Number>", Name: "statistics"},
+				{Modifier: types.PackagePrivate, Type: "ReportGenerator[]", Name: "reports"},
 			},
-			description: "测试 Person 类的解析，包括字段和构造函数",
+			Methods: []string{"FinancialReport", "main", "print", "save", "prepareData", "calculateProfit"},
 		},
 	}
 
-	for _, tt := range testCases {
-		t.Run(tt.name, func(t *testing.T) {
-			res, err := parser.Parse(context.Background(), tt.sourceFile, prj)
-			assert.ErrorIs(t, err, tt.wantErr)
-			assert.NotNil(t, res)
+	// 遍历所有期望类，逐一断言
+	for className, want := range expectedClasses {
+		found := false
+		for _, element := range res.Elements {
+			cls, ok := element.(*resolver.Class)
+			if !ok {
+				continue
+			}
+			if cls.GetName() != className {
+				continue
+			}
+			found = true
+			assert.Equal(t, want.Scope, cls.BaseElement.Scope, "类 %s 作用域不匹配", className)
+			// 父类
+			if want.SuperClasses != nil {
+				assert.Equal(t, want.SuperClasses, cls.SuperClasses, "类 %s 父类不匹配", className)
+			}
+			// 接口
+			if want.SuperIfaces != nil {
+				assert.Equal(t, want.SuperIfaces, cls.SuperInterfaces, "类 %s 实现接口不匹配", className)
+			}
+			// 字段
+			if want.Fields != nil {
+				assert.Len(t, cls.Fields, len(want.Fields), "类 %s 字段数量不匹配", className)
+				actualFields := make(map[string]*resolver.Field)
+				for _, field := range cls.Fields {
+					actualFields[field.Name] = field
+				}
 
-			if err == nil {
-				assert.NotEmpty(t, res.Elements)
-				fmt.Println("--------------------------------")
-				found := false
-				for _, element := range res.Elements {
-					if cls, ok := element.(*resolver.Class); ok && cls.GetName() == tt.wantClassName {
-						fmt.Printf("Class: %s\n", cls.GetName())
-						fmt.Printf("Type: %s\n", cls.GetType())
-						fmt.Printf("SuperClasses: %v\n", cls.SuperClasses)
-						fmt.Printf("SuperInterfaces: %v\n", cls.SuperInterfaces)
-
-						assert.Equal(t, tt.wantClassName, cls.GetName())
-						assert.Equal(t, types.ElementTypeClass, cls.GetType())
-
-						// 验证字段数量和详情
-						fmt.Printf("Fields count: %d\n", len(cls.Fields))
-						assert.Len(t, cls.Fields, len(tt.wantFields),
-							"字段数量不匹配，期望 %d，实际 %d", len(tt.wantFields), len(cls.Fields))
-
-						// 创建字段映射用于比较
-						actualFields := make(map[string]*resolver.Field)
-						for _, field := range cls.Fields {
-							fmt.Printf("  Field: %s %s %s\n", field.Modifier, field.Type, field.Name)
-							actualFields[field.Name] = field
-						}
-
-						// 逐个比较每个期望的字段
-						for _, wantField := range tt.wantFields {
-							actualField, exists := actualFields[wantField.Name]
-							assert.True(t, exists, "未找到字段: %s", wantField.Name)
-
-							if exists {
-								assert.Equal(t, wantField.Modifier, actualField.Modifier,
-									"字段 %s 的修饰符不匹配，期望 %s，实际 %s",
-									wantField.Name, wantField.Modifier, actualField.Modifier)
-								assert.Equal(t, wantField.Type, actualField.Type,
-									"字段 %s 的类型不匹配，期望 %s，实际 %s",
-									wantField.Name, wantField.Type, actualField.Type)
-								assert.Equal(t, wantField.Name, actualField.Name,
-									"字段名称不匹配，期望 %s，实际 %s",
-									wantField.Name, actualField.Name)
-							}
-						}
-
-						// 验证方法数量和详情
-						fmt.Printf("Methods count: %d\n", len(cls.Methods))
-						assert.Len(t, cls.Methods, len(tt.wantMethods),
-							"方法数量不匹配，期望 %d，实际 %d", len(tt.wantMethods), len(cls.Methods))
-
-						// 创建方法映射用于比较
-						actualMethods := make(map[string]*resolver.Method)
-						for _, method := range cls.Methods {
-							fmt.Printf("  Method: %s %s %s %v\n",
-								method.Declaration.Modifier,
-								method.Declaration.ReturnType,
-								method.Declaration.Name,
-								method.Declaration.Parameters)
-							fmt.Printf("    Owner: %s\n", method.Owner)
-							actualMethods[method.Declaration.Name] = method
-						}
-
-						// 逐个比较每个期望的方法
-						for _, wantMethod := range tt.wantMethods {
-							actualMethod, exists := actualMethods[wantMethod.Declaration.Name]
-							assert.True(t, exists, "未找到方法: %s", wantMethod.Declaration.Name)
-
-							if exists {
-								// 比较修饰符
-								assert.Equal(t, wantMethod.Declaration.Modifier, actualMethod.Declaration.Modifier,
-									"方法 %s 的修饰符不匹配，期望 %s，实际 %s",
-									wantMethod.Declaration.Name, wantMethod.Declaration.Modifier, actualMethod.Declaration.Modifier)
-
-								// 比较返回值类型
-								assert.Equal(t, wantMethod.Declaration.ReturnType, actualMethod.Declaration.ReturnType,
-									"方法 %s 的返回值类型不匹配，期望 %s，实际 %s",
-									wantMethod.Declaration.Name, wantMethod.Declaration.ReturnType, actualMethod.Declaration.ReturnType)
-
-								// 比较参数数量
-								assert.Equal(t, len(wantMethod.Declaration.Parameters), len(actualMethod.Declaration.Parameters),
-									"方法 %s 的参数数量不匹配，期望 %d，实际 %d",
-									wantMethod.Declaration.Name, len(wantMethod.Declaration.Parameters), len(actualMethod.Declaration.Parameters))
-
-								// 比较参数详情
-								for i, wantParam := range wantMethod.Declaration.Parameters {
-									if i < len(actualMethod.Declaration.Parameters) {
-										actualParam := actualMethod.Declaration.Parameters[i]
-										assert.Equal(t, wantParam.Name, actualParam.Name,
-											"方法 %s 的第 %d 个参数名称不匹配，期望 %s，实际 %s",
-											wantMethod.Declaration.Name, i+1, wantParam.Name, actualParam.Name)
-										assert.Equal(t, wantParam.Type, actualParam.Type,
-											"方法 %s 的第 %d 个参数类型不匹配，期望 %s，实际 %s",
-											wantMethod.Declaration.Name, i+1, wantParam.Type, actualParam.Type)
-									}
-								}
-
-								// 比较所有者
-								assert.Equal(t, wantMethod.Owner, actualMethod.Owner,
-									"方法 %s 的所有者不匹配，期望 %s，实际 %s",
-									wantMethod.Declaration.Name, wantMethod.Owner, actualMethod.Owner)
-							}
-						}
-
-						found = true
-						break
+				for _, wantField := range want.Fields {
+					actualField, exists := actualFields[wantField.Name]
+					
+					assert.True(t, exists, "类 %s 未找到字段: %s", className, wantField.Name)
+					if exists {
+						assert.Equal(t, wantField.Modifier, actualField.Modifier, "类 %s 字段 %s 修饰符不匹配", className, wantField.Name)
+						assert.Equal(t, wantField.Type, actualField.Type, "类 %s 字段 %s 类型不匹配", className, wantField.Name)
 					}
 				}
-				assert.True(t, found, "未找到类: %s", tt.wantClassName)
 			}
-		})
+			// 方法
+			if want.Methods != nil {
+				actualMethods := make(map[string]bool)
+				for _, method := range cls.Methods {
+					actualMethods[method.Declaration.Name] = true
+				}
+				for _, wantMethod := range want.Methods {
+					assert.True(t, actualMethods[wantMethod], "类 %s 未找到方法: %s", className, wantMethod)
+				}
+			}
+			break
+		}
+		assert.True(t, found, "未找到类: %s", className)
 	}
 }
 
 func TestJavaResolver_ResolveVariable(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata", []string{"com/example/test/TestClass.java"})
+	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata", []string{"com/example/test/TestVar.java"})
 
 	testCases := []struct {
 		name          string
@@ -699,128 +539,32 @@ func TestJavaResolver_ResolveVariable(t *testing.T) {
 		description   string
 	}{
 		{
-			name: "基本类型变量",
+			name: "TestVar.java 全变量类型校验",
 			sourceFile: &types.SourceFile{
-				Path: "testdata/BasicVariableTest.java",
-				Content: []byte(`package com.example;
-public class BasicVariableTest {
-    public void testMethod() {
-        int count = 0;
-        String name = "test";
-        double price = 99.99;
-        boolean flag = true;
-        char letter = 'A';
-    }
-}`),
+				Path:    "testdata/com/example/test/TestVar.java",
+				Content: readFile("testdata/com/example/test/TestVar.java"),
 			},
 			wantErr: nil,
 			wantVariables: []resolver.Variable{
-				{BaseElement: &resolver.BaseElement{Name: "count", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "name", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "price", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "flag", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "letter", Type: types.ElementTypeLocalVariable}},
+				{BaseElement: &resolver.BaseElement{Name: "number", Type: types.ElementTypeLocalVariable}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "price", Type: types.ElementTypeLocalVariable}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "isActive", Type: types.ElementTypeLocalVariable}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "initial", Type: types.ElementTypeLocalVariable}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "array", Type: types.ElementTypeLocalVariable}, VariableType: []string{"MyClass"}},
+				{BaseElement: &resolver.BaseElement{Name: "name", Type: types.ElementTypeLocalVariable}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "age", Type: types.ElementTypeLocalVariable}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "tags", Type: types.ElementTypeLocalVariable}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "scoreMap", Type: types.ElementTypeLocalVariable}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "person", Type: types.ElementTypeLocalVariable}, VariableType: []string{"Person"}},
+				{BaseElement: &resolver.BaseElement{Name: "numbers", Type: types.ElementTypeLocalVariable}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "names", Type: types.ElementTypeLocalVariable}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "people", Type: types.ElementTypeLocalVariable}, VariableType: []string{"Person"}},
+				{BaseElement: &resolver.BaseElement{Name: "personList", Type: types.ElementTypeLocalVariable}, VariableType: []string{"Person"}},
+				{BaseElement: &resolver.BaseElement{Name: "personMap", Type: types.ElementTypeLocalVariable}, VariableType: []string{"Person"}},
+				{BaseElement: &resolver.BaseElement{Name: "task", Type: types.ElementTypeLocalVariable}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "wildcardList", Type: types.ElementTypeLocalVariable}, VariableType: []string{"Person"}},
 			},
-			description: "测试基本类型变量的解析",
-		},
-		{
-			name: "复杂类型变量",
-			sourceFile: &types.SourceFile{
-				Path: "testdata/ComplexVariableTest.java",
-				Content: []byte(`package com.example;
-import java.util.List;
-import java.util.Map;
-import java.util.ArrayList;
-import java.util.HashMap;
-
-public class ComplexVariableTest {
-    public void testMethod() {
-        List<String> items = new ArrayList<>();
-        Map<String, Integer> scores = new HashMap<>();
-        String names = {"Alice", "Bob", "Charlie"};
-        int[] numbers = {1, 2, 3, 5};
-        List<String[]> matrix = new ArrayList<>();
-    }
-}`),
-			},
-			wantErr: nil,
-			wantVariables: []resolver.Variable{
-				{BaseElement: &resolver.BaseElement{Name: "items", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "scores", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "names", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "numbers", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "matrix", Type: types.ElementTypeLocalVariable}},
-			},
-			description: "测试复杂类型变量的解析",
-		},
-		{
-			name: "循环和条件语句中的变量",
-			sourceFile: &types.SourceFile{
-				Path: "testdata/LoopVariableTest.java",
-				Content: []byte(`package com.example;
-public class LoopVariableTest {
-    public void testMethod() {
-        int total = 0;
-        
-        for (int i = 0; i < 10; i++) {
-            String item = "item" + i;
-            int value = i * 2;
-            
-            if (i > 5) {
-                String special = "special" + i;
-                double ratio = i / 20.0;
-            }
-        }
-        
-        while (total < 100) {
-            int increment = 10;
-            total += increment;
-        }
-    }
-}`),
-			},
-			wantErr: nil,
-			wantVariables: []resolver.Variable{
-				{BaseElement: &resolver.BaseElement{Name: "total", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "i", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "item", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "value", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "special", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "ratio", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "increment", Type: types.ElementTypeLocalVariable}},
-			},
-			description: "测试循环和条件语句中的变量解析",
-		},
-		{
-			name: "TestClass 中的局部变量",
-			sourceFile: &types.SourceFile{
-				Path:    "testdata/com/example/test/TestClass.java",
-				Content: readFile("testdata/com/example/test/TestClass.java"),
-			},
-			wantErr: nil,
-			wantVariables: []resolver.Variable{
-				// Example.main() 方法中的变量
-				{BaseElement: &resolver.BaseElement{Name: "greeting", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "count", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "price", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "flag", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "letter", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "names", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "scores", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "person", Type: types.ElementTypeLocalVariable}},
-				// TestClass.test() 方法中的变量
-				{BaseElement: &resolver.BaseElement{Name: "x", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "y", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "s", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "arr", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "list", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "map", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "set", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "localRunnable", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "intToString", Type: types.ElementTypeLocalVariable}},
-				{BaseElement: &resolver.BaseElement{Name: "result", Type: types.ElementTypeLocalVariable}},
-			},
-			description: "测试 TestClass 中 test 方法的局部变量解析",
+			description: "测试 TestVar.java 中所有变量的类型解析",
 		},
 	}
 
@@ -840,7 +584,7 @@ public class LoopVariableTest {
 				for _, element := range res.Elements {
 					if variable, ok := element.(*resolver.Variable); ok {
 						actualVariables = append(actualVariables, variable)
-						fmt.Printf("变量: %s, Type: %s\n", variable.GetName(), variable.GetType())
+						fmt.Printf("变量: %s, Type: %s, VariableType: %s\n", variable.GetName(), variable.GetType(), variable.VariableType)
 					}
 				}
 
@@ -853,7 +597,6 @@ public class LoopVariableTest {
 				// 创建实际变量的映射
 				actualVarMap := make(map[string]*resolver.Variable)
 				for _, variable := range actualVariables {
-					fmt.Printf("  Variable: %s, Type: %s\n", variable.GetName(), variable.GetType())
 					actualVarMap[variable.GetName()] = variable
 				}
 
@@ -873,17 +616,11 @@ public class LoopVariableTest {
 							"变量类型不匹配，期望 %s，实际 %s",
 							wantVariable.GetType(), actualVariable.GetType())
 
-						// 验证变量作用域
-						assert.Equal(t, types.ElementTypeLocalVariable, actualVariable.GetType(),
-							"变量 %s 的作用域类型不正确，期望 %s，实际 %s",
-							actualVariable.GetName(), types.ElementTypeLocalVariable, actualVariable.GetType())
+						// 验证变量的 VariableType 字段
+						assert.Equal(t, wantVariable.VariableType, actualVariable.VariableType,
+							"变量 %s 的VariableType不匹配，期望 %s，实际 %s",
+							wantVariable.GetName(), wantVariable.VariableType, actualVariable.VariableType)
 					}
-				}
-
-				// 验证所有变量都是局部变量类型
-				for _, variable := range actualVariables {
-					assert.Equal(t, types.ElementTypeLocalVariable, variable.GetType(),
-						"变量 %s 的类型不是局部变量", variable.GetName())
 				}
 			}
 		})

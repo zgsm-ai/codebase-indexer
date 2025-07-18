@@ -9,6 +9,11 @@ const (
 	LF             = "\n"
 	PackagePrivate = "package-private"
 	PublicAbstract = "public abstract"
+	ModifierProtected = "protected"
+	ModifierPrivate = "private"
+	ModifierPublic = "public"
+	ModifierDefault = "default"
+	PrimitiveType = "primitive_type"
 )
 
 // ElementType 表示代码元素类型，使用字符串字面量作为枚举值
@@ -27,10 +32,12 @@ const (
 	ElementTypeClassName           ElementType = "definition.class.name"
 	ElementTypeClassExtends        ElementType = "definition.class.extends"
 	ElementTypeClassImplements     ElementType = "definition.class.implements"
+	ElementTypeClassModifiers      ElementType = "definition.class.modifiers"
 	ElementTypeInterface           ElementType = "definition.interface"
 	ElementTypeInterfaceName       ElementType = "definition.interface.name"
 	ElementTypeInterfaceType       ElementType = "definition.interface.type"
 	ElementTypeInterfaceExtends    ElementType = "definition.interface.extends"
+	ElementTypeInterfaceModifiers  ElementType = "definition.interface.modifiers"
 	ElementTypeStruct              ElementType = "definition.struct"
 	ElementTypeStructName          ElementType = "definition.struct.name"
 	ElementTypeStructType          ElementType = "definition.struct.type"
@@ -60,6 +67,7 @@ const (
 	ElementTypeGlobalVariable      ElementType = "global_variable"
 	ElementTypeLocalVariable       ElementType = "local_variable"
 	ElementTypeLocalVariableName   ElementType = "local_variable.name"
+	ElementTypeLocalVariableType   ElementType = "local_variable.type"	
 	ElementTypeLocalVariableValue  ElementType = "local_variable.value"
 	ElementTypeVariable            ElementType = "variable"
 	ElementTypeConstant            ElementType = "constant"
@@ -89,9 +97,11 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeInterfaceType):       ElementTypeInterfaceType,
 	string(ElementTypeClassExtends):        ElementTypeClassExtends,
 	string(ElementTypeClassImplements):     ElementTypeClassImplements,
+	string(ElementTypeClassModifiers):      ElementTypeClassModifiers,
 	string(ElementTypeInterface):           ElementTypeInterface,
 	string(ElementTypeInterfaceName):       ElementTypeInterfaceName,
 	string(ElementTypeInterfaceExtends):    ElementTypeInterfaceExtends,
+	string(ElementTypeInterfaceModifiers):  ElementTypeInterfaceModifiers,
 	string(ElementTypeStruct):              ElementTypeStruct,
 	string(ElementTypeStructName):          ElementTypeStructName,
 	string(ElementTypeStructType):          ElementTypeStructType,
@@ -119,6 +129,7 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeGlobalVariable):      ElementTypeGlobalVariable,
 	string(ElementTypeLocalVariable):       ElementTypeLocalVariable,
 	string(ElementTypeLocalVariableName):   ElementTypeLocalVariableName,
+	string(ElementTypeLocalVariableType):   ElementTypeLocalVariableType,
 	string(ElementTypeLocalVariableValue):  ElementTypeLocalVariableValue,
 	string(ElementTypeVariable):            ElementTypeVariable,
 	string(ElementTypeConstant):            ElementTypeConstant,
@@ -183,8 +194,9 @@ const (
 	NodeKindArrayType            NodeKind = "array_type"
 	NodeKindGenericType          NodeKind = "generic_type"
 	NodeKindTypeIdentifier       NodeKind = "type_identifier"
+	NodeKindTypeArguments        NodeKind = "type_arguments"
 	NodeKindScopedTypeIdentifier NodeKind = "scoped_type_identifier"
-	NodeKindWildcard             NodeKind = "wildcard"
+	NodeKindWildcard             NodeKind = "wildcard" // 通配符 <? extends MyClass>
 )
 
 var NodeKindMappings = map[string]NodeKind{
@@ -219,6 +231,7 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindGenericType):          NodeKindGenericType,
 	string(NodeKindTypeIdentifier):       NodeKindTypeIdentifier,
 	string(NodeKindScopedTypeIdentifier): NodeKindScopedTypeIdentifier,
+	string(NodeKindTypeArguments):        NodeKindTypeArguments,
 	string(NodeKindWildcard):             NodeKindWildcard,
 }
 
