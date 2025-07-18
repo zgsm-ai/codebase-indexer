@@ -143,4 +143,5 @@ type Declaration struct {
 
 type Variable struct {
 	*BaseElement
+	VariableType string
 }

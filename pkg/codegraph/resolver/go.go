@@ -4,7 +4,6 @@ import (
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -67,32 +66,6 @@ func (r *GoResolver) resolveImport(ctx context.Context, element *Import, rc *Res
 					element.Content = []byte(path)
 				}
 
-				// Set filepaths as relative to project root
-				if rc.ProjectInfo != nil && !rc.ProjectInfo.IsEmpty() {
-					// Check if this is standard library import
-					isStd, _ := r.isStandardLibrary(path)
-					if !isStd {
-						// For non-standard library imports, try to resolve the file path
-						// relative to the project root
-						sourceRoots := rc.ProjectInfo.GetDirs()
-						if len(sourceRoots) > 0 {
-							// Try to find the file path relative to any of the source roots
-							var filePaths []string
-							for _, root := range sourceRoots {
-								// Construct potential file paths
-								possiblePath := filepath.Join(root, path)
-								filePaths = append(filePaths, possiblePath)
-							}
-							element.FilePaths = filePaths
-						} else {
-							// If we don't have source roots, just store the import path
-							element.FilePaths = []string{path}
-						}
-					} else {
-						// For standard library, just store the import path
-						element.FilePaths = []string{path}
-					}
-				}
 			}
 		}
 	}
@@ -369,6 +342,7 @@ func analyzeParameterGroups(parameters string) []ParamGroup {
 }
 
 func (r *GoResolver) resolveMethod(ctx context.Context, element *Method, rc *ResolveContext) ([]Element, error) {
+
 	// 使用现有的BaseElement存储方法信息
 	elements := []Element{element}
 
@@ -497,7 +471,6 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 
 			case string(types.ElementTypeStructType):
 				structTypeNode := capture.Node
-				fmt.Println("structTypeNode", structTypeNode.Kind())
 				// 获取field_declaration_list - 遍历所有子节点找到字段列表
 				var fieldListNode *sitter.Node
 
@@ -519,9 +492,17 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 						nameNode := fieldNode.ChildByFieldName("name")
 						typeNode := fieldNode.ChildByFieldName("type")
 
-						if nameNode != nil && typeNode != nil {
-							fieldName := nameNode.Utf8Text(rc.SourceFile.Content)
+						if typeNode != nil {
 							fieldType := typeNode.Utf8Text(rc.SourceFile.Content)
+							var fieldName string
+
+							if nameNode != nil {
+								// 有名称的普通字段
+								fieldName = nameNode.Utf8Text(rc.SourceFile.Content)
+							} else {
+								// 匿名嵌入字段，使用类型作为名称
+								fieldName = fieldType
+							}
 
 							// 判断可见性（公有/私有）
 							visibility := types.ScopeProject
@@ -538,14 +519,6 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 						}
 					}
 				}
-			//无用，暂时保留
-			case string(types.ElementTypeClass) + types.Dot + "base",
-				string(types.ElementTypeStruct) + types.Dot + "base":
-				// 处理基类/嵌入结构体（在Go中是嵌入）
-			//无用，暂时保留
-			case string(types.ElementTypeClass) + types.Dot + "modifier",
-				string(types.ElementTypeStruct) + types.Dot + "modifier":
-				// 类修饰符处理（如果有）
 			}
 		}
 	}
@@ -557,7 +530,7 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 }
 
 func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc *ResolveContext) ([]Element, error) {
-	// 使用现有的BaseElement存储变量信息
+	// 存储所有元素（变量和可能的引用）
 	elements := []Element{element}
 
 	// 如果没有匹配信息，直接返回
@@ -568,166 +541,255 @@ func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc 
 	// 获取根捕获，它应该是变量声明节点
 	rootCapture := rc.Match.Captures[0]
 	rootCaptureName := rc.CaptureNames[rootCapture.Index]
-	nodeKind := rootCapture.Node.Kind()
 
-	// 根据根捕获的类型设置变量类型和作用域
-	setVariableTypeAndScope(element, rootCaptureName, nodeKind)
+	// 更新元素的范围和内容
+	updateRootElement(element, &rootCapture, rootCaptureName, rc.SourceFile.Content)
 
-	// 尝试从根节点获取类型信息
-	var variableType string
-	if !rootCapture.Node.IsError() && !rootCapture.Node.IsMissing() {
-		// 尝试获取类型节点
-		typeNode := rootCapture.Node.ChildByFieldName("type")
-		if typeNode != nil {
-			variableType = typeNode.Utf8Text(rc.SourceFile.Content)
+	// 设置变量名称 - 使用节点文本作为变量名
+	element.BaseElement.Name = rootCapture.Node.Utf8Text(rc.SourceFile.Content)
+
+	// 设置默认元素类型和作用域
+	element.Type = types.ElementTypeVariable
+	element.Scope = types.ScopeBlock
+
+	// 根据捕获名称设置元素类型和作用域
+	switch rootCaptureName {
+	case string(types.ElementTypeGlobalVariable):
+		element.Type = types.ElementTypeGlobalVariable
+		// 根据名称首字母判断作用域
+		if len(element.BaseElement.Name) > 0 && element.BaseElement.Name[0] >= 'A' && element.BaseElement.Name[0] <= 'Z' {
+			element.Scope = types.ScopeProject // 公开的，项目可见
+		} else {
+			element.Scope = types.ScopePackage // 私有的，仅包内可见
+		}
+	case string(types.ElementTypeVariable):
+		element.Type = types.ElementTypeVariable
+		element.Scope = types.ScopeFunction
+	case string(types.ElementTypeLocalVariable):
+		element.Type = types.ElementTypeLocalVariable
+		element.Scope = types.ScopeFunction
+	case string(types.ElementTypeConstant):
+		element.Type = types.ElementTypeConstant
+		// 根据名称首字母判断作用域
+		if len(element.BaseElement.Name) > 0 && element.BaseElement.Name[0] >= 'A' && element.BaseElement.Name[0] <= 'Z' {
+			element.Scope = types.ScopeProject // 公开的，项目可见
+		} else {
+			element.Scope = types.ScopePackage // 私有的，仅包内可见
 		}
 	}
 
+	// 存储变量引用
+	var references []*Reference
+	// 变量类型
+	var variableType string
+	// 变量值
+	var variableValue string
+
 	// 处理所有捕获节点
 	for _, capture := range rc.Match.Captures {
-		// 跳过无效节点
-		if capture.Node.IsMissing() || capture.Node.IsError() {
+		// 跳过无效节点或根节点
+		if capture.Node.IsMissing() || capture.Node.IsError() || capture.Index == rootCapture.Index {
 			continue
 		}
 
 		nodeCaptureName := rc.CaptureNames[capture.Index]
 		content := capture.Node.Utf8Text(rc.SourceFile.Content)
 
-		// 更新元素的Range和其他基本属性
-		updateRootElement(element, &capture, nodeCaptureName, rc.SourceFile.Content)
-
 		// 根据节点类型处理不同信息
 		switch {
-		case strings.HasSuffix(nodeCaptureName, ".name"):
-			// 变量名，仅当尚未设置时更新
-			if element.BaseElement.Name == "" {
-				element.BaseElement.Name = content
-			}
-			// 设置变量名后更新作用域
-			updateScopeBasedOnName(element, rootCaptureName)
-
 		case strings.HasSuffix(nodeCaptureName, ".type"):
-			// 变量类型，存储为纯文本
+			// 变量类型
 			variableType = content
 			element.Content = []byte(content)
+			// 设置 VariableType 字段
+			element.VariableType = content
 
 		case strings.HasSuffix(nodeCaptureName, ".value"):
-			// 变量初始值，仅当没有类型信息时存储
+			// 保存变量值
+			variableValue = content
+
+			// 如果没有类型信息，使用值作为内容
 			if variableType == "" && len(element.Content) == 0 {
 				element.Content = []byte(content)
+			}
+
+			// 变量值处理
+			// 检查是否是引用类型（如结构体实例化、函数调用等）
+			refType := parseVariableValue(&capture.Node, rc.SourceFile.Content)
+			if refType != "" {
+				// 创建引用元素
+				baseRef := NewBaseElement(uint32(capture.Index))
+				ref := &Reference{
+					BaseElement: baseRef,
+					Owner:       refType,
+				}
+				ref.BaseElement.Name = refType
+				ref.BaseElement.Type = types.ElementTypeReference
+
+				// 使用updateRootElement更新Range和Content
+				updateRootElement(ref, &capture, nodeCaptureName, rc.SourceFile.Content)
+
+				// 确定引用类型
+				if strings.Contains(refType, ".") {
+					// 如果包含点，可能是包限定的函数调用或类型引用
+					parts := strings.Split(refType, ".")
+					if len(parts) == 2 {
+						ref.Owner = parts[0]
+						ref.BaseElement.Name = parts[1]
+					}
+				} else {
+					// 如果是单独的标识符，可能是本地类型或函数
+					ref.Owner = ""
+				}
+
+				references = append(references, ref)
 			}
 		}
 	}
 
-	// 处理多变量声明（如 file, err := os.Open(...)）
-	elements = appendMultiVariableDeclarations(elements, element, rc)
+	// 确保变量有内容
+	if len(element.Content) == 0 && variableValue != "" {
+		element.Content = []byte(variableValue)
+	} else if len(element.Content) == 0 && variableType != "" {
+		element.Content = []byte(variableType)
+	}
+
+	// 处理多变量声明（如 a, b := 1, 2）
+	if rootCaptureName == string(types.ElementTypeLocalVariable) {
+		// 查找当前变量的父节点
+		var parentNode *sitter.Node
+		if rootCapture.Node.Parent() != nil {
+			parentNode = rootCapture.Node.Parent().Parent() // 获取 short_var_declaration 节点
+		}
+
+		if parentNode != nil && parentNode.Kind() == string(types.NodeKindShortVarDeclaration) {
+			// 获取左侧和右侧节点
+			leftNode := parentNode.ChildByFieldName("left")
+			rightNode := parentNode.ChildByFieldName("right")
+
+			if leftNode != nil && rightNode != nil {
+				// 收集所有变量名
+				var varNames []*sitter.Node
+				for i := uint(0); i < leftNode.ChildCount(); i++ {
+					id := leftNode.Child(i)
+					if id != nil && id.Kind() == "identifier" {
+						varNames = append(varNames, id)
+					}
+				}
+
+				// 收集所有右值表达式
+				var varValues []*sitter.Node
+				for i := uint(0); i < rightNode.ChildCount(); i++ {
+					expr := rightNode.Child(i)
+					// 过滤掉逗号等分隔符节点
+					if expr != nil && expr.Kind() != "," {
+						varValues = append(varValues, expr)
+					}
+				}
+
+				// 找到当前变量在变量名列表中的位置
+				currentVarIndex := -1
+				for i, nameNode := range varNames {
+					if nameNode.Utf8Text(rc.SourceFile.Content) == element.BaseElement.Name {
+						currentVarIndex = i
+						break
+					}
+				}
+
+				// 如果找到了当前变量的位置，并且有对应的值，则更新内容
+				if currentVarIndex >= 0 && currentVarIndex < len(varValues) {
+					valueNode := varValues[currentVarIndex]
+					valueContent := valueNode.Utf8Text(rc.SourceFile.Content)
+					element.Content = []byte(valueContent)
+				}
+
+				// 为其他变量创建新的元素
+				for i, nameNode := range varNames {
+					// 跳过当前变量
+					if i == currentVarIndex {
+						continue
+					}
+
+					// 创建新的变量元素
+					newBase := NewBaseElement(uint32(i + 1000)) // 使用一个不会与现有捕获冲突的ID
+					newVariable := &Variable{
+						BaseElement: newBase,
+					}
+
+					// 设置变量名称
+					newVariable.BaseElement.Name = nameNode.Utf8Text(rc.SourceFile.Content)
+
+					// 设置类型和作用域
+					newVariable.Type = element.Type
+					newVariable.Scope = element.Scope
+
+					// 设置范围
+					newVariable.SetRange([]int32{
+						int32(nameNode.StartPosition().Row),
+						int32(nameNode.StartPosition().Column),
+						int32(nameNode.EndPosition().Row),
+						int32(nameNode.EndPosition().Column),
+					})
+					// 设置变量值
+					if i < len(varValues) {
+						valueNode := varValues[i]
+						valueContent := valueNode.Utf8Text(rc.SourceFile.Content)
+						newVariable.Content = []byte(valueContent)
+					}
+
+					elements = append(elements, newVariable)
+				}
+			}
+		}
+	}
+
+	// 添加引用元素
+	for _, ref := range references {
+		elements = append(elements, ref)
+	}
 
 	return elements, nil
 }
 
-// 根据捕获名称和节点类型设置变量类型和作用域
-func setVariableTypeAndScope(element *Variable, captureName, nodeKind string) {
-	// 默认设置
-	element.Type = types.ElementTypeVariable
-	element.Scope = types.ScopeBlock
+// parseVariableValue 分析变量值节点，提取可能的引用类型
+// 只在变量值是结构体实例化时返回类型名称
+func parseVariableValue(node *sitter.Node, content []byte) string {
+	// 检查节点类型
+	switch node.Kind() {
+	case string(types.NodeKindIdentifier):
+		// 普通标识符，不是结构体实例化，返回空
+		return ""
 
-	// 根据捕获名称设置元素类型
-	switch {
-	case captureName == string(types.ElementTypeVariable) || strings.Contains(captureName, "variable"):
-		// 通用变量
-		element.Type = types.ElementTypeVariable
-
-		// 根据节点类型判断作用域
-		if nodeKind == "var_declaration" {
-			// var x int 形式 - 可能是全局或局部变量
-			// 暂时设为文件级别，等获取变量名后再确定
-			element.Scope = types.ScopeFile
-		} else {
-			// 其他形式可能是块级别
-			element.Scope = types.ScopeBlock
-		}
-
-	case captureName == string(types.ElementTypeLocalVariable):
-		// 局部变量 - 函数内声明的变量
-		element.Type = types.ElementTypeLocalVariable
-		element.Scope = types.ScopeFunction
-
-	case captureName == string(types.ElementTypeConstant):
-		// 常量
-		element.Type = types.ElementTypeConstant
-		// 暂时设为文件级别，等获取变量名后再确定
-		element.Scope = types.ScopeFile
-
-	case captureName == string(types.ElementTypeField):
-		// 结构体字段
-		element.Type = types.ElementTypeField
-		element.Scope = types.ScopeClass
-	}
-}
-
-// 根据变量名更新作用域
-func updateScopeBasedOnName(element *Variable, rootCaptureName string) {
-	// 只有当变量不是局部变量且已有名称时才需要更新
-	if element.Scope != types.ScopeFunction &&
-		element.BaseElement != nil &&
-		element.BaseElement.Name != "" {
-
-		// 根据名称首字母大小写确定可见性
-		if element.BaseElement.Name[0] >= 'A' && element.BaseElement.Name[0] <= 'Z' {
-			// 大写开头 - 项目可见
-			element.Scope = types.ScopeProject
-		} else {
-			// 小写开头 - 包内可见
-			element.Scope = types.ScopePackage
-		}
-
-		// 局部变量强制为函数作用域
-		if rootCaptureName == string(types.ElementTypeLocalVariable) {
-			element.Scope = types.ScopeFunction
-		}
-	}
-}
-
-// 处理多变量声明
-func appendMultiVariableDeclarations(elements []Element, element *Variable, rc *ResolveContext) []Element {
-	if rc.Match == nil || rc.Match.Captures == nil {
-		return elements
-	}
-
-	// 跟踪已处理的变量名
-	processedNames := make(map[string]bool)
-	if element.BaseElement.Name != "" {
-		processedNames[element.BaseElement.Name] = true
-	}
-
-	for i, capture := range rc.Match.Captures {
-		if i == 0 { // 跳过根捕获
-			continue
-		}
-
-		nodeCaptureName := rc.CaptureNames[capture.Index]
-		if strings.HasSuffix(nodeCaptureName, ".name") {
-			variableName := capture.Node.Utf8Text(rc.SourceFile.Content)
-
-			// 只处理尚未处理过的变量名
-			if !processedNames[variableName] {
-				processedNames[variableName] = true
-
-				newBase := NewBaseElement(uint32(capture.Index))
-				newVariable := &Variable{
-					BaseElement: newBase,
+	case "composite_literal": // TODO: 添加到NodeKind常量
+		// 结构体或数组/切片字面量
+		typeNode := node.ChildByFieldName("type")
+		if typeNode != nil {
+			// 检查是否是结构体实例化
+			if typeNode.Kind() == "type_identifier" {
+				// 是结构体实例化，返回类型名称
+				return typeNode.Utf8Text(content)
+			} else if typeNode.Kind() == "selector_expression" {
+				// 带包名的结构体实例化，例如 pkg.Person{}
+				field := typeNode.ChildByFieldName("field")
+				operand := typeNode.ChildByFieldName("operand")
+				if field != nil && operand != nil {
+					// 返回完整的限定名，如 "pkg.Type"
+					return operand.Utf8Text(content) + "." + field.Utf8Text(content)
+				} else if field != nil {
+					return field.Utf8Text(content)
 				}
-				newVariable.BaseElement.Name = variableName
-				newVariable.Type = element.Type
-				newVariable.Scope = element.Scope
-				newVariable.Content = element.Content
-
-				elements = append(elements, newVariable)
+			} else {
+				// 其他类型（如数组、切片等），不是结构体实例化，返回空
+				return ""
 			}
 		}
+
+	case "call_expression": // TODO: 添加到NodeKind常量
+		// 函数调用，不是结构体实例化，返回空
+		return ""
 	}
 
-	return elements
+	return ""
 }
 
 func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, rc *ResolveContext) ([]Element, error) {
@@ -859,31 +921,20 @@ func (r *GoResolver) resolveCall(ctx context.Context, element *Call, rc *Resolve
 
 			if funcNode != nil {
 				// 检查是否为匿名函数立即调用模式（IIFE）
-				if funcNode.Kind() == "func_literal" {
-					// 这是一个匿名函数，设置特殊名称
-					element.BaseElement.Name = "<anonymous>"
-					element.Type = types.ElementTypeFunctionCall // 仍然使用函数调用类型
-
-					// 如果是在go语句中，标记为goroutine
-					parentNode := capture.Node.Parent()
-					if parentNode != nil && parentNode.Kind() == "go_statement" {
-						element.BaseElement.Name = "<goroutine>"
-					}
-
-					// 不需要进一步处理匿名函数参数
-					continue
+				if funcNode.Kind() == string(types.NodeKindFuncLiteral) {
+					return nil, nil
 				}
 
 				// 正常函数调用处理
-				if funcNode.Kind() == "identifier" {
+				if funcNode.Kind() == string(types.NodeKindIdentifier) {
 					// 简单函数调用
 					element.BaseElement.Name = funcNode.Utf8Text(rc.SourceFile.Content)
-				} else if funcNode.Kind() == "selector_expression" {
+				} else if funcNode.Kind() == string(types.NodeKindSelectorExpression) {
 					// 带包名/接收者的函数调用，如pkg.Func()或obj.Method()
 					field := funcNode.ChildByFieldName("field")
 					operand := funcNode.ChildByFieldName("operand")
 
-					if field != nil && field.Kind() == "field_identifier" {
+					if field != nil && field.Kind() == string(types.NodeKindFieldIdentifier) {
 						element.BaseElement.Name = field.Utf8Text(rc.SourceFile.Content)
 						if operand != nil {
 							element.Owner = operand.Utf8Text(rc.SourceFile.Content)
@@ -909,7 +960,7 @@ func collectArgumentPositions(element *Call, argsNode sitter.Node, content []byt
 	}
 
 	// 确认是参数列表
-	if argsNode.Kind() != "argument_list" {
+	if argsNode.Kind() != string(types.NodeKindArgumentList) {
 		return
 	}
 
@@ -944,34 +995,10 @@ func collectArgumentPositions(element *Call, argsNode sitter.Node, content []byt
 
 // getNodeTypeString 根据节点类型返回对应的类型字符串
 func getNodeTypeString(nodeKind string, value string) string {
-	switch nodeKind {
-	case "identifier":
-		return "unknown"
-	case "int_literal":
-		return "int"
-	case "float_literal":
-		return "float64"
-	case "interpreted_string_literal", "raw_string_literal":
-		return "string"
-	case "true", "false":
-		return "bool"
-	case "nil":
-		return "nil"
-	case "selector_expression":
-		return "selector"
-	case "call_expression":
-		return "function_result"
-	case "binary_expression", "unary_expression":
-		return "expression"
-	case "array_literal", "slice_literal":
-		return "array/slice"
-	case "map_literal":
-		return "map"
-	case "composite_literal":
-		return "struct"
-	default:
-		return nodeKind
+	if typeStr, exists := types.NodeKindTypeMap[nodeKind]; exists {
+		return typeStr
 	}
+	return nodeKind
 }
 
 // analyzeReturnTypes 分析返回类型参数列表节点，提取类型信息

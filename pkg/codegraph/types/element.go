@@ -1,12 +1,12 @@
 package types
 
 const (
-	EmptyString = ""
-	DoubleQuote = "\""
-	Comma       = ","
-	Identifier  = "identifier"
-	Dot         = "."
-	LF          = "\n"
+	EmptyString    = ""
+	DoubleQuote    = "\""
+	Comma          = ","
+	Identifier     = "identifier"
+	Dot            = "."
+	LF             = "\n"
 	PackagePrivate = "package-private"
 	PublicAbstract = "public abstract"
 )
@@ -44,7 +44,7 @@ const (
 	ElementTypeMethodCall          ElementType = "call.method"
 	ElementTypeCallArguments       ElementType = "call.method.arguments"
 	ElementTypeCallOwner           ElementType = "call.method.owner"
-	ElementTypeCallName            ElementType = "call.method.name"	
+	ElementTypeCallName            ElementType = "call.method.name"
 	ElementTypeFunctionCall        ElementType = "call.function"
 	ElementTypeFunctionOwner       ElementType = "call.function.owner"
 	ElementTypeFunctionArguments   ElementType = "call.function.arguments"
@@ -139,18 +139,22 @@ type SourceFile struct {
 type NodeKind string
 
 const (
-	NodeKindMethodElem         NodeKind = "method_elem"
-	NodeKindMethodSpec         NodeKind = "method_spec"
-	NodeKindFieldList          NodeKind = "field_declaration_list"
-	NodeKindField              NodeKind = "field_declaration"
-	NodeKindMethod             NodeKind = "method_declaration"
-	NodeKindConstructor        NodeKind = "constructor_declaration"
-	NodeKindVariableDeclarator NodeKind = "variable_declarator"
-	NodeKindModifier           NodeKind = "modifiers"
-	NodeKindIdentifier         NodeKind = "identifier"
-	NodeKindFormalParameters   NodeKind = "formal_parameters"
-	NodeKindUndefined          NodeKind = "undefined"
-
+	NodeKindMethodElem          NodeKind = "method_elem"
+	NodeKindMethodSpec          NodeKind = "method_spec"
+	NodeKindFieldList           NodeKind = "field_declaration_list"
+	NodeKindField               NodeKind = "field_declaration"
+	NodeKindMethod              NodeKind = "method_declaration"
+	NodeKindConstructor         NodeKind = "constructor_declaration"
+	NodeKindVariableDeclarator  NodeKind = "variable_declarator"
+	NodeKindModifier            NodeKind = "modifiers"
+	NodeKindIdentifier          NodeKind = "identifier"
+	NodeKindFormalParameters    NodeKind = "formal_parameters"
+	NodeKindUndefined           NodeKind = "undefined"
+	NodeKindFuncLiteral         NodeKind = "func_literal"
+	NodeKindSelectorExpression  NodeKind = "selector_expression"
+	NodeKindFieldIdentifier     NodeKind = "field_identifier"
+	NodeKindArgumentList        NodeKind = "argument_list"
+	NodeKindShortVarDeclaration NodeKind = "short_var_declaration"
 	// 用于接收函数的返回类型和字段的类型
 	NodeKindIntegralType         NodeKind = "integral_type"
 	NodeKindFloatingPointType    NodeKind = "floating_point_type"
@@ -211,6 +215,27 @@ func ToNodeKind(kind string) NodeKind {
 	}
 	return NodeKindUndefined
 }
+
+// NodeKindTypeMap 定义节点类型到类型字符串的映射
+var NodeKindTypeMap = map[string]string{
+	"identifier":                 "unknown",
+	"int_literal":                "int",
+	"float_literal":              "float64",
+	"interpreted_string_literal": "string",
+	"raw_string_literal":         "string",
+	"true":                       "bool",
+	"false":                      "bool",
+	"nil":                        "nil",
+	"selector_expression":        "selector",
+	"call_expression":            "function_result",
+	"binary_expression":          "expression",
+	"unary_expression":           "expression",
+	"array_literal":              "array/slice",
+	"slice_literal":              "array/slice",
+	"map_literal":                "map",
+	"composite_literal":          "struct",
+}
+
 func IsTypeNode(kind NodeKind) bool {
 	_, exists := NodeKindTypeMappings[kind]
 	return exists

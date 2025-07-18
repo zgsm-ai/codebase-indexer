@@ -3,12 +3,10 @@ package main
 import (
 	"fmt"
 	"math"
-	aa "os"
+	"os"
 	"strings"
-	"codebase-indexer/pkg/codegraph/types"
 )
 
-type.SourceFile
 // 全局变量
 var globalVar int = 42
 
@@ -19,9 +17,14 @@ type Person struct {
 	a    []int
 }
 
+type Man struct {
+	*Person
+	Sex string
+}
+
 // 接口定义
 type Shape interface {
-	Brea(a,b int,c string)(d,f int) 
+	Brea(a, b int, c string) (d, f int)
 	Area() float64
 }
 
@@ -57,7 +60,7 @@ func main() {
 	// 常量
 	const pi = 3.14159
 
-	var(
+	var (
 		a int
 		b int
 		c int
@@ -131,10 +134,11 @@ func main() {
 	for val := range ch {
 		fmt.Printf("Received from channel: %d\n", val)
 	}
-
-	var G int
-	var(
-		a int
-		b int
+	p := Person{Name: "Alice", Age: 30}
+	var G Person = Person{Name: "Alice", Age: 30}
+	var (
+		a Person = Person{Name: "Alice", Age: 30}
+		b Person = Person{Name: "Alice", Age: 30}
 	)
+	// a, b := 1, a.Person{}
 }

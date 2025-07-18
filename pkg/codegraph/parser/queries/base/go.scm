@@ -23,25 +23,50 @@
   parameters: (parameter_list) @definition.function.parameters
   ) @definition.function
 
-(source_file (var_declaration (var_spec name: (identifier) @global_variable.name)) @global_variable)
+;; 全局变量声明 - 直接捕获标识符节点
+(source_file
+  (var_declaration
+    (var_spec
+      name: (identifier) @global_variable
+      type: (_)? @global_variable.type
+      value: (_)? @global_variable.value
+    )
+  )
+)
 
-(var_declaration (var_spec name: (identifier) @variable.name)) @variable
+;; 函数内的变量声明 - 直接捕获标识符节点
+(block
+  (var_declaration
+    (var_spec
+      name: (identifier) @variable
+      type: (_)? @variable.type
+      value: (_)? @variable.value
+    )
+  )
+)
 
-;; 多个局部变量，逗号分割,正常不会超过10个
+;; var块中的多变量声明
+(var_declaration
+  (var_spec_list
+    (var_spec
+      name: (identifier) @variable
+      type: (_)? @variable.type
+      value: (expression_list
+               (_) @variable.value
+             )*
+    )
+  )
+)
+
+;; 多个局部变量，逗号分割 - 直接捕获每个标识符
 (short_var_declaration
   left: (expression_list
-          (identifier)* @local_variable.name
-          (identifier)* @local_variable.name
-          (identifier)* @local_variable.name
-          (identifier)* @local_variable.name
-          (identifier)* @local_variable.name
-          (identifier)* @local_variable.name
-          (identifier)* @local_variable.name
-          (identifier)* @local_variable.name
-          (identifier)* @local_variable.name
-          (identifier)* @local_variable.name
-          )
-  ) @local_variable
+          (identifier) @local_variable
+         )
+  right: (expression_list
+           (_) @local_variable.value
+         )
+  )
 
 ;; method
 (method_declaration
@@ -61,9 +86,13 @@
 
 (type_declaration (type_spec name: (type_identifier) @definition.type_alias.name type: (type_identifier))) @definition.type_alias
 
-
-(const_declaration (const_spec name: (identifier) @constant.name)) @constant
-
+;; 常量声明 - 直接捕获标识符节点
+(const_declaration
+  (const_spec
+    name: (identifier) @constant
+    value: (_)? @constant.value
+  )
+)
 
 ;; function/method_call
 (call_expression
