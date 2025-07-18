@@ -82,23 +82,35 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeUndefined):           ElementTypeUndefined,
 	string(ElementTypeImport):              ElementTypeImport,
 	string(ElementTypeImportName):          ElementTypeImportName,
+	string(ElementTypeImportAlias):         ElementTypeImportAlias,
+	string(ElementTypeImportPath):          ElementTypeImportPath,
 	string(ElementTypeClass):               ElementTypeClass,
 	string(ElementTypeClassName):           ElementTypeClassName,
+	string(ElementTypeInterfaceType):       ElementTypeInterfaceType,
 	string(ElementTypeClassExtends):        ElementTypeClassExtends,
 	string(ElementTypeClassImplements):     ElementTypeClassImplements,
 	string(ElementTypeInterface):           ElementTypeInterface,
 	string(ElementTypeInterfaceName):       ElementTypeInterfaceName,
 	string(ElementTypeInterfaceExtends):    ElementTypeInterfaceExtends,
 	string(ElementTypeStruct):              ElementTypeStruct,
+	string(ElementTypeStructName):          ElementTypeStructName,
+	string(ElementTypeStructType):          ElementTypeStructType,
 	string(ElementTypeEnum):                ElementTypeEnum,
 	string(ElementTypeUnion):               ElementTypeUnion,
 	string(ElementTypeTrait):               ElementTypeTrait,
 	string(ElementTypeTypeAlias):           ElementTypeTypeAlias,
 	string(ElementTypeFunction):            ElementTypeFunction,
 	string(ElementTypeFunctionCall):        ElementTypeFunctionCall,
+	string(ElementTypeFunctionOwner):       ElementTypeFunctionOwner,
+	string(ElementTypeFunctionArguments):   ElementTypeFunctionArguments,
 	string(ElementTypeFunctionDeclaration): ElementTypeFunctionDeclaration,
 	string(ElementTypeMethod):              ElementTypeMethod,
 	string(ElementTypeMethodCall):          ElementTypeMethodCall,
+	string(ElementTypeMethodModifier):      ElementTypeMethodModifier,
+	string(ElementTypeMethodReturnType):    ElementTypeMethodReturnType,
+	string(ElementTypeMethodName):          ElementTypeMethodName,
+	string(ElementTypeMethodParameters):    ElementTypeMethodParameters,
+	string(ElementTypeMethodReceiver):      ElementTypeMethodReceiver,
 	string(ElementTypeCallArguments):       ElementTypeCallArguments,
 	string(ElementTypeCallOwner):           ElementTypeCallOwner,
 	string(ElementTypeCallName):            ElementTypeCallName,
@@ -112,6 +124,9 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeConstant):            ElementTypeConstant,
 	string(ElementTypeMacro):               ElementTypeMacro,
 	string(ElementTypeField):               ElementTypeField,
+	string(ElementTypeFieldName):           ElementTypeFieldName,
+	string(ElementTypeFieldType):           ElementTypeFieldType,
+	string(ElementTypeFieldModifier):       ElementTypeFieldModifier,
 	string(ElementTypeParameter):           ElementTypeParameter,
 	string(ElementTypeComment):             ElementTypeComment,
 	string(ElementTypeAnnotation):          ElementTypeAnnotation,
@@ -139,22 +154,26 @@ type SourceFile struct {
 type NodeKind string
 
 const (
-	NodeKindMethodElem          NodeKind = "method_elem"
-	NodeKindMethodSpec          NodeKind = "method_spec"
-	NodeKindFieldList           NodeKind = "field_declaration_list"
-	NodeKindField               NodeKind = "field_declaration"
-	NodeKindMethod              NodeKind = "method_declaration"
-	NodeKindConstructor         NodeKind = "constructor_declaration"
-	NodeKindVariableDeclarator  NodeKind = "variable_declarator"
-	NodeKindModifier            NodeKind = "modifiers"
-	NodeKindIdentifier          NodeKind = "identifier"
-	NodeKindFormalParameters    NodeKind = "formal_parameters"
-	NodeKindUndefined           NodeKind = "undefined"
-	NodeKindFuncLiteral         NodeKind = "func_literal"
-	NodeKindSelectorExpression  NodeKind = "selector_expression"
-	NodeKindFieldIdentifier     NodeKind = "field_identifier"
-	NodeKindArgumentList        NodeKind = "argument_list"
-	NodeKindShortVarDeclaration NodeKind = "short_var_declaration"
+	NodeKindMethodElem           NodeKind = "method_elem"
+	NodeKindMethodSpec           NodeKind = "method_spec"
+	NodeKindFieldList            NodeKind = "field_declaration_list"
+	NodeKindField                NodeKind = "field_declaration"
+	NodeKindMethod               NodeKind = "method_declaration"
+	NodeKindConstructor          NodeKind = "constructor_declaration"
+	NodeKindVariableDeclarator   NodeKind = "variable_declarator"
+	NodeKindModifier             NodeKind = "modifiers"
+	NodeKindIdentifier           NodeKind = "identifier"
+	NodeKindFormalParameters     NodeKind = "formal_parameters"
+	NodeKindUndefined            NodeKind = "undefined"
+	NodeKindFuncLiteral          NodeKind = "func_literal"
+	NodeKindSelectorExpression   NodeKind = "selector_expression"
+	NodeKindFieldIdentifier      NodeKind = "field_identifier"
+	NodeKindArgumentList         NodeKind = "argument_list"
+	NodeKindShortVarDeclaration  NodeKind = "short_var_declaration"
+	NodeKindCompositeLiteral     NodeKind = "composite_literal"
+	NodeKindCallExpression       NodeKind = "call_expression"
+	NodeKindParameterList        NodeKind = "parameter_list"
+	NodeKindParameterDeclaration NodeKind = "parameter_declaration"
 	// 用于接收函数的返回类型和字段的类型
 	NodeKindIntegralType         NodeKind = "integral_type"
 	NodeKindFloatingPointType    NodeKind = "floating_point_type"
@@ -169,14 +188,26 @@ const (
 )
 
 var NodeKindMappings = map[string]NodeKind{
-	string(NodeKindField):              NodeKindField,
-	string(NodeKindMethod):             NodeKindMethod,
-	string(NodeKindConstructor):        NodeKindConstructor,
-	string(NodeKindUndefined):          NodeKindUndefined,
-	string(NodeKindVariableDeclarator): NodeKindVariableDeclarator,
-	string(NodeKindModifier):           NodeKindModifier,
-	string(NodeKindIdentifier):         NodeKindIdentifier,
-	string(NodeKindFormalParameters):   NodeKindFormalParameters,
+	string(NodeKindField):                NodeKindField,
+	string(NodeKindMethod):               NodeKindMethod,
+	string(NodeKindConstructor):          NodeKindConstructor,
+	string(NodeKindUndefined):            NodeKindUndefined,
+	string(NodeKindVariableDeclarator):   NodeKindVariableDeclarator,
+	string(NodeKindModifier):             NodeKindModifier,
+	string(NodeKindIdentifier):           NodeKindIdentifier,
+	string(NodeKindFormalParameters):     NodeKindFormalParameters,
+	string(NodeKindMethodElem):           NodeKindMethodElem,
+	string(NodeKindMethodSpec):           NodeKindMethodSpec,
+	string(NodeKindFieldList):            NodeKindFieldList,
+	string(NodeKindFuncLiteral):          NodeKindFuncLiteral,
+	string(NodeKindSelectorExpression):   NodeKindSelectorExpression,
+	string(NodeKindFieldIdentifier):      NodeKindFieldIdentifier,
+	string(NodeKindArgumentList):         NodeKindArgumentList,
+	string(NodeKindShortVarDeclaration):  NodeKindShortVarDeclaration,
+	string(NodeKindCompositeLiteral):     NodeKindCompositeLiteral,
+	string(NodeKindCallExpression):       NodeKindCallExpression,
+	string(NodeKindParameterList):        NodeKindParameterList,
+	string(NodeKindParameterDeclaration): NodeKindParameterDeclaration,
 
 	// 用于接收函数的返回类型和字段的类型
 	string(NodeKindIntegralType):         NodeKindIntegralType,
@@ -239,6 +270,14 @@ var NodeKindTypeMap = map[string]string{
 func IsTypeNode(kind NodeKind) bool {
 	_, exists := NodeKindTypeMappings[kind]
 	return exists
+}
+
+// GetNodeTypeString 根据节点类型返回对应的类型字符串
+func GetNodeTypeString(nodeKind string, value string) string {
+	if typeStr, exists := NodeKindTypeMap[nodeKind]; exists {
+		return typeStr
+	}
+	return nodeKind
 }
 
 // ToElementType 将字符串映射为ElementType

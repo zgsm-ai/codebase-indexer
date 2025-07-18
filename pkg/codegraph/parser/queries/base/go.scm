@@ -58,15 +58,18 @@
   )
 )
 
-;; 多个局部变量，逗号分割 - 直接捕获每个标识符
-(short_var_declaration
-  left: (expression_list
-          (identifier) @local_variable
-         )
-  right: (expression_list
-           (_) @local_variable.value
-         )
-  )
+;;短变量
+(block
+  (short_var_declaration
+    left: (expression_list
+            (identifier) @local_variable
+          )
+    right: (expression_list
+            (_) @local_variable.value
+          )
+    )
+)
+
 
 ;; method
 (method_declaration
@@ -87,12 +90,27 @@
 (type_declaration (type_spec name: (type_identifier) @definition.type_alias.name type: (type_identifier))) @definition.type_alias
 
 ;; 常量声明 - 直接捕获标识符节点
-(const_declaration
-  (const_spec
-    name: (identifier) @constant
-    value: (_)? @constant.value
+
+;;全局常量
+(source_file
+  (const_declaration
+    (const_spec
+      name: (identifier) @global_variable
+      value: (_)? @global_variable.value
+    )
   )
 )
+
+;;局部常量
+(block
+  (const_declaration
+    (const_spec
+      name: (identifier) @constant
+      value: (_)? @constant.value
+    )
+  )
+)
+
 
 ;; function/method_call
 (call_expression
