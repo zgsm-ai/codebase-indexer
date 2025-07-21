@@ -31,11 +31,11 @@
 
 
 (method_declaration
-  (modifiers) @definition.method.modifier
+  (modifiers)? @definition.method.modifier
   type: (_) @definition.method.return_type
   name: (identifier) @definition.method.name
   parameters: (formal_parameters) @definition.method.parameters
-  ) @definition.method
+) @definition.method
 
 ;; Constructor declarations
 (constructor_declaration

@@ -125,7 +125,7 @@ type Field struct {
 
 type Parameter struct {
 	Name string
-	Type string
+	Type []string
 }
 
 type Interface struct {
@@ -138,7 +138,7 @@ type Declaration struct {
 	Modifier   string
 	Name       string
 	Parameters []Parameter
-	ReturnType string
+	ReturnType []string
 }
 
 type Variable struct {

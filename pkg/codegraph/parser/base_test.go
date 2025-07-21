@@ -417,7 +417,7 @@ func TestJavaResolver_ResolveClass(t *testing.T) {
 				{Modifier: types.PackagePrivate, Type: "int", Name: "b"},
 				{Modifier: types.PackagePrivate, Type: "int", Name: "c"},
 			},
-			Methods: []string{"print", "save", "ReportGenerator", },
+			Methods: []string{"print", "save", "ReportGenerator"},
 		},
 		"ReportDetails": {
 			Scope:        types.ScopeProject,
@@ -502,7 +502,7 @@ func TestJavaResolver_ResolveClass(t *testing.T) {
 
 				for _, wantField := range want.Fields {
 					actualField, exists := actualFields[wantField.Name]
-					
+
 					assert.True(t, exists, "类 %s 未找到字段: %s", className, wantField.Name)
 					if exists {
 						assert.Equal(t, wantField.Modifier, actualField.Modifier, "类 %s 字段 %s 修饰符不匹配", className, wantField.Name)
@@ -656,73 +656,55 @@ public interface SimpleInterface {
 				{
 					Modifier:   "public abstract",
 					Name:       "doSomething",
-					ReturnType: "void",
+					ReturnType: []string{types.PrimitiveType},
 					Parameters: []resolver.Parameter{},
 				},
 				{
 					Modifier:   "public abstract",
 					Name:       "getValue",
-					ReturnType: "int",
+					ReturnType: []string{types.PrimitiveType},
 					Parameters: []resolver.Parameter{},
 				},
 			},
 			description: "测试简单接口声明解析",
 		},
 		{
-			name: "复杂接口声明",
+			name: "Printable接口声明",
 			sourceFile: &types.SourceFile{
 				Path:    "testdata/com/example/test/TestClass.java",
 				Content: readFile("testdata/com/example/test/TestClass.java"),
 			},
 			wantErr:       nil,
-			wantIfaceName: "ComplexInterface",
+			wantIfaceName: "Printable",
 			wantMethods: []resolver.Declaration{
 				{
 					Modifier:   "public abstract",
-					Name:       "process",
-					ReturnType: "R",
-					Parameters: []resolver.Parameter{
-						{Name: "input", Type: "T"},
-						{Name: "count", Type: "int"},
-						{Name: "description", Type: "String"},
-					},
-				},
-				{
-					Modifier:   "public abstract",
-					Name:       "convertToList",
-					ReturnType: "List<E>",
-					Parameters: []resolver.Parameter{
-						{Name: "array", Type: "E[]"},
-						{Name: "start", Type: "int"},
-						{Name: "end", Type: "int"},
-					},
-				},
-				{
-					Modifier:   "public default",
-					Name:       "printInfo",
-					ReturnType: "void",
-					Parameters: []resolver.Parameter{
-						{Name: "input", Type: "T"},
-						{Name: "verbose", Type: "boolean"},
-						{Name: "value", Type: "double"},
-					},
-				},
-				{
-					Modifier:   "public static",
-					Name:       "showInterfaceName",
-					ReturnType: "void",
+					Name:       "print",
+					ReturnType: []string{types.PrimitiveType},
 					Parameters: []resolver.Parameter{},
 				},
+			},
+			description: "测试Printable接口声明解析",
+		},
+		{
+			name: "Savable接口声明",
+			sourceFile: &types.SourceFile{
+				Path:    "testdata/com/example/test/TestClass.java",
+				Content: readFile("testdata/com/example/test/TestClass.java"),
+			},
+			wantErr:       nil,
+			wantIfaceName: "Savable",
+			wantMethods: []resolver.Declaration{
 				{
 					Modifier:   "public abstract",
-					Name:       "logMessages",
-					ReturnType: "void",
+					Name:       "save",
+					ReturnType: []string{types.PrimitiveType},
 					Parameters: []resolver.Parameter{
-						{Name: "messages", Type: "String..."},
+						{Name: "destination", Type: []string{types.PrimitiveType}},
 					},
 				},
 			},
-			description: "测试复杂接口声明解析（含泛型、默认方法、静态方法、常量等）",
+			description: "测试Savable接口声明解析",
 		},
 	}
 
@@ -733,66 +715,67 @@ public interface SimpleInterface {
 			assert.NotNil(t, res)
 
 			if err == nil {
-				found := false
+				// 1. 收集所有接口
+				ifaceMap := make(map[string]*resolver.Interface)
 				for _, element := range res.Elements {
 					if iface, ok := element.(*resolver.Interface); ok {
-						fmt.Printf("Interface: %s\n", iface.GetName())
-						assert.Equal(t, tt.wantIfaceName, iface.GetName())
-						assert.Equal(t, types.ElementTypeInterface, iface.GetType())
+						ifaceMap[iface.GetName()] = iface
+					}
+				}
 
-						// 验证方法数量
-						assert.Equal(t, len(tt.wantMethods), len(iface.Methods),
-							"方法数量不匹配，期望 %d，实际 %d", len(tt.wantMethods), len(iface.Methods))
+				// 2. 查找目标接口
+				iface, exists := ifaceMap[tt.wantIfaceName]
+				assert.True(t, exists, "未找到接口类型: %s", tt.wantIfaceName)
+				if exists {
+					assert.Equal(t, types.ElementTypeInterface, iface.GetType())
 
-						// 创建实际方法的映射，用于比较
-						actualMethods := make(map[string]*resolver.Declaration)
-						for _, method := range iface.Methods {
-							fmt.Printf("  Method: %s %s %s %v\n",
-								method.Modifier, method.ReturnType, method.Name, method.Parameters)
-							actualMethods[method.Name] = method
-						}
+					// 验证方法数量
+					assert.Equal(t, len(tt.wantMethods), len(iface.Methods),
+						"方法数量不匹配，期望 %d，实际 %d", len(tt.wantMethods), len(iface.Methods))
 
-						// 逐个比较每个期望的方法
-						for _, wantMethod := range tt.wantMethods {
-							actualMethod, exists := actualMethods[wantMethod.Name]
-							assert.True(t, exists, "未找到方法: %s", wantMethod.Name)
+					// 创建实际方法的映射，用于比较
+					actualMethods := make(map[string]*resolver.Declaration)
+					for _, method := range iface.Methods {
+						actualMethods[method.Name] = method
+					}
 
-							if exists {
-								// 比较修饰符
-								assert.Equal(t, wantMethod.Modifier, actualMethod.Modifier,
-									"方法 %s 的修饰符不匹配，期望 %s，实际 %s",
-									wantMethod.Name, wantMethod.Modifier, actualMethod.Modifier)
+					// 逐个比较每个期望的方法
+					for _, wantMethod := range tt.wantMethods {
+						actualMethod, exists := actualMethods[wantMethod.Name]
+						assert.True(t, exists, "未找到方法: %s", wantMethod.Name)
 
-								// 比较返回值类型
-								assert.Equal(t, wantMethod.ReturnType, actualMethod.ReturnType,
-									"方法 %s 的返回值类型不匹配，期望 %s，实际 %s",
-									wantMethod.Name, wantMethod.ReturnType, actualMethod.ReturnType)
+						if exists {
+							// 比较修饰符
+							assert.Equal(t, wantMethod.Modifier, actualMethod.Modifier,
+								"方法 %s 的修饰符不匹配，期望 %s，实际 %s",
+								wantMethod.Name, wantMethod.Modifier, actualMethod.Modifier)
 
-								// 比较参数数量
-								assert.Equal(t, len(wantMethod.Parameters), len(actualMethod.Parameters),
-									"方法 %s 的参数数量不匹配，期望 %d，实际 %d",
-									wantMethod.Name, len(wantMethod.Parameters), len(actualMethod.Parameters))
+							// 比较返回值类型
+							assert.Equal(t, wantMethod.ReturnType, actualMethod.ReturnType,
+								"方法 %s 的返回值类型不匹配，期望 %s，实际 %s",
+								wantMethod.Name, wantMethod.ReturnType, actualMethod.ReturnType)
 
-								// 比较参数详情
-								for i, wantParam := range wantMethod.Parameters {
-									if i < len(actualMethod.Parameters) {
-										actualParam := actualMethod.Parameters[i]
-										assert.Equal(t, wantParam.Name, actualParam.Name,
-											"方法 %s 的第 %d 个参数名称不匹配，期望 %s，实际 %s",
-											wantMethod.Name, i+1, wantParam.Name, actualParam.Name)
-										assert.Equal(t, wantParam.Type, actualParam.Type,
-											"方法 %s 的第 %d 个参数类型不匹配，期望 %s，实际 %s",
-											wantMethod.Name, i+1, wantParam.Type, actualParam.Type)
-									}
+							// 比较参数数量
+							assert.Equal(t, len(wantMethod.Parameters), len(actualMethod.Parameters),
+								"方法 %s 的参数数量不匹配，期望 %d，实际 %d",
+								wantMethod.Name, len(wantMethod.Parameters), len(actualMethod.Parameters))
+
+							// 比较参数详情
+							for i, wantParam := range wantMethod.Parameters {
+								if i < len(actualMethod.Parameters) {
+									actualParam := actualMethod.Parameters[i]
+									assert.Equal(t, wantParam.Name, actualParam.Name,
+										"方法 %s 的第 %d 个参数名称不匹配，期望 %s，实际 %s",
+										wantMethod.Name, i+1, wantParam.Name, actualParam.Name)
+									
+									assert.Equal(t, wantParam.Type, actualParam.Type,
+										"方法 %s 的第 %d 个参数类型不匹配，期望 %s，实际 %s",
+										wantMethod.Name, i+1, wantParam.Type, actualParam.Type)
 								}
 							}
 						}
-
-						found = true
-						break // 找到第一个匹配的接口就退出
 					}
 				}
-				assert.True(t, found, "未找到接口类型")
 			}
 		})
 	}

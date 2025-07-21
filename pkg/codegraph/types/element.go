@@ -198,6 +198,11 @@ const (
 	NodeKindTypeArguments        NodeKind = "type_arguments"
 	NodeKindScopedTypeIdentifier NodeKind = "scoped_type_identifier"
 	NodeKindWildcard             NodeKind = "wildcard" // 通配符 <? extends MyClass>
+
+	// 用于查找方法所属的类
+	NodeKindClassDeclaration NodeKind = "class_declaration"
+	NodeKindInterfaceDeclaration NodeKind = "interface_declaration"
+	NodeKindEnumDeclaration NodeKind = "enum_declaration"
 )
 
 var NodeKindMappings = map[string]NodeKind{
@@ -234,6 +239,11 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindScopedTypeIdentifier): NodeKindScopedTypeIdentifier,
 	string(NodeKindTypeArguments):        NodeKindTypeArguments,
 	string(NodeKindWildcard):             NodeKindWildcard,
+	
+	// 用于查找方法所属的类
+	string(NodeKindClassDeclaration):     NodeKindClassDeclaration,
+	string(NodeKindInterfaceDeclaration): NodeKindInterfaceDeclaration,
+	string(NodeKindEnumDeclaration):      NodeKindEnumDeclaration,
 }
 
 // 用于接收函数的返回类型和字段的类型

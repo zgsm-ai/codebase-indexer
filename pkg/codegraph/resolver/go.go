@@ -136,7 +136,7 @@ func (r *GoResolver) resolveFunction(ctx context.Context, element *Function, rc 
 			resultNode := funcNode.ChildByFieldName("result")
 			if resultNode != nil {
 				// 使用analyzeReturnTypes函数提取并格式化返回类型
-				element.ReturnType = analyzeReturnTypes(resultNode, rc.SourceFile.Content)
+				element.ReturnType = []string{analyzeReturnTypes(resultNode, rc.SourceFile.Content)}
 			}
 		}
 		for _, capture := range rc.Match.Captures {
@@ -178,7 +178,7 @@ func (r *GoResolver) resolveFunction(ctx context.Context, element *Function, rc 
 						for _, name := range group.Names {
 							element.Parameters = append(element.Parameters, Parameter{
 								Name: name,
-								Type: paramType,
+								Type: []string{paramType},
 							})
 						}
 
@@ -466,7 +466,7 @@ func (r *GoResolver) resolveMethod(ctx context.Context, element *Method, rc *Res
 			resultNode := methodNode.ChildByFieldName("result")
 			if resultNode != nil {
 				// 使用analyzeReturnTypes函数提取并格式化返回类型
-				element.ReturnType = analyzeReturnTypes(resultNode, rc.SourceFile.Content)
+				element.ReturnType = []string{analyzeReturnTypes(resultNode, rc.SourceFile.Content)}
 			}
 
 			// 尝试获取接收器节点
@@ -522,7 +522,7 @@ func (r *GoResolver) resolveMethod(ctx context.Context, element *Method, rc *Res
 						for _, name := range group.Names {
 							element.Parameters = append(element.Parameters, Parameter{
 								Name: name,
-								Type: paramType,
+								Type: []string{paramType},
 							})
 						}
 					}
@@ -958,7 +958,7 @@ func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, r
 									for _, name := range group.Names {
 										decl.Parameters = append(decl.Parameters, Parameter{
 											Name: name,
-											Type: paramType,
+											Type: []string{paramType},
 										})
 									}
 								}
@@ -969,7 +969,7 @@ func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, r
 						resultNode := childNode.ChildByFieldName("result")
 						if resultNode != nil {
 							// 使用analyzeReturnTypes函数提取并格式化返回类型
-							decl.ReturnType = analyzeReturnTypes(resultNode, rc.SourceFile.Content)
+							decl.ReturnType = []string{analyzeReturnTypes(resultNode, rc.SourceFile.Content)}
 						}
 
 						// 将方法添加到接口的Methods列表中
@@ -1102,7 +1102,7 @@ func collectArgumentPositions(element *Call, argsNode sitter.Node, content []byt
 		// 创建参数对象
 		param := &Parameter{
 			Name: value,
-			Type: types.GetNodeTypeString(childKind, value),
+			Type: []string{types.GetNodeTypeString(childKind, value)},
 		}
 
 		element.Parameters = append(element.Parameters, param)

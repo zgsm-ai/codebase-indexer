@@ -10,6 +10,9 @@ var javaStdTypes = map[string]struct{}{
 	"BufferedReader": {}, "BufferedWriter": {}, "FileInputStream": {}, "FileOutputStream": {},
 	"Path": {}, "Paths": {}, "Files": {}, "ByteBuffer": {},
 	"URL": {}, "HttpURLConnection": {}, "Socket": {},
+	// java基本数据类型
+	"int": {}, "boolean": {}, "void": {},
+	"byte": {}, "short": {}, "char": {}, "long": {}, "float": {}, "double": {},
 }
 
 // FilterCustomTypes 过滤类型名切片，只保留用户自定义类型

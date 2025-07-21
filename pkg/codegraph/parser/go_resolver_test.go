@@ -363,13 +363,13 @@ type Reader interface {
 			wantMethods: []resolver.Declaration{
 				{
 					Name:       "Read",
-					Parameters: []resolver.Parameter{{Name: "p", Type: "[]byte"}},
-					ReturnType: "(int, error)",
+					Parameters: []resolver.Parameter{{Name: "p", Type: []string{"[]byte"}}},
+					ReturnType: []string{"(int, error)"},
 				},
 				{
 					Name:       "Close",
 					Parameters: []resolver.Parameter{},
-					ReturnType: "error",
+					ReturnType: []string{"error"},
 				},
 			},
 			description: "测试简单接口声明解析",
@@ -397,35 +397,35 @@ type Handler interface {
 				{
 					Name: "ServeHTTP",
 					Parameters: []resolver.Parameter{
-						{Name: "w", Type: "ResponseWriter"},
-						{Name: "r", Type: "*Request"},
+						{Name: "w", Type: []string{"ResponseWriter"}},
+						{Name: "r", Type: []string{"*Request"}},
 					},
-					ReturnType: "",
+					ReturnType: []string{""},
 				},
 				{
 					Name: "HandleFunc",
 					Parameters: []resolver.Parameter{
-						{Name: "pattern", Type: "string"},
-						{Name: "handler", Type: "func(ResponseWriter, *Request)"},
+						{Name: "pattern", Type: []string{"string"}},
+						{Name: "handler", Type: []string{"func(ResponseWriter, *Request)"}},
 					},
-					ReturnType: "",
+					ReturnType: []string{""},
 				},
 				{
 					Name: "Process",
 					Parameters: []resolver.Parameter{
-						{Name: "data", Type: "[]byte"},
+						{Name: "data", Type: []string{"[]byte"}},
 					},
-					ReturnType: "(interface{}, error)",
+					ReturnType: []string{"(interface{}, error)"},
 				},
 				{
 					Name:       "Close",
 					Parameters: []resolver.Parameter{},
-					ReturnType: "error",
+					ReturnType: []string{"error"},
 				},
 				{
 					Name:       "String",
 					Parameters: []resolver.Parameter{},
-					ReturnType: "string",
+					ReturnType: []string{"string"},
 				},
 			},
 			description: "测试带嵌入和复杂参数的接口声明解析",
@@ -481,13 +481,13 @@ type Handler interface {
 									actualMethods["Close"] = &resolver.Declaration{
 										Name:       "Close",
 										Parameters: []resolver.Parameter{},
-										ReturnType: "error",
+										ReturnType: []string{"error"},
 									}
 								case "fmt.Stringer":
 									actualMethods["String"] = &resolver.Declaration{
 										Name:       "String",
 										Parameters: []resolver.Parameter{},
-										ReturnType: "string",
+										ReturnType: []string{"string"},
 									}
 								}
 							}
