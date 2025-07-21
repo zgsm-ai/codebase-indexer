@@ -29,7 +29,7 @@ type Shape interface {
 }
 
 // 函数定义
-func add(a, b int) int {
+func add(a, b int) (error, int) {
 	return a + b
 }
 
@@ -134,11 +134,5 @@ func main() {
 	for val := range ch {
 		fmt.Printf("Received from channel: %d\n", val)
 	}
-	p := Person{Name: "Alice", Age: 30}
-	var G Person = Person{Name: "Alice", Age: 30}
-	var (
-		a Person = Person{Name: "Alice", Age: 30}
-		b Person = Person{Name: "Alice", Age: 30}
-	)
-	// a, b := 1, a.Person{}
+	const pi := 2
 }

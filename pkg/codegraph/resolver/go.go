@@ -199,6 +199,107 @@ type ParamGroup struct {
 
 // analyzeParameterGroups 分析Go语言的参数列表，将其分组为类型组
 func analyzeParameterGroups(parameters string) []ParamGroup {
+	// 特殊处理函数类型参数的情况
+	if strings.Contains(parameters, "func(") {
+		// 首先需要正确分割多个参数，处理括号嵌套
+		var parts []string
+		var currentPart strings.Builder
+		depth := 0
+
+		for i := 0; i < len(parameters); i++ {
+			char := parameters[i]
+			switch char {
+			case '(':
+				depth++
+				currentPart.WriteByte(char)
+			case ')':
+				depth--
+				currentPart.WriteByte(char)
+			case ',':
+				if depth == 0 {
+					// 外层逗号，分割参数
+					parts = append(parts, currentPart.String())
+					currentPart.Reset()
+				} else {
+					// 括号内的逗号，保留
+					currentPart.WriteByte(char)
+				}
+			default:
+				currentPart.WriteByte(char)
+			}
+		}
+
+		// 添加最后一个部分
+		if currentPart.Len() > 0 {
+			parts = append(parts, currentPart.String())
+		}
+
+		// 处理每个部分
+		var groups []ParamGroup
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+
+			// 分离参数名和类型
+			words := strings.SplitN(part, " ", 2)
+			if len(words) == 2 {
+				// 名称和类型
+				paramName := words[0]
+				paramType := words[1]
+
+				// 处理函数类型参数中的括号平衡
+				if strings.Contains(paramType, "func(") {
+					leftCount := strings.Count(paramType, "(")
+					rightCount := strings.Count(paramType, ")")
+
+					// 补充缺失的右括号
+					if rightCount < leftCount {
+						for i := 0; i < leftCount-rightCount; i++ {
+							paramType += ")"
+						}
+					}
+				}
+
+				groups = append(groups, ParamGroup{
+					Names: []string{paramName},
+					Type:  paramType,
+				})
+			} else if len(words) == 1 {
+				// 只有参数名或者类型
+				paramValue := words[0]
+
+				if strings.Contains(paramValue, "func(") {
+					// 是函数类型
+					leftCount := strings.Count(paramValue, "(")
+					rightCount := strings.Count(paramValue, ")")
+
+					// 补充缺失的右括号
+					if rightCount < leftCount {
+						for i := 0; i < leftCount-rightCount; i++ {
+							paramValue += ")"
+						}
+					}
+
+					groups = append(groups, ParamGroup{
+						Names: []string{""},
+						Type:  paramValue,
+					})
+				} else {
+					// 普通参数
+					groups = append(groups, ParamGroup{
+						Names: []string{paramValue},
+						Type:  "",
+					})
+				}
+			}
+		}
+
+		return groups
+	}
+
+	// 下面是原始的参数解析逻辑
 	var groups []ParamGroup
 
 	// 分割多个参数组 (用逗号分隔)
@@ -598,7 +699,7 @@ func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc 
 			variableType = content
 			element.Content = []byte(content)
 			// 设置 VariableType 字段
-			element.VariableType = content
+			element.VariableType = []string{content}
 
 		case strings.HasSuffix(nodeCaptureName, ".value"):
 			// 保存变量值
@@ -816,8 +917,14 @@ func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, r
 
 				// 直接遍历接口类型节点的所有子节点
 				for i := uint(0); i < interfaceTypeNode.ChildCount(); i++ {
-					methodNode := interfaceTypeNode.Child(i)
-					if methodNode != nil && methodNode.Kind() == string(types.NodeKindMethodElem) {
+					childNode := interfaceTypeNode.Child(i)
+					if childNode == nil {
+						continue
+					}
+
+					switch types.ToNodeKind(childNode.Kind()) {
+					case types.NodeKindMethodElem:
+						// 处理方法声明
 						// 创建一个方法声明
 						decl := &Declaration{
 							Modifier:   "", // Go中接口方法没有显式修饰符
@@ -826,13 +933,13 @@ func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, r
 						}
 
 						// 获取方法名
-						nameNode := methodNode.ChildByFieldName("name")
+						nameNode := childNode.ChildByFieldName("name")
 						if nameNode != nil {
 							decl.Name = nameNode.Utf8Text(rc.SourceFile.Content)
 						}
 
 						// 获取参数列表
-						parametersNode := methodNode.ChildByFieldName("parameters")
+						parametersNode := childNode.ChildByFieldName("parameters")
 						if parametersNode != nil {
 							// 获取参数文本
 							parametersText := parametersNode.Utf8Text(rc.SourceFile.Content)
@@ -859,7 +966,7 @@ func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, r
 						}
 
 						// 获取返回类型
-						resultNode := methodNode.ChildByFieldName("result")
+						resultNode := childNode.ChildByFieldName("result")
 						if resultNode != nil {
 							// 使用analyzeReturnTypes函数提取并格式化返回类型
 							decl.ReturnType = analyzeReturnTypes(resultNode, rc.SourceFile.Content)
@@ -867,6 +974,25 @@ func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, r
 
 						// 将方法添加到接口的Methods列表中
 						element.Methods = append(element.Methods, decl)
+
+					case types.NodeKindTypeElem:
+						// 处理嵌入接口
+						typeNode := childNode.Child(0) // 获取第一个子节点，即类型名称
+						if typeNode != nil {
+							interfaceName := typeNode.Utf8Text(rc.SourceFile.Content)
+
+							// 检查是否是限定名称（包含点号）
+							if strings.Contains(interfaceName, ".") {
+								// 已经是完全限定名称，直接添加
+								element.SuperInterfaces = append(element.SuperInterfaces, interfaceName)
+							} else {
+								// 否则，尝试查找是否有包前缀
+								if rc.SourceFile != nil && rc.SourceFile.Path != "" {
+									// 简单处理，直接添加无包名的接口名
+									element.SuperInterfaces = append(element.SuperInterfaces, interfaceName)
+								}
+							}
+						}
 					}
 				}
 			}
@@ -991,7 +1117,7 @@ func analyzeReturnTypes(resultNode *sitter.Node, content []byte) string {
 	}
 
 	// 如果结果节点不是参数列表，直接返回文本
-	if resultNode.Kind() != "parameter_list" {
+	if resultNode.Kind() != string(types.NodeKindParameterList) {
 		return resultNode.Utf8Text(content)
 	}
 
@@ -1007,7 +1133,7 @@ func analyzeReturnTypes(resultNode *sitter.Node, content []byte) string {
 		}
 
 		// 跳过非参数声明节点（如逗号、括号）
-		if child.Kind() != "parameter_declaration" {
+		if child.Kind() != string(types.NodeKindParameterDeclaration) {
 			continue
 		}
 

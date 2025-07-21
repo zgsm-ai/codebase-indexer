@@ -1,19 +1,19 @@
 package types
 
 const (
-	EmptyString    = ""
-	DoubleQuote    = "\""
-	Comma          = ","
-	Identifier     = "identifier"
-	Dot            = "."
-	LF             = "\n"
-	PackagePrivate = "package-private"
-	PublicAbstract = "public abstract"
+	EmptyString       = ""
+	DoubleQuote       = "\""
+	Comma             = ","
+	Identifier        = "identifier"
+	Dot               = "."
+	LF                = "\n"
+	PackagePrivate    = "package-private"
+	PublicAbstract    = "public abstract"
 	ModifierProtected = "protected"
-	ModifierPrivate = "private"
-	ModifierPublic = "public"
-	ModifierDefault = "default"
-	PrimitiveType = "primitive_type"
+	ModifierPrivate   = "private"
+	ModifierPublic    = "public"
+	ModifierDefault   = "default"
+	PrimitiveType     = "primitive_type"
 )
 
 // ElementType 表示代码元素类型，使用字符串字面量作为枚举值
@@ -67,7 +67,7 @@ const (
 	ElementTypeGlobalVariable      ElementType = "global_variable"
 	ElementTypeLocalVariable       ElementType = "local_variable"
 	ElementTypeLocalVariableName   ElementType = "local_variable.name"
-	ElementTypeLocalVariableType   ElementType = "local_variable.type"	
+	ElementTypeLocalVariableType   ElementType = "local_variable.type"
 	ElementTypeLocalVariableValue  ElementType = "local_variable.value"
 	ElementTypeVariable            ElementType = "variable"
 	ElementTypeConstant            ElementType = "constant"
@@ -185,6 +185,7 @@ const (
 	NodeKindCallExpression       NodeKind = "call_expression"
 	NodeKindParameterList        NodeKind = "parameter_list"
 	NodeKindParameterDeclaration NodeKind = "parameter_declaration"
+	NodeKindTypeElem             NodeKind = "type_elem"
 	// 用于接收函数的返回类型和字段的类型
 	NodeKindIntegralType         NodeKind = "integral_type"
 	NodeKindFloatingPointType    NodeKind = "floating_point_type"
