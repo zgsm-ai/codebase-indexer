@@ -521,6 +521,7 @@ func parseLocalVariableType(node *sitter.Node, content []byte) []string {
 	// 从顶部判断是不是基础数据类型
 	parentKind := node.Kind()
 	switch types.ToNodeKind(parentKind) {
+	// ---------------------------java返回值类型解析--------------------------------
 	case types.NodeKindIntegralType:
 		// 接收 int long short byte char
 		return []string{types.PrimitiveType}
@@ -553,6 +554,12 @@ func parseLocalVariableType(node *sitter.Node, content []byte) []string {
 		//     type_identifier [18, 16] - [18, 23] Person
 		//
 		return parseGenericType(node, content)
+
+	// ---------------------------c/cpp返回值类型解析--------------------------------
+	case types.NodeKindPrimitiveType:
+		// c/cpp的基础类型都由这个接收
+		return []string{types.PrimitiveType}
+
 	default:
 		// 可能有漏的情况，先返回primitive_type
 		return []string{types.PrimitiveType}

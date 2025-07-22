@@ -47,6 +47,7 @@ const (
 	ElementTypeTypeAlias           ElementType = "definition.type_alias"
 	ElementTypeFunction            ElementType = "definition.function"
 	ElementTypeFunctionName        ElementType = "definition.function.name"
+	ElementTypeFunctionReturnType  ElementType = "definition.function.return_type"
 	ElementTypeFunctionParameters  ElementType = "definition.function.parameters"
 	ElementTypeMethodCall          ElementType = "call.method"
 	ElementTypeCallArguments       ElementType = "call.method.arguments"
@@ -112,6 +113,9 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeFunction):            ElementTypeFunction,
 	string(ElementTypeFunctionCall):        ElementTypeFunctionCall,
 	string(ElementTypeFunctionOwner):       ElementTypeFunctionOwner,
+	string(ElementTypeFunctionName):        ElementTypeFunctionName,
+	string(ElementTypeFunctionReturnType):  ElementTypeFunctionReturnType,
+	string(ElementTypeFunctionParameters):  ElementTypeFunctionParameters,
 	string(ElementTypeFunctionArguments):   ElementTypeFunctionArguments,
 	string(ElementTypeFunctionDeclaration): ElementTypeFunctionDeclaration,
 	string(ElementTypeMethod):              ElementTypeMethod,
@@ -198,6 +202,7 @@ const (
 	NodeKindTypeArguments        NodeKind = "type_arguments"
 	NodeKindScopedTypeIdentifier NodeKind = "scoped_type_identifier"
 	NodeKindWildcard             NodeKind = "wildcard" // 通配符 <? extends MyClass>
+	NodeKindPrimitiveType        NodeKind = "primitive_type" // c/cpp基础类型都由这个接收
 
 	// 用于查找方法所属的类
 	NodeKindClassDeclaration NodeKind = "class_declaration"
@@ -259,6 +264,7 @@ var NodeKindTypeMappings = map[NodeKind]struct{}{
 	NodeKindScopedTypeIdentifier: {},
 	NodeKindWildcard:             {},
 	NodeKindConstructor:          {},
+	NodeKindPrimitiveType:        {},
 }
 
 func ToNodeKind(kind string) NodeKind {

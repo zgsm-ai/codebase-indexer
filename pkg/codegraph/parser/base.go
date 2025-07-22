@@ -61,7 +61,6 @@ func (p *SourceFileParser) Parse(ctx context.Context,
 	defer query.Close()
 
 	captureNames := query.CaptureNames() // 根据scm文件从上到下排列的
-
 	if len(captureNames) == 0 {
 		return nil, fmt.Errorf("tree_sitter base_processor query capture names is empty")
 	}
@@ -155,7 +154,6 @@ func (p *SourceFileParser) processNode(
 		SourceFile:   sourceFile,
 		ProjectInfo:  projectInfo,
 	}
-
 	elements, err := p.resolverManager.Resolve(ctx, rootElement, resolveCtx)
 	if err != nil {
 		// TODO full_name（import）、 find identifier recur (variable)、parameters/arguments

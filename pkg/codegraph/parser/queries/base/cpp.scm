@@ -35,7 +35,7 @@
 
 ;; Enum declarations
 (enum_specifier
-  name: (type_identifier) @efinition.enum.name) @definition.enum
+  name: (type_identifier) @definition.enum.name) @definition.enum
 
 ;; Type alias declarations (these are definitions)
 (alias_declaration
@@ -45,12 +45,36 @@
 (type_definition
   declarator: (type_identifier) @definition.typedef.name) @definition.typedef
 
+;; -----------------------------函数的声明----------------------------------
 (declaration
+  type: (_) @declaration.function.return_type
   declarator: (function_declarator
                 declarator: (identifier) @declaration.function.name
                 parameters: (parameter_list) @declaration.function.parameters
                 )
   ) @declaration.function
+;; 返回值带指针
+(declaration
+  type: (_) @declaration.function.return_type
+  declarator: (pointer_declarator
+                declarator: (
+                  function_declarator
+                    declarator: (identifier) @declaration.function.name
+                    parameters: (parameter_list) @declaration.function.parameters
+                )
+              )@declaration.function.reference
+) @declaration.function
+;; 返回值带引用
+(declaration
+  type: (_) @declaration.function.return_type           
+  declarator: (reference_declarator                
+                (function_declarator
+                  declarator: (identifier) @declaration.function.name
+                  parameters: (parameter_list) @declaration.function.parameters
+                )
+              )@declaration.function.reference
+) @declaration.function
+
 
 
 
