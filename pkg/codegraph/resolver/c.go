@@ -19,8 +19,18 @@ func (r *CResolver) Resolve(ctx context.Context, element Element, rc *ResolveCon
 }
 
 func (r *CResolver) resolveImport(ctx context.Context, element *Import, rc *ResolveContext) ([]Element, error) {
-	if element.Name == types.EmptyString {
-		return nil, fmt.Errorf("import is empty")
+	rootCap := rc.Match.Captures[0]
+	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
+	for _, cap := range rc.Match.Captures {
+		captureName := rc.CaptureNames[cap.Index]
+		if cap.Node.IsMissing() || cap.Node.IsError() {
+			continue
+		}
+		content := cap.Node.Utf8Text(rc.SourceFile.Content)
+		switch types.ToElementType(captureName) {
+		case types.ElementTypeImportName:
+			element.Name = content
+		}
 	}
 
 	element.FilePaths = []string{}

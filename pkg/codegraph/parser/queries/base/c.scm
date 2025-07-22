@@ -49,7 +49,7 @@
 (union_specifier
   name: (type_identifier) @definition.union.name) @definition.union
 
-
+;; Function declarations
 (declaration
   declarator: (function_declarator
                 declarator: (identifier) @declaration.function.name
@@ -57,13 +57,27 @@
                 )
   ) @declaration.function
 
-;; Function definitions
+;; Function definitions 不带指针
 (function_definition
+  type: (_) @definition.function.return_type
   declarator: (function_declarator
                 declarator: (identifier) @definition.function.name
                 parameters: (parameter_list) @definition.function.parameters
-                )
-  ) @definition.function
+              )
+) @definition.function
+
+;; Function definitions 带指针的返回值的匹配
+(function_definition
+  type: (_) @definition.function.return_type
+  declarator: (pointer_declarator
+    declarator: (function_declarator
+      declarator: (identifier) @definition.function.name
+      parameters: (parameter_list) @definition.function.parameters
+    )
+  )
+) @definition.function
+
+
 
 ;; TODO 去找它的 identifier
 ;; variable & function  declaration
