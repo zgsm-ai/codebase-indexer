@@ -134,5 +134,5 @@ func main() {
 	for val := range ch {
 		fmt.Printf("Received from channel: %d\n", val)
 	}
-	const pi := 2
+	const pi = 2
 }

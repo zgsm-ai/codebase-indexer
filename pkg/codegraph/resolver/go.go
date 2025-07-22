@@ -136,7 +136,7 @@ func (r *GoResolver) resolveFunction(ctx context.Context, element *Function, rc 
 			resultNode := funcNode.ChildByFieldName("result")
 			if resultNode != nil {
 				// 使用analyzeReturnTypes函数提取并格式化返回类型
-				element.ReturnType = []string{analyzeReturnTypes(resultNode, rc.SourceFile.Content)}
+				element.ReturnType = analyzeReturnTypes(resultNode, rc.SourceFile.Content)
 			}
 		}
 		for _, capture := range rc.Match.Captures {
@@ -172,13 +172,13 @@ func (r *GoResolver) resolveFunction(ctx context.Context, element *Function, rc 
 					// 处理每个类型组
 					for _, group := range typeGroups {
 						// 获取参数类型
-						paramType := group.Type
+						paramTypes := group.Type
 
 						// 处理每个参数名
 						for _, name := range group.Names {
 							element.Parameters = append(element.Parameters, Parameter{
 								Name: name,
-								Type: []string{paramType},
+								Type: paramTypes,
 							})
 						}
 
@@ -194,7 +194,7 @@ func (r *GoResolver) resolveFunction(ctx context.Context, element *Function, rc 
 // ParamGroup 表示一组共享同一类型的参数
 type ParamGroup struct {
 	Names []string // 参数名列表
-	Type  string   // 共享的类型
+	Type  []string // 共享的类型
 }
 
 // analyzeParameterGroups 分析Go语言的参数列表，将其分组为类型组
@@ -264,7 +264,7 @@ func analyzeParameterGroups(parameters string) []ParamGroup {
 
 				groups = append(groups, ParamGroup{
 					Names: []string{paramName},
-					Type:  paramType,
+					Type:  []string{paramType},
 				})
 			} else if len(words) == 1 {
 				// 只有参数名或者类型
@@ -284,13 +284,13 @@ func analyzeParameterGroups(parameters string) []ParamGroup {
 
 					groups = append(groups, ParamGroup{
 						Names: []string{""},
-						Type:  paramValue,
+						Type:  []string{paramValue},
 					})
 				} else {
 					// 普通参数
 					groups = append(groups, ParamGroup{
 						Names: []string{paramValue},
-						Type:  "",
+						Type:  []string{""},
 					})
 				}
 			}
@@ -356,7 +356,7 @@ func analyzeParameterGroups(parameters string) []ParamGroup {
 							// 保存这个组并重置
 							groups = append(groups, ParamGroup{
 								Names: append([]string{}, currentNames...),
-								Type:  currentType,
+								Type:  []string{currentType},
 							})
 
 							currentNames = nil
@@ -369,7 +369,7 @@ func analyzeParameterGroups(parameters string) []ParamGroup {
 							// 保存并重置
 							groups = append(groups, ParamGroup{
 								Names: append([]string{}, currentNames...),
-								Type:  "",
+								Type:  []string{""},
 							})
 
 							currentNames = nil
@@ -387,13 +387,13 @@ func analyzeParameterGroups(parameters string) []ParamGroup {
 					// 保存这个组
 					groups = append(groups, ParamGroup{
 						Names: append([]string{}, currentNames...),
-						Type:  currentType,
+						Type:  []string{currentType},
 					})
 				} else {
 					// 没有前面的参数名，这是单独的参数
 					groups = append(groups, ParamGroup{
 						Names: []string{words[0]},
-						Type:  "",
+						Type:  []string{""},
 					})
 				}
 
@@ -421,7 +421,7 @@ func analyzeParameterGroups(parameters string) []ParamGroup {
 			// 保存这个组并重置
 			groups = append(groups, ParamGroup{
 				Names: append([]string{}, currentNames...),
-				Type:  currentType,
+				Type:  []string{currentType},
 			})
 
 			currentNames = nil
@@ -434,7 +434,7 @@ func analyzeParameterGroups(parameters string) []ParamGroup {
 	if len(currentNames) > 0 && !hasType {
 		groups = append(groups, ParamGroup{
 			Names: currentNames,
-			Type:  "",
+			Type:  []string{""},
 		})
 	}
 
@@ -466,7 +466,7 @@ func (r *GoResolver) resolveMethod(ctx context.Context, element *Method, rc *Res
 			resultNode := methodNode.ChildByFieldName("result")
 			if resultNode != nil {
 				// 使用analyzeReturnTypes函数提取并格式化返回类型
-				element.ReturnType = []string{analyzeReturnTypes(resultNode, rc.SourceFile.Content)}
+				element.ReturnType = analyzeReturnTypes(resultNode, rc.SourceFile.Content)
 			}
 
 			// 尝试获取接收器节点
@@ -516,13 +516,13 @@ func (r *GoResolver) resolveMethod(ctx context.Context, element *Method, rc *Res
 					// 处理每个类型组
 					for _, group := range typeGroups {
 						// 获取参数类型
-						paramType := group.Type
+						paramTypes := group.Type
 
 						// 处理每个参数名
 						for _, name := range group.Names {
 							element.Parameters = append(element.Parameters, Parameter{
 								Name: name,
-								Type: []string{paramType},
+								Type: paramTypes,
 							})
 						}
 					}
@@ -677,7 +677,6 @@ func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc 
 
 	case types.ElementTypeConstant:
 		element.Type = types.ElementTypeConstant
-		// 根据名称首字母判断作用域
 		element.Scope = types.ScopeFunction
 	}
 
@@ -952,13 +951,13 @@ func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, r
 
 								// 处理每个类型组
 								for _, group := range typeGroups {
-									paramType := group.Type
+									paramTypes := group.Type
 
 									// 处理每个参数名
 									for _, name := range group.Names {
 										decl.Parameters = append(decl.Parameters, Parameter{
 											Name: name,
-											Type: []string{paramType},
+											Type: paramTypes,
 										})
 									}
 								}
@@ -969,7 +968,7 @@ func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, r
 						resultNode := childNode.ChildByFieldName("result")
 						if resultNode != nil {
 							// 使用analyzeReturnTypes函数提取并格式化返回类型
-							decl.ReturnType = []string{analyzeReturnTypes(resultNode, rc.SourceFile.Content)}
+							decl.ReturnType = analyzeReturnTypes(resultNode, rc.SourceFile.Content)
 						}
 
 						// 将方法添加到接口的Methods列表中
@@ -1111,14 +1110,14 @@ func collectArgumentPositions(element *Call, argsNode sitter.Node, content []byt
 
 // analyzeReturnTypes 分析返回类型参数列表节点，提取类型信息
 // 支持处理多返回值和带名称的返回值
-func analyzeReturnTypes(resultNode *sitter.Node, content []byte) string {
+func analyzeReturnTypes(resultNode *sitter.Node, content []byte) []string {
 	if resultNode == nil {
-		return ""
+		return []string{}
 	}
 
-	// 如果结果节点不是参数列表，直接返回文本
+	// 如果结果节点不是参数列表，直接返回文本作为单个元素的切片
 	if resultNode.Kind() != string(types.NodeKindParameterList) {
-		return resultNode.Utf8Text(content)
+		return []string{resultNode.Utf8Text(content)}
 	}
 
 	var returnTypes []string
@@ -1189,13 +1188,7 @@ func analyzeReturnTypes(resultNode *sitter.Node, content []byte) string {
 		}
 	}
 
-	// 如果只有一个返回值，直接返回
-	if len(returnTypes) == 1 {
-		return returnTypes[0]
-	}
-
-	// 多个返回值用括号和逗号组合
-	return "(" + strings.Join(returnTypes, ", ") + ")"
+	return returnTypes
 }
 
 func (r *GoResolver) isStandardLibrary(pkgPath string) (bool, error) {
