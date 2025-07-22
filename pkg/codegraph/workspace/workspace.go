@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/codegraph/utils"
+	"codebase-indexer/pkg/logger"
 	"context"
 	"errors"
 	"io"
@@ -16,24 +17,91 @@ import (
 var ErrPathNotExists = errors.New("no such file or directory")
 
 type WorkspaceReader struct {
-	Path string
+	logger logger.Logger
+	Path   string
 }
 
-func NewWorkSpaceReader(path string) *WorkspaceReader {
+func NewWorkSpaceReader(path string, logger logger.Logger) *WorkspaceReader {
 	return &WorkspaceReader{
-		Path: path,
+		Path:   path,
+		logger: logger,
 	}
 }
 
 func (w *WorkspaceReader) FindProjects() []*types.Project {
+	if w.logger != nil {
+		w.logger.Info("[FindProjects] 开始扫描工作区：%s", w.Path)
+	}
 
 	var projects []*types.Project
-	// 1、识别当前目录是否是一个git仓库，是则直接返回
+	maxDepth := 3
+	maxEntries := 2000
+	entryCount := 0
+	foundGit := false
 
-	// 2、递归子目录，最多3层、2000个文件/目录（可配置），识别git仓库，加入项目列表
+	// 辅助函数：判断目录下是否有 .git 目录
+	hasGitDir := func(dir string) bool {
+		gitPath := filepath.Join(dir, ".git")
+		info, err := os.Stat(gitPath)
+		return err == nil && info.IsDir()
+	}
 
-	// 3、没有git仓库，将当前目录加入项目列表
+	// 1. 当前目录是 git 仓库
+	if hasGitDir(w.Path) {
+		projects = append(projects, &types.Project{
+			Path: w.Path,
+			Name: filepath.Base(w.Path),
+		})
+		foundGit = true
+	} else {
+		// 2. 递归子目录，查找 git 仓库
+		var walk func(dir string, depth int)
+		walk = func(dir string, depth int) {
+			if entryCount >= maxEntries || depth > maxDepth {
+				return
+			}
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				return
+			}
+			for _, entry := range entries {
+				if entryCount >= maxEntries {
+					return
+				}
+				if entry.IsDir() {
+					subDir := filepath.Join(dir, entry.Name())
+					if hasGitDir(subDir) {
+						projects = append(projects, &types.Project{
+							Path: subDir,
+							Name: filepath.Base(subDir),
+						})
+						foundGit = true
+						// 不递归 .git 仓库下的子目录
+						continue
+					}
+					// 跳过隐藏目录
+					if strings.HasPrefix(entry.Name(), ".") {
+						continue
+					}
+					entryCount++
+					walk(subDir, depth+1)
+				}
+			}
+		}
+		walk(w.Path, 1)
+	}
 
+	// 3. 没有发现任何 git 仓库，将当前目录作为唯一项目
+	if !foundGit {
+		projects = append(projects, &types.Project{
+			Path: w.Path,
+			Name: filepath.Base(w.Path),
+		})
+	}
+
+	if w.logger != nil {
+		w.logger.Info("[FindProjects] 扫描完成，发现项目数：%d", len(projects))
+	}
 	return projects
 }
 
