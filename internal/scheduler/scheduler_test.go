@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	sechedulerConfig = &SchedulerConfig{
+	schedulerConfig = &SchedulerConfig{
 		IntervalMinutes:       5,
 		RegisterExpireMinutes: 30,
 		HashTreeExpireHours:   24,
@@ -37,11 +37,11 @@ func TestPerformSync(t *testing.T) {
 	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
 
 	s := &Scheduler{
-		httpSync:         mockHttpSync,
-		fileScanner:      mockFileScanner,
-		storage:          mockStorage,
-		sechedulerConfig: sechedulerConfig,
-		logger:           mockLogger,
+		httpSync:        mockHttpSync,
+		fileScanner:     mockFileScanner,
+		storage:         mockStorage,
+		schedulerConfig: schedulerConfig,
+		logger:          mockLogger,
 	}
 
 	t.Run("AlreadyRunning", func(t *testing.T) {
@@ -86,11 +86,11 @@ func TestPerformSyncForCodebase(t *testing.T) {
 	mockLogger.On("Error", mock.Anything, mock.Anything).Return()
 
 	s := &Scheduler{
-		httpSync:         mockHttpSync,
-		fileScanner:      mockFileScanner,
-		storage:          mockStorage,
-		sechedulerConfig: sechedulerConfig,
-		logger:           mockLogger,
+		httpSync:        mockHttpSync,
+		fileScanner:     mockFileScanner,
+		storage:         mockStorage,
+		schedulerConfig: schedulerConfig,
+		logger:          mockLogger,
 	}
 
 	t.Run("ScanDirectoryError", func(t *testing.T) {
@@ -124,11 +124,11 @@ func TestProcessFileChanges(t *testing.T) {
 	mockLogger.On("Error", mock.Anything, mock.Anything).Return()
 
 	s := &Scheduler{
-		httpSync:         mockHttpSync,
-		fileScanner:      mockFileScanner,
-		storage:          mockStorage,
-		sechedulerConfig: sechedulerConfig,
-		logger:           mockLogger,
+		httpSync:        mockHttpSync,
+		fileScanner:     mockFileScanner,
+		storage:         mockStorage,
+		schedulerConfig: schedulerConfig,
+		logger:          mockLogger,
 	}
 
 	t.Run("NormalProcessFileChanges", func(t *testing.T) {
@@ -148,7 +148,7 @@ func TestProcessFileChanges(t *testing.T) {
 
 		mockHttpSync.On("UploadFile", mock.Anything, mock.Anything).Return(nil)
 
-		err := s.processFileChanges(config, changes)
+		err := s.ProcessFileChanges(config, changes)
 
 		assert.NoError(t, err)
 		mockLogger.AssertCalled(t, "Info", "starting to upload zip file: %s", mock.Anything)
@@ -176,7 +176,7 @@ func TestProcessFileChanges(t *testing.T) {
 			},
 		}
 
-		err = s.processFileChanges(config, changes)
+		err = s.ProcessFileChanges(config, changes)
 
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to create changes zip")
@@ -200,7 +200,7 @@ func TestProcessFileChanges(t *testing.T) {
 		s.httpSync = newMockHttpSync
 		newMockHttpSync.On("UploadFile", mock.Anything, mock.Anything).Return(errors.New("upload error"))
 
-		err := s.processFileChanges(config, changes)
+		err := s.ProcessFileChanges(config, changes)
 
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to upload changes zip")
@@ -217,11 +217,11 @@ func TestCreateChangesZip(t *testing.T) {
 	mockLogger.On("Warn", mock.Anything, mock.Anything).Return()
 
 	s := &Scheduler{
-		httpSync:         mockHttpSync,
-		fileScanner:      mockFileScanner,
-		storage:          mockStorage,
-		sechedulerConfig: sechedulerConfig,
-		logger:           mockLogger,
+		httpSync:        mockHttpSync,
+		fileScanner:     mockFileScanner,
+		storage:         mockStorage,
+		schedulerConfig: schedulerConfig,
+		logger:          mockLogger,
 	}
 
 	t.Run("NormalChanges", func(t *testing.T) {
@@ -258,11 +258,11 @@ func TestUploadChangesZip(t *testing.T) {
 	mockLogger.On("Warn", mock.Anything, mock.Anything).Return()
 
 	s := &Scheduler{
-		httpSync:         mockHttpSync,
-		fileScanner:      mockFileScanner,
-		storage:          mockStorage,
-		sechedulerConfig: sechedulerConfig,
-		logger:           mockLogger,
+		httpSync:        mockHttpSync,
+		fileScanner:     mockFileScanner,
+		storage:         mockStorage,
+		schedulerConfig: schedulerConfig,
+		logger:          mockLogger,
 	}
 
 	t.Run("SuccessAfterRetry", func(t *testing.T) {
@@ -273,7 +273,7 @@ func TestUploadChangesZip(t *testing.T) {
 		}
 		defer zipfile.Close()
 
-		uploadReq := &syncer.UploadReq{
+		uploadReq := syncer.UploadReq{
 			ClientId:     "test-client",
 			CodebasePath: "/test/path",
 		}

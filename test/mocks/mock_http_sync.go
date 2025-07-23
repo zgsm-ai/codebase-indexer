@@ -25,7 +25,7 @@ func (m *MockHTTPSync) FetchServerHashTree(codebasePath string) (map[string]stri
 	return args.Get(0).(map[string]string), args.Error(1)
 }
 
-func (m *MockHTTPSync) UploadFile(filePath string, uploadReq *syncer.UploadReq) error {
+func (m *MockHTTPSync) UploadFile(filePath string, uploadReq syncer.UploadReq) error {
 	args := m.Called(filePath, uploadReq)
 	return args.Error(0)
 }

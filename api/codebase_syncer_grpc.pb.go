@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v6.31.0
-// source: codebase_syncer.proto
+// source: api/codebase_syncer.proto
 
 package codebase_syncer
 
@@ -324,5 +324,5 @@ var SyncService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "codebase_syncer.proto",
+	Metadata: "api/codebase_syncer.proto",
 }

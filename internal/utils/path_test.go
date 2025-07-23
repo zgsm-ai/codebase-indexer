@@ -16,17 +16,21 @@ func TestGetRootDir(t *testing.T) {
 	}
 
 	tests := []struct {
-		name    string
-		env     map[string]string
-		appName string
-		want    string
-		wantErr bool
+		name        string
+		env         map[string]string
+		appName     string
+		want        string
+		wantErr     bool
+		cleanupfunc func()
 	}{
 		// Test normal path handling for current platform
 		{
 			name:    "basic path test",
 			appName: "testapp",
 			want:    filepath.Join(os.Getenv("USERPROFILE"), ".testapp"),
+			cleanupfunc: func() {
+				_ = os.RemoveAll(filepath.Join(os.Getenv("USERPROFILE"), ".testapp"))
+			},
 		},
 	}
 
@@ -54,6 +58,10 @@ func TestGetRootDir(t *testing.T) {
 			// Restore environment
 			for k := range tt.env {
 				os.Unsetenv(k)
+			}
+
+			if tt.cleanupfunc != nil {
+				tt.cleanupfunc()
 			}
 		})
 	}

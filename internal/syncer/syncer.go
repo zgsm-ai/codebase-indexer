@@ -36,7 +36,7 @@ type SyncInterface interface {
 	SetSyncConfig(config *SyncConfig)
 	GetSyncConfig() *SyncConfig
 	FetchServerHashTree(codebasePath string) (map[string]string, error)
-	UploadFile(codebasePath string, uploadRe *UploadReq) error
+	UploadFile(codebasePath string, uploadRe UploadReq) error
 	GetClientConfig() (storage.ClientConfig, error)
 }
 
@@ -65,13 +65,13 @@ func (hs *HTTPSync) calculateTimeout(fileSize int64) time.Duration {
 	fileSizeMB := float64(fileSize) / (1024 * 1024)
 	baseTimeout := utils.BaseWriteTimeoutSeconds * time.Second
 
-	// Files ≤10MB use fixed 60s timeout
-	if fileSizeMB <= 10 {
+	// Files ≤5MB use fixed 60s timeout
+	if fileSizeMB <= 5 {
 		return baseTimeout
 	}
 
-	// Files >10MB: 60s + (file size MB - 10)*5s
-	totalTimeout := baseTimeout + time.Duration(fileSizeMB-10)*5*time.Second
+	// Files >5MB: 60s + (file size MB - 5)*5s
+	totalTimeout := baseTimeout + time.Duration(fileSizeMB-5)*5*time.Second
 
 	// Maximum does not exceed 10 minutes
 	if totalTimeout > 600*time.Second {
@@ -182,7 +182,7 @@ type UploadReq struct {
 }
 
 // UploadFile uploads file to server
-func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
+func (hs *HTTPSync) UploadFile(filePath string, uploadReq UploadReq) error {
 	mu := sync.Mutex{}
 	hs.logger.Info("uploading file: %s", filePath)
 
@@ -203,7 +203,7 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq *UploadReq) error {
 	}
 	fileSize := fileInfo.Size()
 	// TODO: Temporarily hardcode file size limit, will be changed to remote configuration management in the future
-	if fileSize > 100*1024*1024 {
+	if fileSize >= 100*1024*1024 {
 		return fmt.Errorf("file size exceeds 100MB")
 	}
 

@@ -115,9 +115,9 @@ func TestScanDirectory(t *testing.T) {
 		return tempDir
 	}
 
-	t.Run("Scan directory and filter files", func(t *testing.T) {
+	t.Run("Scan codebase and filter files", func(t *testing.T) {
 		codebasePath := setupTestDir(t)
-		hashTree, err := fs.ScanDirectory(codebasePath)
+		hashTree, err := fs.ScanCodebase(codebasePath)
 		require.NoError(t, err)
 
 		// Verify included files
@@ -139,7 +139,7 @@ func TestScanDirectory(t *testing.T) {
 			t.Skip("skip: only run on Windows system")
 		}
 		codebasePath := setupTestDir(t)
-		hashTree, err := fs.ScanDirectory(codebasePath)
+		hashTree, err := fs.ScanCodebase(codebasePath)
 		require.NoError(t, err)
 
 		// Verify with Windows-style paths
@@ -148,7 +148,7 @@ func TestScanDirectory(t *testing.T) {
 	})
 }
 
-func benchmarkScanDirectory(t *testing.T, fileCount int) (*MockLogger, ScannerInterface, string) {
+func benchmarkScanCodebase(t *testing.T, fileCount int) (*MockLogger, ScannerInterface, string) {
 	logger := &MockLogger{t}
 	fs := NewFileScanner(logger)
 
@@ -168,14 +168,14 @@ func benchmarkScanDirectory(t *testing.T, fileCount int) (*MockLogger, ScannerIn
 	return logger, fs, tempDir
 }
 
-func BenchmarkScanDirectory_10000Files(b *testing.B) {
+func BenchmarkScanCodebase_10000Files(b *testing.B) {
 	t := &testing.T{} // Create temp testing.T instance
-	logger, fs, tempDir := benchmarkScanDirectory(t, 10000)
+	logger, fs, tempDir := benchmarkScanCodebase(t, 10000)
 	_ = logger // Avoid unused variable warning
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := fs.ScanDirectory(tempDir)
+		_, err := fs.ScanCodebase(tempDir)
 		require.NoError(b, err)
 	}
 

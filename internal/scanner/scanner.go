@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"sync"
@@ -46,8 +47,12 @@ type ScannerInterface interface {
 	LoadIgnoreRules(codebasePath string) *gitignore.GitIgnore
 	LoadFileIgnoreRules(codebasePath string) *gitignore.GitIgnore
 	LoadFolderIgnoreRules(codebasePath string) *gitignore.GitIgnore
-	ScanDirectory(codebasePath string) (map[string]string, error)
+	ScanCodebase(codebasePath string) (map[string]string, error)
+	ScanFilePaths(codebasePath string, filePaths []string) (map[string]string, error)
+	ScanDirectory(codebasePath, dirPath string) (map[string]string, error)
+	ScanFile(codebasePath, filePath string) (string, error)
 	CalculateFileChanges(local, remote map[string]string) []*FileStatus
+	CalculateFileChangesWithoutDelete(local, remote map[string]string) []*FileStatus
 }
 
 type FileScanner struct {
@@ -184,9 +189,9 @@ func (s *FileScanner) loadGitignore(codebasePath string) []string {
 	return ignores
 }
 
-// ScanDirectory scans directory and generates hash tree
-func (s *FileScanner) ScanDirectory(codebasePath string) (map[string]string, error) {
-	s.logger.Info("starting directory scan: %s", codebasePath)
+// ScanCodebase scans codebase directory and generates hash tree
+func (s *FileScanner) ScanCodebase(codebasePath string) (map[string]string, error) {
+	s.logger.Info("starting codebase scan: %s", codebasePath)
 	startTime := time.Now()
 
 	hashTree := make(map[string]string)
@@ -256,6 +261,128 @@ func (s *FileScanner) ScanDirectory(codebasePath string) (map[string]string, err
 	})
 
 	if err != nil {
+		return nil, fmt.Errorf("failed to scan codebase: %v", err)
+	}
+
+	s.logger.Info("codebase scan completed, %d files scanned, time taken: %v",
+		filesScanned, time.Since(startTime))
+
+	return hashTree, nil
+}
+
+// ScanFilePaths scans file paths and generates hash tree
+func (s *FileScanner) ScanFilePaths(codebasePath string, filePaths []string) (map[string]string, error) {
+	s.logger.Info("starting file paths scan for codebase: %s", codebasePath)
+	filesHashTree := make(map[string]string)
+	for _, filePath := range filePaths {
+		// Check if the file is in this codebase
+		relPath, err := filepath.Rel(codebasePath, filePath)
+		if err != nil {
+			s.logger.Debug("file path %s is not in codebase %s: %v", filePath, codebasePath, err)
+			continue
+		}
+
+		// Check file size and ignore rules
+		fileInfo, err := os.Stat(filePath)
+		if err != nil {
+			s.logger.Warn("failed to get file info: %s, %v", filePath, err)
+			continue
+		}
+
+		// If directory
+		if fileInfo.IsDir() {
+			dirHashTree, err := s.ScanDirectory(codebasePath, filePath)
+			if err != nil {
+				s.logger.Warn("failed to scan directory: %s, %v", filePath, err)
+				continue
+			}
+			maps.Copy(filesHashTree, dirHashTree)
+		} else {
+			fileHash, err := s.ScanFile(codebasePath, filePath)
+			if err != nil {
+				s.logger.Warn("failed to scan file: %s, %v", filePath, err)
+				continue
+			}
+			filesHashTree[relPath] = fileHash
+		}
+	}
+	s.logger.Info("file paths scan completed, scanned %d files", len(filesHashTree))
+
+	return filesHashTree, nil
+}
+
+// ScanDirectory scans directory and generates hash tree
+func (s *FileScanner) ScanDirectory(codebasePath, dirPath string) (map[string]string, error) {
+	s.logger.Info("starting directory scan: %s", dirPath)
+	startTime := time.Now()
+
+	hashTree := make(map[string]string)
+	var filesScanned int
+
+	fileIgnore := s.LoadFileIgnoreRules(codebasePath)
+	folderIgnore := s.LoadFolderIgnoreRules(codebasePath)
+
+	maxFileSizeKB := s.scannerConfig.MaxFileSizeKB
+	maxFileSize := int64(maxFileSizeKB * 1024)
+	err := filepath.WalkDir(dirPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			s.logger.Warn("error accessing file %s: %v", path, err)
+			return nil // Continue scanning other files
+		}
+
+		// Calculate relative path
+		relPath, err := filepath.Rel(codebasePath, path)
+		if err != nil {
+			s.logger.Warn("failed to get relative path for file %s: %v", path, err)
+			return nil
+		}
+
+		if d.IsDir() {
+			// For directories, check if we should skip entire dir
+			// Don't skip root dir (relPath=".") due to ".*" rules
+			if relPath != "." && folderIgnore != nil && folderIgnore.MatchesPath(relPath+"/") {
+				s.logger.Debug("skipping ignored directory: %s", relPath)
+				return fs.SkipDir
+			}
+			return nil
+		}
+
+		// Check if file is excluded by ignore
+		if fileIgnore != nil && fileIgnore.MatchesPath(relPath) {
+			s.logger.Debug("skipping file excluded by ignore: %s", relPath)
+			return nil
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			s.logger.Warn("error getting file info for %s: %v", path, err)
+			return nil
+		}
+
+		// Verify file size doesn't exceed max limit
+		if info.Size() >= maxFileSize {
+			s.logger.Debug("skipping file larger than %dKB: %s (size: %.2f KB)", maxFileSizeKB, relPath, float64(info.Size())/1024)
+			return nil
+		}
+
+		// Calculate file hash
+		hash, err := s.CalculateFileHash(path)
+		if err != nil {
+			s.logger.Warn("error calculating hash for file %s: %v", path, err)
+			return nil
+		}
+
+		hashTree[relPath] = hash
+		filesScanned++
+
+		if filesScanned%100 == 0 {
+			s.logger.Debug("%d files scanned", filesScanned)
+		}
+
+		return nil
+	})
+
+	if err != nil {
 		return nil, fmt.Errorf("failed to scan directory: %v", err)
 	}
 
@@ -263,6 +390,39 @@ func (s *FileScanner) ScanDirectory(codebasePath string) (map[string]string, err
 		filesScanned, time.Since(startTime))
 
 	return hashTree, nil
+}
+
+// ScanFile scans file and generates hash tree
+func (s *FileScanner) ScanFile(codebasePath, filePath string) (string, error) {
+	s.logger.Info("starting file scan: %s", filePath)
+	startTime := time.Now()
+
+	fileIgnore := s.LoadFileIgnoreRules(codebasePath)
+	maxFileSizeKB := s.scannerConfig.MaxFileSizeKB
+	maxFileSize := int64(maxFileSizeKB * 1024)
+	relPath, err := filepath.Rel(codebasePath, filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get relative path: %v", err)
+	}
+	if fileIgnore != nil && fileIgnore.MatchesPath(relPath) {
+		return "", fmt.Errorf("file excluded by ignore")
+	}
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get file info: %v", err)
+	}
+	if info.Size() >= maxFileSize {
+		return "", fmt.Errorf("file larger than %dKB(size: %.2f KB)", maxFileSizeKB, float64(info.Size())/1024)
+	}
+	hash, err := s.CalculateFileHash(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to scan file: %v", err)
+	}
+
+	s.logger.Info("file scan completed, time taken: %v",
+		time.Since(startTime))
+
+	return hash, nil
 }
 
 // Calculate file differences
@@ -295,6 +455,32 @@ func (s *FileScanner) CalculateFileChanges(local, remote map[string]string) []*F
 				Path:   path,
 				Hash:   "",
 				Status: FILE_STATUS_DELETED,
+			})
+		}
+	}
+
+	return changes
+}
+
+// CalculateFileChangesWithoutDelete compares local and remote files, only recording added and modified files
+func (s *FileScanner) CalculateFileChangesWithoutDelete(local, remote map[string]string) []*FileStatus {
+	var changes []*FileStatus
+
+	// Check for added or modified files
+	for path, localHash := range local {
+		if remoteHash, exists := remote[path]; !exists {
+			// New file
+			changes = append(changes, &FileStatus{
+				Path:   path,
+				Hash:   localHash,
+				Status: FILE_STATUS_ADDED,
+			})
+		} else if localHash != remoteHash {
+			// Modified file
+			changes = append(changes, &FileStatus{
+				Path:   path,
+				Hash:   localHash,
+				Status: FILE_STATUS_MODIFIED,
 			})
 		}
 	}
