@@ -9,6 +9,8 @@ type Element interface {
 	GetRange() []int32
 	GetContent() []byte
 	GetRootIndex() uint32
+	GetPath() string
+	SetPath(path string)
 	SetName(name string)
 	SetType(et types.ElementType)
 	SetRange(range_ []int32)
@@ -18,6 +20,7 @@ type Element interface {
 // BaseElement 提供接口的基础实现，其他类型嵌入该结构体
 type BaseElement struct {
 	Name             string
+	Path             string // 符号所属文件路径
 	rootCaptureIndex uint32
 	Scope            types.Scope
 	Type             types.ElementType
@@ -54,6 +57,12 @@ func (e *BaseElement) GetType() types.ElementType { return e.Type }
 func (e *BaseElement) GetRange() []int32          { return e.Range }
 func (e *BaseElement) GetContent() []byte         { return e.Content }
 func (e *BaseElement) GetRootIndex() uint32       { return e.rootCaptureIndex }
+func (e *BaseElement) GetPath() string {
+	return e.Path
+}
+func (e *BaseElement) SetPath(path string) {
+	e.Path = path
+}
 func (e *BaseElement) SetName(name string) {
 	e.Name = name
 }
@@ -71,9 +80,8 @@ func (e *BaseElement) SetContent(content []byte) {
 // Import 表示导入语句
 type Import struct {
 	*BaseElement
-	Source    string   // from (xxx)
-	Alias     string   // as (xxx)
-	FilePaths []string // 相对于项目root的路径（排除标准库/第三方包）
+	Source string // from (xxx)
+	Alias  string // as (xxx)
 }
 
 // Package 表示代码包

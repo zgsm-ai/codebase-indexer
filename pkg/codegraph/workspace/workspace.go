@@ -179,7 +179,7 @@ func (w *WorkspaceReader) ReadFile(ctx context.Context, path string, option type
 // Exists 判断文件/目录是否存在
 func (w *WorkspaceReader) Exists(ctx context.Context, path string) (bool, error) {
 	if path == types.EmptyString {
-		return false, errors.New("codebasePath cannot be empty")
+		return false, errors.New("path cannot be empty")
 	}
 
 	_, err := os.Stat(path)

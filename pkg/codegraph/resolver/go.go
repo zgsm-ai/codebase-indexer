@@ -102,14 +102,6 @@ func (r *GoResolver) resolvePackage(ctx context.Context, element *Package, rc *R
 		return elements, nil
 	}
 
-	// 处理项目特定的逻辑
-	pj := rc.ProjectInfo
-
-	// 如果项目信息为空，返回当前元素
-	if pj.IsEmpty() {
-		return elements, nil
-	}
-
 	// 尝试查找包对应的所有Go文件
 	if rc.SourceFile != nil && rc.SourceFile.Path != "" {
 		// 已经在处理源文件，不需要额外操作

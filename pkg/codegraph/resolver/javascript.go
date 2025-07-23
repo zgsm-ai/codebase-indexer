@@ -79,13 +79,9 @@ func (js *JavaScriptResolver) Resolve(ctx context.Context, element Element, rc *
 }
 
 func (js *JavaScriptResolver) resolveImport(ctx context.Context, element *Import, rc *ResolveContext) ([]Element, error) {
-	pj := rc.ProjectInfo
 
 	elements := []Element{element}
-	if pj.IsEmpty() {
-		fmt.Println("not support project file list, use default resolve")
-		return elements, nil
-	}
+
 	for _, capture := range rc.Match.Captures {
 		if capture.Node.IsMissing() || capture.Node.IsError() {
 			continue

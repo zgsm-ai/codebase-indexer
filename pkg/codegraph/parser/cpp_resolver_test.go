@@ -18,9 +18,7 @@ func TestCPPResolver(t *testing.T) {
 func TestCPPResolver_ResolveImport(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.CPP, "pkg/codegraph/parser/testdata", []string{
-		"test.cpp", "utils/helper.hpp", "local.hpp", "common.hpp", "nested/dir/deep.hpp", "special-@file.hpp", "space file.hpp",
-	})
+	prj := workspace.NewProjectInfo(lang.CPP, "pkg/codegraph/parser/testdata")
 
 	testCases := []struct {
 		name        string
@@ -84,7 +82,7 @@ func TestCPPResolver_ResolveImport(t *testing.T) {
 		},
 		{
 			name: "using声明导入",
-			sourceFile: &types.SourceFile{		
+			sourceFile: &types.SourceFile{
 				Path: "testdata/UsingImportTest.cpp",
 				Content: []byte(`using namespace std;
 using std::vector;
@@ -108,7 +106,7 @@ using myns::MyClass2;
 			assert.NotNil(t, res)
 			if err == nil {
 				for _, importItem := range res.Imports {
-					fmt.Printf("Import: %s, FilePaths: %v\n", importItem.GetName(), importItem.FilePaths)
+					fmt.Printf("Import: %s\n", importItem.GetName())
 					assert.NotEmpty(t, importItem.GetName())
 					assert.Equal(t, types.ElementTypeImport, importItem.GetType())
 				}
@@ -116,7 +114,6 @@ using myns::MyClass2;
 		})
 	}
 }
-
 
 func TestCPPResolver_ResolveFunction(t *testing.T) {
 

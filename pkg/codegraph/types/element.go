@@ -3,9 +3,13 @@ package types
 const (
 	EmptyString       = ""
 	DoubleQuote       = "\""
+	Slash             = "/"
 	Comma             = ","
 	Identifier        = "identifier"
 	Dot               = "."
+	CurrentDir        = "./"
+	ParentDir         = "../"
+	EmailAt           = "@"
 	LF                = "\n"
 	Static            = "static"
 	Arrow             = "arrow"

@@ -19,7 +19,7 @@ func TestCResolver(t *testing.T) {
 func TestCResolver_ResolveImport(t *testing.T) {
 	logger := initLogger()                // 如果有日志初始化
 	parser := NewSourceFileParser(logger) // 假设有类似 Java 的解析器
-	prj := workspace.NewProjectInfo(lang.C, "pkg/codegraph/parser/testdata", []string{"test.c"})
+	prj := workspace.NewProjectInfo(lang.C, "pkg/codegraph/parser/testdata")
 
 	testCases := []struct {
 		name        string
@@ -73,7 +73,7 @@ func TestCResolver_ResolveImport(t *testing.T) {
 				// 验证导入解析
 				fmt.Println(len(res.Imports))
 				for _, importItem := range res.Imports {
-					fmt.Printf("Import: %s, FilePaths: %v\n", importItem.GetName(), importItem.FilePaths)
+					fmt.Printf("Import: %s\n", importItem.GetName())
 					assert.NotEmpty(t, importItem.GetName())
 					assert.Equal(t, types.ElementTypeImport, importItem.GetType())
 				}
@@ -85,7 +85,7 @@ func TestCResolver_ResolveImport(t *testing.T) {
 func TestCResolver_ResolveFunction(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.C, "pkg/codegraph/parser/testdata", []string{"functions.c"})
+	prj := workspace.NewProjectInfo(lang.C, "pkg/codegraph/parser/testdata")
 
 	cCode := `#include <stdio.h>
 #include <stdlib.h>

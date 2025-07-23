@@ -27,7 +27,7 @@ func initLogger() logger.Logger {
 func TestGoBaseParse(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Go, "github.com/hashicorp", []string{"pkg/go-uuid/uuid.go"})
+	prj := workspace.NewProjectInfo(lang.Go, "github.com/hashicorp")
 	testCases := []struct {
 		name       string
 		sourceFile *types.SourceFile
@@ -62,7 +62,6 @@ func TestGoBaseParse(t *testing.T) {
 							fmt.Printf("  RootIndex: %v\n", imp.BaseElement.GetRootIndex())
 							fmt.Printf("  type: %s\n", imp.BaseElement.GetType())
 							fmt.Printf("  Alias: %s\n", imp.Alias)
-							fmt.Printf("  FilePaths: %v\n", imp.FilePaths)
 
 						}
 					}
@@ -139,7 +138,7 @@ func TestGoBaseParse(t *testing.T) {
 func TestJavaBaseParse(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata", []string{"com/example/test/TestClass.java"})
+	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata")
 	testCases := []struct {
 		name       string
 		sourceFile *types.SourceFile
@@ -272,7 +271,7 @@ func TestGoBaseParse_MatchesDebug(t *testing.T) {
 func TestJavaResolver_ResolveImport(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata", []string{"com/example/test/TestClass.java"})
+	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata")
 
 	testCases := []struct {
 		name        string
@@ -328,7 +327,7 @@ import static java.util.Collections.emptyList;`),
 				// 验证导入解析
 				fmt.Println(len(res.Imports))
 				for _, importItem := range res.Imports {
-					fmt.Printf("Import: %s, FilePaths: %v\n", importItem.GetName(), importItem.FilePaths)
+					fmt.Printf("Import: %s", importItem.GetName())
 					assert.NotEmpty(t, importItem.GetName())
 					assert.Equal(t, types.ElementTypeImport, importItem.GetType())
 				}
@@ -340,7 +339,7 @@ import static java.util.Collections.emptyList;`),
 func TestJavaResolver_ResolveClass(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata", []string{"com/example/test/TestClass.java"})
+	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata")
 
 	sourceFile := &types.SourceFile{
 		Path:    "testdata/com/example/test/TestClass.java",
@@ -529,7 +528,7 @@ func TestJavaResolver_ResolveClass(t *testing.T) {
 func TestJavaResolver_ResolveVariable(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata", []string{"com/example/test/TestVar.java"})
+	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata")
 
 	testCases := []struct {
 		name          string
@@ -630,7 +629,7 @@ func TestJavaResolver_ResolveVariable(t *testing.T) {
 func TestJavaResolver_ResolveInterface(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata", []string{"com/example/test/TestClass.java"})
+	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata")
 
 	testCases := []struct {
 		name          string
@@ -767,7 +766,7 @@ public interface SimpleInterface {
 									assert.Equal(t, wantParam.Name, actualParam.Name,
 										"方法 %s 的第 %d 个参数名称不匹配，期望 %s，实际 %s",
 										wantMethod.Name, i+1, wantParam.Name, actualParam.Name)
-									
+
 									assert.Equal(t, wantParam.Type, actualParam.Type,
 										"方法 %s 的第 %d 个参数类型不匹配，期望 %s，实际 %s",
 										wantMethod.Name, i+1, wantParam.Type, actualParam.Type)
@@ -784,7 +783,7 @@ public interface SimpleInterface {
 func TestJavaResolver_ResolveLocalVariableValue(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata", []string{"com/example/test/TestClass.java"})
+	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata")
 	sourceFile := &types.SourceFile{
 		Path: "testdata/com/example/test/TestClass.java",
 		Content: []byte(`
@@ -848,7 +847,7 @@ func TestJavaResolver_ResolveLocalVariableValue(t *testing.T) {
 func TestJavaResolver_AllResolveMethods(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata", []string{"com/example/test/AllTest.java"})
+	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata")
 
 	source := []byte(`
 		package com.example.test;
@@ -941,7 +940,7 @@ func TestJavaResolver_AllResolveMethods(t *testing.T) {
 	assert.NotNil(t, res.Imports)
 	fmt.Printf("【导入】数量: %d\n", len(res.Imports))
 	for _, ipt := range res.Imports {
-		fmt.Printf("  导入: %s, FilePaths: %v\n", ipt.GetName(), ipt.FilePaths)
+		fmt.Printf("  导入: %s\n", ipt.GetName())
 	}
 	importNames := map[string]bool{}
 	for _, ipt := range res.Imports {

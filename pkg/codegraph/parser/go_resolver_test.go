@@ -15,7 +15,7 @@ import (
 func TestGoResolver_ResolveImport(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Go, "testdata", []string{"test.go"})
+	prj := workspace.NewProjectInfo(lang.Go, "testdata")
 
 	testCases := []struct {
 		name        string
@@ -105,7 +105,7 @@ func main() {
 func TestGoResolver_ResolveStruct(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Go, "testdata", []string{"test.go"})
+	prj := workspace.NewProjectInfo(lang.Go, "testdata")
 
 	sourceFile := &types.SourceFile{
 		Path: "testdata/test.go",
@@ -186,7 +186,7 @@ type Employee struct {
 func TestGoResolver_ResolveVariable(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Go, "testdata", []string{"test.go"})
+	prj := workspace.NewProjectInfo(lang.Go, "testdata")
 
 	testCases := []struct {
 		name          string
@@ -336,7 +336,7 @@ func main() {
 func TestGoResolver_ResolveInterface(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Go, "testdata", []string{"test.go"})
+	prj := workspace.NewProjectInfo(lang.Go, "testdata")
 
 	testCases := []struct {
 		name          string
@@ -537,7 +537,7 @@ type Handler interface {
 func TestGoResolver_ResolveMultipleVariableDeclaration(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Go, "testdata", []string{"test.go"})
+	prj := workspace.NewProjectInfo(lang.Go, "testdata")
 
 	sourceFile := &types.SourceFile{
 		Path: "testdata/multiple_var.go",
@@ -627,7 +627,7 @@ func main() {
 func TestGoResolver_AllResolveMethods(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Go, "testdata", []string{"all_test.go"})
+	prj := workspace.NewProjectInfo(lang.Go, "testdata")
 
 	source := []byte(`package main
 

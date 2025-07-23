@@ -2,10 +2,8 @@ package resolver
 
 import (
 	"codebase-indexer/pkg/codegraph/types"
-	"codebase-indexer/pkg/codegraph/utils"
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 )
 
@@ -33,7 +31,6 @@ func (r *CResolver) resolveImport(ctx context.Context, element *Import, rc *Reso
 		}
 	}
 
-	element.FilePaths = []string{}
 	importName := element.Name
 
 	elements := []Element{element}
@@ -41,43 +38,6 @@ func (r *CResolver) resolveImport(ctx context.Context, element *Import, rc *Reso
 	// 处理系统头文件
 	if strings.HasPrefix(importName, "<") && strings.HasSuffix(importName, ">") {
 		return elements, nil // 系统头文件，不映射到项目文件
-	}
-
-	// 移除引号
-	headerFile := strings.Trim(importName, "\"")
-
-	pj := rc.ProjectInfo
-	if pj.IsEmpty() {
-		fmt.Println("not support project file list, use default resolve")
-		element.FilePaths = []string{headerFile}
-		return elements, nil
-	}
-
-	foundPaths := []string{}
-
-	// 相对路径导入
-	if strings.HasPrefix(headerFile, ".") {
-		// 计算当前文件相对于 sourceRoot 的路径
-		currentRelPath, _ := filepath.Rel(pj.GetSourceRoot(), rc.SourceFile.Path)
-		currentDir := utils.ToUnixPath(filepath.Dir(currentRelPath))
-		relPath := utils.ToUnixPath(filepath.Join(currentDir, headerFile))
-		fullPath := utils.ToUnixPath(filepath.Join(pj.GetSourceRoot(), relPath))
-		if pj.ContainsFileIndex(fullPath) {
-			foundPaths = append(foundPaths, fullPath)
-		}
-	}
-
-	// 在源目录中查找
-	for _, relDir := range pj.GetDirs() {
-		fullPath := utils.ToUnixPath(filepath.Join(relDir, headerFile))
-		if pj.ContainsFileIndex(fullPath) {
-			foundPaths = append(foundPaths, fullPath)
-		}
-	}
-
-	element.FilePaths = foundPaths
-	if len(element.FilePaths) > 0 {
-		return elements, nil
 	}
 
 	return nil, fmt.Errorf("cannot find file which import belongs to: %s", importName)

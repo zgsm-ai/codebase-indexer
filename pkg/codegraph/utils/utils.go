@@ -66,3 +66,8 @@ func IsHiddenFile(path string) bool {
 
 	return false
 }
+
+// IsRelativePath 判断是否为相对路径
+func IsRelativePath(path string) bool {
+	return strings.HasPrefix(path, "./") || strings.HasPrefix(path, "../") || path == "." || path == ".."
+}

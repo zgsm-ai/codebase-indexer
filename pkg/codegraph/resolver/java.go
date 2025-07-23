@@ -2,10 +2,8 @@ package resolver
 
 import (
 	"codebase-indexer/pkg/codegraph/types"
-	"codebase-indexer/pkg/codegraph/utils"
 	"context"
 	"fmt"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -24,7 +22,6 @@ func (j *JavaResolver) Resolve(ctx context.Context, element Element, rc *Resolve
 
 func (j *JavaResolver) resolveImport(ctx context.Context, element *Import, rc *ResolveContext) ([]Element, error) {
 
-	element.FilePaths = []string{}
 	rootCap := rc.Match.Captures[0]
 	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
 
@@ -42,40 +39,17 @@ func (j *JavaResolver) resolveImport(ctx context.Context, element *Import, rc *R
 		}
 	}
 	// 处理类导入
-	classPath := strings.ReplaceAll(importName, ".", "/") + ".java"
-	pj := rc.ProjectInfo
-	fullPath := utils.ToUnixPath(filepath.Join(pj.GetSourceRoot(), classPath))
-
 	elements := []Element{element}
 	element.BaseElement.Scope = types.ScopePackage
 	element.BaseElement.Name = importName
 
-	if pj.IsEmpty() {
-		// TODO logger
-		fmt.Println("not support project file list, use default resolve")
-		element.FilePaths = []string{fullPath}
-		return elements, nil
-	}
-
 	// 处理静态导入，有则会移除，没有就不会动
-	importName = strings.TrimPrefix(importName, "static ")
+	element.BaseElement.Name = strings.TrimPrefix(importName, "static ")
 	// 处理包导入
 	if strings.HasSuffix(importName, ".*") {
-		pkgPath := strings.ReplaceAll(strings.TrimSuffix(importName, ".*"), ".", "/")
-		fullPkgPath := utils.ToUnixPath(filepath.Join(pj.GetSourceRoot(), pkgPath))
-		files := pj.FindFilesInDirIndex(fullPkgPath, ".java")
-		element.FilePaths = files
-		if len(element.FilePaths) == 0 {
-			return nil, fmt.Errorf("cannot find file which package belongs to: %s", importName)
-		}
+		element.BaseElement.Name = strings.ReplaceAll(strings.TrimSuffix(importName, ".*"), ".", "/")
 		return elements, nil
 	}
-
-	element.FilePaths = pj.FindMatchingFiles(fullPath)
-	// if len(element.FilePaths) == 0 {
-	// 	return nil, fmt.Errorf("cannot find file which import belongs to: %s", importName)
-	// }
-
 	return elements, nil
 }
 
@@ -361,7 +335,7 @@ func parseFieldNode(node *sitter.Node, content []byte) []*Field {
 				// TODO 待解析为类型数组
 				// typ = parseLocalVariableType(child, content)
 				typ = txt
-				
+
 			}
 		}
 	}

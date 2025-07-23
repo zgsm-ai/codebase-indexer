@@ -92,7 +92,6 @@ func (p *SourceFileParser) Parse(ctx context.Context,
 			continue // 跳过错误的匹配
 		}
 
-
 		for _, element := range elems {
 			// 去重，主要针对variable
 			if position, ok := visited[element.GetName()]; ok && isSamePosition(position, element.GetRange()) {
@@ -144,7 +143,7 @@ func (p *SourceFileParser) processNode(
 	rootCaptureName := captureNames[rootIndex]
 
 	rootElement := newRootElement(rootCaptureName, rootIndex)
-
+	rootElement.SetPath(sourceFile.Path)
 	resolvedElements := make([]resolver.Element, 0)
 
 	resolveCtx := &resolver.ResolveContext{
