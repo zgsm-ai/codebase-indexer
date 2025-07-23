@@ -123,9 +123,9 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeFunction):            ElementTypeFunction,
 	string(ElementTypeFunctionName):        ElementTypeFunctionName,
 	string(ElementTypeFunctionParameters):  ElementTypeFunctionParameters,
+	string(ElementTypeFunctionReturnType):  ElementTypeFunctionReturnType,
 	string(ElementTypeFunctionCall):        ElementTypeFunctionCall,
 	string(ElementTypeFunctionOwner):       ElementTypeFunctionOwner,
-	string(ElementTypeFunctionReturnType):  ElementTypeFunctionReturnType,
 	string(ElementTypeFunctionArguments):   ElementTypeFunctionArguments,
 	string(ElementTypeFunctionDeclaration): ElementTypeFunctionDeclaration,
 	string(ElementTypeMethod):              ElementTypeMethod,
@@ -235,6 +235,9 @@ const (
 	NodeKindClassDeclaration     NodeKind = "class_declaration"
 	NodeKindInterfaceDeclaration NodeKind = "interface_declaration"
 	NodeKindEnumDeclaration      NodeKind = "enum_declaration"
+	NodeKindClassSpecifier       NodeKind = "class_specifier"
+	NodeKindStructSpecifier      NodeKind = "struct_specifier"
+	NodeKindAccessSpecifier      NodeKind = "access_specifier"
 )
 
 var NodeKindMappings = map[string]NodeKind{
@@ -290,6 +293,10 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindClassDeclaration):     NodeKindClassDeclaration,
 	string(NodeKindInterfaceDeclaration): NodeKindInterfaceDeclaration,
 	string(NodeKindEnumDeclaration):      NodeKindEnumDeclaration,
+	string(NodeKindClassSpecifier):       NodeKindClassSpecifier,
+	string(NodeKindStructSpecifier):      NodeKindStructSpecifier,
+	string(NodeKindAccessSpecifier):      NodeKindAccessSpecifier,
+
 }
 
 // 用于接收函数的返回类型和字段的类型

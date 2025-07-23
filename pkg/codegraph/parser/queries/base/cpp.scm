@@ -78,11 +78,48 @@
 
 
 
+;; 返回值不带指针和引用的基础函数定义
 (function_definition
+  type: (_) @definition.function.return_type
   declarator: (function_declarator
-                declarator: (identifier) @definition.function.name
-                parameters: (parameter_list) @definition.function.parameters
-                )) @definition.function
+    declarator: (identifier) @definition.function.name
+    parameters: (parameter_list) @definition.function.parameters
+  )
+) @definition.function
+
+;; 返回值带指针的函数定义
+(function_definition
+  type: (_) @definition.function.return_type
+  declarator: (pointer_declarator
+    (function_declarator
+      declarator: (identifier) @definition.function.name
+      parameters: (parameter_list) @definition.function.parameters
+    )
+  ) @definition.function.reference
+) @definition.function
+
+;; 返回值带引用的函数定义
+(function_definition
+  type: (_) @definition.function.return_type
+  declarator: (reference_declarator                    ;; 引用修饰
+    (function_declarator
+      declarator: (identifier) @definition.function.name
+      parameters: (parameter_list) @definition.function.parameters
+    )
+  ) @definition.function.reference
+) @definition.function
+
+;; 方法的定义
+(function_definition
+  type: (_) @definition.method.return_type
+  declarator: (function_declarator
+                declarator: (field_identifier) @definition.method.name
+                parameters: (parameter_list) @definition.method.parameters
+                (type_qualifier)? @definition.method.qualifiers
+              )
+) @definition.method
+
+
 
 ;; TODO 对象.方法
 (call_expression

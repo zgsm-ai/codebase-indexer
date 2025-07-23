@@ -36,3 +36,5 @@ func IsElementNameCapture(elementType types.ElementType, captureName string) boo
 	return IsNameCapture(captureName) &&
 		captureName == string(elementType)+dotName
 }
+
+
