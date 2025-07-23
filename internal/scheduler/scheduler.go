@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -20,12 +21,6 @@ import (
 	"codebase-indexer/pkg/logger"
 )
 
-const (
-	statusUnauthorized       = "401" // HTTP 401 Unauthorized
-	statusTooManyRequests    = "429" // HTTP 429 Too Many Requests
-	statusServiceUnavailable = "503" // HTTP 503 Service Unavailable
-)
-
 type SchedulerConfig struct {
 	IntervalMinutes       int // Sync interval in minutes
 	RegisterExpireMinutes int // Registration expiration time in minutes
@@ -35,29 +30,29 @@ type SchedulerConfig struct {
 }
 
 type Scheduler struct {
-	httpSync         syncer.SyncInterface
-	fileScanner      scanner.ScannerInterface
-	storage          storage.SotrageInterface
-	sechedulerConfig *SchedulerConfig
-	logger           logger.Logger
-	mutex            sync.Mutex
-	rwMutex          sync.RWMutex
-	isRunning        bool
-	restartCh        chan struct{} // Restart channel
-	updateCh         chan struct{} // Config update channel
-	currentTicker    *time.Ticker
+	httpSync        syncer.SyncInterface
+	fileScanner     scanner.ScannerInterface
+	storage         storage.SotrageInterface
+	schedulerConfig *SchedulerConfig
+	logger          logger.Logger
+	mutex           sync.Mutex
+	rwMutex         sync.RWMutex
+	isRunning       bool
+	restartCh       chan struct{} // Restart channel
+	updateCh        chan struct{} // Config update channel
+	currentTicker   *time.Ticker
 }
 
 func NewScheduler(httpSync syncer.SyncInterface, fileScanner scanner.ScannerInterface, storageManager storage.SotrageInterface,
 	logger logger.Logger) *Scheduler {
 	return &Scheduler{
-		httpSync:         httpSync,
-		fileScanner:      fileScanner,
-		storage:          storageManager,
-		sechedulerConfig: defaultSchedulerConfig(),
-		restartCh:        make(chan struct{}),
-		updateCh:         make(chan struct{}),
-		logger:           logger,
+		httpSync:        httpSync,
+		fileScanner:     fileScanner,
+		storage:         storageManager,
+		schedulerConfig: defaultSchedulerConfig(),
+		restartCh:       make(chan struct{}),
+		updateCh:        make(chan struct{}),
+		logger:          logger,
 	}
 }
 
@@ -80,19 +75,19 @@ func (s *Scheduler) SetSchedulerConfig(config *SchedulerConfig) {
 	s.rwMutex.Lock()
 	defer s.rwMutex.Unlock()
 	if config.IntervalMinutes > 0 && config.IntervalMinutes <= 30 {
-		s.sechedulerConfig.IntervalMinutes = config.IntervalMinutes
+		s.schedulerConfig.IntervalMinutes = config.IntervalMinutes
 	}
 	if config.RegisterExpireMinutes > 0 && config.RegisterExpireMinutes <= 60 {
-		s.sechedulerConfig.RegisterExpireMinutes = config.RegisterExpireMinutes
+		s.schedulerConfig.RegisterExpireMinutes = config.RegisterExpireMinutes
 	}
 	if config.HashTreeExpireHours > 0 {
-		s.sechedulerConfig.HashTreeExpireHours = config.HashTreeExpireHours
+		s.schedulerConfig.HashTreeExpireHours = config.HashTreeExpireHours
 	}
 	if config.MaxRetries > 1 && config.MaxRetries <= 10 {
-		s.sechedulerConfig.MaxRetries = config.MaxRetries
+		s.schedulerConfig.MaxRetries = config.MaxRetries
 	}
 	if config.RetryIntervalSeconds > 0 && config.RetryIntervalSeconds <= 30 {
-		s.sechedulerConfig.RetryIntervalSeconds = config.RetryIntervalSeconds
+		s.schedulerConfig.RetryIntervalSeconds = config.RetryIntervalSeconds
 	}
 }
 
@@ -100,7 +95,7 @@ func (s *Scheduler) SetSchedulerConfig(config *SchedulerConfig) {
 func (s *Scheduler) GetSchedulerConfig() *SchedulerConfig {
 	s.rwMutex.RLock()
 	defer s.rwMutex.RUnlock()
-	return s.sechedulerConfig
+	return s.schedulerConfig
 }
 
 // Start Start the scheduler
@@ -149,7 +144,7 @@ func (s *Scheduler) LoadConfig(ctx context.Context) {
 
 // runScheduler Actually run the scheduler loop
 func (s *Scheduler) runScheduler(parentCtx context.Context, initial bool) {
-	syncInterval := time.Duration(s.sechedulerConfig.IntervalMinutes) * time.Minute
+	syncInterval := time.Duration(s.schedulerConfig.IntervalMinutes) * time.Minute
 
 	s.logger.Info("starting sync scheduler with interval: %v", syncInterval)
 
@@ -201,7 +196,7 @@ func (s *Scheduler) performSync() {
 		s.isRunning = false
 	}()
 
-	syncConfigTimeout := time.Duration(s.sechedulerConfig.RegisterExpireMinutes) * time.Minute
+	syncConfigTimeout := time.Duration(s.schedulerConfig.RegisterExpireMinutes) * time.Minute
 	codebaseConfigs := s.storage.GetCodebaseConfigs()
 	if len(codebaseConfigs) == 0 {
 		s.logger.Info("no codebase configs found, skipping sync")
@@ -228,7 +223,7 @@ func (s *Scheduler) performSync() {
 func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) error {
 	s.logger.Info("starting sync for codebase: %s", config.CodebaseId)
 	nowTime := time.Now()
-	localHashTree, err := s.fileScanner.ScanDirectory(config.CodebasePath)
+	localHashTree, err := s.fileScanner.ScanCodebase(config.CodebasePath)
 	if err != nil {
 		s.logger.Error("failed to scan directory (%s): %v", config.CodebasePath, err)
 		return fmt.Errorf("scan directory (%s) failed: %v", config.CodebasePath, err)
@@ -236,7 +231,7 @@ func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) error
 
 	// Get codebase hash tree
 	var serverHashTree map[string]string
-	if len(config.HashTree) > 0 && config.LastSync.Add(time.Duration(s.sechedulerConfig.HashTreeExpireHours)*time.Hour).After(nowTime) {
+	if len(config.HashTree) > 0 {
 		serverHashTree = config.HashTree
 	} else {
 		s.logger.Info("local hash tree empty, fetching from server")
@@ -266,7 +261,7 @@ func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) error
 	s.logger.Info("detected %d file changes", len(changes))
 
 	// Process all file changes
-	if err := s.processFileChanges(config, changes); err != nil {
+	if err := s.ProcessFileChanges(config, changes); err != nil {
 		s.logger.Error("file changes processing failed: %v", err)
 		return fmt.Errorf("file changes processing failed: %v", err)
 	}
@@ -283,8 +278,55 @@ func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) error
 	return nil
 }
 
-// processFileChanges Process file changes and encapsulate upload logic
-func (s *Scheduler) processFileChanges(config *storage.CodebaseConfig, changes []*scanner.FileStatus) error {
+// PerformSyncForCodebaseWithFilePaths Perform sync for codebase with specified file paths
+func (s *Scheduler) PerformSyncForCodebaseWithFilePaths(config *storage.CodebaseConfig, filePaths []string) error {
+	s.logger.Info("performing sync for codebase: %s, file paths: %v", config.CodebaseId, filePaths)
+	nowTime := time.Now()
+	localHashTree, err := s.fileScanner.ScanFilePaths(config.CodebasePath, filePaths)
+	if err != nil {
+		s.logger.Error("failed to scan file paths (%s): %v", config.CodebasePath, err)
+		return fmt.Errorf("scan file paths (%s) failed: %v", config.CodebasePath, err)
+	}
+
+	// Get codebase hash tree
+	var serverHashTree map[string]string
+	if len(config.HashTree) > 0 {
+		serverHashTree = config.HashTree
+	}
+
+	// Compare hash trees to find changes
+	changes := s.fileScanner.CalculateFileChangesWithoutDelete(localHashTree, serverHashTree)
+	if len(changes) == 0 {
+		s.logger.Info("no file changes detected, sync completed")
+		return nil
+	}
+
+	s.logger.Info("detected %d file changes", len(changes))
+
+	// Process all file changes
+	if err := s.ProcessFileChanges(config, changes); err != nil {
+		s.logger.Error("file changes processing failed: %v", err)
+		return fmt.Errorf("file changes processing failed: %v", err)
+	}
+
+	// Update local hash tree and save configuration
+	if len(config.HashTree) == 0 {
+		config.HashTree = localHashTree
+	} else {
+		maps.Copy(config.HashTree, localHashTree)
+	}
+	config.LastSync = nowTime
+	if err := s.storage.SaveCodebaseConfig(config); err != nil {
+		s.logger.Error("failed to save codebase config: %v", err)
+		return fmt.Errorf("save codebase config failed: %v", err)
+	}
+
+	s.logger.Info("sync completed for codebase: %s, time taken: %v", config.CodebaseId, time.Since(nowTime))
+	return nil
+}
+
+// ProcessFileChanges Process file changes and encapsulate upload logic
+func (s *Scheduler) ProcessFileChanges(config *storage.CodebaseConfig, changes []*scanner.FileStatus) error {
 	// Create zip with all changed files (new and modified)
 	zipPath, err := s.createChangesZip(config, changes)
 	if err != nil {
@@ -292,7 +334,7 @@ func (s *Scheduler) processFileChanges(config *storage.CodebaseConfig, changes [
 	}
 
 	// Upload zip file
-	uploadReq := &syncer.UploadReq{
+	uploadReq := syncer.UploadReq{
 		ClientId:     config.ClientID,
 		CodebasePath: config.CodebasePath,
 		CodebaseName: config.CodebaseName,
@@ -385,9 +427,9 @@ func (s *Scheduler) createChangesZip(config *storage.CodebaseConfig, changes []*
 	return zipPath, nil
 }
 
-func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq *syncer.UploadReq) error {
-	maxRetries := s.sechedulerConfig.MaxRetries
-	retryDelay := time.Duration(s.sechedulerConfig.RetryIntervalSeconds) * time.Second
+func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq syncer.UploadReq) error {
+	maxRetries := s.schedulerConfig.MaxRetries
+	retryDelay := time.Duration(s.schedulerConfig.RetryIntervalSeconds) * time.Second
 
 	s.logger.Info("starting to upload zip file: %s", zipPath)
 

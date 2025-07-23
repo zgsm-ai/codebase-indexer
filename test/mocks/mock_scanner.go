@@ -40,7 +40,7 @@ func (m *MockScanner) LoadFolderIgnoreRules(codebasePath string) *gitignore.GitI
 	return args.Get(0).(*gitignore.GitIgnore)
 }
 
-func (m *MockScanner) ScanDirectory(codebasePath string) (map[string]string, error) {
+func (m *MockScanner) ScanCodebase(codebasePath string) (map[string]string, error) {
 	args := m.Called(codebasePath)
 	if args.Get(0) != nil {
 		return args.Get(0).(map[string]string), args.Error(1)
@@ -48,7 +48,36 @@ func (m *MockScanner) ScanDirectory(codebasePath string) (map[string]string, err
 	return nil, args.Error(1)
 }
 
+func (m *MockScanner) ScanFilePaths(codebasePath string, filePaths []string) (map[string]string, error) {
+	args := m.Called(codebasePath, filePaths)
+	if args.Get(0) != nil {
+		return args.Get(0).(map[string]string), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *MockScanner) ScanDirectory(codebasePath, dirPath string) (map[string]string, error) {
+	args := m.Called(codebasePath, dirPath)
+	if args.Get(0) != nil {
+		return args.Get(0).(map[string]string), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *MockScanner) ScanFile(codebasePath, filePath string) (string, error) {
+	args := m.Called(codebasePath, filePath)
+	return args.String(0), args.Error(1)
+}
+
 func (m *MockScanner) CalculateFileChanges(local, remote map[string]string) []*scanner.FileStatus {
+	args := m.Called(local, remote)
+	if args.Get(0) != nil {
+		return args.Get(0).([]*scanner.FileStatus)
+	}
+	return nil
+}
+
+func (m *MockScanner) CalculateFileChangesWithoutDelete(local, remote map[string]string) []*scanner.FileStatus {
 	args := m.Called(local, remote)
 	if args.Get(0) != nil {
 		return args.Get(0).([]*scanner.FileStatus)

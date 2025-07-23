@@ -54,7 +54,7 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 	codebaseConfigsToRegister, err := h.findCodebasePaths(req.WorkspacePath, req.WorkspaceName)
 	if err != nil {
 		h.logger.Error("failed to find codebase paths to register: %v", err)
-		return &api.RegisterSyncResponse{Success: false, Message: fmt.Sprintf("failed to find codebase paths: %v", err)}, nil
+		return &api.RegisterSyncResponse{Success: false, Message: "failed to find codebase paths"}, nil
 	}
 
 	if len(codebaseConfigsToRegister) == 0 {
@@ -104,7 +104,7 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 
 	if registeredCount == 0 && lastError != nil {
 		h.logger.Error("all codebase config saves failed: %v", lastError)
-		return &api.RegisterSyncResponse{Success: false, Message: fmt.Sprintf("all codebase registrations failed: %v", lastError)}, nil
+		return &api.RegisterSyncResponse{Success: false, Message: "all codebase registrations failed"}, nil
 	}
 
 	// Sync newly registered codebases
@@ -127,7 +127,7 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 
 // SyncCodebase syncs codebases under specified workspace
 func (h *GRPCHandler) SyncCodebase(ctx context.Context, req *api.SyncCodebaseRequest) (*api.SyncCodebaseResponse, error) {
-	h.logger.Info("codebase sync request: WorkspacePath=%s, WorkspaceName=%s", req.WorkspacePath, req.WorkspaceName)
+	h.logger.Info("codebase sync request: WorkspacePath=%s, WorkspaceName=%s, FilePaths=%v", req.WorkspacePath, req.WorkspaceName, req.FilePaths)
 	// Check request parameters
 	if req.ClientId == "" || req.WorkspacePath == "" || req.WorkspaceName == "" {
 		h.logger.Error("invalid codebase sync parameters")
@@ -137,7 +137,7 @@ func (h *GRPCHandler) SyncCodebase(ctx context.Context, req *api.SyncCodebaseReq
 	codebaseConfigsToSync, err := h.findCodebasePaths(req.WorkspacePath, req.WorkspaceName)
 	if err != nil {
 		h.logger.Error("failed to find codebase paths to sync: %v", err)
-		return &api.SyncCodebaseResponse{Success: false, Code: "0010", Message: fmt.Sprintf("failed to find codebase paths: %v", err)}, nil
+		return &api.SyncCodebaseResponse{Success: false, Code: "0010", Message: "failed to find codebase paths"}, nil
 	}
 
 	if len(codebaseConfigsToSync) == 0 {
@@ -185,25 +185,30 @@ func (h *GRPCHandler) SyncCodebase(ctx context.Context, req *api.SyncCodebaseReq
 
 	if savedCount == 0 && lastError != nil {
 		h.logger.Error("all codebase config saves failed: %v", lastError)
-		return &api.SyncCodebaseResponse{Success: false, Code: "0010", Message: fmt.Sprintf("all codebase config saved failed: %v", lastError)}, nil
+		return &api.SyncCodebaseResponse{Success: false, Code: "0010", Message: "all codebase config saved failed"}, nil
 	}
 
 	// Sync codebases
 	if len(syncCodebaseConfigs) > 0 && h.httpSync.GetSyncConfig() != nil {
-		err := h.syncCodebases(syncCodebaseConfigs)
+		var err error
+		if len(req.FilePaths) == 0 {
+			err = h.syncCodebases(syncCodebaseConfigs)
+		} else {
+			err = h.syncCodebasesWithFilePaths(syncCodebaseConfigs, req.FilePaths)
+		}
 		if err != nil {
 			h.logger.Error("failed to sync codebases: %v", err)
 			if utils.IsUnauthorizedError(err) {
-				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodeUnauthorized, Message: fmt.Sprintf("sync codebase failed: %v", err)}, nil
+				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodeUnauthorized, Message: "unauthorized"}, nil
 			}
 			if utils.IsPageNotFoundError(err) {
-				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodePageNotFound, Message: fmt.Sprintf("sync codebase failed: %v", err)}, nil
+				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodePageNotFound, Message: "page not found"}, nil
 			}
 			if utils.IsTooManyRequestsError(err) {
-				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodeTooManyRequests, Message: fmt.Sprintf("sync codebase failed: %v", err)}, nil
+				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodeTooManyRequests, Message: "too many requests"}, nil
 			}
 			if utils.IsServiceUnavailableError(err) {
-				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodeServiceUnavailable, Message: fmt.Sprintf("sync codebase failed: %v", err)}, nil
+				return &api.SyncCodebaseResponse{Success: false, Code: utils.StatusCodeServiceUnavailable, Message: "service unavailable"}, nil
 			}
 			return &api.SyncCodebaseResponse{Success: false, Code: "1001", Message: fmt.Sprintf("sync codebase failed: %v", err)}, nil
 		}
@@ -319,7 +324,7 @@ func (h *GRPCHandler) CheckIgnoreFile(ctx context.Context, req *api.CheckIgnoreF
 		SuccessCode          = "0"
 	)
 
-	h.logger.Info("check ignore file request: %+v", req)
+	h.logger.Info("check ignore file request: WorkspacePath=%s, WorkspaceName=%s, FilePaths=%v", req.WorkspacePath, req.WorkspaceName, req.FilePaths)
 
 	// Validate input params
 	if req.ClientId == "" || req.WorkspacePath == "" || req.WorkspaceName == "" || len(req.FilePaths) == 0 {
@@ -338,7 +343,7 @@ func (h *GRPCHandler) CheckIgnoreFile(ctx context.Context, req *api.CheckIgnoreF
 		return &api.SyncCodebaseResponse{
 			Success: false,
 			Code:    CodebaseFindError,
-			Message: fmt.Sprintf("failed to find codebase: %v", err),
+			Message: "failed to find codebase paths",
 		}, nil
 	}
 
@@ -425,6 +430,18 @@ func (h *GRPCHandler) syncCodebases(codebaseConfigs []*storage.CodebaseConfig) e
 			h.logger.Warn("sync timeout for %d codebases", len(codebaseConfigs))
 			return fmt.Errorf("sync timeout for %d codebases: %v", len(codebaseConfigs), err)
 		} else {
+			h.logger.Error("sync failed: %v", err)
+			return err
+		}
+	}
+
+	return nil
+}
+
+// syncCodebasesWithFilePaths syncs code repositories with specified file paths
+func (h *GRPCHandler) syncCodebasesWithFilePaths(codebaseConfigs []*storage.CodebaseConfig, filePaths []string) error {
+	for _, codebaseConfig := range codebaseConfigs {
+		if err := h.scheduler.PerformSyncForCodebaseWithFilePaths(codebaseConfig, filePaths); err != nil {
 			h.logger.Error("sync failed: %v", err)
 			return err
 		}
