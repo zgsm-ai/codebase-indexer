@@ -7,6 +7,8 @@ const (
 	Identifier        = "identifier"
 	Dot               = "."
 	LF                = "\n"
+	Static            = "static"
+	Arrow             = "arrow"
 	PackagePrivate    = "package-private"
 	PublicAbstract    = "public abstract"
 	ModifierProtected = "protected"
@@ -28,6 +30,7 @@ const (
 	ElementTypeImportName          ElementType = "import.name"
 	ElementTypeImportAlias         ElementType = "import.alias"
 	ElementTypeImportPath          ElementType = "import.path"
+	ElementTypeImportSource        ElementType = "import.source"
 	ElementTypeClass               ElementType = "definition.class"
 	ElementTypeClassName           ElementType = "definition.class.name"
 	ElementTypeClassExtends        ElementType = "definition.class.extends"
@@ -71,6 +74,8 @@ const (
 	ElementTypeLocalVariableType   ElementType = "local_variable.type"
 	ElementTypeLocalVariableValue  ElementType = "local_variable.value"
 	ElementTypeVariable            ElementType = "variable"
+	ElementTypeVariableName        ElementType = "variable.name"
+	ElementTypeVariableValue       ElementType = "variable.value"
 	ElementTypeConstant            ElementType = "constant"
 	ElementTypeMacro               ElementType = "macro"
 	ElementTypeField               ElementType = "definition.field"
@@ -93,6 +98,7 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeImportName):          ElementTypeImportName,
 	string(ElementTypeImportAlias):         ElementTypeImportAlias,
 	string(ElementTypeImportPath):          ElementTypeImportPath,
+	string(ElementTypeImportSource):        ElementTypeImportSource,
 	string(ElementTypeClass):               ElementTypeClass,
 	string(ElementTypeClassName):           ElementTypeClassName,
 	string(ElementTypeInterfaceType):       ElementTypeInterfaceType,
@@ -111,11 +117,11 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeTrait):               ElementTypeTrait,
 	string(ElementTypeTypeAlias):           ElementTypeTypeAlias,
 	string(ElementTypeFunction):            ElementTypeFunction,
+	string(ElementTypeFunctionName):        ElementTypeFunctionName,
+	string(ElementTypeFunctionParameters):  ElementTypeFunctionParameters,
 	string(ElementTypeFunctionCall):        ElementTypeFunctionCall,
 	string(ElementTypeFunctionOwner):       ElementTypeFunctionOwner,
-	string(ElementTypeFunctionName):        ElementTypeFunctionName,
 	string(ElementTypeFunctionReturnType):  ElementTypeFunctionReturnType,
-	string(ElementTypeFunctionParameters):  ElementTypeFunctionParameters,
 	string(ElementTypeFunctionArguments):   ElementTypeFunctionArguments,
 	string(ElementTypeFunctionDeclaration): ElementTypeFunctionDeclaration,
 	string(ElementTypeMethod):              ElementTypeMethod,
@@ -136,6 +142,8 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeLocalVariableType):   ElementTypeLocalVariableType,
 	string(ElementTypeLocalVariableValue):  ElementTypeLocalVariableValue,
 	string(ElementTypeVariable):            ElementTypeVariable,
+	string(ElementTypeVariableName):        ElementTypeVariableName,
+	string(ElementTypeVariableValue):       ElementTypeVariableValue,
 	string(ElementTypeConstant):            ElementTypeConstant,
 	string(ElementTypeMacro):               ElementTypeMacro,
 	string(ElementTypeField):               ElementTypeField,
@@ -169,27 +177,42 @@ type SourceFile struct {
 type NodeKind string
 
 const (
-	NodeKindMethodElem           NodeKind = "method_elem"
-	NodeKindMethodSpec           NodeKind = "method_spec"
-	NodeKindFieldList            NodeKind = "field_declaration_list"
-	NodeKindField                NodeKind = "field_declaration"
-	NodeKindMethod               NodeKind = "method_declaration"
-	NodeKindConstructor          NodeKind = "constructor_declaration"
-	NodeKindVariableDeclarator   NodeKind = "variable_declarator"
-	NodeKindModifier             NodeKind = "modifiers"
-	NodeKindIdentifier           NodeKind = "identifier"
-	NodeKindFormalParameters     NodeKind = "formal_parameters"
-	NodeKindUndefined            NodeKind = "undefined"
-	NodeKindFuncLiteral          NodeKind = "func_literal"
-	NodeKindSelectorExpression   NodeKind = "selector_expression"
-	NodeKindFieldIdentifier      NodeKind = "field_identifier"
-	NodeKindArgumentList         NodeKind = "argument_list"
-	NodeKindShortVarDeclaration  NodeKind = "short_var_declaration"
-	NodeKindCompositeLiteral     NodeKind = "composite_literal"
-	NodeKindCallExpression       NodeKind = "call_expression"
-	NodeKindParameterList        NodeKind = "parameter_list"
-	NodeKindParameterDeclaration NodeKind = "parameter_declaration"
-	NodeKindTypeElem             NodeKind = "type_elem"
+	NodeKindMethodElem                         NodeKind = "method_elem"
+	NodeKindMethodSpec                         NodeKind = "method_spec"
+	NodeKindFieldList                          NodeKind = "field_declaration_list"
+	NodeKindField                              NodeKind = "field_declaration"
+	NodeKindMethod                             NodeKind = "method_declaration"
+	NodeKindMethodDefinition                   NodeKind = "method_definition"
+	NodeKindFieldDefinition                    NodeKind = "field_definition"
+	NodeKindConstructor                        NodeKind = "constructor_declaration"
+	NodeKindVariableDeclarator                 NodeKind = "variable_declarator"
+	NodeKindLexicalDeclaration                 NodeKind = "lexical_declaration"
+	NodeKindVariableDeclaration                NodeKind = "variable_declaration"
+	NodeKindModifier                           NodeKind = "modifiers"
+	NodeKindIdentifier                         NodeKind = "identifier"
+	NodeKindFormalParameters                   NodeKind = "formal_parameters"
+	NodeKindUndefined                          NodeKind = "undefined"
+	NodeKindFuncLiteral                        NodeKind = "func_literal"
+	NodeKindSelectorExpression                 NodeKind = "selector_expression"
+	NodeKindFieldIdentifier                    NodeKind = "field_identifier"
+	NodeKindArgumentList                       NodeKind = "argument_list"
+	NodeKindShortVarDeclaration                NodeKind = "short_var_declaration"
+	NodeKindCompositeLiteral                   NodeKind = "composite_literal"
+	NodeKindCallExpression                     NodeKind = "call_expression"
+	NodeKindParameterList                      NodeKind = "parameter_list"
+	NodeKindParameterDeclaration               NodeKind = "parameter_declaration"
+	NodeKindTypeElem                           NodeKind = "type_elem"
+	NodeKindClassBody                          NodeKind = "class_body"
+	NodeKindPropertyIdentifier                 NodeKind = "property_identifier"
+	NodeKindPrivatePropertyIdentifier          NodeKind = "private_property_identifier"
+	NodeKindArrowFunction                      NodeKind = "arrow_function"
+	NodeKindMemberExpression                   NodeKind = "member_expression"
+	NodeKindNewExpression                      NodeKind = "new_expression"
+	NodeKindObject                             NodeKind = "object"
+	NodeKindArrayPattern                       NodeKind = "array_pattern"
+	NodeKindObjectPattern                      NodeKind = "object_pattern"
+	NodeKindShorthandPropertyIdentifierPattern NodeKind = "shorthand_property_identifier_pattern"
+	NodeKindString                             NodeKind = "string"
 	// 用于接收函数的返回类型和字段的类型
 	NodeKindIntegralType         NodeKind = "integral_type"
 	NodeKindFloatingPointType    NodeKind = "floating_point_type"
@@ -201,37 +224,51 @@ const (
 	NodeKindTypeIdentifier       NodeKind = "type_identifier"
 	NodeKindTypeArguments        NodeKind = "type_arguments"
 	NodeKindScopedTypeIdentifier NodeKind = "scoped_type_identifier"
-	NodeKindWildcard             NodeKind = "wildcard" // 通配符 <? extends MyClass>
+	NodeKindWildcard             NodeKind = "wildcard"       // 通配符 <? extends MyClass>
 	NodeKindPrimitiveType        NodeKind = "primitive_type" // c/cpp基础类型都由这个接收
 
 	// 用于查找方法所属的类
-	NodeKindClassDeclaration NodeKind = "class_declaration"
+	NodeKindClassDeclaration     NodeKind = "class_declaration"
 	NodeKindInterfaceDeclaration NodeKind = "interface_declaration"
-	NodeKindEnumDeclaration NodeKind = "enum_declaration"
+	NodeKindEnumDeclaration      NodeKind = "enum_declaration"
 )
 
 var NodeKindMappings = map[string]NodeKind{
-	string(NodeKindField):                NodeKindField,
-	string(NodeKindMethod):               NodeKindMethod,
-	string(NodeKindConstructor):          NodeKindConstructor,
-	string(NodeKindUndefined):            NodeKindUndefined,
-	string(NodeKindVariableDeclarator):   NodeKindVariableDeclarator,
-	string(NodeKindModifier):             NodeKindModifier,
-	string(NodeKindIdentifier):           NodeKindIdentifier,
-	string(NodeKindFormalParameters):     NodeKindFormalParameters,
-	string(NodeKindMethodElem):           NodeKindMethodElem,
-	string(NodeKindMethodSpec):           NodeKindMethodSpec,
-	string(NodeKindFieldList):            NodeKindFieldList,
-	string(NodeKindFuncLiteral):          NodeKindFuncLiteral,
-	string(NodeKindSelectorExpression):   NodeKindSelectorExpression,
-	string(NodeKindFieldIdentifier):      NodeKindFieldIdentifier,
-	string(NodeKindArgumentList):         NodeKindArgumentList,
-	string(NodeKindShortVarDeclaration):  NodeKindShortVarDeclaration,
-	string(NodeKindCompositeLiteral):     NodeKindCompositeLiteral,
-	string(NodeKindCallExpression):       NodeKindCallExpression,
-	string(NodeKindParameterList):        NodeKindParameterList,
-	string(NodeKindParameterDeclaration): NodeKindParameterDeclaration,
-
+	string(NodeKindField):                              NodeKindField,
+	string(NodeKindMethod):                             NodeKindMethod,
+	string(NodeKindMethodDefinition):                   NodeKindMethodDefinition,
+	string(NodeKindFieldDefinition):                    NodeKindFieldDefinition,
+	string(NodeKindClassBody):                          NodeKindClassBody,
+	string(NodeKindConstructor):                        NodeKindConstructor,
+	string(NodeKindUndefined):                          NodeKindUndefined,
+	string(NodeKindVariableDeclarator):                 NodeKindVariableDeclarator,
+	string(NodeKindLexicalDeclaration):                 NodeKindLexicalDeclaration,
+	string(NodeKindVariableDeclaration):                NodeKindVariableDeclaration,
+	string(NodeKindModifier):                           NodeKindModifier,
+	string(NodeKindIdentifier):                         NodeKindIdentifier,
+	string(NodeKindFormalParameters):                   NodeKindFormalParameters,
+	string(NodeKindMethodElem):                         NodeKindMethodElem,
+	string(NodeKindMethodSpec):                         NodeKindMethodSpec,
+	string(NodeKindFieldList):                          NodeKindFieldList,
+	string(NodeKindFuncLiteral):                        NodeKindFuncLiteral,
+	string(NodeKindSelectorExpression):                 NodeKindSelectorExpression,
+	string(NodeKindFieldIdentifier):                    NodeKindFieldIdentifier,
+	string(NodeKindArgumentList):                       NodeKindArgumentList,
+	string(NodeKindShortVarDeclaration):                NodeKindShortVarDeclaration,
+	string(NodeKindCompositeLiteral):                   NodeKindCompositeLiteral,
+	string(NodeKindCallExpression):                     NodeKindCallExpression,
+	string(NodeKindParameterList):                      NodeKindParameterList,
+	string(NodeKindParameterDeclaration):               NodeKindParameterDeclaration,
+	string(NodeKindPropertyIdentifier):                 NodeKindPropertyIdentifier,
+	string(NodeKindPrivatePropertyIdentifier):          NodeKindPrivatePropertyIdentifier,
+	string(NodeKindArrowFunction):                      NodeKindArrowFunction,
+	string(NodeKindMemberExpression):                   NodeKindMemberExpression,
+	string(NodeKindNewExpression):                      NodeKindNewExpression,
+	string(NodeKindObject):                             NodeKindObject,
+	string(NodeKindArrayPattern):                       NodeKindArrayPattern,
+	string(NodeKindObjectPattern):                      NodeKindObjectPattern,
+	string(NodeKindShorthandPropertyIdentifierPattern): NodeKindShorthandPropertyIdentifierPattern,
+	string(NodeKindString):                             NodeKindString,
 	// 用于接收函数的返回类型和字段的类型
 	string(NodeKindIntegralType):         NodeKindIntegralType,
 	string(NodeKindFloatingPointType):    NodeKindFloatingPointType,
@@ -244,7 +281,7 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindScopedTypeIdentifier): NodeKindScopedTypeIdentifier,
 	string(NodeKindTypeArguments):        NodeKindTypeArguments,
 	string(NodeKindWildcard):             NodeKindWildcard,
-	
+
 	// 用于查找方法所属的类
 	string(NodeKindClassDeclaration):     NodeKindClassDeclaration,
 	string(NodeKindInterfaceDeclaration): NodeKindInterfaceDeclaration,

@@ -22,22 +22,19 @@
 
   ) @definition.function
 
-;; 全局变量
-(program
-  (_
-    (variable_declarator
-      name: (identifier) @global_variable.name
-      ) @global_variable
-    )
-  )
-
 ;; 函数、变量
-
 (variable_declarator
   name: (identifier) @variable.name
+  value: (_) @variable.value
   ) @variable
 
-
+;;解构变量
+  (variable_declarator
+    name: [(array_pattern 
+            (identifier) @variable.name)
+           (object_pattern 
+            (shorthand_property_identifier_pattern) @variable.name)]
+    value: (_) @variable.value) @variable
 
 ;; Object properties
 (pair
@@ -54,11 +51,24 @@
     (export_specifier
       name: (identifier) @definition.export_statement.name))) @definition.export_statement
 
+;; 类声明 - 匹配所有类
+(class_declaration
+  name: (identifier) @definition.class.name
+  (class_heritage)? @definition.class.extends
+) @definition.class
+
+;; 类方法
+(method_definition
+  name: (property_identifier) @definition.method.name
+  parameters: (formal_parameters) @definition.method.parameters) @definition.method
+
+;; 类属性
+(field_definition
+  property: (property_identifier) @definition.field.name) @definition.field
+
+
 ;; 函数调用
 (call_expression
-  function: (member_expression
-              object: (identifier) @call.function.owner
-              property: (property_identifier) @call.function.name
-              )
+  function: [(member_expression) (identifier)] @call.function.name
   arguments: (arguments) @call.function.arguments
   ) @call.function
