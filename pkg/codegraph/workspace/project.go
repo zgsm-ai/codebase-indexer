@@ -9,4 +9,5 @@ type ProjectInfo struct {
 	language lang.Language // 项目语言
 	Path     string
 	Name     string
+	GoModule string
 }

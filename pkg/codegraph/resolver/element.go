@@ -9,12 +9,14 @@ type Element interface {
 	GetRange() []int32
 	GetContent() []byte
 	GetRootIndex() uint32
+	GetRelations() []*Relation
 	GetPath() string
 	SetPath(path string)
 	SetName(name string)
 	SetType(et types.ElementType)
 	SetRange(range_ []int32)
 	SetContent(content []byte)
+	SetRelations(relations []*Relation)
 }
 
 // BaseElement 提供接口的基础实现，其他类型嵌入该结构体
@@ -40,10 +42,12 @@ type RelationType int
 
 const (
 	RelationTypeUndefined RelationType = iota
-	RelationTypeDefine
+	RelationTypeDefinition
 	RelationTypeReference
 	RelationTypeInherit
 	RelationTypeImplement
+	RelationTypeSuperClass
+	RelationTypeSuperInterface
 )
 
 func NewBaseElement(rootCaptureIndex uint32) *BaseElement {
@@ -75,6 +79,13 @@ func (e *BaseElement) SetRange(range_ []int32) {
 
 func (e *BaseElement) SetContent(content []byte) {
 	e.Content = content
+}
+
+func (e *BaseElement) SetRelations(relations []*Relation) {
+	e.Relations = relations
+}
+func (e *BaseElement) GetRelations() []*Relation {
+	return e.Relations
 }
 
 // Import 表示导入语句

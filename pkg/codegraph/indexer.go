@@ -5,14 +5,16 @@ import (
 	"codebase-indexer/pkg/codegraph/parser"
 	"codebase-indexer/pkg/codegraph/store"
 	"codebase-indexer/pkg/codegraph/workspace"
+	"context"
 )
 
-// 代码索引器主系统
+// Indexer 代码索引器
 type Indexer struct {
-	parser    *parser.SourceFileParser     // 单文件语法解析
-	analyzer  *analyzer.DependencyAnalyzer // 跨文件依赖分析
-	workspace workspace.WorkspaceReader    // 进行工作区的文件读取、项目识别、项目列表维护
-	storage   *store.GraphStorage          // 存储
+	parser          *parser.SourceFileParser     // 单文件语法解析
+	analyzer        *analyzer.DependencyAnalyzer // 跨文件依赖分析
+	workspaceReader workspace.WorkspaceReader    // 进行工作区的文件读取、项目识别、项目列表维护
+	storage         *store.GraphStorage          // 存储
+	MaxConcurrency  int                          // 最大并发度
 }
 
 func NewCodeIndexer(parser *parser.SourceFileParser, analyzer *analyzer.DependencyAnalyzer, store *store.GraphStorage) *Indexer {
@@ -24,12 +26,25 @@ func NewCodeIndexer(parser *parser.SourceFileParser, analyzer *analyzer.Dependen
 	}
 }
 
-func (i *Indexer) IndexWorkspace(workspace string) error {
-	//// 将workspace 拆分为项目
+func (i *Indexer) IndexWorkspace(ctx context.Context, workspace string) error {
+	// 将workspace 拆分为项目
+	//projects := i.workspaceReader.FindProjects(workspace)
+	//if len(projects) == 0 {
+	//	return fmt.Errorf("index_workspace find no projects in workspace: %s", workspace)
+	//}
 	//
-	//files, err := findSourceFiles(projectPath)
-	//if err != nil {
-	//	return err
+	//// 循环项目，逐个处理
+	//for _, p := range projects {
+	//	// 并发walk 目录，构建
+	//	i.workspaceReader.Walk(ctx, p.Path, func(walkCtx *types.WalkContext, reader io.ReadCloser) error {
+	//
+	//	}, types.WalkOptions{
+	//		IgnoreError: true,
+	//		ExcludeExts: []string{
+	//
+	//		}
+	//	})
+	//
 	//}
 	//
 	//// 并行解析文件
@@ -95,7 +110,7 @@ func (i *Indexer) IndexWorkspace(workspace string) error {
 
 // RemoveIndexes 根据工作区路径、文件路径，批量删除索引
 func (i *Indexer) RemoveIndexes(workspace string, filePaths []string) error {
-	// 根据 workspace 及 filepath 路径，匹配 到project
+	// 根据 workspaceReader 及 filepath 路径，匹配 到project
 	// 再到对应project中，删除对应的index
 	// 以filepath 为key，先将index查询出来，遍历index的element，找到它被谁引用，然后更新对应的引用关系，再删除index
 
@@ -104,7 +119,7 @@ func (i *Indexer) RemoveIndexes(workspace string, filePaths []string) error {
 
 // SaveIndexes 根据工作区路径、文件路径，批量保存索引
 func (i *Indexer) SaveIndexes(workspace string, filePaths []string) error {
-	// 根据 workspace 及 filepath 路径，匹配 到project
+	// 根据 workspaceReader 及 filepath 路径，匹配 到project
 	// 再到对应project中，保存对应的index，存在直接覆盖
 
 	return nil

@@ -5,7 +5,6 @@ import (
 	"codebase-indexer/pkg/codegraph/resolver"
 	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/codegraph/utils"
-	"codebase-indexer/pkg/codegraph/workspace"
 	"codebase-indexer/pkg/logger"
 	"context"
 	"fmt"
@@ -27,8 +26,7 @@ func NewSourceFileParser(logger logger.Logger) *SourceFileParser {
 }
 
 func (p *SourceFileParser) Parse(ctx context.Context,
-	sourceFile *types.SourceFile,
-	projectInfo *workspace.ProjectInfo) (*FileElementTable, error) {
+	sourceFile *types.SourceFile) (*FileElementTable, error) {
 	// Extract file extension
 	langParser, err := lang.GetSitterParserByFilePath(sourceFile.Path)
 	if err != nil {
@@ -86,7 +84,7 @@ func (p *SourceFileParser) Parse(ctx context.Context,
 			break
 		}
 		// TODO Parent 、Children 关系处理。比如变量定义在函数中，函数定义在类中。
-		elems, err := p.processNode(ctx, langParser.Language, match, captureNames, sourceFile, projectInfo)
+		elems, err := p.processNode(ctx, langParser.Language, match, captureNames, sourceFile)
 		if err != nil {
 			p.logger.Debug("tree_sitter base processor processNode error: %v", err)
 			continue // 跳过错误的匹配
@@ -133,8 +131,7 @@ func (p *SourceFileParser) processNode(
 	language lang.Language,
 	match *sitter.QueryMatch,
 	captureNames []string,
-	sourceFile *types.SourceFile,
-	projectInfo *workspace.ProjectInfo) ([]resolver.Element, error) {
+	sourceFile *types.SourceFile) ([]resolver.Element, error) {
 
 	if len(match.Captures) == 0 || len(captureNames) == 0 {
 		return nil, lang.ErrNoCaptures
@@ -151,7 +148,6 @@ func (p *SourceFileParser) processNode(
 		Match:        match,
 		CaptureNames: captureNames,
 		SourceFile:   sourceFile,
-		ProjectInfo:  projectInfo,
 	}
 	elements, err := p.resolverManager.Resolve(ctx, rootElement, resolveCtx)
 	if err != nil {

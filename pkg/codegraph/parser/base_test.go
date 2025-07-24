@@ -5,7 +5,6 @@ import (
 	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/resolver"
 	"codebase-indexer/pkg/codegraph/types"
-	"codebase-indexer/pkg/codegraph/workspace"
 	"codebase-indexer/pkg/logger"
 	"context"
 	"fmt"
@@ -27,7 +26,6 @@ func initLogger() logger.Logger {
 func TestGoBaseParse(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Go, "github.com/hashicorp")
 	testCases := []struct {
 		name       string
 		sourceFile *types.SourceFile
@@ -44,7 +42,7 @@ func TestGoBaseParse(t *testing.T) {
 	}
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := parser.Parse(context.Background(), tt.sourceFile, prj)
+			res, err := parser.Parse(context.Background(), tt.sourceFile)
 			if res != nil {
 				if res.Package != nil {
 					fmt.Printf("  name: %s\n", res.Package.BaseElement.GetName())
@@ -138,7 +136,6 @@ func TestGoBaseParse(t *testing.T) {
 func TestJavaBaseParse(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata")
 	testCases := []struct {
 		name       string
 		sourceFile *types.SourceFile
@@ -155,7 +152,7 @@ func TestJavaBaseParse(t *testing.T) {
 	}
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := parser.Parse(context.Background(), tt.sourceFile, prj)
+			res, err := parser.Parse(context.Background(), tt.sourceFile)
 			assert.ErrorIs(t, err, tt.wantErr)
 			assert.NotNil(t, res)
 			assert.NotNil(t, res.Package)
@@ -271,7 +268,6 @@ func TestGoBaseParse_MatchesDebug(t *testing.T) {
 func TestJavaResolver_ResolveImport(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata")
 
 	testCases := []struct {
 		name        string
@@ -319,7 +315,7 @@ import static java.util.Collections.emptyList;`),
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := parser.Parse(context.Background(), tt.sourceFile, prj)
+			res, err := parser.Parse(context.Background(), tt.sourceFile)
 			assert.ErrorIs(t, err, tt.wantErr)
 			assert.NotNil(t, res)
 
@@ -339,14 +335,13 @@ import static java.util.Collections.emptyList;`),
 func TestJavaResolver_ResolveClass(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata")
 
 	sourceFile := &types.SourceFile{
 		Path:    "testdata/com/example/test/TestClass.java",
 		Content: readFile("testdata/com/example/test/TestClass.java"),
 	}
 
-	res, err := parser.Parse(context.Background(), sourceFile, prj)
+	res, err := parser.Parse(context.Background(), sourceFile)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 
@@ -528,7 +523,6 @@ func TestJavaResolver_ResolveClass(t *testing.T) {
 func TestJavaResolver_ResolveVariable(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata")
 
 	testCases := []struct {
 		name          string
@@ -569,7 +563,7 @@ func TestJavaResolver_ResolveVariable(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := parser.Parse(context.Background(), tt.sourceFile, prj)
+			res, err := parser.Parse(context.Background(), tt.sourceFile)
 			assert.ErrorIs(t, err, tt.wantErr)
 			assert.NotNil(t, res)
 
@@ -629,7 +623,6 @@ func TestJavaResolver_ResolveVariable(t *testing.T) {
 func TestJavaResolver_ResolveInterface(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata")
 
 	testCases := []struct {
 		name          string
@@ -709,7 +702,7 @@ public interface SimpleInterface {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := parser.Parse(context.Background(), tt.sourceFile, prj)
+			res, err := parser.Parse(context.Background(), tt.sourceFile)
 			assert.ErrorIs(t, err, tt.wantErr)
 			assert.NotNil(t, res)
 
@@ -783,7 +776,6 @@ public interface SimpleInterface {
 func TestJavaResolver_ResolveLocalVariableValue(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata")
 	sourceFile := &types.SourceFile{
 		Path: "testdata/com/example/test/TestClass.java",
 		Content: []byte(`
@@ -806,7 +798,7 @@ func TestJavaResolver_ResolveLocalVariableValue(t *testing.T) {
 			}
 		`),
 	}
-	res, err := parser.Parse(context.Background(), sourceFile, prj)
+	res, err := parser.Parse(context.Background(), sourceFile)
 	assert.ErrorIs(t, err, nil)
 	assert.NotNil(t, res)
 
@@ -847,7 +839,6 @@ func TestJavaResolver_ResolveLocalVariableValue(t *testing.T) {
 func TestJavaResolver_AllResolveMethods(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Java, "pkg/codegraph/parser/testdata")
 
 	source := []byte(`
 		package com.example.test;
@@ -927,7 +918,7 @@ func TestJavaResolver_AllResolveMethods(t *testing.T) {
 		Content: source,
 	}
 
-	res, err := parser.Parse(context.Background(), sourceFile, prj)
+	res, err := parser.Parse(context.Background(), sourceFile)
 	assert.ErrorIs(t, err, nil)
 	assert.NotNil(t, res)
 

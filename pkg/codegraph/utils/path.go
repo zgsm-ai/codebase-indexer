@@ -71,3 +71,11 @@ func IsHiddenFile(path string) bool {
 func IsRelativePath(path string) bool {
 	return strings.HasPrefix(path, "./") || strings.HasPrefix(path, "../") || path == "." || path == ".."
 }
+
+// IsSameParentDir 属于相同的父目录
+func IsSameParentDir(a, b string) bool {
+	parentA := filepath.Dir(a)
+	parentB := filepath.Dir(b)
+	// 比较父目录是否相同（已自动处理路径分隔符差异）
+	return parentA == parentB
+}

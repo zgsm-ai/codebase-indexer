@@ -7,9 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/types"
-	"codebase-indexer/pkg/codegraph/workspace"
 )
 
 func TestCPPResolver(t *testing.T) {
@@ -18,7 +16,6 @@ func TestCPPResolver(t *testing.T) {
 func TestCPPResolver_ResolveImport(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.CPP, "pkg/codegraph/parser/testdata")
 
 	testCases := []struct {
 		name        string
@@ -97,7 +94,7 @@ using myns::MyClass2;
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := parser.Parse(context.Background(), tt.sourceFile, prj)
+			res, err := parser.Parse(context.Background(), tt.sourceFile)
 			if tt.wantErr != nil {
 				assert.Error(t, err, tt.description)
 			} else {
