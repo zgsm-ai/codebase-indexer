@@ -3,8 +3,9 @@ package resolver
 import (
 	"codebase-indexer/pkg/codegraph/types"
 	"fmt"
-	sitter "github.com/tree-sitter/go-tree-sitter"
 	"strings"
+
+	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 // findIdentifierNode 递归遍历语法树节点，查找类型为"identifier"的节点
@@ -63,4 +64,13 @@ func updateRootElement(
 		}
 		rootElement.SetName(name)
 	}
+}
+
+func updateElementRange(element Element, capture *sitter.QueryCapture) {
+	element.SetRange([]int32{
+		int32(capture.Node.StartPosition().Row),
+		int32(capture.Node.StartPosition().Column),
+		int32(capture.Node.EndPosition().Row),
+		int32(capture.Node.EndPosition().Column),
+	})
 }

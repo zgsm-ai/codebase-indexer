@@ -5,16 +5,38 @@
   (import_clause
     (named_imports
       (import_specifier
-        name: (identifier) @import.name
+        name: (identifier)? @import.name
         alias: (identifier) * @import.alias
         )
-      ) *
-    (namespace_import
-      (identifier) @import.name
-      ) *
+      )
     ) *
-  source: (string) * @import.source
+  (import_clause
+    (namespace_import
+      (identifier) @import.alias
+    )
+  ) *
+  source: (string)* @import.source
   ) @import
+
+;;import函数
+(variable_declarator
+  name:(identifier) @import.name
+  (call_expression
+    function:(import)@import.declaration
+    arguments:(arguments)@import.source
+  )
+)@import
+
+;;import函数 - 带await的动态导入
+(variable_declarator
+  name:(identifier) @import.name
+  value:(await_expression
+    (call_expression
+      function:(import)@import.declaration
+      arguments:(arguments)@import.source
+    )
+  )
+)@import
 
 ;; let/const declarations
 (lexical_declaration

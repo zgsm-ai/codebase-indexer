@@ -59,15 +59,19 @@
 )
 
 ;;短变量
-(block
-  (short_var_declaration
-    left: (expression_list
-            (identifier) @local_variable
-          )
-    right: (expression_list
-            (_) @local_variable.value
-          )
-    )
+(short_var_declaration
+  left: (expression_list
+          (identifier) @local_variable)
+  right: (expression_list
+          (_) @local_variable.value)
+)
+
+(short_var_declaration
+  left: (expression_list
+          (unary_expression
+            operand: (identifier) @local_variable))
+  right: (expression_list
+          (_) @local_variable.value)
 )
 
 

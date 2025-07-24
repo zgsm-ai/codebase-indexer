@@ -5,6 +5,7 @@ import (
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
 	"fmt"
+
 	treesitter "github.com/tree-sitter/go-tree-sitter"
 )
 
@@ -32,7 +33,7 @@ func NewResolverManager() *ResolverManager {
 	manager.register(lang.C, &CppResolver{})
 	manager.register(lang.CPP, &CppResolver{})
 	manager.register(lang.JavaScript, &JavaScriptResolver{})
-	manager.register(lang.TypeScript, &JavaScriptResolver{})
+	manager.register(lang.TypeScript, &TypeScriptResolver{})
 
 	return manager
 

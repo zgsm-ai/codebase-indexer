@@ -611,6 +611,8 @@ func findMethodOwner(node *sitter.Node) *sitter.Node {
 		// 找到枚举声明，返回当前节点
 		case types.NodeKindEnumDeclaration:
 			return current
+		case types.NodeKindVariableDeclarator:
+			return current
 		}
 
 		current = current.Parent()

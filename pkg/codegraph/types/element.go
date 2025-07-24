@@ -217,6 +217,7 @@ const (
 	NodeKindObjectPattern                      NodeKind = "object_pattern"
 	NodeKindShorthandPropertyIdentifierPattern NodeKind = "shorthand_property_identifier_pattern"
 	NodeKindString                             NodeKind = "string"
+	NodeKindPair                               NodeKind = "pair"
 	// 用于接收函数的返回类型和字段的类型
 	NodeKindIntegralType         NodeKind = "integral_type"
 	NodeKindFloatingPointType    NodeKind = "floating_point_type"
@@ -273,6 +274,7 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindObjectPattern):                      NodeKindObjectPattern,
 	string(NodeKindShorthandPropertyIdentifierPattern): NodeKindShorthandPropertyIdentifierPattern,
 	string(NodeKindString):                             NodeKindString,
+	string(NodeKindPair):                               NodeKindPair,
 	// 用于接收函数的返回类型和字段的类型
 	string(NodeKindIntegralType):         NodeKindIntegralType,
 	string(NodeKindFloatingPointType):    NodeKindFloatingPointType,
