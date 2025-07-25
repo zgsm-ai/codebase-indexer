@@ -61,6 +61,7 @@ const (
 	ElementTypeCallOwner           ElementType = "call.method.owner"
 	ElementTypeCallName            ElementType = "call.method.name"
 	ElementTypeFunctionCall        ElementType = "call.function"
+	ElementTypeFunctionCallName    ElementType = "call.function.name"
 	ElementTypeFunctionOwner       ElementType = "call.function.owner"
 	ElementTypeFunctionArguments   ElementType = "call.function.arguments"
 	ElementTypeFunctionDeclaration ElementType = "declaration.function"
@@ -80,11 +81,13 @@ const (
 	ElementTypeVariable            ElementType = "variable"
 	ElementTypeVariableName        ElementType = "variable.name"
 	ElementTypeVariableValue       ElementType = "variable.value"
+	ElementTypeVariableType        ElementType = "variable.type"
 	ElementTypeConstant            ElementType = "constant"
 	ElementTypeMacro               ElementType = "macro"
 	ElementTypeField               ElementType = "definition.field"
 	ElementTypeFieldName           ElementType = "definition.field.name"
 	ElementTypeFieldType           ElementType = "definition.field.type"
+	ElementTypeFieldValue          ElementType = "definition.field.value"
 	ElementTypeFieldModifier       ElementType = "definition.field.modifier"
 	ElementTypeParameter           ElementType = "definition.parameter"
 	ElementTypeComment             ElementType = "comment"
@@ -123,9 +126,10 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeFunction):            ElementTypeFunction,
 	string(ElementTypeFunctionName):        ElementTypeFunctionName,
 	string(ElementTypeFunctionParameters):  ElementTypeFunctionParameters,
-	string(ElementTypeFunctionCall):        ElementTypeFunctionCall,
-	string(ElementTypeFunctionOwner):       ElementTypeFunctionOwner,
 	string(ElementTypeFunctionReturnType):  ElementTypeFunctionReturnType,
+	string(ElementTypeFunctionCall):        ElementTypeFunctionCall,
+	string(ElementTypeFunctionCallName):    ElementTypeFunctionCallName,
+	string(ElementTypeFunctionOwner):       ElementTypeFunctionOwner,
 	string(ElementTypeFunctionArguments):   ElementTypeFunctionArguments,
 	string(ElementTypeFunctionDeclaration): ElementTypeFunctionDeclaration,
 	string(ElementTypeMethod):              ElementTypeMethod,
@@ -148,11 +152,13 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeVariable):            ElementTypeVariable,
 	string(ElementTypeVariableName):        ElementTypeVariableName,
 	string(ElementTypeVariableValue):       ElementTypeVariableValue,
+	string(ElementTypeVariableType):        ElementTypeVariableType,
 	string(ElementTypeConstant):            ElementTypeConstant,
 	string(ElementTypeMacro):               ElementTypeMacro,
 	string(ElementTypeField):               ElementTypeField,
 	string(ElementTypeFieldName):           ElementTypeFieldName,
 	string(ElementTypeFieldType):           ElementTypeFieldType,
+	string(ElementTypeFieldValue):          ElementTypeFieldValue,
 	string(ElementTypeFieldModifier):       ElementTypeFieldModifier,
 	string(ElementTypeParameter):           ElementTypeParameter,
 	string(ElementTypeComment):             ElementTypeComment,
@@ -231,11 +237,15 @@ const (
 	NodeKindScopedTypeIdentifier NodeKind = "scoped_type_identifier"
 	NodeKindWildcard             NodeKind = "wildcard"       // 通配符 <? extends MyClass>
 	NodeKindPrimitiveType        NodeKind = "primitive_type" // c/cpp基础类型都由这个接收
+	NodeKindQualifiedIdentifier  NodeKind = "qualified_identifier" // c/cpp 复合类型 Outer::Inner
 
 	// 用于查找方法所属的类
 	NodeKindClassDeclaration     NodeKind = "class_declaration"
 	NodeKindInterfaceDeclaration NodeKind = "interface_declaration"
 	NodeKindEnumDeclaration      NodeKind = "enum_declaration"
+	NodeKindClassSpecifier       NodeKind = "class_specifier"
+	NodeKindStructSpecifier      NodeKind = "struct_specifier"
+	NodeKindAccessSpecifier      NodeKind = "access_specifier"
 )
 
 var NodeKindMappings = map[string]NodeKind{
@@ -292,6 +302,10 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindClassDeclaration):     NodeKindClassDeclaration,
 	string(NodeKindInterfaceDeclaration): NodeKindInterfaceDeclaration,
 	string(NodeKindEnumDeclaration):      NodeKindEnumDeclaration,
+	string(NodeKindClassSpecifier):       NodeKindClassSpecifier,
+	string(NodeKindStructSpecifier):      NodeKindStructSpecifier,
+	string(NodeKindAccessSpecifier):      NodeKindAccessSpecifier,
+	string(NodeKindQualifiedIdentifier):  NodeKindQualifiedIdentifier,
 }
 
 // 用于接收函数的返回类型和字段的类型

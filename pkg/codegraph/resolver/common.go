@@ -3,6 +3,7 @@ package resolver
 import (
 	"codebase-indexer/pkg/codegraph/types"
 	"fmt"
+	"regexp"
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -66,6 +67,56 @@ func updateRootElement(
 	}
 }
 
+// 清理参数字符串，支持cpp和java
+// (int const a,const int b,[[maybe_unused]] const std::string& name)
+// -> (int a, int b, std::string name)
+func CleanParam(param string) string {
+
+	// 0. 清理注释
+	reComment := regexp.MustCompile(`/\*.*?\*/`)
+	param = reComment.ReplaceAllString(param, "")
+
+	// 1. 去除属性标记 [[...]]
+	reAttr := regexp.MustCompile(`\[\[.*?\]\]`)
+	param = reAttr.ReplaceAllString(param, "")
+
+	// 2. 去除关键字修饰符
+	reKeywords := regexp.MustCompile(`\b(const|volatile|mutable|__?restrict)\b`)
+	param = reKeywords.ReplaceAllString(param, "")
+
+	// 3. 去除指针和引用符号
+	rePtrRef := regexp.MustCompile(`[*&]+`)
+	param = rePtrRef.ReplaceAllString(param, "")
+
+	// 4. 清理多余空白
+	param = strings.TrimSpace(param)
+	reSpaces := regexp.MustCompile(`\s+`)
+	param = reSpaces.ReplaceAllString(param, " ")
+
+	// 5. 清理 @注解
+	reAt := regexp.MustCompile(`@\w+\s+`)
+	param = reAt.ReplaceAllString(param, "")
+
+	// 6. super/extends
+	reSuper := regexp.MustCompile(`super|extends`)
+	param = reSuper.ReplaceAllString(param, "")
+
+	// 7. 清理问号
+	reQuestion := regexp.MustCompile(`\?`)
+	param = reQuestion.ReplaceAllString(param, "")
+
+	// 去除这种情况 struct TempPoint {
+	// int tx, ty;
+	// } temp_pt = {10, 20};
+	// 直接提取结构体名字
+	reStruct := regexp.MustCompile(`struct\s+(\w+)\s*\{`)
+	matches := reStruct.FindAllStringSubmatch(param, -1)
+
+	if len(matches) > 0 {
+		param = matches[0][1]
+	}
+	return param
+}
 func updateElementRange(element Element, capture *sitter.QueryCapture) {
 	element.SetRange([]int32{
 		int32(capture.Node.StartPosition().Row),
