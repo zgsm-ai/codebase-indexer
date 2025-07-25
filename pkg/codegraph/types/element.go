@@ -2,6 +2,7 @@ package types
 
 const (
 	EmptyString       = ""
+	Underline         = "_"
 	DoubleQuote       = "\""
 	Slash             = "/"
 	Comma             = ","
@@ -177,12 +178,8 @@ const (
 )
 
 type SourceFile struct {
-	ClientId     string
-	CodebasePath string
-	CodebaseName string
-	Name         string
-	Path         string
-	Content      []byte
+	Path    string
+	Content []byte
 }
 type NodeKind string
 

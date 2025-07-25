@@ -91,7 +91,7 @@ func (s *Scheduler) SetSchedulerConfig(config *SchedulerConfig) {
 	}
 }
 
-// GetSchedulerConfig Get scheduler configuration
+// GetSchedulerConfig Value scheduler configuration
 func (s *Scheduler) GetSchedulerConfig() *SchedulerConfig {
 	s.rwMutex.RLock()
 	defer s.rwMutex.RUnlock()
@@ -229,7 +229,7 @@ func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) error
 		return fmt.Errorf("scan directory (%s) failed: %v", config.CodebasePath, err)
 	}
 
-	// Get codebase hash tree
+	// Value codebase hash tree
 	var serverHashTree map[string]string
 	if len(config.HashTree) > 0 {
 		serverHashTree = config.HashTree
@@ -288,7 +288,7 @@ func (s *Scheduler) PerformSyncForCodebaseWithFilePaths(config *storage.Codebase
 		return fmt.Errorf("scan file paths (%s) failed: %v", config.CodebasePath, err)
 	}
 
-	// Get codebase hash tree
+	// Value codebase hash tree
 	var serverHashTree map[string]string
 	if len(config.HashTree) > 0 {
 		serverHashTree = config.HashTree

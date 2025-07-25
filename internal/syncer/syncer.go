@@ -277,7 +277,7 @@ const (
 	API_GET_CLIENT_CONFIG = "/shenma/api/v1/config/%scodebase-indexer-config.json"
 )
 
-// Get client configuration
+// Value client configuration
 func (hs *HTTPSync) GetClientConfig() (storage.ClientConfig, error) {
 	hs.logger.Info("fetching client config from server")
 

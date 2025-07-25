@@ -3,52 +3,60 @@ package analyzer
 import (
 	"codebase-indexer/pkg/codegraph/parser"
 	"codebase-indexer/pkg/codegraph/resolver"
+	"codebase-indexer/pkg/codegraph/store"
 	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/codegraph/utils"
 	"codebase-indexer/pkg/codegraph/workspace"
 	"codebase-indexer/pkg/logger"
 	"context"
+	"fmt"
 	"strings"
 )
 
 type ProjectElementTable struct {
-	ProjectInfo       *workspace.ProjectInfo
+	ProjectInfo       *workspace.Project
 	FileElementTables []*parser.FileElementTable
+}
+
+type SymbolDefinition struct {
+	Name        string
+	Definitions []*Definition
+}
+type Definition struct {
+	Path        string
+	Range       []int32
+	ElementType types.ElementType
 }
 
 type DependencyAnalyzer struct {
 	workspaceReader *workspace.WorkspaceReader
 	logger          logger.Logger
+	store           store.GraphStorage
 }
 
-func NewDependencyAnalyzer(logger logger.Logger, reader *workspace.WorkspaceReader) *DependencyAnalyzer {
+func NewDependencyAnalyzer(logger logger.Logger,
+	reader *workspace.WorkspaceReader,
+	store store.GraphStorage) *DependencyAnalyzer {
+
 	return &DependencyAnalyzer{
 		logger:          logger,
 		workspaceReader: reader,
+		store:           store,
 	}
 }
 
 func (da *DependencyAnalyzer) Analyze(ctx context.Context, projectSymbolTable *ProjectElementTable) error {
+	projectUuid, err := projectSymbolTable.ProjectInfo.Uuid()
+	if err != nil {
+		return err
+	}
+
 	// 1. 处理 import
-	if err := da.preprocessImport(ctx, projectSymbolTable); err != nil {
+	if err = da.preprocessImport(ctx, projectSymbolTable); err != nil {
 		da.logger.Error("analyze import error: %v", err)
 	}
 
-	// 2. 构建项目定义符号表  符号名 -> 元素列表，先根据符号名匹配，匹配符号名后，再根据导入路径、包名进行过滤。
-	definitionSymbols := make(map[string][]resolver.Element)
-	for _, fileTable := range projectSymbolTable.FileElementTables {
-		// 处理定义
-		for _, elem := range fileTable.Elements {
-			switch elem.(type) {
-			case *resolver.Class, *resolver.Function, *resolver.Method, *resolver.Variable, *resolver.Interface:
-				key := elem.GetName()
-				definitionSymbols[key] = append(definitionSymbols[key], elem)
-			}
-		}
-
-	}
-
-	// 3. 迭代符号表，去解析依赖关系。 需要区分跨文件依赖、当前文件引用。
+	// 2. 迭代符号表，去解析依赖关系。 需要区分跨文件依赖、当前文件引用。
 	// 优先根据名字做匹配，匹配到多个，再根据作用域、导入、包、别名等信息进行二次过滤。
 	for _, fileTable := range projectSymbolTable.FileElementTables {
 		currentPath := fileTable.Path
@@ -58,10 +66,14 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context, projectSymbolTable *P
 			// 函数、方法调用
 			case *resolver.Call:
 				// todo 函数重载，考虑参数
-				foundElements := da.findReferredElement(definitionSymbols, e.Name, currentPath, imports)
-
+				// TODO 先通过参数数量过滤
+				foundElements, err := da.findReferredElement(ctx, projectUuid, e.Name, currentPath, imports)
+				if err != nil {
+					da.logger.Error("dependency_analyze find referred element %s err:%v", err)
+					continue
+				}
 				if len(foundElements) == 0 {
-					da.logger.Debug(" %s referred element not found", e.Name)
+					da.logger.Debug("dependency_analyze %s referred element not found", e.Name)
 					continue
 				}
 
@@ -71,8 +83,11 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context, projectSymbolTable *P
 
 			// 类、结构体引用
 			case *resolver.Reference:
-				foundElements := da.findReferredElement(definitionSymbols, e.Name, currentPath, imports)
-
+				foundElements, err := da.findReferredElement(ctx, projectUuid, e.Name, currentPath, imports)
+				if err != nil {
+					da.logger.Error("dependency_analyze find referred element %s err:%v", e.Name, err)
+					continue
+				}
 				if len(foundElements) == 0 {
 					da.logger.Debug(" %s referred element not found", e.Name)
 					continue
@@ -86,7 +101,11 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context, projectSymbolTable *P
 			case *resolver.Class:
 				// Handle inheritance
 				for _, superClassName := range e.SuperClasses {
-					foundElements := da.findReferredElement(definitionSymbols, superClassName, currentPath, imports)
+					foundElements, err := da.findReferredElement(ctx, projectUuid, superClassName, currentPath, imports)
+					if err != nil {
+						da.logger.Error("dependency_analyze find referred element %s err:%v", superClassName, err)
+						continue
+					}
 					if len(foundElements) == 0 {
 						da.logger.Debug(" %s referred element not found", e.Name)
 						continue
@@ -98,7 +117,11 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context, projectSymbolTable *P
 
 				// Handle implementation
 				for _, superInterfaceName := range e.SuperInterfaces {
-					foundElements := da.findReferredElement(definitionSymbols, superInterfaceName, currentPath, imports)
+					foundElements, err := da.findReferredElement(ctx, projectUuid, superInterfaceName, currentPath, imports)
+					if err != nil {
+						da.logger.Error("dependency_analyze find referred element %s err:%v", superInterfaceName, err)
+						continue
+					}
 					if len(foundElements) == 0 {
 						da.logger.Debug(" %s referred element not found", e.Name)
 						continue
@@ -112,7 +135,11 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context, projectSymbolTable *P
 			case *resolver.Interface:
 				// Handle interface extension
 				for _, superInterfaceName := range e.SuperInterfaces {
-					foundElements := da.findReferredElement(definitionSymbols, superInterfaceName, currentPath, imports)
+					foundElements, err := da.findReferredElement(ctx, projectUuid, superInterfaceName, currentPath, imports)
+					if err != nil {
+						da.logger.Error("dependency_analyze find referred element %s err:%v", superInterfaceName, err)
+						continue
+					}
 					if len(foundElements) == 0 {
 						da.logger.Debug(" %s referred element not found", e.Name)
 						continue
@@ -128,43 +155,91 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context, projectSymbolTable *P
 	return nil
 }
 
-func (da *DependencyAnalyzer) findReferredElement(definitionSymbols map[string][]resolver.Element,
-	referredName string,
-	currentPath string,
-	imports []*resolver.Import,
-) []resolver.Element {
-
-	foundDef := make([]resolver.Element, 0)
-
-	if defs, ok := definitionSymbols[referredName]; ok {
-		// 同名的所有定义
-		for _, def := range defs {
-			if def.GetPath() == types.EmptyString {
-				da.logger.Debug("dependency_analyzer definition symbol %s path is empty", def.GetName())
-			}
-			// 1、同文件
-			if def.GetPath() == currentPath {
-				foundDef = append(foundDef, def)
-				break
-			}
-
-			// 2、同包(同父路径)
-			if utils.IsSameParentDir(def.GetPath(), currentPath) {
-				foundDef = append(foundDef, def)
-				break
-			}
-
-			// 3、根据import，当前def的路径包含imp的路径
-			for _, imp := range imports {
-				if strings.Contains(def.GetPath(), imp.Source) ||
-					strings.Contains(def.GetPath(), imp.Name) {
-					foundDef = append(foundDef, def)
-					break
+// SaveSymbolDefinitions 保存符号定义位置
+func (da *DependencyAnalyzer) SaveSymbolDefinitions(ctx context.Context, projectUuid string,
+	fileElementTables []*parser.FileElementTable) error {
+	// 2. 构建项目定义符号表  符号名 -> 元素列表，先根据符号名匹配，匹配符号名后，再根据导入路径、包名进行过滤。
+	definitionSymbolsMap := make(map[string]*SymbolDefinition)
+	for _, fileTable := range fileElementTables {
+		// 处理定义
+		for _, elem := range fileTable.Elements {
+			switch elem.(type) {
+			case *resolver.Class, *resolver.Function, *resolver.Method, *resolver.Variable, *resolver.Interface:
+				key := elem.GetName()
+				d, ok := definitionSymbolsMap[key]
+				if !ok {
+					d = &SymbolDefinition{Name: key, Definitions: make([]*Definition, 0)}
 				}
+				d.Definitions = append(d.Definitions, &Definition{
+					Path:        fileTable.Path,
+					Range:       elem.GetRange(),
+					ElementType: elem.GetType(),
+				})
+				definitionSymbolsMap[key] = d
 			}
 		}
 	}
-	return foundDef
+	definitionSymbols := make([]*SymbolDefinition, 0)
+	for _, d := range definitionSymbolsMap {
+		definitionSymbols = append(definitionSymbols, d)
+	}
+
+	// 3. 保存到存储中，后续查询使用
+	if err := da.store.BatchSave(ctx, projectUuid, workspace.SymbolDefinitions(definitionSymbols)); err != nil {
+		return fmt.Errorf("dependency_analyze batch save symbol definitions error: %w", err)
+	}
+	return nil
+}
+
+func (da *DependencyAnalyzer) findReferredElement(ctx context.Context,
+	projectUuid string,
+	referredName string,
+	currentPath string,
+	imports []*resolver.Import,
+) ([]resolver.Element, error) {
+
+	foundDef := make([]resolver.Element, 0)
+
+	value, err := da.store.Get(ctx, projectUuid, store.SymbolKey(referredName))
+	if err != nil {
+		return nil, fmt.Errorf("dependency_analyzer get symbol definitions error: %w", err)
+	}
+	symbolDefs := value.(*SymbolDefinition)
+
+	// 同名的所有定义
+	for _, def := range symbolDefs.Definitions {
+		element := &resolver.BaseElement{
+			Name:  referredName,
+			Path:  def.Path,
+			Type:  def.ElementType,
+			Range: def.Range,
+		}
+		if def.Path == types.EmptyString {
+			da.logger.Debug("dependency_analyzer definition symbol %s path is empty", referredName)
+		}
+
+		// 1、同文件
+		if def.Path == currentPath {
+			foundDef = append(foundDef, element)
+			break
+		}
+
+		// 2、同包(同父路径)
+		if utils.IsSameParentDir(def.Path, currentPath) {
+			foundDef = append(foundDef, element)
+			break
+		}
+
+		// 3、根据import，当前def的路径包含imp的路径
+		for _, imp := range imports {
+			if strings.Contains(def.Path, imp.Source) ||
+				strings.Contains(def.Path, imp.Name) {
+				foundDef = append(foundDef, element)
+				break
+			}
+		}
+	}
+	return foundDef, nil
 }
 
 // bindRelation establishes a bi-directional relationship between two elements.

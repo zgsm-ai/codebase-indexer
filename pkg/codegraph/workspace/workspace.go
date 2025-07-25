@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 )
 
@@ -26,12 +25,12 @@ func NewWorkSpaceReader(logger logger.Logger) *WorkspaceReader {
 	}
 }
 
-func (w *WorkspaceReader) FindProjects(workspace string) []*ProjectInfo {
+func (w *WorkspaceReader) FindProjects(workspace string, visitPattern types.VisitPattern) []*Project {
 
 	w.logger.Info("find_projects start to scan workspace：%s", workspace)
 
-	var projects []*ProjectInfo
-	maxDepth := 3
+	var projects []*Project
+	maxLayer := 3
 	maxEntries := 2000
 	entryCount := 0
 	foundGit := false
@@ -45,30 +44,54 @@ func (w *WorkspaceReader) FindProjects(workspace string) []*ProjectInfo {
 
 	// 1. 当前目录是 git 仓库
 	if hasGitDir(workspace) {
-		projects = append(projects, &ProjectInfo{
+		projects = append(projects, &Project{
 			Path: workspace,
 			Name: filepath.Base(workspace),
 		})
 		foundGit = true
 	} else {
-		// 2. 递归子目录，查找 git 仓库
-		var walk func(dir string, depth int)
-		walk = func(dir string, depth int) {
-			if entryCount >= maxEntries || depth > maxDepth {
-				return
+		// 2. 使用广度优先遍历查找 git 仓库
+		type queueItem struct {
+			dir   string
+			depth int
+		}
+
+		queue := []queueItem{{dir: workspace, depth: 1}}
+
+		for len(queue) > 0 && entryCount < maxEntries {
+			current := queue[0]
+			queue = queue[1:]
+
+			if current.depth > maxLayer {
+				continue
 			}
-			entries, err := os.ReadDir(dir)
+			currentDir := current.dir
+
+			// 应用过滤规则
+			if visitPattern.ShouldSkip(currentDir) {
+				continue
+			}
+
+			entries, err := os.ReadDir(currentDir)
 			if err != nil {
-				return
+				continue
 			}
+
 			for _, entry := range entries {
 				if entryCount >= maxEntries {
-					return
+					break
 				}
+
 				if entry.IsDir() {
-					subDir := filepath.Join(dir, entry.Name())
+					subDir := filepath.Join(currentDir, entry.Name())
+
+					// 跳过隐藏目录
+					if strings.HasPrefix(entry.Name(), types.Dot) {
+						continue
+					}
+
 					if hasGitDir(subDir) {
-						projects = append(projects, &ProjectInfo{
+						projects = append(projects, &Project{
 							Path: subDir,
 							Name: filepath.Base(subDir),
 						})
@@ -76,21 +99,17 @@ func (w *WorkspaceReader) FindProjects(workspace string) []*ProjectInfo {
 						// 不递归 .git 仓库下的子目录
 						continue
 					}
-					// 跳过隐藏目录
-					if strings.HasPrefix(entry.Name(), ".") {
-						continue
-					}
+
 					entryCount++
-					walk(subDir, depth+1)
+					queue = append(queue, queueItem{dir: subDir, depth: current.depth + 1})
 				}
 			}
 		}
-		walk(workspace, 1)
 	}
 
 	// 3. 没有发现任何 git 仓库，将当前目录作为唯一项目
 	if !foundGit {
-		projects = append(projects, &ProjectInfo{
+		projects = append(projects, &Project{
 			Path: workspace,
 			Name: filepath.Base(workspace),
 		})
@@ -224,37 +243,9 @@ func (w *WorkspaceReader) Walk(ctx context.Context, dir string, walkFn types.Wal
 		if relativePath == types.Dot {
 			return nil
 		}
-		fileExt := filepath.Ext(relativePath)
-		if slices.Contains(walkOpts.ExcludeExts, fileExt) {
+
+		if walkOpts.VisitPattern.ShouldSkip(relativePath) {
 			return nil
-		}
-
-		if len(walkOpts.IncludeExts) > 0 && !slices.Contains(walkOpts.IncludeExts, fileExt) {
-			return nil
-		}
-
-		for _, p := range walkOpts.ExcludeDirs {
-			if relativePath == p {
-				return nil
-			}
-		}
-
-		for _, p := range walkOpts.IncludeDirs {
-			if relativePath != p {
-				return nil
-			}
-		}
-
-		for _, p := range walkOpts.ExcludePrefixes {
-			if strings.HasPrefix(relativePath, p) {
-				return nil
-			}
-		}
-
-		for _, p := range walkOpts.IncludePrefixes {
-			if !strings.HasPrefix(relativePath, p) {
-				return nil
-			}
 		}
 
 		// Convert Windows filePath separators to forward slashes
@@ -286,7 +277,9 @@ func (w *WorkspaceReader) Walk(ctx context.Context, dir string, walkFn types.Wal
 		if file == nil {
 			return nil
 		}
+
 		defer file.Close()
+
 		return walkFn(walkCtx, file)
 	})
 }

@@ -42,7 +42,7 @@ type SyncServiceClient interface {
 	UnregisterSync(ctx context.Context, in *UnregisterSyncRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Share AccessToken (plain text transmission, server-side encrypted storage)
 	ShareAccessToken(ctx context.Context, in *ShareAccessTokenRequest, opts ...grpc.CallOption) (*ShareAccessTokenResponse, error)
-	// Get application name and version information
+	// Value application name and version information
 	GetVersion(ctx context.Context, in *VersionRequest, opts ...grpc.CallOption) (*VersionResponse, error)
 	// Check ignore file
 	CheckIgnoreFile(ctx context.Context, in *CheckIgnoreFileRequest, opts ...grpc.CallOption) (*SyncCodebaseResponse, error)
@@ -130,7 +130,7 @@ type SyncServiceServer interface {
 	UnregisterSync(context.Context, *UnregisterSyncRequest) (*emptypb.Empty, error)
 	// Share AccessToken (plain text transmission, server-side encrypted storage)
 	ShareAccessToken(context.Context, *ShareAccessTokenRequest) (*ShareAccessTokenResponse, error)
-	// Get application name and version information
+	// Value application name and version information
 	GetVersion(context.Context, *VersionRequest) (*VersionResponse, error)
 	// Check ignore file
 	CheckIgnoreFile(context.Context, *CheckIgnoreFileRequest) (*SyncCodebaseResponse, error)

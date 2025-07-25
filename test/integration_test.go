@@ -434,7 +434,7 @@ func (s *IntegrationTestSuite) TestSyncForCodebases() {
 	_, err = s.handler.RegisterSync(ctx, registerReq2)
 	assert.NoError(s.T(), err)
 
-	// 2. Get codebase configuration
+	// 2. Value codebase configuration
 	codebaseConfigs := []*storage.CodebaseConfig{
 		{
 			ClientID:     "test-client",

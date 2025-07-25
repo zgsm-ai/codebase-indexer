@@ -5,19 +5,19 @@ import (
 	"fmt"
 	"path/filepath"
 
-	sitterkotlin "github.com/tree-sitter-grammars/tree-sitter-kotlin/bindings/go"
+	//sitterkotlin "github.com/tree-sitter-grammars/tree-sitter-kotlin/bindings/go"
 	sitter "github.com/tree-sitter/go-tree-sitter"
-	sittercsharp "github.com/tree-sitter/tree-sitter-c-sharp/bindings/go"
+	//sittercsharp "github.com/tree-sitter/tree-sitter-c-sharp/bindings/go"
 	sitterc "github.com/tree-sitter/tree-sitter-c/bindings/go"
 	sittercpp "github.com/tree-sitter/tree-sitter-cpp/bindings/go"
 	sittergo "github.com/tree-sitter/tree-sitter-go/bindings/go"
 	sitterjava "github.com/tree-sitter/tree-sitter-java/bindings/go"
 	sitterjavascript "github.com/tree-sitter/tree-sitter-javascript/bindings/go"
-	sitterphp "github.com/tree-sitter/tree-sitter-php/bindings/go"
+	//sitterphp "github.com/tree-sitter/tree-sitter-php/bindings/go"
 	sitterpython "github.com/tree-sitter/tree-sitter-python/bindings/go"
-	sitterruby "github.com/tree-sitter/tree-sitter-ruby/bindings/go"
-	sitterrust "github.com/tree-sitter/tree-sitter-rust/bindings/go"
-	sitterscala "github.com/tree-sitter/tree-sitter-scala/bindings/go"
+	//sitterruby "github.com/tree-sitter/tree-sitter-ruby/bindings/go"
+	//sitterrust "github.com/tree-sitter/tree-sitter-rust/bindings/go"
+	//sitterscala "github.com/tree-sitter/tree-sitter-scala/bindings/go"
 	sittertypescript "github.com/tree-sitter/tree-sitter-typescript/bindings/go"
 )
 
@@ -84,13 +84,13 @@ var treeSitterParsers = []*TreeSitterParser{
 		},
 		SupportedExts: []string{".ts", ".tsx"},
 	},
-	{
-		Language: Rust,
-		SitterLanguage: func() *sitter.Language {
-			return sitter.NewLanguage(sitterrust.Language())
-		},
-		SupportedExts: []string{".rs"},
-	},
+	//{
+	//	Language: Rust,
+	//	SitterLanguage: func() *sitter.Language {
+	//		return sitter.NewLanguage(sitterrust.Language())
+	//	},
+	//	SupportedExts: []string{".rs"},
+	//},
 	{
 		Language: C,
 		SitterLanguage: func() *sitter.Language {
@@ -105,41 +105,41 @@ var treeSitterParsers = []*TreeSitterParser{
 		},
 		SupportedExts: []string{".cpp", ".cc", ".cxx", ".hpp"},
 	},
-	{
-		Language: CSharp,
-		SitterLanguage: func() *sitter.Language {
-			return sitter.NewLanguage(sittercsharp.Language())
-		},
-		SupportedExts: []string{".cs"},
-	},
-	{
-		Language: Ruby,
-		SitterLanguage: func() *sitter.Language {
-			return sitter.NewLanguage(sitterruby.Language())
-		},
-		SupportedExts: []string{".rb"},
-	},
-	{
-		Language: PHP,
-		SitterLanguage: func() *sitter.Language {
-			return sitter.NewLanguage(sitterphp.LanguagePHP())
-		},
-		SupportedExts: []string{".php", ".phtml"},
-	},
-	{
-		Language: Kotlin,
-		SitterLanguage: func() *sitter.Language {
-			return sitter.NewLanguage(sitterkotlin.Language())
-		},
-		SupportedExts: []string{".kt", ".kts"},
-	},
-	{
-		Language: Scala,
-		SitterLanguage: func() *sitter.Language {
-			return sitter.NewLanguage(sitterscala.Language())
-		},
-		SupportedExts: []string{".scala"},
-	},
+	//{
+	//	Language: CSharp,
+	//	SitterLanguage: func() *sitter.Language {
+	//		return sitter.NewLanguage(sittercsharp.Language())
+	//	},
+	//	SupportedExts: []string{".cs"},
+	//},
+	//{
+	//	Language: Ruby,
+	//	SitterLanguage: func() *sitter.Language {
+	//		return sitter.NewLanguage(sitterruby.Language())
+	//	},
+	//	SupportedExts: []string{".rb"},
+	//},
+	//{
+	//	Language: PHP,
+	//	SitterLanguage: func() *sitter.Language {
+	//		return sitter.NewLanguage(sitterphp.LanguagePHP())
+	//	},
+	//	SupportedExts: []string{".php", ".phtml"},
+	//},
+	//{
+	//	Language: Kotlin,
+	//	SitterLanguage: func() *sitter.Language {
+	//		return sitter.NewLanguage(sitterkotlin.Language())
+	//	},
+	//	SupportedExts: []string{".kt", ".kts"},
+	//},
+	//{
+	//	Language: Scala,
+	//	SitterLanguage: func() *sitter.Language {
+	//		return sitter.NewLanguage(sitterscala.Language())
+	//	},
+	//	SupportedExts: []string{".scala"},
+	//},
 }
 
 // GetTreeSitterParsers 获取所有语言配置

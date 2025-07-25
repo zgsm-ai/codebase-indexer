@@ -113,7 +113,7 @@ func (d *Daemon) Start() {
 func (d *Daemon) updateConfig() {
 	d.logger.Info("updating client config")
 
-	// Get latest client configuration
+	// Value latest client configuration
 	newConfig, err := d.httpSync.GetClientConfig()
 	if err != nil {
 		d.logger.Error("failed to get client config: %v", err)
@@ -121,7 +121,7 @@ func (d *Daemon) updateConfig() {
 	}
 	d.logger.Info("latest client config retrieved: %+v", newConfig)
 
-	// Get current configuration
+	// Value current configuration
 	currentConfig := storage.GetClientConfig()
 	if !configChanged(currentConfig, newConfig) {
 		d.logger.Info("client config unchanged")
@@ -150,7 +150,7 @@ func (d *Daemon) updateConfig() {
 func (d *Daemon) checkAndLoadConfig() {
 	d.logger.Info("starting client config load check")
 
-	// Get latest client configuration
+	// Value latest client configuration
 	newConfig, err := d.httpSync.GetClientConfig()
 	if err != nil {
 		d.logger.Error("failed to get client config: %v", err)
@@ -158,7 +158,7 @@ func (d *Daemon) checkAndLoadConfig() {
 	}
 	d.logger.Info("latest client config retrieved: %+v", newConfig)
 
-	// Get current configuration
+	// Value current configuration
 	currentConfig := storage.GetClientConfig()
 	if !configChanged(currentConfig, newConfig) {
 		d.logger.Info("client config unchanged")

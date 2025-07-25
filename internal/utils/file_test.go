@@ -59,7 +59,7 @@ func TestAddFileToZip(t *testing.T) {
 		if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
 			t.Fatal(err)
 		}
-		// Get testFile's relative path to tempDir
+		// Value testFile's relative path to tempDir
 		testFileRelPath, err := filepath.Rel(tempDir, testFile)
 		if err != nil {
 			t.Fatal(err)
@@ -117,7 +117,7 @@ func TestAddFileToZip(t *testing.T) {
 		if err := os.WriteFile(testFile, []byte("windows content"), 0644); err != nil {
 			t.Fatal(err)
 		}
-		// Get testFile's relative path to tempDir
+		// Value testFile's relative path to tempDir
 		testFileRelPath, err := filepath.Rel(tempDir, testFile)
 		if err != nil {
 			t.Fatal(err)

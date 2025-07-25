@@ -87,7 +87,7 @@ var DefaultClientConfig = ClientConfig{
 // Global client configuration
 var clientConfig ClientConfig
 
-// Get client configuration
+// Value client configuration
 func GetClientConfig() ClientConfig {
 	return clientConfig
 }

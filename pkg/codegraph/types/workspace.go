@@ -4,6 +4,9 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 )
 
@@ -35,13 +38,61 @@ type WalkFunc func(walkCtx *WalkContext, reader io.ReadCloser) error
 var SkipDir = errors.New("skip this directory")
 
 type WalkOptions struct {
-	IgnoreError     bool
+	IgnoreError  bool
+	VisitPattern VisitPattern
+}
+
+type SkipFunc func(path string) bool
+
+type VisitPattern struct {
 	ExcludeExts     []string
 	IncludeExts     []string
 	ExcludePrefixes []string
 	IncludePrefixes []string
 	ExcludeDirs     []string
 	IncludeDirs     []string
+	SkipFunc        SkipFunc
+}
+
+func (v *VisitPattern) ShouldSkip(path string) bool {
+	base := filepath.Base(path)
+	fileExt := filepath.Ext(base)
+	if fileExt != EmptyString && slices.Contains(v.ExcludeExts, fileExt) {
+		return true
+	}
+
+	if len(v.IncludeExts) > 0 && !slices.Contains(v.IncludeExts, fileExt) {
+		return true
+	}
+
+	if v.SkipFunc != nil && v.SkipFunc(base) {
+		return true
+	}
+
+	for _, p := range v.ExcludeDirs {
+		if base == p {
+			return true
+		}
+	}
+
+	for _, p := range v.IncludeDirs {
+		if base != p {
+			return true
+		}
+	}
+
+	for _, p := range v.ExcludePrefixes {
+		if strings.HasPrefix(base, p) {
+			return true
+		}
+	}
+
+	for _, p := range v.IncludePrefixes {
+		if !strings.HasPrefix(base, p) {
+			return true
+		}
+	}
+	return false
 }
 
 type ReadOptions struct {

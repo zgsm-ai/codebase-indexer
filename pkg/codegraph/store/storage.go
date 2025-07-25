@@ -7,11 +7,15 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// TODO 使用项目名+路径hash作为项目索引的目录
+
 type GraphStorage interface {
-	Put(ctx context.Context, key string, value proto.Message) error
-	Get(ctx context.Context, key string) (proto.Message, error)
-	Delete(ctx context.Context, key string) error
-	Iter(ctx context.Context) Iterator
+	BatchSave(ctx context.Context, projectUuid string, values Values) error
+	Save(ctx context.Context, projectUuid string, value proto.Message) error
+	Get(ctx context.Context, projectUuid string, key Key) (proto.Message, error)
+	Delete(ctx context.Context, projectUuid string, key Key) error
+	Iter(ctx context.Context, projectUuid string) Iterator
+	Size(ctx context.Context, projectUuid string) int
 	Close() error
 }
 
@@ -34,15 +38,37 @@ type Iterator interface {
 }
 
 const (
-	pathPrefix = "path:"
-	symPrefix  = "sym:"
+	pathPrefix = "path"
+	symPrefix  = "sym"
 )
 
-// PathKey 键生成函数  unix path
-func PathKey(path string) []byte {
-	return []byte(fmt.Sprintf("%s%s", pathPrefix, utils.ToUnixPath(path)))
+//// PathKey 键生成函数  unix path
+//func PathKey(path string) string {
+//	return fmt.Sprintf("%s:%s", pathPrefix, utils.ToUnixPath(path))
+//}
+//
+//func SymbolKey(symbol string) string {
+//	return fmt.Sprintf("%s:%s", symPrefix, symbol)
+//}
+
+type Key interface {
+	Get() string
 }
 
-func SymbolKey(symbol string) []byte {
-	return []byte(fmt.Sprintf("%s%s", symPrefix, symbol))
+type PathKey string
+
+func (p PathKey) Get() string {
+	return fmt.Sprintf("%s:%s", pathPrefix, utils.ToUnixPath(string(p)))
+}
+
+type SymbolKey string
+
+func (s SymbolKey) Get() string {
+	return fmt.Sprintf("%s:%s", symPrefix, string(s))
+}
+
+type Values interface {
+	Len() int
+	Value(i int) proto.Message
+	Key(i int) string
 }
