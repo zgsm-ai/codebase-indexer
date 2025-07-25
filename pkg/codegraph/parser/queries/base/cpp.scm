@@ -88,7 +88,7 @@
 ) @definition.field
 
 
-        
+
 
 
 ;; Union declarations
@@ -142,6 +142,7 @@
 ;;-----------------------函数/方法定义----------------------------
 ;; 返回值不带指针和引用的基础函数定义
 (function_definition
+  type: (_) @definition.function.return_type
   declarator: (function_declarator
     declarator: (identifier) @definition.function.name
     parameters: (parameter_list) @definition.function.parameters

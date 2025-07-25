@@ -4,7 +4,6 @@ import (
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -24,9 +23,6 @@ func (j *JavaResolver) resolveImport(ctx context.Context, element *Import, rc *R
 
 	rootCap := rc.Match.Captures[0]
 	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
-
-	var importName string
-	// 获取import name
 	for _, cap := range rc.Match.Captures {
 		captureName := rc.CaptureNames[cap.Index]
 		if cap.Node.IsMissing() || cap.Node.IsError() {
@@ -35,21 +31,12 @@ func (j *JavaResolver) resolveImport(ctx context.Context, element *Import, rc *R
 		content := cap.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(captureName) {
 		case types.ElementTypeImportName:
-			importName = content
+			element.BaseElement.Name = content
 		}
 	}
 	// 处理类导入
 	elements := []Element{element}
 	element.BaseElement.Scope = types.ScopePackage
-	element.BaseElement.Name = importName
-
-	// 处理静态导入，有则会移除，没有就不会动
-	element.BaseElement.Name = strings.TrimPrefix(importName, "static ")
-	// 处理包导入
-	if strings.HasSuffix(importName, ".*") {
-		element.BaseElement.Name = strings.ReplaceAll(strings.TrimSuffix(importName, ".*"), ".", "/")
-		return elements, nil
-	}
 	return elements, nil
 }
 
@@ -91,7 +78,8 @@ func (j *JavaResolver) resolveMethod(ctx context.Context, element *Method, rc *R
 		case types.ElementTypeMethodModifier:
 			element.Declaration.Modifier = getElementModifier(content)
 		case types.ElementTypeMethodName:
-			element.BaseElement.Name = content
+			element.BaseElement.Name = strings.TrimSpace(content)
+			element.Declaration.Name = element.BaseElement.Name
 		case types.ElementTypeMethodReturnType:
 			element.Declaration.ReturnType = getFilteredTypes(content)
 		case types.ElementTypeMethodParameters:
@@ -410,9 +398,17 @@ func parseParameters(content string) []Parameter {
 }
 
 func parseSingleParameter(paramStr string) Parameter {
-	// 去掉注解
-	paramStr = regexp.MustCompile(`@\w+\s+`).ReplaceAllString(paramStr, "")
+	// 过滤修饰符在CleanParam里面做完了
 	// 拆分类型和名称
+	// 解析如下三种参数格式，提取类型和名称，忽略默认值：
+	// 1. std::vector<int>& scores      => 类型: std::vector<int>&, 名称: scores
+	// 2. int rank = 1                  => 类型: int, 名称: rank
+	// 3. double bonus = 0.0            => 类型: double, 名称: bonus
+	// 实现：先去除=及其后面的默认值，再用空格分割，最后一个为名称，其余为类型
+	if idx := strings.Index(paramStr, "="); idx != -1 {
+		paramStr = paramStr[:idx]
+	}
+	paramStr = strings.TrimSpace(paramStr)
 	parts := strings.Fields(paramStr)
 	// if len(parts) < 2 {
 	// 	// 可能是省略了参数名，可特殊处理 或 报错 日志？
@@ -481,6 +477,12 @@ func getScopeFromModifiers(modifiers string, kind types.NodeKind) types.Scope {
 		return types.ScopeProject
 	case types.NodeKindEnumDeclaration:
 		return types.ScopePackage
+
+		//c++的访问修饰符
+	case types.NodeKindStructSpecifier:
+		return types.ScopeProject
+	case types.NodeKindClassSpecifier:
+		return types.ScopeClass
 	default:
 		return types.ScopePackage
 	}
@@ -605,8 +607,8 @@ func findMethodOwner(node *sitter.Node) *sitter.Node {
 	for current != nil {
 		kind := current.Kind()
 		switch types.ToNodeKind(kind) {
-		// 找到类或接口声明，返回当前节点
-		case types.NodeKindClassDeclaration:
+		// 找到类、接口、方法声明，返回当前节点（支持java、c、cpp）
+		case types.NodeKindClassDeclaration, types.NodeKindClassSpecifier, types.NodeKindStructSpecifier:
 			return current
 		// 找到接口声明，返回当前节点
 		case types.NodeKindInterfaceDeclaration:
@@ -628,7 +630,7 @@ func extractNodeName(node *sitter.Node, content []byte) string {
 	for i := uint(0); i < node.ChildCount(); i++ {
 		child := node.Child(i)
 		kind := types.ToNodeKind(child.Kind())
-		if kind == types.NodeKindIdentifier {
+		if kind == types.NodeKindIdentifier || kind == types.NodeKindTypeIdentifier {
 			return child.Utf8Text(content)
 		}
 	}
@@ -671,6 +673,9 @@ func getFilteredTypes(typ string) []string {
 
 // 提取参数字符串并过滤类型
 func getFilteredParameters(paramStr string) []Parameter {
+	// 删除一些影响解析的修饰符
+	paramStr = CleanParam(paramStr)
+	// 提取参数
 	params := ExtractParameters(paramStr)
 	for i, param := range params {
 		params[i].Type = types.FilterCustomTypes(param.Type)

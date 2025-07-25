@@ -1241,33 +1241,20 @@ func createReferenceElement(refType string, node *sitter.Node, elementID uint32,
 // isPrimitiveType 检查类型名称是否为Go基本数据类型
 func isPrimitiveType(typeName string) bool {
 	// 去除可能的数组、切片或指针标记
-	cleanType := strings.TrimPrefix(strings.TrimPrefix(typeName, "[]"), "*")
+	cleanType := strings.ToLower(typeName)
 
 	// Go基本数据类型列表
-	primitiveTypes := map[string]bool{
-		// 布尔型
-		"bool": true,
-
-		// 整型
-		"int": true, "int8": true, "int16": true, "int32": true, "int64": true,
-		"uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true,
-		"uintptr": true,
-
-		// 浮点型
-		"float32": true, "float64": true,
-
-		// 复数型
-		"complex64": true, "complex128": true,
-
-		// 别名
-		"byte": true, "rune": true,
-
-		// 字符串
-		"string": true,
-
-		// 空接口类型（常作为动态类型使用）
-		"any": true, "interface{}": true,
+	primitiveTypes := []string{
+		"bool", "int", "int8", "int16", "int32", "int64",
+		"uint", "uint8", "uint16", "uint32", "uint64", "uintptr",
+		"float32", "float64", "complex64", "complex128",
+		"byte", "rune", "string", "any", "interface{}",
 	}
 
-	return primitiveTypes[cleanType]
+	for _, t := range primitiveTypes {
+		if strings.Contains(cleanType, t) {
+			return true
+		}
+	}
+	return false
 }

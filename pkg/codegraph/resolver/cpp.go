@@ -30,19 +30,10 @@ func (c *CppResolver) resolveImport(ctx context.Context, element *Import, rc *Re
 		switch types.ToElementType(captureName) {
 		case types.ElementTypeImportName:
 			// 容错处理，出现空格，语法会报错，但也应该能解析
-			element.Name = strings.TrimSpace(content)
+			element.BaseElement.Name = content
 		}
 	}
-
-	importName := element.Name
-
-	elements := []Element{element}
-
-	// 处理系统头文件
-	if strings.HasPrefix(importName, "<") && strings.HasSuffix(importName, ">") {
-		return elements, nil // 系统头文件，不映射到项目文件
-	}
-	return elements, nil
+	return []Element{element}, nil
 }
 
 func (c *CppResolver) resolvePackage(ctx context.Context, element *Package, rc *ResolveContext) ([]Element, error) {
@@ -69,6 +60,7 @@ func (c *CppResolver) resolveFunction(ctx context.Context, element *Function, rc
 			element.Declaration.Parameters = getFilteredParameters(content)
 		}
 	}
+	element.BaseElement.Scope = types.ScopeProject
 	return []Element{element}, nil
 }
 
@@ -107,7 +99,7 @@ func (c *CppResolver) resolveMethod(ctx context.Context, element *Method, rc *Re
 
 func (c *CppResolver) resolveClass(ctx context.Context, element *Class, rc *ResolveContext) ([]Element, error) {
 	//TODO implement me
-	return nil,fmt.Errorf("not support class")
+	return nil, fmt.Errorf("not support class")
 }
 
 func (c *CppResolver) resolveVariable(ctx context.Context, element *Variable, rc *ResolveContext) ([]Element, error) {
@@ -122,11 +114,11 @@ func (c *CppResolver) resolveVariable(ctx context.Context, element *Variable, rc
 		}
 		content := cap.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(captureName) {
-		case types.ElementTypeVariableName,types.ElementTypeFieldName:
+		case types.ElementTypeVariableName, types.ElementTypeFieldName:
 			element.BaseElement.Name = CleanParam(content)
-		case types.ElementTypeVariableType,types.ElementTypeFieldType:
+		case types.ElementTypeVariableType, types.ElementTypeFieldType:
 			element.VariableType = getFilteredTypes(content)
-		case types.ElementTypeVariableValue,types.ElementTypeFieldValue:
+		case types.ElementTypeVariableValue, types.ElementTypeFieldValue:
 			// 有可能是字面量，也有可能是类和结构体的创建，和方法调用
 			// 只能处理一个 new 的创建
 			// 字面量不处理，方法调用由resolveCall处理，只处理类的创建
@@ -158,7 +150,7 @@ func (c *CppResolver) resolveVariable(ctx context.Context, element *Variable, rc
 
 func (c *CppResolver) resolveInterface(ctx context.Context, element *Interface, rc *ResolveContext) ([]Element, error) {
 	//TODO implement me
-	return nil,fmt.Errorf("not support interface")
+	return nil, fmt.Errorf("not support interface")
 }
 
 func (c *CppResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
@@ -171,13 +163,13 @@ func (c *CppResolver) resolveCall(ctx context.Context, element *Call, rc *Resolv
 		}
 		content := cap.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(captureName) {
-		case types.ElementTypeFunctionCallName,types.ElementTypeCallName:
+		case types.ElementTypeFunctionCallName, types.ElementTypeCallName:
 			element.BaseElement.Name = strings.TrimSpace(content)
-		case types.ElementTypeFunctionOwner,types.ElementTypeCallOwner:
+		case types.ElementTypeFunctionOwner, types.ElementTypeCallOwner:
 			element.Owner = strings.TrimSpace(content)
-		case types.ElementTypeFunctionArguments,types.ElementTypeCallArguments:
+		case types.ElementTypeFunctionArguments, types.ElementTypeCallArguments:
 			// 暂时只保留name，参数类型先不考虑
-			for i:=uint(0);i<cap.Node.NamedChildCount();i++{
+			for i := uint(0); i < cap.Node.NamedChildCount(); i++ {
 				arg := cap.Node.NamedChild(i)
 				argContent := arg.Utf8Text(rc.SourceFile.Content)
 				element.Parameters = append(element.Parameters, &Parameter{
@@ -217,5 +209,3 @@ func findAccessSpecifier(node *sitter.Node, content []byte) string {
 	// 3. 这里不给默认修饰符
 	return types.EmptyString
 }
-
-

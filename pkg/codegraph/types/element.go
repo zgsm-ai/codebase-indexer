@@ -87,7 +87,7 @@ const (
 	ElementTypeField               ElementType = "definition.field"
 	ElementTypeFieldName           ElementType = "definition.field.name"
 	ElementTypeFieldType           ElementType = "definition.field.type"
-	ElementTypeFieldValue          ElementType = "definition.field.value"	
+	ElementTypeFieldValue          ElementType = "definition.field.value"
 	ElementTypeFieldModifier       ElementType = "definition.field.modifier"
 	ElementTypeParameter           ElementType = "definition.parameter"
 	ElementTypeComment             ElementType = "comment"
@@ -126,10 +126,10 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeFunction):            ElementTypeFunction,
 	string(ElementTypeFunctionName):        ElementTypeFunctionName,
 	string(ElementTypeFunctionParameters):  ElementTypeFunctionParameters,
+	string(ElementTypeFunctionReturnType):  ElementTypeFunctionReturnType,
 	string(ElementTypeFunctionCall):        ElementTypeFunctionCall,
 	string(ElementTypeFunctionCallName):    ElementTypeFunctionCallName,
 	string(ElementTypeFunctionOwner):       ElementTypeFunctionOwner,
-	string(ElementTypeFunctionReturnType):  ElementTypeFunctionReturnType,
 	string(ElementTypeFunctionArguments):   ElementTypeFunctionArguments,
 	string(ElementTypeFunctionDeclaration): ElementTypeFunctionDeclaration,
 	string(ElementTypeMethod):              ElementTypeMethod,
@@ -278,7 +278,7 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindPrivatePropertyIdentifier):          NodeKindPrivatePropertyIdentifier,
 	string(NodeKindArrowFunction):                      NodeKindArrowFunction,
 	string(NodeKindMemberExpression):                   NodeKindMemberExpression,
-	string(NodeKindNewExpression):                      NodeKindNewExpression,	
+	string(NodeKindNewExpression):                      NodeKindNewExpression,
 	string(NodeKindObject):                             NodeKindObject,
 	string(NodeKindArrayPattern):                       NodeKindArrayPattern,
 	string(NodeKindObjectPattern):                      NodeKindObjectPattern,

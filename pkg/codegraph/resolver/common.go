@@ -117,8 +117,6 @@ func CleanParam(param string) string {
 	}
 	return param
 }
-
-
 func updateElementRange(element Element, capture *sitter.QueryCapture) {
 	element.SetRange([]int32{
 		int32(capture.Node.StartPosition().Row),

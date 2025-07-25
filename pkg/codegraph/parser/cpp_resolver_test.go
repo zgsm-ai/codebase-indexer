@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"codebase-indexer/pkg/codegraph/resolver"
 	"context"
 	"fmt"
 	"regexp"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"codebase-indexer/pkg/codegraph/resolver"
 	"codebase-indexer/pkg/codegraph/types"
 )
 
@@ -116,7 +116,168 @@ using myns::MyClass2;
 }
 
 func TestCPPResolver_ResolveFunction(t *testing.T) {
+	logger := initLogger()
+	parser := NewSourceFileParser(logger)
 
+	testCases := []struct {
+		name        string
+		sourceFile  *types.SourceFile
+		wantErr     error
+		wantFuncs   []resolver.Declaration
+		description string
+	}{
+		{
+			name: "testfunc.cpp 全部函数声明解析",
+			sourceFile: &types.SourceFile{
+				Path:    "testdata/testfunc.cpp",
+				Content: readFile("testdata/testfunc.cpp"),
+			},
+			wantErr: nil,
+			wantFuncs: []resolver.Declaration{
+				// 基本类型
+				{Name: "getInt", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+				{Name: "doNothing", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+				{Name: "getFloat", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+
+				// 指针和引用
+				{Name: "getBuffer", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
+					{Name: "count", Type: []string{types.PrimitiveType}},
+				}},
+				{Name: "getNameRef1", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+				{Name: "getNameRef2", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+
+				// 标准模板容器
+				{Name: "getVector", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+				{Name: "getMap", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+
+				// 嵌套模板类型
+				{Name: "getComplexMap", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+
+				// 自定义模板类型
+				{Name: "getBox", ReturnType: []string{"Box"}, Parameters: []resolver.Parameter{}},
+				{Name: "getBoxOfVector", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+				{
+					Name:       "getComplexMap1",
+					ReturnType: []string{types.PrimitiveType},
+					Parameters: []resolver.Parameter{
+						{Name: "simpleMap", Type: []string{types.PrimitiveType}},
+						{Name: "names", Type: []string{types.PrimitiveType}},
+						{Name: "key", Type: []string{types.PrimitiveType}},
+						{Name: "count", Type: []string{types.PrimitiveType}},
+					},
+				},
+
+				// pair 和 tuple 类型
+				{Name: "getPair", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+				{Name: "getTuple", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
+					{Name: "count", Type: []string{types.PrimitiveType}}, // 有默认值，断言类型即可
+				}},
+
+				// auto 和 decltype
+				{Name: "getAutoValue", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+				// {Name: "getAnotherInt", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+
+				// 带默认参数和命名空间返回值
+				{Name: "getNames", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
+					{Name: "count", Type: []string{types.PrimitiveType}}, // 有默认值，断言类型即可
+				}},
+
+				// 带 const 和 noexcept 的返回值
+				{Name: "getConstVector", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+
+				// 你补充的 15+ 个函数
+				{Name: "func0", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+				{Name: "func1", ReturnType: []string{"MyClass"}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{"MyStruct"}},
+					{Name: "arg2", Type: []string{types.PrimitiveType}},
+				}},
+				// 泛型函数模板参数名可用T，参数名可用arg1、arg2
+				{Name: "func2", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{types.PrimitiveType}},
+				}},
+				{Name: "func3", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{types.PrimitiveType}},
+					{Name: "arg2", Type: []string{types.PrimitiveType}},
+				}},
+				{Name: "func4", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+				{Name: "func5", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{types.PrimitiveType}},
+				}},
+				{Name: "func6", ReturnType: []string{"MyStruct"}, Parameters: []resolver.Parameter{}},
+				{Name: "func7", ReturnType: []string{"MyClass"}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{"MyClass"}},
+					{Name: "arg2", Type: []string{types.PrimitiveType}},
+				}},
+				{Name: "func8", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{types.PrimitiveType}},
+				}},
+				{Name: "func9", ReturnType: []string{"MyClass"}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{types.PrimitiveType}},
+					{Name: "arg2", Type: []string{"MyClass"}},
+				}},
+				{Name: "func10", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+				{Name: "func11", ReturnType: []string{"MyClass"}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{"MyStruct"}},
+				}},
+				{Name: "func12", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{types.PrimitiveType}},
+					{Name: "arg2", Type: []string{types.PrimitiveType}},
+				}},
+				{Name: "func13", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+				{Name: "func14", ReturnType: []string{"MyClass"}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{"MyClass"}},
+					{Name: "arg2", Type: []string{types.PrimitiveType}},
+				}},
+				{Name: "func15", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+				{Name: "func16", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{types.PrimitiveType}},
+					{Name: "arg2", Type: []string{types.PrimitiveType}},
+				}},
+				{Name: "func17", ReturnType: []string{"MyStruct"}, Parameters: []resolver.Parameter{}},
+				{Name: "func18", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{types.PrimitiveType}},
+				}},
+				{Name: "func19", ReturnType: []string{"MyClass"}, Parameters: []resolver.Parameter{}},
+			},
+			description: "测试 testfunc.cpp 中所有函数声明的解析",
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := parser.Parse(context.Background(), tt.sourceFile)
+			assert.ErrorIs(t, err, tt.wantErr)
+			assert.NotNil(t, res)
+
+			if err == nil {
+				// 1. 收集所有函数（不考虑重载，直接用名字做唯一键）
+				funcMap := make(map[string]*resolver.Declaration)
+				for _, element := range res.Elements {
+					if fn, ok := element.(*resolver.Function); ok {
+						funcMap[fn.Declaration.Name] = &fn.Declaration
+					}
+				}
+				// 2. 逐个比较每个期望的函数
+				for _, wantFunc := range tt.wantFuncs {
+					actualFunc, exists := funcMap[wantFunc.Name]
+					assert.True(t, exists, "未找到函数: %s", wantFunc.Name)
+					if exists {
+						assert.Equal(t, wantFunc.ReturnType, actualFunc.ReturnType,
+							"函数 %s 的返回值类型不匹配，期望 %v，实际 %v",
+							wantFunc.Name, wantFunc.ReturnType, actualFunc.ReturnType)
+						assert.Equal(t, len(wantFunc.Parameters), len(actualFunc.Parameters),
+							"函数 %s 的参数数量不匹配，期望 %d，实际 %d",
+							wantFunc.Name, len(wantFunc.Parameters), len(actualFunc.Parameters))
+						for i, wantParam := range wantFunc.Parameters {
+							assert.Equal(t, wantParam.Type, actualFunc.Parameters[i].Type,
+								"函数 %s 的第 %d 个参数类型不匹配，期望 %v，实际 %v",
+								wantFunc.Name, i+1, wantParam.Type, actualFunc.Parameters[i].Type)
+						}
+					}
+				}
+			}
+		})
+	}
 }
 
 func TestCPPResolver_ResolveCall(t *testing.T) {
@@ -148,12 +309,12 @@ func TestCPPResolver_ResolveCall(t *testing.T) {
 		{"freeFunction", "", 3},          // Free function call (int, double, char)
 		{"nsFunction", "MyNamespace", 3}, // Namespace function call (int, int, int)
 		{"memberFunction", "obj", 2},     // Object member function call (int, double)
-		{"memberFunction1", "ptr", 3},     // Pointer member function call (int, double)
+		{"memberFunction1", "ptr", 3},    // Pointer member function call (int, double)
 		{"staticFunction", "MyClass", 2}, // Static member function call (int, int)
 		{"templatedFunction", "", 4},     // Template function call (4 args via generic lambda)
 		{"lambda", "", 3},                // Lambda function call (int, int, int)
 		{"fp", "", 3},                    // Function pointer call (int, double, char)
-		{"obj", "", 4},                     // Function object call (int, int, int, int)
+		{"obj", "", 4},                   // Function object call (int, int, int, int)
 		{"append", "str", 2},             // Method chaining (first call) (const char*, size_t)
 		{"at", "", 1},                    // Method chaining (second call) (size_t)
 	}
@@ -185,7 +346,6 @@ func TestCPPResolver_ResolveCall(t *testing.T) {
 func TestCPPResolver_ResolveVariable(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-
 	sourceFile := &types.SourceFile{
 		Path:    "testdata/testvar.cpp",
 		Content: readFile("testdata/testvar.cpp"),
@@ -211,7 +371,7 @@ func TestCPPResolver_ResolveVariable(t *testing.T) {
 		{Name: "value", Type: []string{types.PrimitiveType}},
 		{Name: "a", Type: []string{types.PrimitiveType}},
 		{Name: "b", Type: []string{types.PrimitiveType}},
-		{Name: "c",Type: []string{types.PrimitiveType}},
+		{Name: "c", Type: []string{types.PrimitiveType}},
 		{Name: "raw_ptr", Type: []string{types.PrimitiveType}},
 		{Name: "raw_ptr2", Type: []string{types.PrimitiveType}},
 		{Name: "ref_a", Type: []string{types.PrimitiveType}},
@@ -264,7 +424,7 @@ func TestCPPResolver_ResolveVariable(t *testing.T) {
 		{Name: "loop_k", Type: []string{types.PrimitiveType}},
 		{Name: "loop_u", Type: []string{types.PrimitiveType}},
 		{Name: "loop_v", Type: []string{types.PrimitiveType}},
-		{Name: "temp_pt", Type: []string{"TempPoint"}},	
+		{Name: "temp_pt", Type: []string{"TempPoint"}},
 	}
 
 	for _, want := range typicalVars {
@@ -275,9 +435,6 @@ func TestCPPResolver_ResolveVariable(t *testing.T) {
 		}
 	}
 }
-
-
-
 
 func TestCPPResolver_ResolveStruct(t *testing.T) {
 	param := `

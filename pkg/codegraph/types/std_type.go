@@ -13,7 +13,6 @@ var javaStdTypes = map[string]struct{}{
 	// java基本数据类型
 	"int": {}, "boolean": {}, "void": {},
 	"byte": {}, "short": {}, "char": {}, "long": {}, "float": {}, "double": {},
-
 	// c++的
 	"vector": {}, "map": {}, "set": {}, "list": {}, "queue": {}, "stack": {}, "deque": {}, "priority_queue": {},
 	"pair": {}, "tuple": {}, "auto": {}, "decltype": {}, "function": {}, "lambda": {}, "bind": {}, "reference": {},
@@ -75,7 +74,7 @@ var javaStdTypes = map[string]struct{}{
 	"char16_t": {}, "char32_t": {},
 	"long long": {},
 	"unsigned":  {}, "unsigned int": {}, "unsigned short": {}, "unsigned long": {}, "unsigned long long": {},
-	"long double": {},"T":{},
+	"long double": {}, "T": {},
 }
 
 // FilterCustomTypes 过滤类型名切片，只保留用户自定义类型
