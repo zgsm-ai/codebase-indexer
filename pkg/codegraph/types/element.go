@@ -39,6 +39,7 @@ const (
 	ElementTypeClass               ElementType = "definition.class"
 	ElementTypeClassName           ElementType = "definition.class.name"
 	ElementTypeClassExtends        ElementType = "definition.class.extends"
+	ElementTypeClassExtendsName    ElementType = "definition.class.extends.name"
 	ElementTypeClassImplements     ElementType = "definition.class.implements"
 	ElementTypeClassModifiers      ElementType = "definition.class.modifiers"
 	ElementTypeInterface           ElementType = "definition.interface"
@@ -48,6 +49,7 @@ const (
 	ElementTypeInterfaceModifiers  ElementType = "definition.interface.modifiers"
 	ElementTypeStruct              ElementType = "definition.struct"
 	ElementTypeStructName          ElementType = "definition.struct.name"
+	ElementTypeStructExtends       ElementType = "definition.struct.extends"
 	ElementTypeStructType          ElementType = "definition.struct.type"
 	ElementTypeEnum                ElementType = "definition.enum"
 	ElementTypeUnion               ElementType = "definition.union"
@@ -111,6 +113,7 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeClassName):           ElementTypeClassName,
 	string(ElementTypeInterfaceType):       ElementTypeInterfaceType,
 	string(ElementTypeClassExtends):        ElementTypeClassExtends,
+	string(ElementTypeClassExtendsName):    ElementTypeClassExtendsName,
 	string(ElementTypeClassImplements):     ElementTypeClassImplements,
 	string(ElementTypeClassModifiers):      ElementTypeClassModifiers,
 	string(ElementTypeInterface):           ElementTypeInterface,
@@ -120,6 +123,7 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeStruct):              ElementTypeStruct,
 	string(ElementTypeStructName):          ElementTypeStructName,
 	string(ElementTypeStructType):          ElementTypeStructType,
+	string(ElementTypeStructExtends):       ElementTypeStructExtends,
 	string(ElementTypeEnum):                ElementTypeEnum,
 	string(ElementTypeUnion):               ElementTypeUnion,
 	string(ElementTypeTrait):               ElementTypeTrait,

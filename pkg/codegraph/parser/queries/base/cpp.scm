@@ -11,13 +11,19 @@
   name: (namespace_identifier) @namespace.name
   ) @namespace
 
-;; Class declarations
+;; ----------------------------类的声明-------------------------------
 (class_specifier
-  name: (type_identifier) @definition.class.name) @definition.class
+  name: (type_identifier) @definition.class.name
+  (base_class_clause)? @definition.class.extends
+) @definition.class
+
+
 
 ;; Struct declarations
 (struct_specifier
-  name: (type_identifier) @definition.struct.name) @definition.struct
+  name: (type_identifier) @definition.struct.name
+  (base_class_clause)? @definition.struct.extends
+)@definition.struct
 
 ;; ------------------------------变量声明----------------------------------
 ;; Variable declarations (keep as declaration)

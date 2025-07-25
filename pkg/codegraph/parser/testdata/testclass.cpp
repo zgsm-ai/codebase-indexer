@@ -1,0 +1,212 @@
+#include <vector>
+#include <optional>
+#include <memory>
+#include <iostream>
+#include <math.h>
+class Animal {
+private:
+    std::string name;
+    int age;
+
+public:
+    Animal(const std::string& name, int age) : name(name), age(age) {}
+    
+    std::string getName() const { return name; }
+    virtual void speak() const { std::cout << "Animal sound\n"; }
+};
+class Shape {
+public:
+    virtual double area() const = 0;      // 纯虚函数
+    virtual double perimeter() const = 0;
+    virtual ~Shape() {}
+};
+
+class Circle : public Shape {
+private:
+    double radius;
+
+public:
+    Circle(double r) : radius(r) {}
+
+    double area() const override {
+        return 3.14159 * radius * radius;
+    }
+
+    double perimeter() const override {
+        return 2 * 3.14159 * radius;
+    }
+};
+class Flyable {
+public:
+    virtual void fly() const = 0;
+};
+
+class Swimmable {
+public:
+    virtual void swim() const = 0;
+};
+
+class Duck : public Animal, Flyable, private Swimmable {
+public:
+    Duck(const std::string& name, int age) : Animal(name, age) {}
+
+    void speak() const override {
+        std::cout << "Quack!\n";
+    }
+
+    void fly() const override {
+        std::cout << "Duck is flying\n";
+    }
+
+    void swim() const override {
+        std::cout << "Duck is swimming\n";
+    }
+};
+class Outer {
+public:
+    int outerValue;
+
+    class Inner {
+    public:
+        int innerValue;
+        void show() {
+            std::cout << "Inner value\n";
+        }
+    };
+};
+template <typename T>
+class Box {
+protected:
+    T value;
+
+public:
+    Box(T val) : value(val) {}
+    virtual T getValue() const { return value; }
+};
+
+template <typename T>
+class LabeledBox : public Box<T> {
+private:
+    std::string label;
+
+public:
+    LabeledBox(T val, const std::string& lbl) : Box<T>(val), label(lbl) {}
+
+    std::string getLabel() const { return label; }
+};
+struct Point {
+    double x, y;
+
+    Point(double x = 0, double y = 0) : x(x), y(y) {}
+
+    virtual double distanceFromOrigin() const {
+        return std::sqrt(x * x + y * y);
+    }
+};
+
+struct ColoredPoint : public Point {
+    std::string color;
+
+    ColoredPoint(double x, double y, const std::string& c) : Point(x, y), color(c) {}
+
+    void print() const {
+        std::cout << "Point (" << x << ", " << y << ") Color: " << color << "\n";
+    }
+};
+
+
+class Config {
+private:
+    std::string filePath;
+    std::vector<std::pair<std::string, int>> settings;
+    std::unique_ptr<int> version;
+
+public:
+
+    void setFilePath(const std::string& path) {
+        filePath = path;
+    }
+
+    void addSetting(const std::string& key, int value) {
+        settings.emplace_back(key, value);
+    }
+};
+class MathUtil {
+public:
+    static constexpr double PI = 3.1415926;
+
+    static double square(double x) {
+        return x * x;
+    }
+
+    static double cube(double x) {
+        return x * x * x;
+    }
+};
+#include <iostream>
+
+class Logger {
+public:
+    void log(const std::string& message) const {
+        std::cout << "[LOG] " << message << std::endl;
+    }
+};
+
+class Serializable {
+public:
+    virtual std::string serialize() const = 0;
+};
+
+class User : public Logger, public Serializable {
+private:
+    std::string name;
+    int age;
+
+public:
+    User(const std::string& name, int age) : name(name), age(age) {}
+
+    std::string serialize() const override {
+        return "{ \"name\": \"" + name + "\", \"age\": " + std::to_string(age) + " }";
+    }
+
+    void printInfo() {
+        log("Serializing user...");
+        std::cout << serialize() << std::endl;
+    }
+};
+
+int main() {
+    User user("Alice", 30);
+    user.printInfo();
+}
+#include <iostream>
+
+struct Position {
+    double x = 0;
+    double y = 0;
+
+    void move(double dx, double dy) {
+        x += dx;
+        y += dy;
+    }
+};
+
+struct Drawable {
+    virtual void draw() const = 0;
+};
+
+struct Circle1 : public Position, public Drawable {
+    double radius = 1.0;
+    Circle1(double x, double y, double r) {
+        this->x = x;
+        this->y = y;
+        radius = r;
+    }
+
+    void draw() const override {
+        std::cout << "Drawing circle at (" << x << ", " << y << ") with radius " << radius << std::endl;
+    }
+};
+
+
+
