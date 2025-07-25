@@ -45,6 +45,9 @@ func newRootElement(elementTypeValue string, rootIndex uint32) resolver.Element 
 	case types.ElementTypeInterface:
 		base.Type = types.ElementTypeInterface
 		return &resolver.Interface{BaseElement: base}
+	case types.ElementTypeField:
+		base.Type = types.ElementTypeField
+		return &resolver.Variable{BaseElement: base}
 	case types.ElementTypeVariable:
 		base.Type = types.ElementTypeVariable
 		return &resolver.Variable{BaseElement: base}

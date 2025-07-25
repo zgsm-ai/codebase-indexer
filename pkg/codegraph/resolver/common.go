@@ -66,6 +66,7 @@ func updateRootElement(
 		rootElement.SetName(name)
 	}
 }
+
 // 清理参数字符串，支持cpp和java
 // (int const a,const int b,[[maybe_unused]] const std::string& name)
 // -> (int a, int b, std::string name)
@@ -104,5 +105,15 @@ func CleanParam(param string) string {
 	reQuestion := regexp.MustCompile(`\?`)
 	param = reQuestion.ReplaceAllString(param, "")
 
+	// 去除这种情况 struct TempPoint {
+	// int tx, ty;
+	// } temp_pt = {10, 20};
+	// 直接提取结构体名字
+	reStruct := regexp.MustCompile(`struct\s+(\w+)\s*\{`)
+	matches := reStruct.FindAllStringSubmatch(param, -1)
+
+	if len(matches) > 0 {
+		param = matches[0][1]
+	}
 	return param
 }

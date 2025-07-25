@@ -81,7 +81,7 @@ func (j *JavaResolver) resolveMethod(ctx context.Context, element *Method, rc *R
 			element.BaseElement.Name = strings.TrimSpace(content)
 			element.Declaration.Name = element.BaseElement.Name
 		case types.ElementTypeMethodReturnType:
-			element.Declaration.ReturnType = getFilteredReturnType(content)
+			element.Declaration.ReturnType = getFilteredTypes(content)
 		case types.ElementTypeMethodParameters:
 			element.Declaration.Parameters = getFilteredParameters(content)
 		}
@@ -163,7 +163,7 @@ func (j *JavaResolver) resolveClass(ctx context.Context, element *Class, rc *Res
 }
 
 func (j *JavaResolver) resolveVariable(ctx context.Context, element *Variable, rc *ResolveContext) ([]Element, error) {
-
+	// TODO 没考虑字段
 	var refs = []*Reference{}
 	rootCap := rc.Match.Captures[0]
 	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
@@ -434,6 +434,9 @@ func parseLocalVariableValue(node *sitter.Node, content []byte) string {
 		case types.NodeKindScopedTypeIdentifier:
 			// new com.example.test.Person("Alice", 30);
 			return child.Utf8Text(content)
+		case types.NodeKindQualifiedIdentifier:
+			// in = Outer::Inner{8}
+			return child.ChildByFieldName("name").Utf8Text(content)
 		}
 
 	}
@@ -660,9 +663,9 @@ func ExtractParameters(paramStr string) []Parameter {
 	return results
 }
 
-func getFilteredReturnType(returnType string) []string {
-	returnType = CleanParam(returnType)
-	typeNames := extractTypeNames(returnType)
+func getFilteredTypes(typ string) []string {
+	typ = CleanParam(typ)
+	typeNames := extractTypeNames(typ)
 	return types.FilterCustomTypes(typeNames)
 }
 

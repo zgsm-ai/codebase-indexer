@@ -19,15 +19,77 @@
 (struct_specifier
   name: (type_identifier) @definition.struct.name) @definition.struct
 
-
+;; ------------------------------变量声明----------------------------------
 ;; Variable declarations (keep as declaration)
+;; int x = 42;
 (declaration
-  declarator: (init_declarator
-                declarator: (identifier) @variable.name)) @variable
+  type: (_) @variable.type
+  declarator: [
+    ;; 有默认值：init_declarator 结构
+    (init_declarator
+      declarator: (identifier) @variable.name
+      value: (_)? @variable.value)
 
-;; Member variable declarations (keep as declaration)
+    ;; 没有默认值：裸 declarator（identifier）
+    (identifier) @variable.name
+  ]
+) @variable
+
+;; 指针类型
+(declaration
+  type: (_) @variable.type
+  declarator: [
+    ;; 有默认值
+    (init_declarator
+      declarator: (pointer_declarator
+                    declarator: (identifier) @variable.name)
+      value: (_)? @variable.value)
+
+    ;; 没有默认值
+    (pointer_declarator
+      declarator: (identifier) @variable.name)
+  ]
+) @variable
+;; 引用类型
+(declaration
+  type: (_)@variable.type
+  declarator: (init_declarator
+    declarator: (reference_declarator
+      (identifier) @variable.name)
+    value: (_) @variable.value)
+) @variable
+
+;; char buf[4] = "abc";
+(declaration
+  type: (_) @variable.type
+  declarator: [
+    ; 情形 A：有初始化
+    (init_declarator
+      declarator: (array_declarator
+        declarator: (identifier) @variable.name)
+      value: (_)? @variable.value)
+
+    ; 情形 B：没有初始化
+    (array_declarator
+      declarator: (identifier) @variable.name)
+  ]) @variable
+
+
+;; ------------------------字段声明--------------------------------
 (field_declaration
-  declarator: (field_identifier) @definition.field.name) @definition.field
+  type: (_) @definition.field.type
+  declarator: [
+    (field_identifier) @definition.field.name
+    (reference_declarator (field_identifier) @definition.field.name)
+    (pointer_declarator (field_identifier) @definition.field.name)
+    (array_declarator declarator: (field_identifier) @definition.field.name)
+  ]
+  default_value: (_) @definition.field.value ?
+) @definition.field
+
+
+        
+
 
 ;; Union declarations
 (union_specifier
@@ -45,7 +107,7 @@
 (type_definition
   declarator: (type_identifier) @definition.typedef.name) @definition.typedef
 
-;; -----------------------------函数的声明----------------------------------
+;; -----------------------------函数的声明，暂不考虑----------------------------------
 (declaration
   type: (_) @declaration.function.return_type
   declarator: (function_declarator
@@ -77,7 +139,7 @@
 
 
 
-
+;;-----------------------函数/方法定义----------------------------
 ;; 返回值不带指针和引用的基础函数定义
 (function_definition
   type: (_) @definition.function.return_type
@@ -120,22 +182,34 @@
 ) @definition.method
 
 
-
-;; TODO 对象.方法
+;; -----------------------------方法/函数调用-----------------------------
+;; TODO 对象.方法 对象->方法
 (call_expression
   function: (
               field_expression
-              argument: (identifier) @call.method.owner
+              argument: (_) @call.method.owner
               field: (field_identifier) @call.method.name
               )
   arguments: (argument_list) @call.method.arguments
   ) @call.method
 
-;; 函数调用
+;; add(a,b)
 (call_expression
-  function: (qualified_identifier
-              scope: (namespace_identifier) @call.function.namespace
-              name: (identifier) @call.function.name
-              )
+  function: (identifier) @call.function.name
   arguments: (argument_list) @call.function.arguments
-  ) @call.function
+  )@call.function
+
+; 匹配 std::max<int>(...) 或 ::ns::foo<T>(...)
+(call_expression
+  ; function 可能是 qualified_identifier
+  function: (qualified_identifier
+    scope: (_) @call.function.owner    ; <- 命名空间 / 类名
+    name: (_) @call.function.name)
+  arguments: (argument_list) @call.function.arguments
+) @call.function
+
+;; max<int>(1,2)
+(call_expression
+  function: (template_function name: (_) @call.function.name)
+  arguments: (argument_list) @call.function.arguments
+) @call.function
