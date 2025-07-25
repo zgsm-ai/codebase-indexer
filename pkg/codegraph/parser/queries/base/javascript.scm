@@ -5,13 +5,17 @@
   (import_clause
     (named_imports
       (import_specifier
-        name: (identifier) @import.name
+        name: (identifier)? @import.name
         alias: (identifier) * @import.alias
         )
       )
     ) *
+  (import_clause
+    (namespace_import
+      (identifier) @import.alias
+    )
+  ) *
   source: (string)* @import.source
-
   ) @import
 
 
@@ -21,6 +25,15 @@
   parameters: (formal_parameters) @definition.function.parameters
 
   ) @definition.function
+
+
+;; Object properties
+(pair
+  key: (property_identifier) @definition.function.name
+  value:(function_expression
+    parameters: (formal_parameters)@definition.function.parameters
+  )  
+) @definition.function
 
 ;; 函数、变量
 (variable_declarator
@@ -36,9 +49,7 @@
             (shorthand_property_identifier_pattern) @variable.name)]
     value: (_) @variable.value) @variable
 
-;; Object properties
-(pair
-  key: (property_identifier) @definition.property.name) @definition.property
+
 
 ;; Export declarations
 (export_statement
@@ -69,6 +80,11 @@
 
 ;; 函数调用
 (call_expression
-  function: [(member_expression) (identifier)] @call.function.name
+  function:  (identifier)@call.function.name
   arguments: (arguments) @call.function.arguments
   ) @call.function
+
+(call_expression
+  function: (member_expression)@call.method.name
+  arguments: (arguments) @call.method.arguments
+  ) @call.method

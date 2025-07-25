@@ -72,8 +72,8 @@ func TestFindProjects(t *testing.T) {
 			dir := createTestDir(t, tt.structure)
 			logger := &mocks.MockLogger{}
 			logger.On("Info", mock.Anything, mock.Anything).Return()
-			wr := NewWorkSpaceReader(dir, logger)
-			projects := wr.FindProjects()
+			wr := NewWorkSpaceReader(logger)
+			projects := wr.FindProjects(dir)
 			assert.Equal(t, tt.expectNum, len(projects))
 			for _, rel := range tt.expectHas {
 				var found bool

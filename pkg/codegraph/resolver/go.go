@@ -102,12 +102,6 @@ func (r *GoResolver) resolvePackage(ctx context.Context, element *Package, rc *R
 		return elements, nil
 	}
 
-	// 尝试查找包对应的所有Go文件
-	if rc.SourceFile != nil && rc.SourceFile.Path != "" {
-		// 已经在处理源文件，不需要额外操作
-		return elements, nil
-	}
-
 	return elements, nil
 }
 
@@ -689,8 +683,15 @@ func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc 
 			// 变量类型
 			variableType = content
 			element.Content = []byte(content)
-			// 设置 VariableType 字段
-			element.VariableType = []string{content}
+
+			// 检查是否为基本数据类型
+			if isPrimitiveType(content) {
+				// 设置为基本数据类型
+				element.VariableType = []string{types.PrimitiveType}
+			} else {
+				// 保持原有类型
+				element.VariableType = []string{content}
+			}
 
 		case strings.HasSuffix(nodeCaptureName, ".value"):
 			// 保存变量值
@@ -703,7 +704,7 @@ func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc 
 
 			// 变量值处理
 			// 使用processVariableValue函数处理引用类型
-			r.processVariableValue(&capture.Node, uint32(capture.Index), rc.SourceFile.Content, &references)
+			r.processVariableValue(&capture.Node, uint32(capture.Index), rc.SourceFile.Content, element.Path, &references)
 
 			// 如果需要额外处理（如更新范围和内容），可以在references最后一个元素上操作
 			if len(references) > 0 {
@@ -777,7 +778,7 @@ func (r *GoResolver) processMultipleVariableDeclaration(rootCapture treesitter.Q
 				element.Content = []byte(valueContent)
 
 				// 使用新函数处理引用类型
-				r.processVariableValue(valueNode, uint32(1000+currentVarIndex), rc.SourceFile.Content, references)
+				r.processVariableValue(valueNode, uint32(1000+currentVarIndex), rc.SourceFile.Content, element.Path, references)
 			}
 
 			// 为其他变量创建新的元素
@@ -795,7 +796,7 @@ func (r *GoResolver) processMultipleVariableDeclaration(rootCapture treesitter.Q
 
 				// 设置变量名称
 				newVariable.BaseElement.Name = nameNode.Utf8Text(rc.SourceFile.Content)
-
+				newVariable.BaseElement.Path = element.Path
 				// 设置类型和作用域
 				newVariable.Type = element.Type
 				newVariable.Scope = element.Scope
@@ -815,7 +816,7 @@ func (r *GoResolver) processMultipleVariableDeclaration(rootCapture treesitter.Q
 					newVariable.Content = []byte(valueContent)
 
 					// 使用新函数处理引用类型
-					r.processVariableValue(valueNode, uint32(2000+i), rc.SourceFile.Content, references)
+					r.processVariableValue(valueNode, uint32(2000+i), rc.SourceFile.Content, newVariable.Path, references)
 				}
 
 				elements = append(elements, newVariable)
@@ -827,13 +828,14 @@ func (r *GoResolver) processMultipleVariableDeclaration(rootCapture treesitter.Q
 }
 
 // processVariableValue 处理变量值，如果是引用类型，创建引用元素
-func (r *GoResolver) processVariableValue(valueNode *sitter.Node, elementID uint32, content []byte, references *[]*Reference) {
+func (r *GoResolver) processVariableValue(valueNode *sitter.Node, elementID uint32, content []byte, rootPath string, references *[]*Reference) {
 	// 检查变量的值是否是引用类型
 	refType := parseVariableValue(valueNode, content)
 	if refType != "" {
 		// 使用函数创建引用元素
 		ref := createReferenceElement(refType, valueNode, elementID, content)
-
+		// 设置引用元素的Path为根元素的Path
+		ref.BaseElement.Path = rootPath
 		// 添加到引用列表
 		*references = append(*references, ref)
 	}
@@ -1088,12 +1090,13 @@ func collectArgumentPositions(element *Call, argsNode sitter.Node, content []byt
 		}
 
 		// 获取参数值
-		value := child.Utf8Text(content)
+		//value := child.Utf8Text(content)
 
 		// 创建参数对象
 		param := &Parameter{
-			Name: value,
-			Type: []string{types.GetNodeTypeString(childKind, value)},
+			Name: "",
+			Type: nil,
+			//Type: []string{types.GetNodeTypeString(childKind, value)},
 		}
 
 		element.Parameters = append(element.Parameters, param)
@@ -1211,7 +1214,6 @@ func createReferenceElement(refType string, node *sitter.Node, elementID uint32,
 	}
 	ref.BaseElement.Name = refType
 	ref.BaseElement.Type = types.ElementTypeReference
-
 	// 设置范围
 	ref.SetRange([]int32{
 		int32(node.StartPosition().Row),
@@ -1234,4 +1236,38 @@ func createReferenceElement(refType string, node *sitter.Node, elementID uint32,
 	}
 
 	return ref
+}
+
+// isPrimitiveType 检查类型名称是否为Go基本数据类型
+func isPrimitiveType(typeName string) bool {
+	// 去除可能的数组、切片或指针标记
+	cleanType := strings.TrimPrefix(strings.TrimPrefix(typeName, "[]"), "*")
+
+	// Go基本数据类型列表
+	primitiveTypes := map[string]bool{
+		// 布尔型
+		"bool": true,
+
+		// 整型
+		"int": true, "int8": true, "int16": true, "int32": true, "int64": true,
+		"uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true,
+		"uintptr": true,
+
+		// 浮点型
+		"float32": true, "float64": true,
+
+		// 复数型
+		"complex64": true, "complex128": true,
+
+		// 别名
+		"byte": true, "rune": true,
+
+		// 字符串
+		"string": true,
+
+		// 空接口类型（常作为动态类型使用）
+		"any": true, "interface{}": true,
+	}
+
+	return primitiveTypes[cleanType]
 }

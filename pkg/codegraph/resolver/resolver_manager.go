@@ -3,9 +3,9 @@ package resolver
 import (
 	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/types"
-	"codebase-indexer/pkg/codegraph/workspace"
 	"context"
 	"fmt"
+
 	treesitter "github.com/tree-sitter/go-tree-sitter"
 )
 
@@ -14,7 +14,6 @@ type ResolveContext struct {
 	Match        *treesitter.QueryMatch
 	CaptureNames []string // 通过Match.Capture.Index获取captureName
 	SourceFile   *types.SourceFile
-	ProjectInfo  *workspace.ProjectInfo
 }
 
 // 解析器管理器
@@ -34,7 +33,7 @@ func NewResolverManager() *ResolverManager {
 	manager.register(lang.C, &CppResolver{})
 	manager.register(lang.CPP, &CppResolver{})
 	manager.register(lang.JavaScript, &JavaScriptResolver{})
-	manager.register(lang.TypeScript, &JavaScriptResolver{})
+	manager.register(lang.TypeScript, &TypeScriptResolver{})
 
 	return manager
 

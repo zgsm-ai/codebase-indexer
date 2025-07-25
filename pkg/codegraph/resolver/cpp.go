@@ -30,10 +30,19 @@ func (c *CppResolver) resolveImport(ctx context.Context, element *Import, rc *Re
 		switch types.ToElementType(captureName) {
 		case types.ElementTypeImportName:
 			// 容错处理，出现空格，语法会报错，但也应该能解析
-			element.BaseElement.Name = content
+			element.Name = strings.TrimSpace(content)
 		}
 	}
-	return []Element{element}, nil
+
+	importName := element.Name
+
+	elements := []Element{element}
+
+	// 处理系统头文件
+	if strings.HasPrefix(importName, "<") && strings.HasSuffix(importName, ">") {
+		return elements, nil // 系统头文件，不映射到项目文件
+	}
+	return elements, nil
 }
 
 func (c *CppResolver) resolvePackage(ctx context.Context, element *Package, rc *ResolveContext) ([]Element, error) {
@@ -60,7 +69,6 @@ func (c *CppResolver) resolveFunction(ctx context.Context, element *Function, rc
 			element.Declaration.Parameters = getFilteredParameters(content)
 		}
 	}
-	element.BaseElement.Scope = types.ScopeProject
 	return []Element{element}, nil
 }
 
@@ -99,7 +107,7 @@ func (c *CppResolver) resolveMethod(ctx context.Context, element *Method, rc *Re
 
 func (c *CppResolver) resolveClass(ctx context.Context, element *Class, rc *ResolveContext) ([]Element, error) {
 	//TODO implement me
-	return nil, fmt.Errorf("not support class")
+	return nil,fmt.Errorf("not support class")
 }
 
 func (c *CppResolver) resolveVariable(ctx context.Context, element *Variable, rc *ResolveContext) ([]Element, error) {

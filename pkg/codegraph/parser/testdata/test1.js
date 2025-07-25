@@ -4,7 +4,7 @@
     import { export as ex1 } from 'modules';
     import { export1, export2 } from 'modules.js';
     import { export1 as ex1, export2 as ex2 } from 'moduls.js';
-    import defaultName, { expoprt } from 'modules';
+    import defaultName, { expoprt } from './modules';
     import * as moduleName from 'modules.js';
     import defaultName, * as moduleName from 'modules';
     import 'modules';
@@ -128,5 +128,5 @@
       };
     let  o = o.next(1).log(1).next(2,3)
     let  a = b.p.say(); // ✅ 先赋值，再访问，再重赋值
-    const x = require('模块名');
-    const y = add(1,2)
+    const x = require('./common/test.js');
+    const y = add(...sasd)

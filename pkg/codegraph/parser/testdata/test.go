@@ -108,6 +108,7 @@ func main() {
 
 	// 指针
 	ptr := &x
+	*ptr := 100
 	fmt.Printf("Value at pointer: %d\n", *ptr)
 
 	// 错误处理
@@ -134,5 +135,5 @@ func main() {
 	for val := range ch {
 		fmt.Printf("Received from channel: %d\n", val)
 	}
-	const pi = 2
+	a, b := 1, 2
 }

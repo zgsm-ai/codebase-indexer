@@ -40,14 +40,11 @@ type WalkOptions struct {
 	IncludeExts     []string
 	ExcludePrefixes []string
 	IncludePrefixes []string
+	ExcludeDirs     []string
+	IncludeDirs     []string
 }
 
 type ReadOptions struct {
 	StartLine int
 	EndLine   int
-}
-
-type Project struct {
-	Path string
-	Name string
 }

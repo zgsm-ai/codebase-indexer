@@ -5,11 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/resolver"
 	"codebase-indexer/pkg/codegraph/types"
-	"codebase-indexer/pkg/codegraph/workspace"
-
 	"github.com/stretchr/testify/assert"
 )
 
@@ -19,7 +16,6 @@ func TestCResolver(t *testing.T) {
 func TestCResolver_ResolveImport(t *testing.T) {
 	logger := initLogger()                // 如果有日志初始化
 	parser := NewSourceFileParser(logger) // 假设有类似 Java 的解析器
-	prj := workspace.NewProjectInfo(lang.C, "pkg/codegraph/parser/testdata")
 
 	testCases := []struct {
 		name        string
@@ -65,7 +61,7 @@ func TestCResolver_ResolveImport(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := parser.Parse(context.Background(), tt.sourceFile, prj)
+			res, err := parser.Parse(context.Background(), tt.sourceFile)
 			assert.ErrorIs(t, err, tt.wantErr)
 			assert.NotNil(t, res)
 			// fmt.Println("res",res)
@@ -85,7 +81,6 @@ func TestCResolver_ResolveImport(t *testing.T) {
 func TestCResolver_ResolveFunction(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.C, "pkg/codegraph/parser/testdata")
 
 	cCode := `#include <stdio.h>
 #include <stdlib.h>
@@ -116,7 +111,7 @@ void logf(const char *fmt, ...) { va_list args; va_start(args, fmt); vprintf(fmt
 		Content: []byte(cCode),
 	}
 
-	res, err := parser.Parse(context.Background(), sourceFile, prj)
+	res, err := parser.Parse(context.Background(), sourceFile)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 

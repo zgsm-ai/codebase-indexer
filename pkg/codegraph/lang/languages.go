@@ -3,6 +3,8 @@ package lang
 import (
 	"codebase-indexer/pkg/codegraph/types"
 	"fmt"
+	"path/filepath"
+
 	sitterkotlin "github.com/tree-sitter-grammars/tree-sitter-kotlin/bindings/go"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	sittercsharp "github.com/tree-sitter/tree-sitter-c-sharp/bindings/go"
@@ -17,7 +19,6 @@ import (
 	sitterrust "github.com/tree-sitter/tree-sitter-rust/bindings/go"
 	sitterscala "github.com/tree-sitter/tree-sitter-scala/bindings/go"
 	sittertypescript "github.com/tree-sitter/tree-sitter-typescript/bindings/go"
-	"path/filepath"
 )
 
 // Language represents a programming language.
@@ -29,7 +30,6 @@ const (
 	Go         Language = "go"
 	JavaScript Language = "javascript"
 	TypeScript Language = "typescript"
-	TSX        Language = "tsx"
 	Rust       Language = "rust"
 	C          Language = "c"
 	CPP        Language = "cpp"
@@ -75,21 +75,14 @@ var treeSitterParsers = []*TreeSitterParser{
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sitterjavascript.Language())
 		},
-		SupportedExts: []string{".js", ".jsx"},
+		SupportedExts: []string{".js", ".jsx", ".vue", ".Vue"},
 	},
 	{
 		Language: TypeScript,
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sittertypescript.LanguageTypescript())
 		},
-		SupportedExts: []string{".ts"},
-	},
-	{
-		Language: TSX,
-		SitterLanguage: func() *sitter.Language {
-			return sitter.NewLanguage(sittertypescript.LanguageTSX())
-		},
-		SupportedExts: []string{".tsx"},
+		SupportedExts: []string{".ts", ".tsx"},
 	},
 	{
 		Language: Rust,

@@ -18,22 +18,19 @@ var ErrPathNotExists = errors.New("no such file or directory")
 
 type WorkspaceReader struct {
 	logger logger.Logger
-	Path   string
 }
 
-func NewWorkSpaceReader(path string, logger logger.Logger) *WorkspaceReader {
+func NewWorkSpaceReader(logger logger.Logger) *WorkspaceReader {
 	return &WorkspaceReader{
-		Path:   path,
 		logger: logger,
 	}
 }
 
-func (w *WorkspaceReader) FindProjects() []*types.Project {
-	if w.logger != nil {
-		w.logger.Info("[FindProjects] 开始扫描工作区：%s", w.Path)
-	}
+func (w *WorkspaceReader) FindProjects(workspace string) []*ProjectInfo {
 
-	var projects []*types.Project
+	w.logger.Info("find_projects start to scan workspace：%s", workspace)
+
+	var projects []*ProjectInfo
 	maxDepth := 3
 	maxEntries := 2000
 	entryCount := 0
@@ -47,10 +44,10 @@ func (w *WorkspaceReader) FindProjects() []*types.Project {
 	}
 
 	// 1. 当前目录是 git 仓库
-	if hasGitDir(w.Path) {
-		projects = append(projects, &types.Project{
-			Path: w.Path,
-			Name: filepath.Base(w.Path),
+	if hasGitDir(workspace) {
+		projects = append(projects, &ProjectInfo{
+			Path: workspace,
+			Name: filepath.Base(workspace),
 		})
 		foundGit = true
 	} else {
@@ -71,7 +68,7 @@ func (w *WorkspaceReader) FindProjects() []*types.Project {
 				if entry.IsDir() {
 					subDir := filepath.Join(dir, entry.Name())
 					if hasGitDir(subDir) {
-						projects = append(projects, &types.Project{
+						projects = append(projects, &ProjectInfo{
 							Path: subDir,
 							Name: filepath.Base(subDir),
 						})
@@ -88,20 +85,19 @@ func (w *WorkspaceReader) FindProjects() []*types.Project {
 				}
 			}
 		}
-		walk(w.Path, 1)
+		walk(workspace, 1)
 	}
 
 	// 3. 没有发现任何 git 仓库，将当前目录作为唯一项目
 	if !foundGit {
-		projects = append(projects, &types.Project{
-			Path: w.Path,
-			Name: filepath.Base(w.Path),
+		projects = append(projects, &ProjectInfo{
+			Path: workspace,
+			Name: filepath.Base(workspace),
 		})
 	}
 
-	if w.logger != nil {
-		w.logger.Info("[FindProjects] 扫描完成，发现项目数：%d", len(projects))
-	}
+	w.logger.Info("find_projects scan finish, found projects：%+v", projects)
+
 	return projects
 }
 
@@ -235,6 +231,18 @@ func (w *WorkspaceReader) Walk(ctx context.Context, dir string, walkFn types.Wal
 
 		if len(walkOpts.IncludeExts) > 0 && !slices.Contains(walkOpts.IncludeExts, fileExt) {
 			return nil
+		}
+
+		for _, p := range walkOpts.ExcludeDirs {
+			if relativePath == p {
+				return nil
+			}
+		}
+
+		for _, p := range walkOpts.IncludeDirs {
+			if relativePath != p {
+				return nil
+			}
 		}
 
 		for _, p := range walkOpts.ExcludePrefixes {

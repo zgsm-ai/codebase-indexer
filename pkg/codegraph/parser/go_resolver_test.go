@@ -1,10 +1,8 @@
 package parser
 
 import (
-	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/resolver"
 	"codebase-indexer/pkg/codegraph/types"
-	"codebase-indexer/pkg/codegraph/workspace"
 	"context"
 	"fmt"
 	"testing"
@@ -15,7 +13,6 @@ import (
 func TestGoResolver_ResolveImport(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Go, "testdata")
 
 	testCases := []struct {
 		name        string
@@ -85,7 +82,7 @@ func main() {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := parser.Parse(context.Background(), tt.sourceFile, prj)
+			res, err := parser.Parse(context.Background(), tt.sourceFile)
 			assert.ErrorIs(t, err, tt.wantErr)
 			assert.NotNil(t, res)
 
@@ -105,7 +102,6 @@ func main() {
 func TestGoResolver_ResolveStruct(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Go, "testdata")
 
 	sourceFile := &types.SourceFile{
 		Path: "testdata/test.go",
@@ -126,7 +122,7 @@ type Employee struct {
 }`),
 	}
 
-	res, err := parser.Parse(context.Background(), sourceFile, prj)
+	res, err := parser.Parse(context.Background(), sourceFile)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 
@@ -186,7 +182,6 @@ type Employee struct {
 func TestGoResolver_ResolveVariable(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Go, "testdata")
 
 	testCases := []struct {
 		name          string
@@ -272,7 +267,7 @@ func main() {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := parser.Parse(context.Background(), tt.sourceFile, prj)
+			res, err := parser.Parse(context.Background(), tt.sourceFile)
 			assert.ErrorIs(t, err, tt.wantErr)
 			assert.NotNil(t, res)
 
@@ -336,7 +331,6 @@ func main() {
 func TestGoResolver_ResolveInterface(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Go, "testdata")
 
 	testCases := []struct {
 		name          string
@@ -434,7 +428,7 @@ type Handler interface {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := parser.Parse(context.Background(), tt.sourceFile, prj)
+			res, err := parser.Parse(context.Background(), tt.sourceFile)
 			assert.ErrorIs(t, err, tt.wantErr)
 			assert.NotNil(t, res)
 
@@ -537,7 +531,6 @@ type Handler interface {
 func TestGoResolver_ResolveMultipleVariableDeclaration(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Go, "testdata")
 
 	sourceFile := &types.SourceFile{
 		Path: "testdata/multiple_var.go",
@@ -566,7 +559,7 @@ func main() {
 }`),
 	}
 
-	res, err := parser.Parse(context.Background(), sourceFile, prj)
+	res, err := parser.Parse(context.Background(), sourceFile)
 	assert.ErrorIs(t, err, nil)
 	assert.NotNil(t, res)
 
@@ -627,7 +620,6 @@ func main() {
 func TestGoResolver_AllResolveMethods(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
-	prj := workspace.NewProjectInfo(lang.Go, "testdata")
 
 	source := []byte(`package main
 
@@ -724,7 +716,7 @@ func createLogger(level int) *FileLogger {
 		Content: source,
 	}
 
-	res, err := parser.Parse(context.Background(), sourceFile, prj)
+	res, err := parser.Parse(context.Background(), sourceFile)
 	assert.ErrorIs(t, err, nil)
 	assert.NotNil(t, res)
 
