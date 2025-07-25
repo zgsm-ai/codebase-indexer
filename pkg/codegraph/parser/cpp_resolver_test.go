@@ -450,3 +450,61 @@ func TestCPPResolver_ResolveStruct(t *testing.T) {
 		fmt.Println("Struct name:", match[1])
 	}
 }
+
+func TestCPPResolver_ResolveClass(t *testing.T) {
+	logger := initLogger()
+	parser := NewSourceFileParser(logger)
+	sourceFile := &types.SourceFile{
+		Path:    "testdata/testclass.cpp",
+		Content: readFile("testdata/testclass.cpp"),
+	}
+	res, err := parser.Parse(context.Background(), sourceFile)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	// 期望的类/结构体及其继承
+	expected := map[string][]string{
+		"Animal":       {},
+		"Shape":        {},
+		"Circle":       {"Shape"},
+		"Flyable":      {},
+		"Swimmable":    {},
+		"Duck":         {"Animal", "Flyable", "Swimmable"},
+		"Outer":        {},
+		"Inner":        {},
+		"Box":          {},
+		"LabeledBox":   {"Box<T>"},
+		"Point":        {},
+		"ColoredPoint": {"Point"},
+		"Config":       {},
+		"MathUtil":     {},
+		"Logger":       {},
+		"Serializable": {},
+		"User":         {"Logger", "Serializable"},
+		"Position":     {},
+		"Drawable":     {},
+		"Circle1":      {"Position", "Drawable"},
+	}
+
+	// 收集所有解析到的Class元素
+	classMap := make(map[string]*resolver.Class)
+	for _, element := range res.Elements {
+		classElem, ok := element.(*resolver.Class)
+		if !ok {
+			continue
+		}
+		classMap[classElem.GetName()] = classElem
+	}
+
+	for name, supers := range expected {
+		classElem, ok := classMap[name]
+		assert.True(t, ok, "未找到类/结构体: %s", name)
+		if ok {
+			// 继承类名断言（顺序不敏感）
+			actualSupers := append([]string{}, classElem.SuperClasses...)
+
+			assert.ElementsMatch(t, supers, actualSupers, "类/结构体 %s 继承不符", name)
+
+		}
+	}
+}

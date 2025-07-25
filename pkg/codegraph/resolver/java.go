@@ -410,10 +410,10 @@ func parseSingleParameter(paramStr string) Parameter {
 	}
 	paramStr = strings.TrimSpace(paramStr)
 	parts := strings.Fields(paramStr)
-	// if len(parts) < 2 {
-	// 	// 可能是省略了参数名，可特殊处理 或 报错 日志？
-	// 	return &Parameter{Name: paramStr}
-	// }
+	if len(parts) < 2 {
+		// 省略了type的情况
+		return Parameter{Name: paramStr, Type: []string{types.PrimitiveType}}
+	}
 	name := parts[len(parts)-1]
 	typ := strings.Join(parts[:len(parts)-1], " ")
 	return Parameter{

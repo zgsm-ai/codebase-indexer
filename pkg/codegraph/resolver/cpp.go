@@ -98,8 +98,45 @@ func (c *CppResolver) resolveMethod(ctx context.Context, element *Method, rc *Re
 }
 
 func (c *CppResolver) resolveClass(ctx context.Context, element *Class, rc *ResolveContext) ([]Element, error) {
-	//TODO implement me
-	return nil, fmt.Errorf("not support class")
+	rootCap := rc.Match.Captures[0]
+	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
+	var refs []*Reference
+	for _, cap := range rc.Match.Captures {
+		captureName := rc.CaptureNames[cap.Index]
+		if cap.Node.IsMissing() || cap.Node.IsError() {
+			continue
+		}
+		content := cap.Node.Utf8Text(rc.SourceFile.Content)
+		switch types.ToElementType(captureName) {
+		case types.ElementTypeClassName, types.ElementTypeStructName:
+			element.BaseElement.Name = strings.TrimSpace(content)
+		case types.ElementTypeClassExtends, types.ElementTypeStructExtends:
+			content = strings.TrimSpace(content)
+			content = strings.TrimPrefix(content, ":")
+			params := getFilteredParameters(content)
+			for _, param := range params {
+				typNames := getFilteredTypes(param.Name)
+				element.SuperClasses = append(element.SuperClasses, param.Name)
+				// 类里面有可能包含其他类型
+				for _, typName := range typNames {
+					if typName == types.PrimitiveType {
+						continue
+					}
+					refs = append(refs, &Reference{
+						BaseElement: &BaseElement{
+							Name: typName,
+						},
+					})
+				}
+			}
+		}
+	}
+	element.BaseElement.Scope = types.ScopeProject
+	elems := []Element{element}
+	for _, ref := range refs {
+		elems = append(elems, ref)
+	}
+	return elems, nil
 }
 
 func (c *CppResolver) resolveVariable(ctx context.Context, element *Variable, rc *ResolveContext) ([]Element, error) {
