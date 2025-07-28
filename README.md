@@ -23,7 +23,7 @@ codebase-indexer is the context module of [ZGSM (ZhuGe Smart Mind) AI Programmin
 
 ## Requirements
 
-- Go 1.24.0 or higher
+- Go 1.24.4 or higher
 
 ## Quick Start
 
