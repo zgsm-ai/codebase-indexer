@@ -44,7 +44,6 @@ func (r *GoResolver) resolveImport(ctx context.Context, element *Import, rc *Res
 			switch types.ToElementType(nodeCaptureName) {
 			case types.ElementTypeImportName:
 				element.Name = content
-				element.Content = []byte(content)
 			case types.ElementTypeImportAlias:
 				element.Alias = content
 			case types.ElementTypeImportPath:
@@ -60,11 +59,6 @@ func (r *GoResolver) resolveImport(ctx context.Context, element *Import, rc *Res
 					} else {
 						element.Name = path
 					}
-				}
-
-				// Store the import path in Content if not already set
-				if len(element.Content) == 0 {
-					element.Content = []byte(path)
 				}
 
 			}
@@ -92,7 +86,6 @@ func (r *GoResolver) resolvePackage(ctx context.Context, element *Package, rc *R
 			switch types.ToElementType(nodeCaptureName) {
 			case types.ElementTypePackageName:
 				element.Name = content
-				element.Content = []byte(content)
 			}
 		}
 	}
@@ -622,10 +615,6 @@ func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc 
 
 	// 存储变量引用
 	var references []*Reference
-	// 变量类型
-	var variableType string
-	// 变量值
-	var variableValue string
 
 	// 如果没有匹配信息，直接返回
 	if rc.Match == nil || rc.Match.Captures == nil || len(rc.Match.Captures) == 0 {
@@ -635,8 +624,6 @@ func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc 
 	// 获取根捕获，它应该是变量声明节点
 	rootCapture := rc.Match.Captures[0]
 	rootCaptureName := rc.CaptureNames[rootCapture.Index]
-
-	// 更新元素的范围和内容
 	updateRootElement(element, &rootCapture, rootCaptureName, rc.SourceFile.Content)
 
 	// 设置变量名称 - 使用节点文本作为变量名
@@ -680,9 +667,6 @@ func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc 
 		// 需要同时处理const，variable，local_variable
 		switch {
 		case strings.HasSuffix(nodeCaptureName, ".type"):
-			// 变量类型
-			variableType = content
-			element.Content = []byte(content)
 
 			// 检查是否为基本数据类型
 			if isPrimitiveType(content) {
@@ -694,31 +678,10 @@ func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc 
 			}
 
 		case strings.HasSuffix(nodeCaptureName, ".value"):
-			// 保存变量值
-			variableValue = content
-
-			// 如果没有类型信息，使用值作为内容
-			if variableType == "" && len(element.Content) == 0 {
-				element.Content = []byte(content)
-			}
-
 			// 变量值处理
 			// 使用processVariableValue函数处理引用类型
 			r.processVariableValue(&capture.Node, uint32(capture.Index), rc.SourceFile.Content, element.Path, &references)
-
-			// 如果需要额外处理（如更新范围和内容），可以在references最后一个元素上操作
-			if len(references) > 0 {
-				lastRef := references[len(references)-1]
-				updateRootElement(lastRef, &capture, nodeCaptureName, rc.SourceFile.Content)
-			}
 		}
-	}
-
-	// 确保变量有内容
-	if len(element.Content) == 0 && variableValue != "" {
-		element.Content = []byte(variableValue)
-	} else if len(element.Content) == 0 && variableType != "" {
-		element.Content = []byte(variableType)
 	}
 
 	// 添加引用元素
@@ -774,8 +737,6 @@ func (r *GoResolver) processMultipleVariableDeclaration(rootCapture treesitter.Q
 			// 如果找到了当前变量的位置，并且有对应的值，则更新内容
 			if currentVarIndex >= 0 && currentVarIndex < len(varValues) {
 				valueNode := varValues[currentVarIndex]
-				valueContent := valueNode.Utf8Text(rc.SourceFile.Content)
-				element.Content = []byte(valueContent)
 
 				// 使用新函数处理引用类型
 				r.processVariableValue(valueNode, uint32(1000+currentVarIndex), rc.SourceFile.Content, element.Path, references)
@@ -812,8 +773,6 @@ func (r *GoResolver) processMultipleVariableDeclaration(rootCapture treesitter.Q
 				// 设置变量值
 				if i < len(varValues) {
 					valueNode := varValues[i]
-					valueContent := valueNode.Utf8Text(rc.SourceFile.Content)
-					newVariable.Content = []byte(valueContent)
 
 					// 使用新函数处理引用类型
 					r.processVariableValue(valueNode, uint32(2000+i), rc.SourceFile.Content, newVariable.Path, references)

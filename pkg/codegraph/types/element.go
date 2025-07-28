@@ -225,6 +225,13 @@ const (
 	NodeKindShorthandPropertyIdentifierPattern NodeKind = "shorthand_property_identifier_pattern"
 	NodeKindString                             NodeKind = "string"
 	NodeKindPair                               NodeKind = "pair"
+	NodeKindAccessibilityModifier              NodeKind = "accessibility_modifier"
+	NodeKindTypeAnnotation                     NodeKind = "type_annotation"
+	NodeKindPublicFieldDefinition              NodeKind = "public_field_definition"
+	NodeKindRequiredParameter                  NodeKind = "required_parameter"
+	NodeKindRestParameter                      NodeKind = "rest_parameter"
+	NodeKindOptionalParameter                  NodeKind = "optional_parameter"
+	NodeKindMethodSignature                    NodeKind = "method_signature"
 	// 用于接收函数的返回类型和字段的类型
 	NodeKindIntegralType         NodeKind = "integral_type"
 	NodeKindFloatingPointType    NodeKind = "floating_point_type"
@@ -236,8 +243,8 @@ const (
 	NodeKindTypeIdentifier       NodeKind = "type_identifier"
 	NodeKindTypeArguments        NodeKind = "type_arguments"
 	NodeKindScopedTypeIdentifier NodeKind = "scoped_type_identifier"
-	NodeKindWildcard             NodeKind = "wildcard"       // 通配符 <? extends MyClass>
-	NodeKindPrimitiveType        NodeKind = "primitive_type" // c/cpp基础类型都由这个接收
+	NodeKindWildcard             NodeKind = "wildcard"             // 通配符 <? extends MyClass>
+	NodeKindPrimitiveType        NodeKind = "primitive_type"       // c/cpp基础类型都由这个接收
 	NodeKindQualifiedIdentifier  NodeKind = "qualified_identifier" // c/cpp 复合类型 Outer::Inner
 
 	// 用于查找方法所属的类
@@ -286,6 +293,13 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindShorthandPropertyIdentifierPattern): NodeKindShorthandPropertyIdentifierPattern,
 	string(NodeKindString):                             NodeKindString,
 	string(NodeKindPair):                               NodeKindPair,
+	string(NodeKindAccessibilityModifier):              NodeKindAccessibilityModifier,
+	string(NodeKindTypeAnnotation):                     NodeKindTypeAnnotation,
+	string(NodeKindPublicFieldDefinition):              NodeKindPublicFieldDefinition,
+	string(NodeKindRequiredParameter):                  NodeKindRequiredParameter,
+	string(NodeKindRestParameter):                      NodeKindRestParameter,
+	string(NodeKindOptionalParameter):                  NodeKindOptionalParameter,
+	string(NodeKindMethodSignature):                    NodeKindMethodSignature,
 	// 用于接收函数的返回类型和字段的类型
 	string(NodeKindIntegralType):         NodeKindIntegralType,
 	string(NodeKindFloatingPointType):    NodeKindFloatingPointType,
