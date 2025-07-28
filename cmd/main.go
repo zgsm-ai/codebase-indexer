@@ -88,11 +88,11 @@ func main() {
 
 	// Initialize service layer
 	codebaseService := service.NewCodebaseService(logger)
-	syncService := service.NewExtensionService(storageManager, httpSync, fileScanner, codebaseService, logger)
+	extensionService := service.NewExtensionService(storageManager, httpSync, fileScanner, codebaseService, logger)
 
 	// Initialize handler layer
 	grpcHandler := handler.NewGRPCHandler(httpSync, fileScanner, storageManager, syncScheduler, logger)
-	extensionHandler := handler.NewExtensionHandler(syncService, logger)
+	extensionHandler := handler.NewExtensionHandler(extensionService, logger)
 	backendHandler := handler.NewBackendHandler(codebaseService, logger)
 
 	// Initialize gRPC server

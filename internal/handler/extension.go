@@ -14,15 +14,15 @@ import (
 
 // ExtensionHandler handles RESTful API services using Gin framework
 type ExtensionHandler struct {
-	syncService service.ExtensionService
-	logger      logger.Logger
+	extensionService service.ExtensionService
+	logger           logger.Logger
 }
 
 // NewExtensionHandler creates a new REST handler
-func NewExtensionHandler(syncService service.ExtensionService, logger logger.Logger) *ExtensionHandler {
+func NewExtensionHandler(extensionService service.ExtensionService, logger logger.Logger) *ExtensionHandler {
 	return &ExtensionHandler{
-		syncService: syncService,
-		logger:      logger,
+		extensionService: extensionService,
+		logger:           logger,
 	}
 }
 
@@ -52,7 +52,7 @@ func (h *ExtensionHandler) RegisterSync(c *gin.Context) {
 	h.logger.Info("workspace registration request: WorkspacePath=%s, WorkspaceName=%s", req.WorkspacePath, req.WorkspaceName)
 
 	// 调用service层处理业务逻辑
-	configs, err := h.syncService.RegisterCodebase(c.Request.Context(), req.ClientId, req.WorkspacePath, req.WorkspaceName)
+	configs, err := h.extensionService.RegisterCodebase(c.Request.Context(), req.ClientId, req.WorkspacePath, req.WorkspaceName)
 	if err != nil {
 		h.logger.Error("failed to register codebase: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.RegisterSyncResponse{
@@ -105,7 +105,7 @@ func (h *ExtensionHandler) SyncCodebase(c *gin.Context) {
 	h.logger.Info("codebase sync request: WorkspacePath=%s, WorkspaceName=%s, FilePaths=%v", req.WorkspacePath, req.WorkspaceName, req.FilePaths)
 
 	// 调用service层处理业务逻辑
-	configs, err := h.syncService.SyncCodebase(c.Request.Context(), req.ClientId, req.WorkspacePath, req.WorkspaceName, req.FilePaths)
+	configs, err := h.extensionService.SyncCodebase(c.Request.Context(), req.ClientId, req.WorkspacePath, req.WorkspaceName, req.FilePaths)
 	if err != nil {
 		h.logger.Error("failed to sync codebase: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.SyncCodebaseResponse{
@@ -156,7 +156,7 @@ func (h *ExtensionHandler) UnregisterSync(c *gin.Context) {
 	h.logger.Info("workspace unregistration request: WorkspacePath=%s, WorkspaceName=%s", req.WorkspacePath, req.WorkspaceName)
 
 	// 调用service层处理业务逻辑
-	configs, err := h.syncService.UnregisterCodebase(c.Request.Context(), req.ClientId, req.WorkspacePath, req.WorkspaceName)
+	configs, err := h.extensionService.UnregisterCodebase(c.Request.Context(), req.ClientId, req.WorkspacePath, req.WorkspaceName)
 	if err != nil {
 		h.logger.Error("failed to unregister codebase: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to unregister codebase"})
@@ -193,7 +193,7 @@ func (h *ExtensionHandler) ShareAccessToken(c *gin.Context) {
 	h.logger.Info("token synchronization request: ClientId=%s, ServerEndpoint=%s", req.ClientId, req.ServerEndpoint)
 
 	// 调用service层处理业务逻辑
-	err := h.syncService.UpdateSyncConfig(c.Request.Context(), req.ClientId, req.ServerEndpoint, req.AccessToken)
+	err := h.extensionService.UpdateSyncConfig(c.Request.Context(), req.ClientId, req.ServerEndpoint, req.AccessToken)
 	if err != nil {
 		h.logger.Error("failed to update sync config: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.ShareAccessTokenResponse{
@@ -292,7 +292,7 @@ func (h *ExtensionHandler) CheckIgnoreFile(c *gin.Context) {
 	}
 
 	// 调用service层处理业务逻辑
-	result, err := h.syncService.CheckIgnoreFiles(c.Request.Context(), req.ClientId, req.WorkspacePath, req.WorkspaceName, req.FilePaths)
+	result, err := h.extensionService.CheckIgnoreFiles(c.Request.Context(), req.ClientId, req.WorkspacePath, req.WorkspaceName, req.FilePaths)
 	if err != nil {
 		h.logger.Error("failed to check ignore files: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.CheckIgnoreFileResponse{
@@ -323,6 +323,164 @@ func (h *ExtensionHandler) CheckIgnoreFile(c *gin.Context) {
 	})
 }
 
+// PublishEvents handles workspace events publishing via REST API
+// @Summary 发布工作区事件
+// @Description 发布工作区事件通知
+// @Tags events
+// @Accept json
+// @Produce json
+// @Param request body PublishEventsRequest true "事件发布请求"
+// @Success 200 {object} PublishEventsResponse "发布成功"
+// @Failure 400 {object} PublishEventsResponse "请求格式错误"
+// @Failure 500 {object} PublishEventsResponse "服务器内部错误"
+// @Router /codebase-indexer/api/v1/events [post]
+func (h *ExtensionHandler) PublishEvents(c *gin.Context) {
+	var req dto.PublishEventsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("invalid request format: %v", err)
+		c.JSON(http.StatusBadRequest, dto.PublishEventsResponse{
+			Code:    http.StatusBadRequest,
+			Success: false,
+			Message: "invalid request format",
+			Data:    0,
+		})
+		return
+	}
+
+	h.logger.Info("workspace events publish request: Workspace=%s, Events=%d", req.Workspace, len(req.Data))
+
+	// TODO: 调用service层处理业务逻辑 - 暂时返回成功
+	c.JSON(http.StatusOK, dto.PublishEventsResponse{
+		Code:    0,
+		Success: true,
+		Message: "ok",
+		Data:    len(req.Data),
+	})
+}
+
+// TriggerIndex handles manual index building via REST API
+// @Summary 手动触发索引构建
+// @Description 手动触发代码索引构建
+// @Tags index
+// @Accept json
+// @Produce json
+// @Param request body TriggerIndexRequest true "索引构建请求"
+// @Success 200 {object} TriggerIndexResponse "触发成功"
+// @Failure 400 {object} TriggerIndexResponse "请求格式错误"
+// @Failure 500 {object} TriggerIndexResponse "服务器内部错误"
+// @Router /codebase-indexer/api/v1/index [post]
+func (h *ExtensionHandler) TriggerIndex(c *gin.Context) {
+	var req dto.TriggerIndexRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("invalid request format: %v", err)
+		c.JSON(http.StatusBadRequest, dto.TriggerIndexResponse{
+			Code:    http.StatusBadRequest,
+			Success: false,
+			Message: "invalid request format",
+			Data:    0,
+		})
+		return
+	}
+
+	h.logger.Info("index build trigger request: Workspace=%s, Path=%s, Type=%s", req.Workspace, req.Path, req.Type)
+
+	// TODO: 调用service层处理业务逻辑 - 暂时返回成功
+	c.JSON(http.StatusOK, dto.TriggerIndexResponse{
+		Code:    0,
+		Success: true,
+		Message: "ok",
+		Data:    1,
+	})
+}
+
+// GetIndexStatus handles index status querying via REST API
+// @Summary 查询索引状态
+// @Description 查询工作区索引构建状态
+// @Tags index
+// @Accept json
+// @Produce json
+// @Param clientId query string true "客户端ID" example(111a)
+// @Param workspace query string true "工作区路径" example(g:\projects\codebase-indexer)
+// @Success 200 {object} IndexStatusResponse "查询成功"
+// @Failure 400 {object} IndexStatusResponse "请求参数错误"
+// @Failure 500 {object} IndexStatusResponse "服务器内部错误"
+// @Router /codebase-indexer/api/v1/index/status [get]
+func (h *ExtensionHandler) GetIndexStatus(c *gin.Context) {
+	var query dto.IndexStatusQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		h.logger.Error("invalid query parameters: %v", err)
+		c.JSON(http.StatusBadRequest, dto.IndexStatusResponse{
+			Code:    http.StatusBadRequest,
+			Message: "invalid query parameters",
+		})
+		return
+	}
+
+	h.logger.Info("index status query request: ClientId=%s, Workspace=%s", query.ClientId, query.Workspace)
+
+	// TODO: 调用service层处理业务逻辑 - 暂时返回模拟数据
+	response := dto.IndexStatusResponse{
+		Code:    0,
+		Message: "ok",
+	}
+	response.Data.Projects = []dto.ProjectIndexStatus{
+		{
+			Name: "zgsm",
+			Embedding: dto.IndexStatus{
+				Status:       "running",
+				TotalFiles:   100,
+				TotalSucceed: 10,
+				TotalFailed:  10,
+				TotalChunks:  1000,
+			},
+			Codegraph: dto.IndexStatus{
+				Status:       "success",
+				TotalFiles:   100,
+				TotalSucceed: 10,
+				TotalFailed:  10,
+			},
+		},
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// SwitchIndex handles index feature switching via REST API
+// @Summary 索引功能开关
+// @Description 控制索引功能的开启和关闭
+// @Tags index
+// @Accept json
+// @Produce json
+// @Param switch query string true "开关状态，on：开启，off：关闭" example(on) Enums(on, off) default(off)
+// @Success 200 {object} IndexSwitchResponse "操作成功"
+// @Failure 400 {object} IndexSwitchResponse "请求参数错误"
+// @Failure 500 {object} IndexSwitchResponse "服务器内部错误"
+// @Router /codebase-indexer/api/v1/switch [get]
+func (h *ExtensionHandler) SwitchIndex(c *gin.Context) {
+	var query dto.IndexSwitchQuery
+	if err := c.ShouldBindQuery(&query); err != nil {
+		h.logger.Error("invalid query parameters: %v", err)
+		c.JSON(http.StatusBadRequest, dto.IndexSwitchResponse{
+			Code:    http.StatusBadRequest,
+			Success: false,
+			Message: "invalid query parameters",
+			Data:    false,
+		})
+		return
+	}
+
+	h.logger.Info("index switch request: Switch=%s", query.Switch)
+
+	// TODO: 调用service层处理业务逻辑 - 暂时返回成功
+	isEnabled := query.Switch == "on"
+	c.JSON(http.StatusOK, dto.IndexSwitchResponse{
+		Code:    0,
+		Success: true,
+		Message: "ok",
+		Data:    isEnabled,
+	})
+}
+
 // SetupRoutes sets up the REST API routes
 // @Description 设置REST API路由
 func (h *ExtensionHandler) SetupRoutes(router *gin.Engine) {
@@ -334,5 +492,9 @@ func (h *ExtensionHandler) SetupRoutes(router *gin.Engine) {
 		api.POST("/token", h.ShareAccessToken)
 		api.POST("/version", h.GetVersion)
 		api.POST("/files/ignore", h.CheckIgnoreFile)
+		api.POST("/events", h.PublishEvents)
+		api.POST("/index", h.TriggerIndex)
+		api.GET("/index/status", h.GetIndexStatus)
+		api.GET("/switch", h.SwitchIndex)
 	}
 }
