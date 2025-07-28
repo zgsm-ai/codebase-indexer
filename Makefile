@@ -24,3 +24,17 @@ test:
 build:
 	go mod tidy
 	go build -ldflags="-s -w" -o ./bin/main ./cmd/main.go
+
+.PHONY: swag
+swag:
+	swag init -g cmd/main.go -o docs/swagger
+
+.PHONY: swag-ui
+swag-ui:
+	mkdir -p docs/swagger-ui
+	cp -r $$(go list -f '{{.Dir}}' -m github.com/swaggo/swag)/example/docs/swagger-ui/* docs/swagger-ui/
+
+.PHONY: docs
+docs: swag swag-ui
+	@echo "Swagger documentation generated successfully"
+	@echo "Access the documentation at: http://localhost:8080/docs"
