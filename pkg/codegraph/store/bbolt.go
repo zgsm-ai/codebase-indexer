@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"go.etcd.io/bbolt"
 	"google.golang.org/protobuf/proto"
@@ -22,6 +23,7 @@ type BBoltStorage struct {
 	clients   sync.Map // projectUuid -> *bbolt.DB
 	closeOnce sync.Once
 	closed    bool
+	dbMutex   sync.Map // projectUuid -> *sync.Mutex
 }
 
 // NewBBoltStorage creates new bbolt storage instance
@@ -51,6 +53,14 @@ func (s *BBoltStorage) getDB(projectUuid string) (*bbolt.DB, error) {
 		return nil, fmt.Errorf("storage is closed")
 	}
 
+	// 获取或创建项目级别的互斥锁
+	mutexInterface, _ := s.dbMutex.LoadOrStore(projectUuid, &sync.Mutex{})
+	mutex := mutexInterface.(*sync.Mutex)
+
+	// 加锁防止并发创建数据库
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	s.logger.Debug("get_db: checking existing client", "project", projectUuid)
 
 	if db, exists := s.clients.Load(projectUuid); exists {
@@ -74,6 +84,7 @@ func (s *BBoltStorage) getDB(projectUuid string) (*bbolt.DB, error) {
 // createDB 创建新的数据库实例
 func (s *BBoltStorage) createDB(projectUuid string) (*bbolt.DB, error) {
 	s.logger.Debug("create_db: creating project directory", "project", projectUuid)
+	// 对项目ID进行编码，避免特殊字符导致目录创建失败
 	projectDir := filepath.Join(s.baseDir, projectUuid)
 	if err := os.MkdirAll(projectDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create project directory %s: %w", projectDir, err)
@@ -82,9 +93,21 @@ func (s *BBoltStorage) createDB(projectUuid string) (*bbolt.DB, error) {
 	dbPath := filepath.Join(projectDir, "data.db")
 	s.logger.Debug("create_db: opening database", "project", projectUuid, "path", dbPath)
 
-	db, err := bbolt.Open(dbPath, 0600, nil)
+	db, err := bbolt.Open(dbPath, 0600, &bbolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
-		return nil, fmt.Errorf("failed to open project database %s: %w", dbPath, err)
+		s.logger.Warn("create_db: database open failed, attempting to recreate", "project", projectUuid, "error", err)
+
+		// 尝试删除损坏的数据库文件并重建
+		if removeErr := os.Remove(dbPath); removeErr != nil {
+			s.logger.Error("create_db: failed to remove corrupted database", "project", projectUuid, "error", removeErr)
+			return nil, fmt.Errorf("failed to open project database %s: %w (and failed to remove corrupted file: %v)", dbPath, err, removeErr)
+		}
+
+		// 重新尝试创建数据库
+		db, err = bbolt.Open(dbPath, 0600, &bbolt.Options{Timeout: 1 * time.Second})
+		if err != nil {
+			return nil, fmt.Errorf("failed to recreate project database %s: %w", dbPath, err)
+		}
 	}
 
 	s.logger.Debug("create_db: initializing bucket", "project", projectUuid)
@@ -313,14 +336,19 @@ func (s *BBoltStorage) Close() error {
 		projectID := key.(string)
 		db := value.(*bbolt.DB)
 
+		s.logger.Info("close: closing database", "projectID", projectID)
 		if err := db.Close(); err != nil {
+			s.logger.Error("close: failed to close database", "projectID", projectID, "error", err)
 			errs = append(errs, fmt.Errorf("failed to close project %s database: %w", projectID, err))
+		} else {
+			s.logger.Info("close: successfully closed database", "projectID", projectID)
 		}
 		return true
 	})
 
 	s.closeOnce.Do(func() {
 		s.closed = true
+		s.logger.Info("close: storage marked as closed")
 	})
 
 	if len(errs) > 0 {

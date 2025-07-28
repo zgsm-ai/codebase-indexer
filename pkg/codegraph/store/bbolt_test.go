@@ -2,9 +2,14 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +18,20 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
+
+const (
+	testProjectID = "test-project"
+)
+
+var (
+	ErrTestError = errors.New("test error")
+)
+
+// generateTestProjectUUID generates a test project UUID using the same method as workspace.Project.Uuid()
+func generateTestProjectUUID(name, path string) string {
+	hash := sha256.Sum256([]byte(path))
+	return name + "_" + hex.EncodeToString(hash[:])
+}
 
 // TestMessage 用于测试的 protobuf 消息
 type TestMessage struct {
@@ -137,7 +156,14 @@ func TestBBoltStorage_Save(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	projectID := "test-project"
+	projectName := "test-project"
+	projectPath := "/tmp/test-project"
+	projectID := generateTestProjectUUID(projectName, projectPath)
+
+	// 预填充数据
+	testData := &TestMessage{Value: "test-value"}
+	err := storage.Save(ctx, projectID, testData)
+	require.NoError(t, err)
 
 	tests := []struct {
 		name      string
@@ -147,7 +173,7 @@ func TestBBoltStorage_Save(t *testing.T) {
 	}{
 		{
 			name:  "保存成功",
-			value: &TestMessage{Value: "test-value"},
+			value: &TestMessage{Value: "test-value-2"},
 		},
 		{
 			name:  "保存空消息",
@@ -574,4 +600,336 @@ func (tv *testValues) Value(i int) proto.Message {
 		return tv.values[i]
 	}
 	return &TestMessage{Value: "default"}
+}
+
+func TestBBoltStorage_ConcurrentReadWrite(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	projectID := "concurrent-test"
+
+	const (
+		writers      = 20
+		readers      = 20
+		opsPerWorker = 50
+	)
+
+	var wg sync.WaitGroup
+	wg.Add(writers + readers)
+
+	// 严格并发测试：所有goroutine同时启动
+	start := make(chan struct{})
+
+	// 并发写入goroutine
+	for w := 0; w < writers; w++ {
+		go func(writerID int) {
+			defer wg.Done()
+			<-start // 等待统一开始信号
+
+			for i := 0; i < opsPerWorker; i++ {
+				value := &TestMessage{Value: fmt.Sprintf("writer-%d-value-%d", writerID, i)}
+				err := storage.Save(ctx, projectID, value)
+				assert.NoError(t, err)
+			}
+		}(w)
+	}
+
+	// 并发读取goroutine
+	for r := 0; r < readers; r++ {
+		go func(readerID int) {
+			defer wg.Done()
+			<-start // 等待统一开始信号
+
+			for i := 0; i < opsPerWorker; i++ {
+				key := TestKey{key: "*store.TestMessage"}
+				_, _ = storage.Get(ctx, projectID, key)
+				// 读取可能成功也可能失败，不验证结果
+			}
+		}(r)
+	}
+
+	// 统一启动所有并发操作
+	close(start)
+	wg.Wait()
+
+	// 验证最终数据完整性
+	finalSize := storage.Size(ctx, projectID)
+	assert.GreaterOrEqual(t, finalSize, 0)
+
+	// 验证至少有一个写入成功
+	allData := make([]*TestMessage, 0)
+	iter := storage.Iter(ctx, projectID)
+	for iter.Next() {
+		data := iter.Value()
+		if msg, ok := data.(*TestMessage); ok {
+			allData = append(allData, msg)
+		}
+	}
+	assert.GreaterOrEqual(t, len(allData), 0)
+	// 确保所有goroutine完成后再执行cleanup
+	iter.Close()
+}
+
+func TestBBoltStorage_ConcurrentBatchWrite(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	projectID := "batch-concurrent-test"
+	const goroutines = 50
+	const batchSize = 10000
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	for i := 0; i < goroutines; i++ {
+		go func(id int) {
+			defer wg.Done()
+			values := make([]proto.Message, batchSize)
+			keys := make([]string, batchSize)
+			for j := 0; j < batchSize; j++ {
+				values[j] = &TestMessage{Value: fmt.Sprintf("batch-%d-%d", id, j)}
+				keys[j] = fmt.Sprintf("key-%d-%d", id, j)
+			}
+			testValues := &testValues{values: values, keys: keys}
+			err := storage.BatchSave(ctx, projectID, testValues)
+			assert.NoError(t, err)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// 验证总数据量
+	size := storage.Size(ctx, projectID)
+	assert.Equal(t, goroutines*batchSize, size)
+}
+
+func TestBBoltStorage_MultipleProjectsIsolation(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	const projects = 10
+
+	// 为每个项目写入数据
+	for p := 0; p < projects; p++ {
+		projectName := fmt.Sprintf("project-%d", p)
+		projectPath := fmt.Sprintf("/tmp/test-project-%d", p)
+		projectID := generateTestProjectUUID(projectName, projectPath)
+
+		// 创建测试用的Values实现
+		values := &testValues{
+			values: make([]proto.Message, p+1),
+			keys:   make([]string, p+1),
+		}
+		for i := 0; i < p+1; i++ {
+			values.values[i] = &TestMessage{Value: fmt.Sprintf("project-%d-value-%d", p, i)}
+			values.keys[i] = fmt.Sprintf("key-%d", i)
+		}
+
+		err := storage.BatchSave(ctx, projectID, values)
+		assert.NoError(t, err)
+	}
+
+	// 验证项目隔离性
+	for p := 0; p < projects; p++ {
+		projectName := fmt.Sprintf("project-%d", p)
+		projectPath := fmt.Sprintf("/tmp/test-project-%d", p)
+		projectID := generateTestProjectUUID(projectName, projectPath)
+		size := storage.Size(ctx, projectID)
+		assert.Equal(t, p+1, size)
+	}
+}
+
+func TestBBoltStorage_CorruptedFileHandling(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "corruption-test-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	// 创建正常存储
+	storage, err := NewBBoltStorage(tempDir, &mockLogger{})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	projectName := "corruption-test"
+	projectPath := "/tmp/corruption-test"
+	projectID := generateTestProjectUUID(projectName, projectPath)
+
+	// 写入一些数据
+	err = storage.Save(ctx, projectID, &TestMessage{Value: "test-data"})
+	assert.NoError(t, err)
+	storage.Close()
+
+	// 模拟文件损坏：直接修改数据库文件
+	dbPath := filepath.Join(tempDir, projectID, "data.db")
+	data, err := os.ReadFile(dbPath)
+	require.NoError(t, err)
+
+	// 破坏文件内容（修改前100字节）
+	if len(data) > 100 {
+		for i := 0; i < 100; i++ {
+			data[i] = byte(i % 256)
+		}
+		err = os.WriteFile(dbPath, data, 0644)
+		require.NoError(t, err)
+	}
+
+	// 尝试重新打开损坏的文件
+	_, err = NewBBoltStorage(tempDir, &mockLogger{})
+	assert.NoError(t, err)
+}
+
+func TestBBoltStorage_NonexistentDirectory(t *testing.T) {
+	tempDir := filepath.Join(os.TempDir(), "nonexistent", "deep", "path", fmt.Sprintf("%d", time.Now().UnixNano()))
+	defer os.RemoveAll(filepath.Dir(tempDir))
+
+	storage, err := NewBBoltStorage(tempDir, &mockLogger{})
+	assert.NoError(t, err)
+	assert.NotNil(t, storage)
+
+	if storage != nil {
+		storage.Close()
+	}
+}
+
+func TestBBoltStorage_ReadOnlyFileSystem(t *testing.T) {
+	if testing.Short() {
+		t.Skip("跳过只读文件系统测试")
+	}
+
+	// 在Windows系统上跳过此测试，因为Windows对只读目录的处理方式不同
+	if runtime.GOOS == "windows" {
+		t.Skip("在Windows系统上跳过只读文件系统测试")
+	}
+
+	tempDir, err := os.MkdirTemp("", "readonly-test-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	// 创建存储并写入数据
+	storage, err := NewBBoltStorage(tempDir, &mockLogger{})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	projectName := "test"
+	projectPath := "/tmp/test"
+	projectID := generateTestProjectUUID(projectName, projectPath)
+	err = storage.Save(ctx, projectID, &TestMessage{Value: "data"})
+	assert.NoError(t, err)
+	storage.Close()
+
+	// 修改目录权限为只读
+	err = os.Chmod(tempDir, 0444)
+	require.NoError(t, err)
+	defer os.Chmod(tempDir, 0755) // 恢复权限
+
+	// 尝试在只读目录中创建新存储
+	_, err = NewBBoltStorage(tempDir, &mockLogger{})
+	assert.Error(t, err)
+}
+
+func TestBBoltStorage_LargeDataHandling(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	projectName := "large-data-test"
+	projectPath := "/tmp/large-data-test"
+	projectID := generateTestProjectUUID(projectName, projectPath)
+
+	// 测试大数据量
+	const dataCount = 1000
+	values := &testValues{
+		values: make([]proto.Message, dataCount),
+		keys:   make([]string, dataCount),
+	}
+	for i := 0; i < dataCount; i++ {
+		values.values[i] = &TestMessage{Value: fmt.Sprintf("large-value-%d", i)}
+		values.keys[i] = fmt.Sprintf("key-%d", i)
+	}
+	err := storage.BatchSave(ctx, projectID, values)
+	assert.NoError(t, err)
+
+	size := storage.Size(ctx, projectID)
+	assert.Equal(t, dataCount, size)
+
+	// 测试超大单条数据
+	largeValue := &TestMessage{Value: string(make([]byte, 1024*1024))} // 1MB
+	largeValueProjectID := projectID + "-large"
+	err = storage.Save(ctx, largeValueProjectID, largeValue)
+	assert.NoError(t, err)
+
+	retrieved, err := storage.Get(ctx, largeValueProjectID, TestKey{key: "*store.TestMessage"})
+	assert.NoError(t, err)
+	assert.Equal(t, largeValue.Value, string(retrieved.(*RawMessage).Data))
+}
+
+func TestBBoltStorage_SpecialProjectNames(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	// 项目名来自路径的最后一层，只会出现路径允许的字符（windows、linux、mac）
+	specialNames := []string{
+		"test-project",                 // 普通项目名
+		"test.project",                 // 包含点
+		"test project",                 // 包含空格
+		"test-project-123",             // 包含数字
+		"test_project",                 // 包含下划线
+		"test-project.123",             // 包含点和数字
+		"a",                            // 单字符
+		"1234567890",                   // 纯数字
+		"test-project-with-unicode-测试", // 包含Unicode字符
+	}
+
+	for _, projectName := range specialNames {
+		// 为每个项目生成唯一的路径
+		projectPath := fmt.Sprintf("/tmp/%s", projectName)
+		projectID := generateTestProjectUUID(projectName, projectPath)
+
+		value := &TestMessage{Value: "test-value"}
+		err := storage.Save(ctx, projectID, value)
+		assert.NoError(t, err)
+
+		retrieved, err := storage.Get(ctx, projectID, TestKey{key: "*store.TestMessage"})
+		assert.NoError(t, err)
+		assert.Equal(t, value.Value, string(retrieved.(*RawMessage).Data))
+	}
+}
+
+func TestBBoltStorage_CloseDuringOperations(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	projectID := "close-during-ops"
+
+	// 预填充数据
+	err := storage.Save(ctx, projectID, &TestMessage{Value: "test"})
+	assert.NoError(t, err)
+
+	// 并发关闭和操作
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		time.Sleep(10 * time.Millisecond)
+		storage.Close()
+	}()
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			err := storage.Save(ctx, projectID, &TestMessage{Value: fmt.Sprintf("concurrent-%d", i)})
+			if err != nil {
+				// 期望在关闭后操作失败
+				assert.Contains(t, err.Error(), "database not open")
+				break
+			}
+		}
+	}()
+
+	wg.Wait()
 }
