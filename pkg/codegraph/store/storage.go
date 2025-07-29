@@ -42,12 +42,12 @@ const (
 	symPrefix  = "sym"
 )
 
-//// PathKey 键生成函数  unix path
-//func PathKey(path string) string {
+//// ElementPathKey 键生成函数  unix path
+//func ElementPathKey(path string) string {
 //	return fmt.Sprintf("%s:%s", pathPrefix, utils.ToUnixPath(path))
 //}
 //
-//func SymbolKey(symbol string) string {
+//func SymbolNameKey(symbol string) string {
 //	return fmt.Sprintf("%s:%s", symPrefix, symbol)
 //}
 
@@ -55,15 +55,15 @@ type Key interface {
 	Get() string
 }
 
-type PathKey string
+type ElementPathKey string
 
-func (p PathKey) Get() string {
+func (p ElementPathKey) Get() string {
 	return fmt.Sprintf("%s:%s", pathPrefix, utils.ToUnixPath(string(p)))
 }
 
-type SymbolKey string
+type SymbolNameKey string
 
-func (s SymbolKey) Get() string {
+func (s SymbolNameKey) Get() string {
 	return fmt.Sprintf("%s:%s", symPrefix, string(s))
 }
 

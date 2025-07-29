@@ -1,8 +1,7 @@
 package workspace
 
 import (
-	"codebase-indexer/pkg/codegraph/analyzer"
-	"codebase-indexer/pkg/codegraph/parser"
+	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
 	"codebase-indexer/pkg/codegraph/types"
 	"crypto/sha256"
 	"encoding/hex"
@@ -31,7 +30,7 @@ func (p *Project) Uuid() (string, error) {
 	return p.Name + types.Underline + hex.EncodeToString(hash[:]), nil
 }
 
-type FileElementTables []*parser.FileElementTable
+type FileElementTables []*codegraphpb.FileElementTable
 
 func (l FileElementTables) Len() int { return len(l) }
 func (l FileElementTables) Value(i int) proto.Message {
@@ -41,11 +40,11 @@ func (l FileElementTables) Key(i int) string {
 	return l[i].Path
 }
 
-type SymbolDefinitions []*analyzer.SymbolDefinition
+type SymbolDefinitions []*codegraphpb.SymbolDefinition
 
 func (l SymbolDefinitions) Len() int { return len(l) }
 func (l SymbolDefinitions) Value(i int) proto.Message {
-	return l[i].Definitions
+	return l[i]
 }
 
 func (l SymbolDefinitions) Key(i int) string {

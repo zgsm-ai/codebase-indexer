@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package codegraphpb;
+
+import "pkg/codegraph/proto/types.proto";
+
+option go_package = "pkg/codegraph/proto/codegraphpb;codegraphpb";
+
+// SymbolDefinition 符号定义
+message SymbolDefinition {
+  string name = 1;
+  repeated Definition definitions = 2;
+}
+
+// Definition 定义详情
+message Definition {
+  string path = 1;
+  repeated int32 range = 2;
+  ElementType element_type = 3;
+}

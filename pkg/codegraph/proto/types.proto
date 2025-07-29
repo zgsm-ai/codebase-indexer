@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package codegraphpb;
+
+option go_package = "pkg/codegraph/proto/codegraphpb;codegraphpb";
+
+// ElementType 元素类型枚举，只包含核心类型
+enum ElementType {
+  ELEMENT_TYPE_UNDEFINED = 0;
+  ELEMENT_TYPE_FUNCTION = 1;
+  ELEMENT_TYPE_METHOD = 2;
+  ELEMENT_TYPE_CALL = 3;
+  ELEMENT_TYPE_REFERENCE = 4;
+  ELEMENT_TYPE_CLASS = 5;
+  ELEMENT_TYPE_INTERFACE = 6;
+  ELEMENT_TYPE_VARIABLE = 7;
+}
