@@ -1,0 +1,1504 @@
+openapi: 3.0.3
+info:
+  title: Codebase Indexer API
+  description: 代码库索引器HTTP API文档 - 提供代码库同步、索引构建、关系检索等功能
+  version: 1.0.0
+  contact:
+    name: Codebase Indexer Team
+    email: support@codebase-indexer.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: 本地开发服务器
+  - url: https://api.codebase-indexer.com
+    description: 生产环境服务器
+
+tags:
+  - name: sync
+    description: 代码库同步相关接口
+  - name: search
+    description: 代码检索相关接口
+  - name: files
+    description: 文件操作相关接口
+  - name: codebases
+    description: 代码库管理相关接口
+  - name: index
+    description: 索引管理相关接口
+  - name: auth
+    description: 认证授权相关接口
+  - name: system
+    description: 系统信息相关接口
+  - name: events
+    description: 事件处理相关接口
+
+paths:
+  # ==================== 同步相关接口 ====================
+  /codebase-indexer/api/v1/register:
+    post:
+      tags:
+        - sync
+      summary: 注册工作空间同步
+      description: 注册工作空间用于代码库同步
+      operationId: registerSync
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterSyncRequest'
+      responses:
+        '200':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterSyncResponse'
+        '400':
+          description: 请求格式错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterSyncResponse'
+        '404':
+          description: 未找到代码库
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterSyncResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterSyncResponse'
+
+  /codebase-indexer/api/v1/sync:
+    post:
+      tags:
+        - sync
+      summary: 同步代码库
+      description: 同步代码库文件
+      operationId: syncCodebase
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncCodebaseRequest'
+      responses:
+        '200':
+          description: 同步成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncCodebaseResponse'
+        '400':
+          description: 请求格式错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncCodebaseResponse'
+        '404':
+          description: 未找到代码库
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncCodebaseResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncCodebaseResponse'
+
+  /codebase-indexer/api/v1/unregister:
+    post:
+      tags:
+        - sync
+      summary: 取消注册工作空间同步
+      description: 从代码库同步中取消注册工作空间
+      operationId: unregisterSync
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnregisterSyncRequest'
+      responses:
+        '200':
+          description: 取消注册成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnregisterSyncResponse'
+        '400':
+          description: 请求格式错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnregisterSyncResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnregisterSyncResponse'
+
+  # ==================== 检索相关接口 ====================
+  /codebase-indexer/api/v1/search/relation:
+    get:
+      tags:
+        - search
+      summary: 关系检索
+      description: 根据代码位置检索符号的关系信息
+      operationId: searchRelation
+      parameters:
+        - name: clientId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 用户机器ID
+          example: client-123456
+        - name: codebasePath
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 代码库绝对路径
+          example: /home/user/workspace/project
+        - name: filePath
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 文件相对路径
+          example: src/main.go
+        - name: startLine
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: 开始行号
+          example: 10
+        - name: startColumn
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: 开始列号
+          example: 5
+        - name: endLine
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: 结束行号
+          example: 15
+        - name: endColumn
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: 结束列号
+          example: 20
+        - name: symbolName
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 符号名
+          example: UserService
+        - name: includeContent
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: 是否需要返回代码内容
+          example: true
+        - name: maxLayer
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: 最大图层数
+          example: 3
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchRelationResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchRelationResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchRelationResponse'
+
+  /codebase-indexer/api/v1/search/definition:
+    get:
+      tags:
+        - search
+      summary: 获取定义
+      description: 获取一个代码文件范围的内容定义
+      operationId: searchDefinition
+      parameters:
+        - name: clientId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 用户机器ID
+          example: client-123456
+        - name: codebasePath
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 代码库绝对路径
+          example: /home/user/workspace/project
+        - name: filePath
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 文件相对路径
+          example: src/main.go
+        - name: startLine
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: 开始行号
+          example: 10
+        - name: endLine
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: 结束行号
+          example: 20
+        - name: codeSnippet
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 代码片段
+          example: "func main() {"
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchDefinitionResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchDefinitionResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchDefinitionResponse'
+
+  # ==================== 文件相关接口 ====================
+  /codebase-indexer/api/v1/files/content:
+    get:
+      tags:
+        - files
+      summary: 获取文件内容
+      description: 获取源文件内容，以二进制流形式返回
+      operationId: getFileContent
+      parameters:
+        - name: clientId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 用户机器ID
+          example: client-123456
+        - name: codebasePath
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 代码库绝对地址
+          example: /home/user/workspace/project
+        - name: filePath
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 文件相对路径
+          example: src/main.go
+        - name: startLine
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: 开始行号
+          example: 10
+        - name: endLine
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: 结束行号
+          example: 20
+      responses:
+        '200':
+          description: 文件内容二进制流
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: 请求参数错误
+        '404':
+          description: 文件不存在
+        '500':
+          description: 服务器内部错误
+
+  /codebase-indexer/api/v1/files/structure:
+    get:
+      tags:
+        - files
+      summary: 获取文件结构
+      description: 获取单个代码文件的结构信息
+      operationId: getFileStructure
+      parameters:
+        - name: clientId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 用户机器ID
+          example: client-123456
+        - name: codebasePath
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 项目绝对路径
+          example: /home/user/workspace/project
+        - name: filePath
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 文件相对路径
+          example: src/main.go
+        - name: types
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          description: 类型列表
+          example: ["function", "class", "variable"]
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetFileStructureResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetFileStructureResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetFileStructureResponse'
+
+  # ==================== 代码库相关接口 ====================
+  /codebase-indexer/api/v1/codebases/directory:
+    get:
+      tags:
+        - codebases
+      summary: 获取目录树
+      description: 获取代码库的目录树结构
+      operationId: getCodebaseDirectory
+      parameters:
+        - name: clientId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 用户机器ID
+          example: client-123456
+        - name: codebasePath
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 项目绝对路径
+          example: /home/user/workspace/project
+        - name: depth
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+          description: 递归深度
+          example: 3
+        - name: includeFiles
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: 是否包含文件
+          example: true
+        - name: subDir
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 子目录
+          example: src
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetCodebaseDirectoryResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetCodebaseDirectoryResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetCodebaseDirectoryResponse'
+
+  # ==================== 索引相关接口 ====================
+  /codebase-indexer/api/v1/index/summary:
+    get:
+      tags:
+        - index
+      summary: 获取索引情况
+      description: 获取一个代码库的索引情况摘要
+      operationId: getIndexSummary
+      parameters:
+        - name: clientId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 用户机器ID
+          example: client-123456
+        - name: codebasePath
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 项目绝对路径
+          example: /home/user/workspace/project
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetIndexSummaryResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetIndexSummaryResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetIndexSummaryResponse'
+
+  /codebase-indexer/api/v1/index/status:
+    get:
+      tags:
+        - index
+      summary: 查询索引状态
+      description: 查询工作区索引构建状态
+      operationId: getIndexStatus
+      parameters:
+        - name: clientId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 客户端ID
+          example: 111a
+        - name: workspace
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 工作区路径
+          example: g:\projects\codebase-indexer
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexStatusResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexStatusResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexStatusResponse'
+
+  /codebase-indexer/api/v1/index:
+    post:
+      tags:
+        - index
+      summary: 手动触发索引构建
+      description: 手动触发代码索引构建
+      operationId: triggerIndex
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerIndexRequest'
+      responses:
+        '200':
+          description: 触发成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerIndexResponse'
+        '400':
+          description: 请求格式错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerIndexResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerIndexResponse'
+
+  /codebase-indexer/api/v1/switch:
+    get:
+      tags:
+        - index
+      summary: 索引功能开关
+      description: 控制索引功能的开启和关闭
+      operationId: switchIndex
+      parameters:
+        - name: switch
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [on, off]
+            default: off
+          description: 开关状态，on：开启，off：关闭
+          example: on
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexSwitchResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexSwitchResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexSwitchResponse'
+
+  # ==================== 认证相关接口 ====================
+  /codebase-indexer/api/v1/token:
+    post:
+      tags:
+        - auth
+      summary: 共享访问令牌
+      description: 为同步服务共享认证令牌
+      operationId: shareAccessToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShareAccessTokenRequest'
+      responses:
+        '200':
+          description: 共享成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareAccessTokenResponse'
+        '400':
+          description: 请求格式错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareAccessTokenResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareAccessTokenResponse'
+
+  # ==================== 系统相关接口 ====================
+  /codebase-indexer/api/v1/version:
+    post:
+      tags:
+        - system
+      summary: 获取版本信息
+      description: 获取应用程序版本信息
+      operationId: getVersion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VersionRequest'
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResponse'
+        '400':
+          description: 请求格式错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResponse'
+
+  # ==================== 事件相关接口 ====================
+  /codebase-indexer/api/v1/check-ignore:
+    post:
+      tags:
+        - sync
+      summary: 检查忽略文件
+      description: 检查文件是否应该被忽略
+      operationId: checkIgnoreFile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckIgnoreFileRequest'
+      responses:
+        '200':
+          description: 检查成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckIgnoreFileResponse'
+        '400':
+          description: 请求格式错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckIgnoreFileResponse'
+        '404':
+          description: 未找到代码库
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckIgnoreFileResponse'
+        '422':
+          description: 文件被忽略
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckIgnoreFileResponse'
+
+  /codebase-indexer/api/v1/events:
+    post:
+      tags:
+        - events
+      summary: 发布工作区事件
+      description: 发布工作区事件通知
+      operationId: publishEvents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishEventsRequest'
+      responses:
+        '200':
+          description: 发布成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishEventsResponse'
+        '400':
+          description: 请求格式错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishEventsResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishEventsResponse'
+
+components:
+  schemas:
+    # ==================== 基础类型 ====================
+    Position:
+      type: object
+      properties:
+        startLine:
+          type: integer
+          description: 开始行号
+          example: 10
+        startColumn:
+          type: integer
+          description: 开始列号
+          example: 5
+        endLine:
+          type: integer
+          description: 结束行号
+          example: 15
+        endColumn:
+          type: integer
+          description: 结束列号
+          example: 20
+
+    # ==================== 同步相关 ====================
+    RegisterSyncRequest:
+      type: object
+      required:
+        - clientId
+        - workspacePath
+        - workspaceName
+      properties:
+        clientId:
+          type: string
+          description: 客户端ID
+          example: client-123456
+        workspacePath:
+          type: string
+          description: 工作空间路径
+          example: /home/user/workspace/project
+        workspaceName:
+          type: string
+          description: 工作空间名称
+          example: my-project
+
+    RegisterSyncResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: 是否成功
+          example: true
+        message:
+          type: string
+          description: 响应消息
+          example: 3 codebases registered successfully
+
+    SyncCodebaseRequest:
+      type: object
+      required:
+        - clientId
+        - workspacePath
+        - workspaceName
+      properties:
+        clientId:
+          type: string
+          description: 客户端ID
+          example: client-123456
+        workspacePath:
+          type: string
+          description: 工作空间路径
+          example: /home/user/workspace/project
+        workspaceName:
+          type: string
+          description: 工作空间名称
+          example: my-project
+        filePaths:
+          type: array
+          items:
+            type: string
+          description: 文件路径列表（可选）
+          example: ["src/main.go", "README.md"]
+
+    SyncCodebaseResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: 是否成功
+          example: true
+        code:
+          type: string
+          description: 响应代码
+          example: "0"
+        message:
+          type: string
+          description: 响应消息
+          example: sync codebase success
+
+    UnregisterSyncRequest:
+      type: object
+      required:
+        - clientId
+        - workspacePath
+        - workspaceName
+      properties:
+        clientId:
+          type: string
+          description: 客户端ID
+          example: client-123456
+        workspacePath:
+          type: string
+          description: 工作空间路径
+          example: /home/user/workspace/project
+        workspaceName:
+          type: string
+          description: 工作空间名称
+          example: my-project
+
+    UnregisterSyncResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: 响应消息
+          example: unregistered 2 codebase(s)
+        success:
+          type: boolean
+          description: 是否成功
+          example: true
+
+    # ==================== 检索相关 ====================
+    RelationNode:
+      type: object
+      properties:
+        content:
+          type: string
+          description: 代码内容
+          example: "func GetUser(id int) *User"
+        nodeType:
+          type: string
+          description: 节点类型
+          example: function
+        filePath:
+          type: string
+          description: 文件路径
+          example: src/service/user.go
+        position:
+          $ref: '#/components/schemas/Position'
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelationNode'
+          description: 子节点列表
+
+    SearchRelationResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应代码
+          example: 200
+        success:
+          type: boolean
+          description: 是否成功
+          example: true
+        message:
+          type: string
+          description: 响应消息
+          example: ok
+        data:
+          type: object
+          properties:
+            list:
+              type: array
+              items:
+                $ref: '#/components/schemas/RelationNode'
+              description: 关系节点列表
+
+    DefinitionInfo:
+      type: object
+      properties:
+        filePath:
+          type: string
+          description: 文件路径
+          example: src/service/user.go
+        name:
+          type: string
+          description: 定义名称
+          example: UserService
+        type:
+          type: string
+          description: 定义类型
+          example: struct
+        content:
+          type: string
+          description: 代码内容
+          example: "type UserService struct { db *Database }"
+        position:
+          $ref: '#/components/schemas/Position'
+
+    SearchDefinitionResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应代码
+          example: 200
+        success:
+          type: boolean
+          description: 是否成功
+          example: true
+        message:
+          type: string
+          description: 响应消息
+          example: ok
+        data:
+          type: object
+          properties:
+            list:
+              type: array
+              items:
+                $ref: '#/components/schemas/DefinitionInfo'
+              description: 定义信息列表
+
+    # ==================== 文件相关 ====================
+    GetFileContentResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应代码
+          example: 200
+        success:
+          type: boolean
+          description: 是否成功
+          example: true
+        message:
+          type: string
+          description: 响应消息
+          example: ok
+        data:
+          type: string
+          format: binary
+          description: 文件内容二进制数据
+
+    DirectoryNode:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 节点名称
+          example: src
+        isDir:
+          type: boolean
+          description: 是否为目录
+          example: true
+        path:
+          type: string
+          description: 节点路径
+          example: /home/user/workspace/project/src
+        size:
+          type: integer
+          format: int64
+          description: 文件大小（字节）
+          example: 1024
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/DirectoryNode'
+          description: 子节点列表
+
+    GetCodebaseDirectoryResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应代码
+          example: 200
+        success:
+          type: boolean
+          description: 是否成功
+          example: true
+        message:
+          type: string
+          description: 响应消息
+          example: ok
+        data:
+          type: object
+          properties:
+            codebaseId:
+              type: string
+              description: 代码库ID
+              example: codebase-123456
+            name:
+              type: string
+              description: 代码库名称
+              example: my-project
+            rootPath:
+              type: string
+              description: 根路径
+              example: /home/user/workspace/project
+            totalFiles:
+              type: integer
+              description: 总文件数
+              example: 100
+            totalSize:
+              type: integer
+              format: int64
+              description: 总大小（字节）
+              example: 1048576
+            directoryTree:
+              type: array
+              items:
+                $ref: '#/components/schemas/DirectoryNode'
+              description: 目录树结构
+
+    FileStructureInfo:
+      type: object
+      properties:
+        type:
+          type: string
+          description: 类型
+          example: function
+        name:
+          type: string
+          description: 名称
+          example: GetUser
+        position:
+          $ref: '#/components/schemas/Position'
+        content:
+          type: string
+          description: 代码内容
+          example: "func GetUser(id int) *User"
+
+    GetFileStructureResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应代码
+          example: 200
+        success:
+          type: boolean
+          description: 是否成功
+          example: true
+        message:
+          type: string
+          description: 响应消息
+          example: ok
+        data:
+          type: object
+          properties:
+            list:
+              type: array
+              items:
+                $ref: '#/components/schemas/FileStructureInfo'
+              description: 文件结构信息列表
+
+    # ==================== 索引相关 ====================
+    IndexSummary:
+      type: object
+      properties:
+        codegraph:
+          type: object
+          properties:
+            status:
+              type: string
+              description: 状态
+              example: completed
+            totalFiles:
+              type: integer
+              description: 总文件数
+              example: 100
+
+    GetIndexSummaryResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应代码
+          example: 200
+        success:
+          type: boolean
+          description: 是否成功
+          example: true
+        message:
+          type: string
+          description: 响应消息
+          example: ok
+        data:
+          $ref: '#/components/schemas/IndexSummary'
+
+    IndexStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, running, success, failed]
+          description: 状态
+          example: running
+        totalFiles:
+          type: integer
+          description: 总文件数
+          example: 100
+        totalSucceed:
+          type: integer
+          description: 成功处理的文件数
+          example: 10
+        totalFailed:
+          type: integer
+          description: 处理失败的文件数
+          example: 10
+        totalChunks:
+          type: integer
+          description: 总块数（仅embedding索引）
+          example: 1000
+
+    ProjectIndexStatus:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 项目名称
+          example: zgsm
+        embedding:
+          $ref: '#/components/schemas/IndexStatus'
+        codegraph:
+          $ref: '#/components/schemas/IndexStatus'
+
+    IndexStatusResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应代码
+          example: 0
+        message:
+          type: string
+          description: 响应消息
+          example: ok
+        data:
+          type: object
+          properties:
+            projects:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProjectIndexStatus'
+              description: 项目列表
+
+    TriggerIndexRequest:
+      type: object
+      required:
+        - workspace
+        - path
+        - type
+      properties:
+        workspace:
+          type: string
+          description: 工作空间路径
+          example: G:\projects\codebase-indexer
+        path:
+          type: string
+          description: 构建路径
+          example: G:\projects\codebase-indexer\api\
+        type:
+          type: string
+          enum: [codegraph, embedding, all]
+          description: 索引类型
+          example: codegraph
+
+    TriggerIndexResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应代码
+          example: 0
+        success:
+          type: boolean
+          description: 是否成功
+          example: true
+        message:
+          type: string
+          description: 响应消息
+          example: ok
+        data:
+          type: integer
+          description: 触发的任务ID
+          example: 1
+
+    IndexSwitchResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应代码
+          example: 0
+        success:
+          type: boolean
+          description: 是否成功
+          example: true
+        message:
+          type: string
+          description: 响应消息
+          example: ok
+        data:
+          type: boolean
+          description: 当前开关状态
+          example: true
+
+    # ==================== 认证相关 ====================
+    ShareAccessTokenRequest:
+      type: object
+      required:
+        - clientId
+        - serverEndpoint
+        - accessToken
+      properties:
+        clientId:
+          type: string
+          description: 客户端ID
+          example: client-123456
+        serverEndpoint:
+          type: string
+          description: 服务器端点
+          example: https://api.example.com
+        accessToken:
+          type: string
+          description: 访问令牌
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+    ShareAccessTokenResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应代码
+          example: 200
+        success:
+          type: boolean
+          description: 是否成功
+          example: true
+        message:
+          type: string
+          description: 响应消息
+          example: ok
+
+    # ==================== 系统相关 ====================
+    VersionRequest:
+      type: object
+      required:
+        - clientId
+      properties:
+        clientId:
+          type: string
+          description: 客户端ID
+          example: client-123456
+
+    VersionResponseData:
+      type: object
+      properties:
+        appName:
+          type: string
+          description: 应用名称
+          example: Codebase Syncer
+        version:
+          type: string
+          description: 版本号
+          example: 1.0.0
+        osName:
+          type: string
+          description: 操作系统名称
+          example: cross-platform
+        archName:
+          type: string
+          description: 架构名称
+          example: universal
+
+    VersionResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应代码
+          example: 200
+        success:
+          type: boolean
+          description: 是否成功
+          example: true
+        message:
+          type: string
+          description: 响应消息
+          example: ok
+        data:
+          $ref: '#/components/schemas/VersionResponseData'
+
+    # ==================== 事件相关 ====================
+    WorkspaceEvent:
+      type: object
+      required:
+        - eventType
+        - eventTime
+        - sourcePath
+      properties:
+        eventType:
+          type: string
+          enum: [open_workspace, close_workspace, add_file, modify_file, delete_file, rename_file, move_file, rename_dir, move_dir, delete_dir]
+          description: 事件类型
+          example: add_file
+        eventTime:
+          type: string
+          description: 事件发生时间
+          example: "2025-07-18 16:01:00"
+        sourcePath:
+          type: string
+          description: 源文件路径
+          example: G:\projects\codebase-indexer\main.go
+        targetPath:
+          type: string
+          description: 目标文件路径（重命名或移动时使用）
+          example: G:\projects\codebase-indexer\new_main.go
+
+    PublishEventsRequest:
+      type: object
+      required:
+        - workspace
+        - data
+      properties:
+        workspace:
+          type: string
+          description: 工作空间路径
+          example: G:\projects\codebase-indexer
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceEvent'
+          description: 事件数据列表
+
+    PublishEventsResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应代码
+          example: 0
+        success:
+          type: boolean
+          description: 是否成功
+          example: true
+        message:
+          type: string
+          description: 响应消息
+          example: ok
+        data:
+          type: integer
+          description: 处理的事件数量
+          example: 1
+
+    CheckIgnoreFileRequest:
+      type: object
+      required:
+        - clientId
+        - workspacePath
+        - workspaceName
+        - filePaths
+      properties:
+        clientId:
+          type: string
+          description: 客户端ID
+          example: client-123456
+        workspacePath:
+          type: string
+          description: 工作空间路径
+          example: /home/user/workspace/project
+        workspaceName:
+          type: string
+          description: 工作空间名称
+          example: project
+        filePaths:
+          type: array
+          items:
+            type: string
+          description: 文件路径列表
+          example: ["/home/user/workspace/project/file1.txt", "/home/user/workspace/project/file2.txt"]
+
+    CheckIgnoreFileResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应代码
+          example: 0
+        success:
+          type: boolean
+          description: 是否成功
+          example: true
+        ignore:
+          type: boolean
+          description: 是否应该忽略
+          example: false
+        message:
+          type: string
+          description: 错误信息
+          example: ""
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - BearerAuth: []

@@ -3,6 +3,7 @@ package resolver
 import (
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
+	"fmt"
 
 	"strings"
 
@@ -20,6 +21,8 @@ func (js *JavaScriptResolver) Resolve(ctx context.Context, element Element, rc *
 		特殊处理：require调用应该被解析为import，而不是call或variable
 		后面提取出来作为公共函数
 	*/
+	rootCapture := rc.Match.Captures[0]
+	updateRootElement(element, &rootCapture, rc.CaptureNames[rootCapture.Index], rc.SourceFile.Content)
 	if rc.Match != nil && len(rc.Match.Captures) > 0 {
 		rootCapture := rc.Match.Captures[0]
 		// 检查是否是call_expression且函数是require
@@ -58,18 +61,9 @@ func (js *JavaScriptResolver) Resolve(ctx context.Context, element Element, rc *
 					if parent != nil && parent.Kind() == string(types.NodeKindVariableDeclarator) {
 						nameNode := parent.ChildByFieldName("name")
 						if nameNode != nil {
-							importElement.Alias = string(nameNode.Utf8Text(rc.SourceFile.Content))
-							importElement.Content = []byte(importElement.Name)
+							importElement.Name = string(nameNode.Utf8Text(rc.SourceFile.Content))
 						}
 					}
-
-					// 设置范围
-					importElement.SetRange([]int32{
-						int32(rootCapture.Node.StartPosition().Row),
-						int32(rootCapture.Node.StartPosition().Column),
-						int32(rootCapture.Node.EndPosition().Row),
-						int32(rootCapture.Node.EndPosition().Column),
-					})
 
 					return []Element{importElement}, nil
 				}
@@ -84,20 +78,19 @@ func (js *JavaScriptResolver) Resolve(ctx context.Context, element Element, rc *
 func (js *JavaScriptResolver) resolveImport(ctx context.Context, element *Import, rc *ResolveContext) ([]Element, error) {
 
 	elements := []Element{element}
-
+	rootCapture := rc.Match.Captures[0]
+	updateRootElement(element, &rootCapture, rc.CaptureNames[rootCapture.Index], rc.SourceFile.Content)
 	for _, capture := range rc.Match.Captures {
 		if capture.Node.IsMissing() || capture.Node.IsError() {
 			continue
 		}
 		nodeCaptureName := rc.CaptureNames[capture.Index]
 		content := capture.Node.Utf8Text(rc.SourceFile.Content)
-		updateRootElement(element, &capture, nodeCaptureName, rc.SourceFile.Content)
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeImport:
 			element.Type = types.ElementTypeImport
 		case types.ElementTypeImportName:
 			element.Name = content
-			element.Content = []byte(content)
 		case types.ElementTypeImportAlias:
 			element.Alias = content
 		case types.ElementTypeImportSource:
@@ -117,15 +110,14 @@ func (js *JavaScriptResolver) resolvePackage(ctx context.Context, element *Packa
 
 func (js *JavaScriptResolver) resolveFunction(ctx context.Context, element *Function, rc *ResolveContext) ([]Element, error) {
 	elements := []Element{element}
+	rootCapture := rc.Match.Captures[0]
+	updateRootElement(element, &rootCapture, rc.CaptureNames[rootCapture.Index], rc.SourceFile.Content)
 	for _, capture := range rc.Match.Captures {
 		if capture.Node.IsMissing() || capture.Node.IsError() {
 			continue
 		}
 		nodeCaptureName := rc.CaptureNames[capture.Index]
 		content := capture.Node.Utf8Text(rc.SourceFile.Content)
-
-		updateRootElement(element, &capture, nodeCaptureName, rc.SourceFile.Content)
-
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeFunction:
 			element.Type = types.ElementTypeFunction
@@ -135,7 +127,6 @@ func (js *JavaScriptResolver) resolveFunction(ctx context.Context, element *Func
 		case types.ElementTypeFunctionName:
 			element.BaseElement.Name = content
 			element.Declaration.Name = content
-			element.Content = []byte(content)
 		case types.ElementTypeFunctionParameters:
 			parseJavaScriptParameters(element, capture.Node, rc.SourceFile.Content)
 		}
@@ -198,16 +189,15 @@ func containsModifier(content string, modifier string) bool {
 }
 
 func (js *JavaScriptResolver) resolveMethod(ctx context.Context, element *Method, rc *ResolveContext) ([]Element, error) {
+	elements := []Element{element}
 	rootCap := rc.Match.Captures[0]
 	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
-	elements := []Element{element}
 	for _, capture := range rc.Match.Captures {
 		if capture.Node.IsMissing() || capture.Node.IsError() {
 			continue
 		}
 		nodeCaptureName := rc.CaptureNames[capture.Index]
 		content := capture.Node.Utf8Text(rc.SourceFile.Content)
-		updateRootElement(element, &capture, nodeCaptureName, rc.SourceFile.Content)
 
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeMethod:
@@ -217,7 +207,6 @@ func (js *JavaScriptResolver) resolveMethod(ctx context.Context, element *Method
 		case types.ElementTypeMethodName:
 			element.BaseElement.Name = content
 			element.Declaration.Name = content
-			element.Content = []byte(content)
 		case types.ElementTypeMethodParameters:
 			parseJavaScriptMethodParameters(element, capture.Node, rc.SourceFile.Content)
 		}
@@ -231,18 +220,6 @@ func (js *JavaScriptResolver) resolveMethod(ctx context.Context, element *Method
 	}
 	// 补充作用域
 	element.BaseElement.Scope = getScopeFromModifiers(element.Declaration.Modifier, ownerKind)
-	if element.Declaration.Modifier == types.EmptyString {
-		switch ownerKind {
-		case types.NodeKindClassDeclaration:
-			element.Declaration.Modifier = types.PackagePrivate
-		case types.NodeKindInterfaceDeclaration:
-			element.Declaration.Modifier = types.PublicAbstract
-		case types.NodeKindEnumDeclaration:
-			element.Declaration.Modifier = types.PackagePrivate
-		default:
-			element.Declaration.Modifier = types.PackagePrivate
-		}
-	}
 	return elements, nil
 }
 
@@ -278,7 +255,6 @@ func (js *JavaScriptResolver) resolveClass(ctx context.Context, element *Class, 
 		}
 		nodeCaptureName := rc.CaptureNames[capture.Index]
 		content := capture.Node.Utf8Text(rc.SourceFile.Content)
-		updateRootElement(element, &capture, nodeCaptureName, rc.SourceFile.Content)
 
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeClass:
@@ -287,7 +263,6 @@ func (js *JavaScriptResolver) resolveClass(ctx context.Context, element *Class, 
 			// 解析类体中的所有成员
 		case types.ElementTypeClassName:
 			element.BaseElement.Name = content
-			element.Content = []byte(content)
 		case types.ElementTypeClassExtends:
 			//获取继承的类名
 			Node := capture.Node
@@ -296,28 +271,30 @@ func (js *JavaScriptResolver) resolveClass(ctx context.Context, element *Class, 
 			element.SuperClasses = append(element.SuperClasses, content)
 		}
 	}
-	parseJavaScriptClassBody(&rootCapure.Node, rc.SourceFile.Content, element)
+	cls := parseJavaScriptClassBody(&rootCapure.Node, rc.SourceFile.Content, element.BaseElement.Name)
+	element.Fields = cls.Fields
+	element.Methods = cls.Methods
 	return elements, nil
 }
 
 // parseJavaScriptClassBody 解析JavaScript类体，提取字段和方法
-func parseJavaScriptClassBody(node *sitter.Node, content []byte, class *Class) {
+func parseJavaScriptClassBody(node *sitter.Node, content []byte, className string) *Class {
+	class := &Class{
+		BaseElement: &BaseElement{
+			Name:  className,
+			Scope: types.ScopeFile,
+			Type:  types.ElementTypeClass,
+		},
+		Methods: []*Method{},
+		Fields:  []*Field{},
+	}
 	// 查找class_body节点
 	var classBodyNode *sitter.Node
-
 	// 类声明节点的最后一个子节点通常是类体
-	for i := uint(0); i < node.ChildCount(); i++ {
-		child := node.Child(i)
-		if child != nil && child.Kind() == string(types.NodeKindClassBody) {
-			classBodyNode = child
-			break
-		}
-	}
-
+	classBodyNode = node.Child(node.ChildCount() - 1)
 	if classBodyNode == nil {
-		return
+		return class
 	}
-
 	// 遍历类体中的所有成员
 	for i := uint(0); i < classBodyNode.ChildCount(); i++ {
 		memberNode := classBodyNode.Child(i)
@@ -326,10 +303,12 @@ func parseJavaScriptClassBody(node *sitter.Node, content []byte, class *Class) {
 		}
 
 		kind := memberNode.Kind()
+		fmt.Println("kind:", kind)
 		switch types.ToNodeKind(kind) {
 		case types.NodeKindMethodDefinition:
 			// 处理方法
 			method := parseJavaScriptMethodNode(memberNode, content, class.BaseElement.Name)
+			method.Owner = className
 			if method != nil {
 				class.Methods = append(class.Methods, method)
 			}
@@ -341,6 +320,7 @@ func parseJavaScriptClassBody(node *sitter.Node, content []byte, class *Class) {
 			}
 		}
 	}
+	return class
 }
 
 // parseJavaScriptMethodNode 解析JavaScript方法节点
@@ -445,6 +425,7 @@ func (js *JavaScriptResolver) resolveVariable(ctx context.Context, element *Vari
 
 	// 检查节点内容
 	rootCapure := rc.Match.Captures[0]
+	updateRootElement(element, &rootCapure, rc.CaptureNames[rootCapure.Index], rc.SourceFile.Content)
 	_ = rc.CaptureNames[rootCapure.Index] // 避免未使用警告
 
 	// 首先获取变量名
@@ -460,10 +441,8 @@ func (js *JavaScriptResolver) resolveVariable(ctx context.Context, element *Vari
 			break
 		}
 	}
-
 	// 使用一个集合跟踪已处理的节点，避免重复处理
 	processedNodes := make(map[uint32]bool)
-
 	// 检查是否为箭头函数
 	for _, capture := range rc.Match.Captures {
 		if capture.Node.IsMissing() || capture.Node.IsError() {
@@ -495,21 +474,21 @@ func (js *JavaScriptResolver) resolveVariable(ctx context.Context, element *Vari
 				// 如果是require调用，跳过变量处理，后续会在resolveCall中处理为import
 				return []Element{}, nil
 			}
-
-			if rightNode != nil && isArrowFunction(rightNode) {
+			arrowFunction := isArrowFunction(rightNode)
+			if rightNode != nil && arrowFunction != types.EmptyString {
 				// 直接创建函数元素
 				functionElement := &Function{
 					BaseElement: &BaseElement{
-						Name:  variableName,
+						Name:  "",
 						Path:  element.Path,
 						Scope: types.ScopeFile,
 						Type:  types.ElementTypeFunction,
 					},
 					Declaration: Declaration{
-						Name:       variableName,
+						Name:       "",
 						Parameters: []Parameter{},
 						ReturnType: []string{},
-						Modifier:   types.Arrow,
+						Modifier:   arrowFunction,
 					},
 				}
 
@@ -517,43 +496,27 @@ func (js *JavaScriptResolver) resolveVariable(ctx context.Context, element *Vari
 				parseArrowFunctionParameters(functionElement, rightNode, rc.SourceFile.Content)
 
 				// 设置范围
-				functionElement.SetRange([]int32{
-					int32(rightNode.StartPosition().Row),
-					int32(rightNode.StartPosition().Column),
-					int32(rightNode.EndPosition().Row),
-					int32(rightNode.EndPosition().Column),
-				})
+				updateElementRange(functionElement, &capture)
 
 				// 直接返回函数元素
 				elements = append(elements, functionElement)
-				return elements, nil
 			} else if rightNode != nil && isClassOrStructReference(rightNode) {
+				// 存储引用路径
+				refPathMap := extractReferencePath(rightNode, rc.SourceFile.Content)
+
 				// 处理引用
 				refElement := &Reference{
 					BaseElement: &BaseElement{
-						Name:  variableName,
+						Name:  refPathMap["property"],
 						Path:  element.Path,
 						Scope: types.ScopeFile,
 						Type:  types.ElementTypeReference,
 					},
-					Owner: variableName,
+					Owner: refPathMap["object"],
 				}
-
-				// 存储引用路径
-				refPath := extractReferencePath(rightNode, rc.SourceFile.Content)
-				refElement.Content = []byte(refPath)
-
 				// 设置范围
-				refElement.SetRange([]int32{
-					int32(rightNode.StartPosition().Row),
-					int32(rightNode.StartPosition().Column),
-					int32(rightNode.EndPosition().Row),
-					int32(rightNode.EndPosition().Column),
-				})
-
-				// 返回引用元素
+				updateElementRange(refElement, &capture)
 				elements = append(elements, refElement)
-				return elements, nil
 			}
 		}
 
@@ -561,27 +524,16 @@ func (js *JavaScriptResolver) resolveVariable(ctx context.Context, element *Vari
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeVariable:
 			element.Type = types.ElementTypeVariable
-
 			// 根据父节点判断变量作用域
 			element.Scope = determineVariableScope(&capture.Node)
-			element.VariableType = []string{types.PrimitiveType}
 		case types.ElementTypeVariableName:
 			element.BaseElement.Name = variableName
-			element.SetRange([]int32{
-				int32(capture.Node.StartPosition().Row),
-				int32(capture.Node.StartPosition().Column),
-				int32(capture.Node.EndPosition().Row),
-				int32(capture.Node.EndPosition().Column),
-			})
 		case types.ElementTypeVariableValue:
-			element.Content = []byte(content)
+			_ = content
 		}
 	}
 
-	// 只添加一次元素
-	if len(elements) == 0 && element.BaseElement.Name != "" {
-		elements = append(elements, element)
-	}
+	elements = append(elements, element)
 
 	return elements, nil
 }
@@ -620,23 +572,19 @@ func (js *JavaScriptResolver) handleDestructuringWithPath(node *sitter.Node, con
 	scope := determineVariableScope(node)
 
 	// 处理右侧引用
-	var refPath string
 	if isClassOrStructReference(valueNode) {
-		refPath = extractReferencePath(valueNode, content)
+		refPathMap := extractReferencePath(valueNode, content)
 
 		// 创建引用元素
 		refElement := &Reference{
 			BaseElement: &BaseElement{
-				Name:  string(valueNode.Utf8Text(content)),
+				Name:  refPathMap["property"],
 				Path:  rootPath,
 				Scope: types.ScopeFile,
 				Type:  types.ElementTypeReference,
 			},
-			Owner: string(valueNode.Utf8Text(content)),
+			Owner: refPathMap["object"],
 		}
-
-		// 设置内容
-		refElement.Content = []byte("ref:" + refPath)
 
 		// 设置范围
 		refElement.SetRange([]int32{
@@ -866,11 +814,13 @@ func parseArrowFunctionParameters(functionElement *Function, node *sitter.Node, 
 	}
 }
 
-// extractReferencePath 提取引用的路径
-func extractReferencePath(node *sitter.Node, content []byte) string {
+// extractReferencePath 递归提取 member_expression 的 object 路径和 property 名称
+func extractReferencePath(node *sitter.Node, content []byte) map[string]string {
+	result := map[string]string{"object": "", "property": ""}
 	// 如果是标识符，直接返回名称
 	if node.Kind() == string(types.NodeKindIdentifier) {
-		return string(node.Utf8Text(content))
+		result["property"] = string(node.Utf8Text(content))
+		return result
 	}
 
 	// 如果是成员表达式，尝试构建完整路径
@@ -881,7 +831,9 @@ func extractReferencePath(node *sitter.Node, content []byte) string {
 		if objectNode != nil && propertyNode != nil {
 			objectText := objectNode.Utf8Text(content)
 			propertyText := propertyNode.Utf8Text(content)
-			return string(objectText) + "." + string(propertyText)
+			result["object"] = string(objectText)
+			result["property"] = string(propertyText)
+			return result
 		}
 	}
 
@@ -889,25 +841,27 @@ func extractReferencePath(node *sitter.Node, content []byte) string {
 	if node.Kind() == string(types.NodeKindNewExpression) {
 		constructorNode := node.Child(1) // new之后的第一个子节点通常是构造函数
 		if constructorNode != nil {
-			return string(constructorNode.Utf8Text(content))
+			result["property"] = string(constructorNode.Utf8Text(content))
+			return result
 		}
 	}
-
-	// 默认返回节点文本
-	return string(node.Utf8Text(content))
+	return result
 }
 
 // isArrowFunction 判断节点是否为箭头函数
-func isArrowFunction(node *sitter.Node) bool {
+func isArrowFunction(node *sitter.Node) string {
 	// 检查节点类型
 	nodeKind := node.Kind()
 	if nodeKind == string(types.NodeKindArrowFunction) {
-		return true
+		return types.Arrow
 	}
 
 	// 如果是变量赋值表达式，检查其内容
-	return strings.Contains(nodeKind, "function") ||
-		strings.Contains(nodeKind, "arrow")
+	if strings.Contains(nodeKind, "function") ||
+		strings.Contains(nodeKind, "arrow") {
+		return types.Arrow
+	}
+	return types.EmptyString
 }
 
 // isClassOrStructReference 判断节点是否为类或结构体引用
@@ -945,7 +899,8 @@ func (js *JavaScriptResolver) resolveCall(ctx context.Context, element *Call, rc
 	}
 
 	elements := []Element{element}
-
+	rootCapture := rc.Match.Captures[0]
+	updateRootElement(element, &rootCapture, rc.CaptureNames[rootCapture.Index], rc.SourceFile.Content)
 	// 如果没有匹配信息，直接返回
 	if rc.Match == nil || rc.Match.Captures == nil || len(rc.Match.Captures) == 0 {
 		return elements, nil
@@ -961,7 +916,6 @@ func (js *JavaScriptResolver) resolveCall(ctx context.Context, element *Call, rc
 		}
 
 		nodeCaptureName := rc.CaptureNames[capture.Index]
-		updateRootElement(element, &capture, nodeCaptureName, rc.SourceFile.Content)
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeFunctionCall, types.ElementTypeMethodCall:
 			// 处理整个函数调用表达式
@@ -982,12 +936,6 @@ func (js *JavaScriptResolver) resolveCall(ctx context.Context, element *Call, rc
 				}
 			}
 
-			// 在这里处理参数，确保所有调用类型都能处理参数
-			// argsNode := capture.Node.ChildByFieldName("arguments")
-			// if argsNode != nil {
-			// 	processArguments(element, *argsNode, rc.SourceFile.Content)
-			// }
-
 		case types.ElementTypeFunctionArguments, types.ElementTypeCallArguments:
 			// 专门处理参数列表
 			processArguments(element, capture.Node, rc.SourceFile.Content)
@@ -1003,7 +951,7 @@ func (js *JavaScriptResolver) resolveCall(ctx context.Context, element *Call, rc
 	}
 
 	// 根据是否有所有者来区分方法调用和函数调用
-	if element.Owner != "" {
+	if element.Owner != types.EmptyString {
 		// 如果有所有者，则为方法调用
 		element.Type = types.ElementTypeMethodCall
 	}
@@ -1030,7 +978,7 @@ func extractMemberExpressionPath(node *sitter.Node, call *Call, content []byte) 
 
 		if propertyNode != nil {
 			// 最底层的属性是函数名
-			if funcName == "" {
+			if funcName == types.EmptyString {
 				funcName = propertyNode.Utf8Text(content)
 			} else {
 				// 中间层的属性是路径的一部分
@@ -1054,7 +1002,7 @@ func extractMemberExpressionPath(node *sitter.Node, call *Call, content []byte) 
 	}
 
 	// 设置函数名
-	if funcName != "" {
+	if funcName != types.EmptyString {
 		call.BaseElement.Name = funcName
 	}
 
@@ -1082,9 +1030,6 @@ func processArguments(element *Call, argsNode sitter.Node, content []byte) {
 		if argNode.Kind() == "," || argNode.Kind() == "(" || argNode.Kind() == ")" {
 			continue
 		}
-
-		// 获取参数值作为参数名称
-		//argName := string(argNode.Utf8Text(content))
 
 		// 创建参数对象
 		param := &Parameter{
@@ -1202,7 +1147,6 @@ func (js *JavaScriptResolver) handleRequireCall(ctx context.Context, rc *Resolve
 			if nameNode != nil {
 				importElement.Name = string(nameNode.Utf8Text(rc.SourceFile.Content))
 				importElement.BaseElement.Name = importElement.Name
-				importElement.Content = []byte(importElement.Name)
 				break
 			}
 		}
@@ -1217,11 +1161,6 @@ func (js *JavaScriptResolver) handleRequireCall(ctx context.Context, rc *Resolve
 		int32(rootCapture.Node.EndPosition().Row),
 		int32(rootCapture.Node.EndPosition().Column),
 	})
-
-	// 添加CommonJS标记
-	if importElement.Content != nil {
-		importElement.Content = append(importElement.Content, []byte(" (CommonJS)")...)
-	}
 
 	return []Element{importElement}, nil
 }

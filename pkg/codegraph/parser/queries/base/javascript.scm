@@ -73,10 +73,6 @@
   name: (property_identifier) @definition.method.name
   parameters: (formal_parameters) @definition.method.parameters) @definition.method
 
-;; 类属性
-(field_definition
-  property: (property_identifier) @definition.field.name) @definition.field
-
 
 ;; 函数调用
 (call_expression

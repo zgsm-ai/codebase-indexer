@@ -224,3 +224,199 @@ type CheckIgnoreFileResponse struct {
 	// example: ""
 	Message string `json:"message"`
 }
+
+// WorkspaceEvent represents a single workspace event
+// @Description 工作区事件数据
+type WorkspaceEvent struct {
+	// 事件类型
+	// example: add_file
+	// enum: open_workspace,close_workspace,add_file,modify_file,delete_file,rename_file,move_file,rename_dir,move_dir,delete_dir
+	EventType string `json:"eventType" binding:"required"`
+
+	// 事件发生时间
+	// example: 2025-07-18 16:01:00
+	EventTime string `json:"eventTime" binding:"required"`
+
+	// 源文件路径
+	// example: G:\projects\codebase-indexer\main.go
+	SourcePath string `json:"sourcePath" binding:"required"`
+
+	// 目标文件路径（重命名或移动时使用）
+	// example: G:\projects\codebase-indexer\new_main.go
+	TargetPath string `json:"targetPath"`
+}
+
+// PublishEventsRequest represents the request for publishing workspace events
+// @Description 发布工作区事件的请求参数
+type PublishEventsRequest struct {
+	// 工作空间路径
+	// required: true
+	// example: G:\projects\codebase-indexer
+	Workspace string `json:"workspace" binding:"required"`
+
+	// 事件数据列表
+	// required: true
+	Data []WorkspaceEvent `json:"data" binding:"required"`
+}
+
+// PublishEventsResponse represents the response for publishing workspace events
+// @Description 发布工作区事件的响应数据
+type PublishEventsResponse struct {
+	// 响应代码
+	// example: 0
+	Code int `json:"code"`
+
+	// 是否成功
+	// example: true
+	Success bool `json:"success"`
+
+	// 响应消息
+	// example: ok
+	Message string `json:"message"`
+
+	// 处理的事件数量
+	// example: 1
+	Data int `json:"data"`
+}
+
+// TriggerIndexRequest represents the request for triggering index build
+// @Description 触发索引构建的请求参数
+type TriggerIndexRequest struct {
+	// 工作空间路径
+	// required: true
+	// example: G:\projects\codebase-indexer
+	Workspace string `json:"workspace" binding:"required"`
+
+	// 构建路径
+	// required: true
+	// example: G:\projects\codebase-indexer\api\
+	Path string `json:"path" binding:"required"`
+
+	// 索引类型
+	// required: true
+	// enum: codegraph,embedding,all
+	// example: codegraph
+	Type string `json:"type" binding:"required"`
+}
+
+// TriggerIndexResponse represents the response for triggering index build
+// @Description 触发索引构建的响应数据
+type TriggerIndexResponse struct {
+	// 响应代码
+	// example: 0
+	Code int `json:"code"`
+
+	// 是否成功
+	// example: true
+	Success bool `json:"success"`
+
+	// 响应消息
+	// example: ok
+	Message string `json:"message"`
+
+	// 触发的任务ID
+	// example: 1
+	Data int `json:"data"`
+}
+
+// IndexStatus represents the status of a specific index type
+// @Description 索引状态信息
+type IndexStatus struct {
+	// 状态
+	// example: running
+	// enum: pending,running,success,failed
+	Status string `json:"status"`
+
+	// 总文件数
+	// example: 100
+	TotalFiles int `json:"totalFiles"`
+
+	// 成功处理的文件数
+	// example: 10
+	TotalSucceed int `json:"totalSucceed"`
+
+	// 处理失败的文件数
+	// example: 10
+	TotalFailed int `json:"totalFailed"`
+
+	// 总块数（仅embedding索引）
+	// example: 1000
+	TotalChunks int `json:"totalChunks,omitempty"`
+}
+
+// ProjectIndexStatus represents the index status for a project
+// @Description 项目索引状态
+type ProjectIndexStatus struct {
+	// 项目名称
+	// example: zgsm
+	Name string `json:"name"`
+
+	// 向量索引状态
+	Embedding IndexStatus `json:"embedding"`
+
+	// 代码关系索引状态
+	Codegraph IndexStatus `json:"codegraph"`
+}
+
+// IndexStatusResponse represents the response for querying index status
+// @Description 索引状态查询的响应数据
+type IndexStatusResponse struct {
+	// 响应代码
+	// example: 0
+	Code int `json:"code"`
+
+	// 响应消息
+	// example: ok
+	Message string `json:"message"`
+
+	// 项目索引状态数据
+	Data struct {
+		// 项目列表
+		Projects []ProjectIndexStatus `json:"projects"`
+	} `json:"data"`
+}
+
+// IndexStatusQuery represents the query parameters for index status
+// @Description 索引状态查询参数
+type IndexStatusQuery struct {
+	// 客户端ID
+	// required: true
+	// example: 111a
+	ClientId string `form:"clientId" binding:"required"`
+
+	// 工作空间路径
+	// required: true
+	// example: g:\projects\codebase-indexer
+	Workspace string `form:"workspace" binding:"required"`
+}
+
+// IndexSwitchQuery represents the query parameters for index switch
+// @Description 索引功能开关查询参数
+type IndexSwitchQuery struct {
+	// 开关状态
+	// required: true
+	// example: on
+	// enum: on,off
+	// default: off
+	Switch string `form:"switch" binding:"required,oneof=on off"`
+}
+
+// IndexSwitchResponse represents the response for index switch
+// @Description 索引功能开关响应数据
+type IndexSwitchResponse struct {
+	// 响应代码
+	// example: 0
+	Code int `json:"code"`
+
+	// 是否成功
+	// example: true
+	Success bool `json:"success"`
+
+	// 响应消息
+	// example: ok
+	Message string `json:"message"`
+
+	// 当前开关状态
+	// example: true
+	Data bool `json:"data"`
+}
