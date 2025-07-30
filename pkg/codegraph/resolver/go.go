@@ -531,6 +531,9 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 	// 将Go的struct视为类
 	elements := []Element{element}
 
+	// 存储可能的引用元素
+	var references []*Reference
+
 	// 如果有节点信息，从节点中提取更多信息
 	if rc.Match != nil && rc.Match.Captures != nil && len(rc.Match.Captures) > 0 {
 		for _, capture := range rc.Match.Captures {
@@ -546,11 +549,11 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 			updateRootElement(element, &capture, nodeCaptureName, rc.SourceFile.Content)
 
 			switch types.ToElementType(nodeCaptureName) {
-			case types.ElementTypeStructName:
+			case types.ElementTypeClassName:
 				element.Name = content
 				element.Scope = analyzeScope(content)
 
-			case types.ElementTypeStructType:
+			case types.ElementTypeClassType:
 				structTypeNode := capture.Node
 				// 获取field_declaration_list - 遍历所有子节点找到字段列表
 				var fieldListNode *sitter.Node
@@ -573,15 +576,68 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 						typeNode := fieldNode.ChildByFieldName("type")
 
 						if typeNode != nil {
-							fieldType := typeNode.Utf8Text(rc.SourceFile.Content)
+							var fieldType string
+
+							// 检查类型节点是否为限定类型（包含包名的类型）
+							if typeNode.Kind() == string(types.NodeKindQualifiedType) {
+								// 处理 pkg.Type 形式的类型
+								pkgNode := typeNode.ChildByFieldName("package")
+								nameNode := typeNode.ChildByFieldName("name")
+
+								if pkgNode != nil && nameNode != nil {
+									// 合并包名和类型名
+									pkgName := pkgNode.Utf8Text(rc.SourceFile.Content)
+									typeName := nameNode.Utf8Text(rc.SourceFile.Content)
+									fieldType = pkgName + "." + typeName
+								} else {
+									// 备用方案：直接使用完整文本
+									fieldType = typeNode.Utf8Text(rc.SourceFile.Content)
+								}
+							} else {
+								// 普通类型
+								fieldType = typeNode.Utf8Text(rc.SourceFile.Content)
+							}
+
 							var fieldName string
 
 							if nameNode != nil {
 								// 有名称的普通字段
 								fieldName = nameNode.Utf8Text(rc.SourceFile.Content)
 							} else {
-								// 匿名嵌入字段，使用类型作为名称
-								fieldName = fieldType
+								// 匿名嵌入字段，为父类
+								element.SuperClasses = append(element.SuperClasses, fieldType)
+
+								// 如果匿名嵌入字段不是基本类型，创建引用元素
+								if !isPrimitiveType(fieldType) {
+									// 创建引用元素
+									ref := &Reference{
+										BaseElement: &BaseElement{
+											Type: types.ElementTypeReference,
+											Range: []int32{
+												int32(typeNode.StartPosition().Row),
+												int32(typeNode.StartPosition().Column),
+												int32(typeNode.EndPosition().Row),
+												int32(typeNode.EndPosition().Column),
+											},
+										},
+									}
+
+									// 处理可能包含点号的类型名称 (如 x.Person)
+									if strings.Contains(fieldType, ".") {
+										parts := strings.Split(fieldType, ".")
+										if len(parts) == 2 {
+											ref.BaseElement.Name = parts[1] // Person
+											ref.Owner = parts[0]            // x
+										} else {
+											ref.BaseElement.Name = fieldType
+										}
+									} else {
+										ref.BaseElement.Name = fieldType
+									}
+
+									references = append(references, ref)
+								}
+								continue
 							}
 
 							// 判断可见性（公有/私有）
@@ -604,7 +660,12 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 	}
 
 	// 设置元素类型
-	element.Type = types.ElementTypeStruct
+	element.Type = types.ElementTypeClass
+
+	// 添加引用元素到结果中
+	for _, ref := range references {
+		elements = append(elements, ref)
+	}
 
 	return elements, nil
 }
@@ -612,9 +673,6 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc *ResolveContext) ([]Element, error) {
 	// 存储所有元素（变量和可能的引用）
 	elements := []Element{element}
-
-	// 存储变量引用
-	var references []*Reference
 
 	// 如果没有匹配信息，直接返回
 	if rc.Match == nil || rc.Match.Captures == nil || len(rc.Match.Captures) == 0 {
@@ -646,7 +704,7 @@ func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc 
 		element.Type = types.ElementTypeLocalVariable
 		element.Scope = types.ScopeFunction
 		// 处理多变量声明
-		elements = r.processMultipleVariableDeclaration(rootCapture, element, rc, elements, &references)
+		elements = r.processMultipleVariableDeclaration(rootCapture, element, rc, elements, nil)
 
 	case types.ElementTypeConstant:
 		element.Type = types.ElementTypeConstant
@@ -665,9 +723,7 @@ func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc 
 
 		// 根据节点类型处理不同信息
 		// 需要同时处理const，variable，local_variable
-		switch {
-		case strings.HasSuffix(nodeCaptureName, ".type"):
-
+		if strings.HasSuffix(nodeCaptureName, ".type") {
 			// 检查是否为基本数据类型
 			if isPrimitiveType(content) {
 				// 设置为基本数据类型
@@ -676,17 +732,7 @@ func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc 
 				// 保持原有类型
 				element.VariableType = []string{content}
 			}
-
-		case strings.HasSuffix(nodeCaptureName, ".value"):
-			// 变量值处理
-			// 使用processVariableValue函数处理引用类型
-			r.processVariableValue(&capture.Node, uint32(capture.Index), rc.SourceFile.Content, element.Path, &references)
 		}
-	}
-
-	// 添加引用元素
-	for _, ref := range references {
-		elements = append(elements, ref)
 	}
 
 	return elements, nil
@@ -701,27 +747,16 @@ func (r *GoResolver) processMultipleVariableDeclaration(rootCapture treesitter.Q
 	}
 
 	if parentNode != nil && parentNode.Kind() == string(types.NodeKindShortVarDeclaration) {
-		// 获取左侧和右侧节点
+		// 获取左侧节点
 		leftNode := parentNode.ChildByFieldName("left")
-		rightNode := parentNode.ChildByFieldName("right")
 
-		if leftNode != nil && rightNode != nil {
+		if leftNode != nil {
 			// 收集所有变量名
 			var varNames []*sitter.Node
 			for i := uint(0); i < leftNode.ChildCount(); i++ {
 				id := leftNode.Child(i)
 				if id != nil && id.Kind() == string(types.NodeKindIdentifier) {
 					varNames = append(varNames, id)
-				}
-			}
-
-			// 收集所有右值表达式
-			var varValues []*sitter.Node
-			for i := uint(0); i < rightNode.ChildCount(); i++ {
-				expr := rightNode.Child(i)
-				// 过滤掉逗号等分隔符节点
-				if expr != nil && expr.Kind() != "," {
-					varValues = append(varValues, expr)
 				}
 			}
 
@@ -732,14 +767,6 @@ func (r *GoResolver) processMultipleVariableDeclaration(rootCapture treesitter.Q
 					currentVarIndex = i
 					break
 				}
-			}
-
-			// 如果找到了当前变量的位置，并且有对应的值，则更新内容
-			if currentVarIndex >= 0 && currentVarIndex < len(varValues) {
-				valueNode := varValues[currentVarIndex]
-
-				// 使用新函数处理引用类型
-				r.processVariableValue(valueNode, uint32(1000+currentVarIndex), rc.SourceFile.Content, element.Path, references)
 			}
 
 			// 为其他变量创建新的元素
@@ -770,75 +797,12 @@ func (r *GoResolver) processMultipleVariableDeclaration(rootCapture treesitter.Q
 					int32(nameNode.EndPosition().Column),
 				})
 
-				// 设置变量值
-				if i < len(varValues) {
-					valueNode := varValues[i]
-
-					// 使用新函数处理引用类型
-					r.processVariableValue(valueNode, uint32(2000+i), rc.SourceFile.Content, newVariable.Path, references)
-				}
-
 				elements = append(elements, newVariable)
 			}
 		}
 	}
 
 	return elements
-}
-
-// processVariableValue 处理变量值，如果是引用类型，创建引用元素
-func (r *GoResolver) processVariableValue(valueNode *sitter.Node, elementID uint32, content []byte, rootPath string, references *[]*Reference) {
-	// 检查变量的值是否是引用类型
-	refType := parseVariableValue(valueNode, content)
-	if refType != "" {
-		// 使用函数创建引用元素
-		ref := createReferenceElement(refType, valueNode, elementID, content)
-		// 设置引用元素的Path为根元素的Path
-		ref.BaseElement.Path = rootPath
-		// 添加到引用列表
-		*references = append(*references, ref)
-	}
-}
-
-// parseVariableValue 分析变量值节点，提取可能的引用类型
-// 只在变量值是结构体实例化时返回类型名称
-func parseVariableValue(node *sitter.Node, content []byte) string {
-	// 检查节点类型
-	switch types.ToNodeKind(node.Kind()) {
-	case types.NodeKindIdentifier:
-		// 普通标识符，不是结构体实例化，返回空
-		return ""
-
-	case types.NodeKindCompositeLiteral: // TODO: 添加到NodeKind常量
-		// 结构体或数组/切片字面量
-		typeNode := node.ChildByFieldName("type")
-		if typeNode != nil {
-			// 检查是否是结构体实例化
-			if typeNode.Kind() == string(types.NodeKindTypeIdentifier) {
-				// 是结构体实例化，返回类型名称
-				return typeNode.Utf8Text(content)
-			} else if typeNode.Kind() == string(types.NodeKindSelectorExpression) {
-				// 带包名的结构体实例化，例如 pkg.Person{}
-				field := typeNode.ChildByFieldName("field")
-				operand := typeNode.ChildByFieldName("operand")
-				if field != nil && operand != nil {
-					// 返回完整的限定名，如 "pkg.Type"
-					return operand.Utf8Text(content) + "." + field.Utf8Text(content)
-				} else if field != nil {
-					return field.Utf8Text(content)
-				}
-			} else {
-				// 其他类型（如数组、切片等），不是结构体实例化，返回空
-				return ""
-			}
-		}
-
-	case types.NodeKindCallExpression:
-		// 函数调用，不是结构体实例化，返回空
-		return ""
-	}
-
-	return ""
 }
 
 func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, rc *ResolveContext) ([]Element, error) {
@@ -932,7 +896,7 @@ func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, r
 						typeNode := childNode.Child(0) // 获取第一个子节点，即类型名称
 						if typeNode != nil {
 							interfaceName := typeNode.Utf8Text(rc.SourceFile.Content)
-
+							interfaceName = strings.TrimPrefix(interfaceName, "*")
 							// 检查是否是限定名称（包含点号）
 							if strings.Contains(interfaceName, ".") {
 								// 已经是完全限定名称，直接添加
@@ -961,13 +925,13 @@ func (r *GoResolver) resolveCall(ctx context.Context, element *Call, rc *Resolve
 	// 使用现有的BaseElement存储调用信息
 	elements := []Element{element}
 
+	// 存储引用元素
+	var references []*Reference
+
 	// 如果没有匹配信息，直接返回
 	if rc.Match == nil || rc.Match.Captures == nil || len(rc.Match.Captures) == 0 {
 		return elements, nil
 	}
-
-	// 设置默认类型
-	element.Type = types.ElementTypeFunctionCall
 
 	// 处理所有捕获节点
 	for _, capture := range rc.Match.Captures {
@@ -977,8 +941,7 @@ func (r *GoResolver) resolveCall(ctx context.Context, element *Call, rc *Resolve
 		}
 
 		nodeCaptureName := rc.CaptureNames[capture.Index]
-		//content := capture.Node.Utf8Text(rc.SourceFile.Content)
-
+		content := capture.Node.Utf8Text(rc.SourceFile.Content)
 		// 更新元素的Range和其他基本属性
 		updateRootElement(element, &capture, nodeCaptureName, rc.SourceFile.Content)
 
@@ -1006,6 +969,7 @@ func (r *GoResolver) resolveCall(ctx context.Context, element *Call, rc *Resolve
 						element.BaseElement.Name = field.Utf8Text(rc.SourceFile.Content)
 						if operand != nil {
 							element.Owner = operand.Utf8Text(rc.SourceFile.Content)
+							element.Type = types.ElementTypeMethodCall
 						}
 					}
 				}
@@ -1014,7 +978,20 @@ func (r *GoResolver) resolveCall(ctx context.Context, element *Call, rc *Resolve
 		case types.ElementTypeFunctionArguments:
 			// 专门处理参数列表，仅收集参数位置信息
 			collectArgumentPositions(element, capture.Node, rc.SourceFile.Content)
+
+		// 处理结构体实例化
+		case types.ElementTypeStructCall:
+			// 创建引用元素
+			refType := content
+			ref := createReferenceElement(refType, &capture.Node, uint32(1000+len(references)), rc.SourceFile.Content, element)
+			ref.BaseElement.Path = element.Path
+			references = append(references, ref)
 		}
+	}
+
+	// 添加引用元素到结果中
+	for _, ref := range references {
+		elements = append(elements, ref)
 	}
 
 	return elements, nil
@@ -1048,14 +1025,10 @@ func collectArgumentPositions(element *Call, argsNode sitter.Node, content []byt
 			continue
 		}
 
-		// 获取参数值
-		//value := child.Utf8Text(content)
-
 		// 创建参数对象
 		param := &Parameter{
 			Name: "",
 			Type: nil,
-			//Type: []string{types.GetNodeTypeString(childKind, value)},
 		}
 
 		element.Parameters = append(element.Parameters, param)
@@ -1164,13 +1137,14 @@ func (r *GoResolver) isStandardLibrary(pkgPath string) (bool, error) {
 }
 
 // createReferenceElement 创建并返回引用类型的元素
-func createReferenceElement(refType string, node *sitter.Node, elementID uint32, content []byte) *Reference {
+func createReferenceElement(refType string, node *sitter.Node, elementID uint32, content []byte, element *Call) *Reference {
 	// 创建引用元素
 	baseRef := NewBaseElement(elementID)
 	ref := &Reference{
 		BaseElement: baseRef,
 		Owner:       refType,
 	}
+	ref.Path = element.Path
 	ref.BaseElement.Name = refType
 	ref.BaseElement.Type = types.ElementTypeReference
 	// 设置范围
