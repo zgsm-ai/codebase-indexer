@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"codebase-indexer/pkg/codegraph/parser"
+	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
 	"codebase-indexer/pkg/codegraph/resolver"
 	"codebase-indexer/pkg/codegraph/store"
 	"codebase-indexer/pkg/codegraph/types"
@@ -12,21 +13,6 @@ import (
 	"fmt"
 	"strings"
 )
-
-type ProjectElementTable struct {
-	ProjectInfo       *workspace.Project
-	FileElementTables []*parser.FileElementTable
-}
-
-type SymbolDefinition struct {
-	Name        string
-	Definitions []*Definition
-}
-type Definition struct {
-	Path        string
-	Range       []int32
-	ElementType types.ElementType
-}
 
 type DependencyAnalyzer struct {
 	workspaceReader *workspace.WorkspaceReader
@@ -45,20 +31,20 @@ func NewDependencyAnalyzer(logger logger.Logger,
 	}
 }
 
-func (da *DependencyAnalyzer) Analyze(ctx context.Context, projectSymbolTable *ProjectElementTable) error {
-	projectUuid, err := projectSymbolTable.ProjectInfo.Uuid()
+func (da *DependencyAnalyzer) Analyze(ctx context.Context,
+	projectInfo *workspace.Project, fileElementTables []*parser.FileElementTable) error {
+	projectUuid, err := projectInfo.Uuid()
 	if err != nil {
 		return err
 	}
-
 	// 1. 处理 import
-	if err = da.preprocessImport(ctx, projectSymbolTable); err != nil {
+	if err = da.preprocessImport(ctx, projectInfo, fileElementTables); err != nil {
 		da.logger.Error("analyze import error: %v", err)
 	}
 
 	// 2. 迭代符号表，去解析依赖关系。 需要区分跨文件依赖、当前文件引用。
 	// 优先根据名字做匹配，匹配到多个，再根据作用域、导入、包、别名等信息进行二次过滤。
-	for _, fileTable := range projectSymbolTable.FileElementTables {
+	for _, fileTable := range fileElementTables {
 		currentPath := fileTable.Path
 		imports := fileTable.Imports
 		for _, elem := range fileTable.Elements {
@@ -159,7 +145,7 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context, projectSymbolTable *P
 func (da *DependencyAnalyzer) SaveSymbolDefinitions(ctx context.Context, projectUuid string,
 	fileElementTables []*parser.FileElementTable) error {
 	// 2. 构建项目定义符号表  符号名 -> 元素列表，先根据符号名匹配，匹配符号名后，再根据导入路径、包名进行过滤。
-	definitionSymbolsMap := make(map[string]*SymbolDefinition)
+	definitionSymbolsMap := make(map[string]*codegraphpb.SymbolDefinition)
 	for _, fileTable := range fileElementTables {
 		// 处理定义
 		for _, elem := range fileTable.Elements {
@@ -168,18 +154,18 @@ func (da *DependencyAnalyzer) SaveSymbolDefinitions(ctx context.Context, project
 				key := elem.GetName()
 				d, ok := definitionSymbolsMap[key]
 				if !ok {
-					d = &SymbolDefinition{Name: key, Definitions: make([]*Definition, 0)}
+					d = &codegraphpb.SymbolDefinition{Name: key, Definitions: make([]*codegraphpb.Definition, 0)}
 				}
-				d.Definitions = append(d.Definitions, &Definition{
+				d.Definitions = append(d.Definitions, &codegraphpb.Definition{
 					Path:        fileTable.Path,
 					Range:       elem.GetRange(),
-					ElementType: elem.GetType(),
+					ElementType: types.ElementTypeToProto(elem.GetType()),
 				})
 				definitionSymbolsMap[key] = d
 			}
 		}
 	}
-	definitionSymbols := make([]*SymbolDefinition, 0)
+	definitionSymbols := make([]*codegraphpb.SymbolDefinition, 0)
 	for _, d := range definitionSymbolsMap {
 		definitionSymbols = append(definitionSymbols, d)
 	}
@@ -200,18 +186,18 @@ func (da *DependencyAnalyzer) findReferredElement(ctx context.Context,
 
 	foundDef := make([]resolver.Element, 0)
 
-	value, err := da.store.Get(ctx, projectUuid, store.SymbolKey(referredName))
+	value, err := da.store.Get(ctx, projectUuid, store.SymbolNameKey(referredName))
 	if err != nil {
 		return nil, fmt.Errorf("dependency_analyzer get symbol definitions error: %w", err)
 	}
-	symbolDefs := value.(*SymbolDefinition)
+	symbolDefs := value.(*codegraphpb.SymbolDefinition)
 
 	// 同名的所有定义
 	for _, def := range symbolDefs.Definitions {
 		element := &resolver.BaseElement{
 			Name:  referredName,
 			Path:  def.Path,
-			Type:  def.ElementType,
+			Type:  types.ElementTypeFromProto(def.ElementType),
 			Range: def.Range,
 		}
 		if def.Path == types.EmptyString {

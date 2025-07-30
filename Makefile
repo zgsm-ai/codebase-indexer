@@ -12,9 +12,9 @@ mock:
 
 .PHONY:proto
 proto:
-	protoc --go_out=. internal/store/codegraph/definition.proto
-	protoc --go_out=. internal/store/codegraph/document.proto
-	protoc --go_out=. internal/store/codegraph/keys.proto
+	protoc --go_out=. pkg/codegraph/proto/file_element.proto
+	protoc --go_out=. pkg/codegraph/proto/symbol_definition.proto
+	protoc --go_out=. pkg/codegraph/proto/types.proto
 
 .PHONY:test
 test:

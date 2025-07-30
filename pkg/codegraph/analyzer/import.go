@@ -1,7 +1,9 @@
 package analyzer
 
 import (
+	"codebase-indexer/pkg/codegraph/parser"
 	"codebase-indexer/pkg/codegraph/types"
+	"codebase-indexer/pkg/codegraph/workspace"
 	"context"
 	"fmt"
 	"golang.org/x/mod/modfile"
@@ -19,12 +21,13 @@ import (
 // 4、python、ts、go 别名处理；
 // 5、作用域。
 // 6、将 . 统一转为 /，方便后续处理。
-func (da *DependencyAnalyzer) preprocessImport(ctx context.Context, projectSymbolTable *ProjectElementTable) error {
-	for _, p := range projectSymbolTable.FileElementTables {
+func (da *DependencyAnalyzer) preprocessImport(ctx context.Context,
+	projectInfo *workspace.Project, fileElementTables []*parser.FileElementTable) error {
+	for _, p := range fileElementTables {
 		imports := make([]*resolver.Import, 0, len(p.Imports))
 		for _, imp := range p.Imports {
 			// TODO 过滤掉标准库、第三方库等非项目的库
-			if i := da.processImportByLanguage(imp, p.Path, p.Language, projectSymbolTable.ProjectInfo.Path); i != nil {
+			if i := da.processImportByLanguage(imp, p.Path, p.Language, projectInfo.Path); i != nil {
 				imports = append(imports, i)
 			}
 		}

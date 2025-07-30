@@ -4,7 +4,7 @@ import (
 	"codebase-indexer/pkg/codegraph/analyzer"
 	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/parser"
-	"codebase-indexer/pkg/codegraph/resolver"
+	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
 	"codebase-indexer/pkg/codegraph/store"
 	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/codegraph/utils"
@@ -85,12 +85,7 @@ func (i *Indexer) indexProject(ctx context.Context, p *workspace.Project) (types
 	projectStart := time.Now()
 	i.logger.Info("index_project start to index project：%s", p.Path)
 	// TODO 日志
-	// 1、项目符号表
-	projectTable := &analyzer.ProjectElementTable{
-		ProjectInfo:       p,
-		FileElementTables: make([]*parser.FileElementTable, 0),
-	}
-
+	fileElementTables := make([]*parser.FileElementTable, 0)
 	projectTaskMetrics := types.IndexTaskMetrics{}
 	// 并发walk 目录，构建
 	if err := i.workspaceReader.Walk(ctx, p.Path, func(walkCtx *types.WalkContext, reader io.ReadCloser) error {
@@ -115,7 +110,7 @@ func (i *Indexer) indexProject(ctx context.Context, p *workspace.Project) (types
 			return err
 		}
 		projectTaskMetrics.TotalSucceedFiles++
-		projectTable.FileElementTables = append(projectTable.FileElementTables, fileElementTable)
+		fileElementTables = append(fileElementTables, fileElementTable)
 		return nil
 	}, types.WalkOptions{
 		IgnoreError:  true,
@@ -131,25 +126,28 @@ func (i *Indexer) indexProject(ctx context.Context, p *workspace.Project) (types
 		projectTaskMetrics.TotalSourceFiles,
 		projectTaskMetrics.TotalSucceedFiles, projectTaskMetrics.TotalFailedFiles)
 
-	if len(projectTable.FileElementTables) == 0 {
+	if len(fileElementTables) == 0 {
 		errs = append(errs, fmt.Errorf("index_project project %s parsed no source files", p.Path))
 		return types.IndexTaskMetrics{}, errs
 	}
 
 	// 2. 项目符号表构建与存储
-	if err := i.analyzer.SaveSymbolDefinitions(ctx, projectUuid, projectTable.FileElementTables); err != nil {
+	if err = i.analyzer.SaveSymbolDefinitions(ctx, projectUuid, fileElementTables); err != nil {
 		errs = append(errs, err)
 		return types.IndexTaskMetrics{}, errs
 	}
 
 	// 3. 依赖分析
-	if err := i.analyzer.Analyze(ctx, projectTable); err != nil {
+	if err = i.analyzer.Analyze(ctx, p, fileElementTables); err != nil {
 		errs = append(errs, err)
 		return types.IndexTaskMetrics{}, errs
 	}
 
+	// 转换为 proto
+	protoElementTables := types.FileElementTablesToProto(fileElementTables)
+
 	// 4. 关系索引存储
-	if err := i.storage.BatchSave(ctx, projectUuid, workspace.FileElementTables(projectTable.FileElementTables)); err != nil {
+	if err = i.storage.BatchSave(ctx, projectUuid, workspace.FileElementTables(protoElementTables)); err != nil {
 		errs = append(errs, err)
 		return types.IndexTaskMetrics{}, errs
 	}
@@ -206,30 +204,30 @@ func (i *Indexer) RemoveIndexes(ctx context.Context, workspacePath string, fileP
 		i.logger.Info("remove_indexes start to remove project %s files index", pfiles.p.Name)
 
 		// 1.查询path 相应的 filetable
-		var deleteFileTables []*parser.FileElementTable
+		var deleteFileTables []*codegraphpb.FileElementTable
 		deletedPaths := make(map[string]interface{})
 		for _, fp := range pfiles.files {
-			fileTable, err := i.storage.Get(ctx, puuid, fp)
+			fileTable, err := i.storage.Get(ctx, puuid, store.ElementPathKey(fp))
 			if err != nil {
 				errs = append(errs, err)
 				continue
 			}
-			ft := fileTable.(*parser.FileElementTable)
+			ft := fileTable.(*codegraphpb.FileElementTable)
 			deleteFileTables = append(deleteFileTables, ft)
 			deletedPaths[ft.Path] = nil
 		}
 
 		// 2.找到所有与它相关的path，也就是被继承、实现、引用的地方，它作为定义。
-		var referedElements []*resolver.Relation
+		var referedElements []*codegraphpb.Relation
 		for _, ft := range deleteFileTables {
 			for _, e := range ft.Elements {
 				if len(e.GetRelations()) == 0 {
 					continue
 				}
 				for _, r := range e.GetRelations() {
-					if r.RelationType == resolver.RelationTypeSuperInterface ||
-						r.RelationType == resolver.RelationTypeSuperClass ||
-						r.RelationType == resolver.RelationTypeReference {
+					if r.RelationType == codegraphpb.RelationType_RELATION_TYPE_SUPER_INTERFACE ||
+						r.RelationType == codegraphpb.RelationType_RELATION_TYPE_SUPER_CLASS ||
+						r.RelationType == codegraphpb.RelationType_RELATION_TYPE_REFERENCE {
 						referedElements = append(referedElements, r)
 					}
 				}
@@ -239,17 +237,17 @@ func (i *Indexer) RemoveIndexes(ctx context.Context, workspacePath string, fileP
 		// 3.查询相关的path，将相关path中与待删除path相关的relation删除
 		for _, ref := range referedElements {
 			// 获取引用该符号的文件
-			refFileTable, err := i.storage.Get(ctx, puuid, store.PathKey(ref.ElementPath))
+			refFileTable, err := i.storage.Get(ctx, puuid, store.ElementPathKey(ref.ElementPath))
 			if err != nil {
 				errs = append(errs, err)
 				continue
 			}
 
-			refTable := refFileTable.(*parser.FileElementTable)
+			refTable := refFileTable.(*codegraphpb.FileElementTable)
 
 			// 移除与该符号相关的relation
 			for _, e := range refTable.Elements {
-				var newRelations []*resolver.Relation
+				var newRelations []*codegraphpb.Relation
 				for _, r := range e.GetRelations() {
 					// 如果relation指向待删除的符号，则跳过
 					if _, ok := deletedPaths[r.ElementPath]; ok {
@@ -257,7 +255,7 @@ func (i *Indexer) RemoveIndexes(ctx context.Context, workspacePath string, fileP
 					}
 					newRelations = append(newRelations, r)
 				}
-				e.SetRelations(newRelations)
+				e.Relations = newRelations
 			}
 
 			// 保存更新后的文件表
@@ -270,15 +268,18 @@ func (i *Indexer) RemoveIndexes(ctx context.Context, workspacePath string, fileP
 		// 4. 删除fileTable的相关definition symbol
 		for _, ft := range deleteFileTables {
 			for _, e := range ft.Elements {
-				if e.GetType() == types.ElementTypeMethod || e.GetType() == types.ElementTypeFunction ||
-					e.GetType() == types.ElementTypeInterface || e.GetType() == types.ElementTypeClass {
-					sym, err := i.storage.Get(ctx, puuid, store.SymbolKey(e.GetName()))
+				if e.ElementType == codegraphpb.ElementType_ELEMENT_TYPE_METHOD ||
+					e.ElementType == codegraphpb.ElementType_ELEMENT_TYPE_FUNCTION ||
+					e.ElementType == codegraphpb.ElementType_ELEMENT_TYPE_INTERFACE ||
+					e.ElementType == codegraphpb.ElementType_ELEMENT_TYPE_CLASS {
+					sym, err := i.storage.Get(ctx, puuid, store.SymbolNameKey(e.GetName()))
 					if err != nil {
 						errs = append(errs, err)
 						continue
 					}
-					symDefs := sym.(*analyzer.SymbolDefinition)
-					newSymDefs := &analyzer.SymbolDefinition{Name: e.GetName(), Definitions: make([]*analyzer.Definition, 0)}
+					symDefs := sym.(*codegraphpb.SymbolDefinition)
+					newSymDefs := &codegraphpb.SymbolDefinition{Name: e.GetName(),
+						Definitions: make([]*codegraphpb.Definition, 0)}
 					for _, d := range symDefs.Definitions {
 						if _, ok := deletedPaths[d.Path]; ok {
 							continue
@@ -296,7 +297,7 @@ func (i *Indexer) RemoveIndexes(ctx context.Context, workspacePath string, fileP
 		// 5. 删除path、symbol
 		for _, fp := range pfiles.files {
 			// 删除path索引
-			if err := i.storage.Delete(ctx, puuid, store.PathKey(fp)); err != nil {
+			if err := i.storage.Delete(ctx, puuid, store.ElementPathKey(fp)); err != nil {
 				errs = append(errs, err)
 			}
 
@@ -388,17 +389,18 @@ func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePath
 				errs = append(errs, fmt.Errorf("save_index save symbol definitions error: %w", err))
 				continue
 			}
-			projectTable := &analyzer.ProjectElementTable{
-				ProjectInfo:       pfiles.p,
-				FileElementTables: fileTables,
-			}
+
 			// 依赖分析
-			if err := i.analyzer.Analyze(ctx, projectTable); err != nil {
+			if err := i.analyzer.Analyze(ctx, pfiles.p, fileTables); err != nil {
 				errs = append(errs, fmt.Errorf("save_index analyze dependency error: %w", err))
 				continue
 			}
+
+			// 转换为 proto
+			protoElementTables := types.FileElementTablesToProto(fileTables)
+
 			// 关系索引存储
-			if err := i.storage.BatchSave(ctx, puuid, workspace.FileElementTables(projectTable.FileElementTables)); err != nil {
+			if err := i.storage.BatchSave(ctx, puuid, workspace.FileElementTables(protoElementTables)); err != nil {
 				errs = append(errs, fmt.Errorf("save_index batch save error: %w", err))
 				continue
 			}
@@ -410,10 +412,114 @@ func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePath
 	return err
 }
 
-// QueryIndexes 查询索引
-func (i *Indexer) QueryIndexes(workspace string, filePaths []string) error {
-	// 根据workspace 及 filepath 路径，匹配 到project
-	// 再到对应project中，查询对应的index
+type QueryOption struct {
+}
 
-	return nil
+// QueryElements 查询elements
+func (i *Indexer) QueryElements(workspacePath string, filePaths []string) ([]*codegraphpb.FileElementTable, error) {
+	// 找到workspace下的所有项目
+	projects := i.workspaceReader.FindProjects(workspacePath, types.VisitPattern{})
+	if len(projects) == 0 {
+		return nil, fmt.Errorf("no project found in workspace %s", workspacePath)
+	}
+	// 找到filepath 各自对应的项目
+	var results []*codegraphpb.FileElementTable
+	var errs []error
+
+	// project key -> filePaths
+	var projectFiles map[string]struct {
+		p     *workspace.Project
+		files []string
+	}
+	// 如果一个文件路径是一个项目的子路径，则将其加入到该项目的文件列表中
+	for _, p := range projects {
+		for _, filePath := range filePaths {
+			if strings.HasPrefix(filePath, p.Path) {
+				projectUuid, err := p.Uuid()
+				if err != nil {
+					errs = append(errs, err)
+					continue
+				}
+				pf, ok := projectFiles[projectUuid]
+				if !ok {
+					pf = struct {
+						p     *workspace.Project
+						files []string
+					}{p: p, files: make([]string, 0)}
+				}
+				pf.files = append(pf.files, filePath)
+				projectFiles[projectUuid] = pf
+			}
+		}
+	}
+
+	for puuid, pfiles := range projectFiles {
+		for _, fp := range pfiles.files {
+			fileTable, err := i.storage.Get(context.Background(), puuid, store.ElementPathKey(fp))
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			ft := fileTable.(*codegraphpb.FileElementTable)
+			results = append(results, ft)
+		}
+	}
+
+	if len(errs) > 0 {
+		return results, fmt.Errorf("query elements completed with errors: %v", errs)
+	}
+
+	return results, nil
+}
+
+// QuerySymbols 查询symbols
+func (i *Indexer) QuerySymbols(workspacePath string, filePath string, symbolNames []string) ([]*codegraphpb.SymbolDefinition, error) {
+	// 找到workspace下的所有项目
+	projects := i.workspaceReader.FindProjects(workspacePath, types.VisitPattern{})
+	if len(projects) == 0 {
+		return nil, fmt.Errorf("no project found in workspace %s", workspacePath)
+	}
+	// 找到filepath 对应的项目
+	var results []*codegraphpb.SymbolDefinition
+	var errs []error
+
+	// 找到文件路径对应的项目
+	var targetProject *workspace.Project
+	var targetProjectUuid string
+	for _, p := range projects {
+		if strings.HasPrefix(filePath, p.Path) {
+			targetProject = p
+			projectUuid, err := p.Uuid()
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			targetProjectUuid = projectUuid
+			break
+		}
+	}
+
+	if targetProject == nil {
+		return nil, fmt.Errorf("no project found for file path %s", filePath)
+	}
+
+	// 查询每个符号名称
+	for _, symbolName := range symbolNames {
+		symbolDef, err := i.storage.Get(context.Background(), targetProjectUuid, store.SymbolNameKey(symbolName))
+		if err != nil {
+			errs = append(errs, fmt.Errorf("failed to get symbol definition %s: %w", symbolName, err))
+			continue
+		}
+
+		if symbolDef != nil {
+			sd := symbolDef.(*codegraphpb.SymbolDefinition)
+			results = append(results, sd)
+		}
+	}
+
+	if len(errs) > 0 {
+		return results, fmt.Errorf("query symbols completed with errors: %v", errs)
+	}
+
+	return results, nil
 }
