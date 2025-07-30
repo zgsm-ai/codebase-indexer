@@ -67,6 +67,7 @@ const (
 	ElementTypeFunctionCallName    ElementType = "call.function.name"
 	ElementTypeFunctionOwner       ElementType = "call.function.owner"
 	ElementTypeFunctionArguments   ElementType = "call.function.arguments"
+	ElementTypeStructCall          ElementType = "call.struct"
 	ElementTypeFunctionDeclaration ElementType = "declaration.function"
 	ElementTypeMethod              ElementType = "definition.method"
 	ElementTypeMethodModifier      ElementType = "definition.method.modifier"
@@ -168,6 +169,7 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeParameter):           ElementTypeParameter,
 	string(ElementTypeComment):             ElementTypeComment,
 	string(ElementTypeAnnotation):          ElementTypeAnnotation,
+	string(ElementTypeStructCall):          ElementTypeStructCall,
 }
 
 type Scope string
@@ -232,6 +234,7 @@ const (
 	NodeKindRestParameter                      NodeKind = "rest_parameter"
 	NodeKindOptionalParameter                  NodeKind = "optional_parameter"
 	NodeKindMethodSignature                    NodeKind = "method_signature"
+	NodeKindQualifiedType                      NodeKind = "qualified_type"
 	// 用于接收函数的返回类型和字段的类型
 	NodeKindIntegralType         NodeKind = "integral_type"
 	NodeKindFloatingPointType    NodeKind = "floating_point_type"
@@ -300,6 +303,8 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindRestParameter):                      NodeKindRestParameter,
 	string(NodeKindOptionalParameter):                  NodeKindOptionalParameter,
 	string(NodeKindMethodSignature):                    NodeKindMethodSignature,
+	string(NodeKindQualifiedType):                      NodeKindQualifiedType,
+	string(NodeKindTypeElem):                           NodeKindTypeElem,
 	// 用于接收函数的返回类型和字段的类型
 	string(NodeKindIntegralType):         NodeKindIntegralType,
 	string(NodeKindFloatingPointType):    NodeKindFloatingPointType,
@@ -349,37 +354,9 @@ func ToNodeKind(kind string) NodeKind {
 	return NodeKindUndefined
 }
 
-// NodeKindTypeMap 定义节点类型到类型字符串的映射
-var NodeKindTypeMap = map[string]string{
-	"identifier":                 "unknown",
-	"int_literal":                "int",
-	"float_literal":              "float64",
-	"interpreted_string_literal": "string",
-	"raw_string_literal":         "string",
-	"true":                       "bool",
-	"false":                      "bool",
-	"nil":                        "nil",
-	"selector_expression":        "selector",
-	"call_expression":            "function_result",
-	"binary_expression":          "expression",
-	"unary_expression":           "expression",
-	"array_literal":              "array/slice",
-	"slice_literal":              "array/slice",
-	"map_literal":                "map",
-	"composite_literal":          "struct",
-}
-
 func IsTypeNode(kind NodeKind) bool {
 	_, exists := NodeKindTypeMappings[kind]
 	return exists
-}
-
-// GetNodeTypeString 根据节点类型返回对应的类型字符串
-func GetNodeTypeString(nodeKind string, value string) string {
-	if typeStr, exists := NodeKindTypeMap[nodeKind]; exists {
-		return typeStr
-	}
-	return nodeKind
 }
 
 // ToElementType 将字符串映射为ElementType

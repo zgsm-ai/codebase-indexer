@@ -29,7 +29,6 @@
     (var_spec
       name: (identifier) @global_variable
       type: (_)? @global_variable.type
-      value: (_)? @global_variable.value
     )
   )
 )
@@ -40,7 +39,6 @@
     (var_spec
       name: (identifier) @variable
       type: (_)? @variable.type
-      value: (_)? @variable.value
     )
   )
 )
@@ -51,9 +49,6 @@
     (var_spec
       name: (identifier) @variable
       type: (_)? @variable.type
-      value: (expression_list
-               (_) @variable.value
-             )*
     )
   )
 )
@@ -62,16 +57,12 @@
 (short_var_declaration
   left: (expression_list
           (identifier) @local_variable)
-  right: (expression_list
-          (_) @local_variable.value)
 )
 
 (short_var_declaration
   left: (expression_list
           (unary_expression
             operand: (identifier) @local_variable))
-  right: (expression_list
-          (_) @local_variable.value)
 )
 
 
@@ -100,7 +91,6 @@
   (const_declaration
     (const_spec
       name: (identifier) @global_variable
-      value: (_)? @global_variable.value
     )
   )
 )
@@ -110,7 +100,6 @@
   (const_declaration
     (const_spec
       name: (identifier) @constant
-      value: (_)? @constant.value
     )
   )
 )
@@ -118,5 +107,23 @@
 
 ;; function/method_call
 (call_expression
+  function:(selector_expression)@call.function.field
   arguments: (argument_list) @call.function.arguments
   ) @call.function
+
+
+
+;;右边非基础类型赋值走call
+(expression_list
+  (composite_literal
+    type: [(type_identifier) (qualified_type)] @call.struct
+  )
+)
+
+(expression_list
+  (unary_expression
+  operand:(composite_literal
+    type: [(type_identifier) (selector_expression)] @call.struct
+  )
+ )
+)
