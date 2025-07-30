@@ -42,12 +42,15 @@ const (
 	ElementTypeClassExtendsName    ElementType = "definition.class.extends.name"
 	ElementTypeClassImplements     ElementType = "definition.class.implements"
 	ElementTypeClassModifiers      ElementType = "definition.class.modifiers"
-	ElementTypeClassType           ElementType = "definition.class.type"
 	ElementTypeInterface           ElementType = "definition.interface"
 	ElementTypeInterfaceName       ElementType = "definition.interface.name"
 	ElementTypeInterfaceType       ElementType = "definition.interface.type"
 	ElementTypeInterfaceExtends    ElementType = "definition.interface.extends"
 	ElementTypeInterfaceModifiers  ElementType = "definition.interface.modifiers"
+	ElementTypeStruct              ElementType = "definition.struct"
+	ElementTypeStructName          ElementType = "definition.struct.name"
+	ElementTypeStructExtends       ElementType = "definition.struct.extends"
+	ElementTypeStructType          ElementType = "definition.struct.type"
 	ElementTypeEnum                ElementType = "definition.enum"
 	ElementTypeUnion               ElementType = "definition.union"
 	ElementTypeTrait               ElementType = "definition.trait"
@@ -72,6 +75,7 @@ const (
 	ElementTypeMethodName          ElementType = "definition.method.name"
 	ElementTypeMethodParameters    ElementType = "definition.method.parameters"
 	ElementTypeMethodReceiver      ElementType = "definition.method.receiver"
+	ElementTypeConstructor         ElementType = "definition.constructor"
 	ElementTypeDestructor          ElementType = "definition.destructor"
 	ElementTypeGlobalVariable      ElementType = "global_variable"
 	ElementTypeLocalVariable       ElementType = "local_variable"
@@ -113,11 +117,14 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeClassExtendsName):    ElementTypeClassExtendsName,
 	string(ElementTypeClassImplements):     ElementTypeClassImplements,
 	string(ElementTypeClassModifiers):      ElementTypeClassModifiers,
-	string(ElementTypeClassType):           ElementTypeClassType,
 	string(ElementTypeInterface):           ElementTypeInterface,
 	string(ElementTypeInterfaceName):       ElementTypeInterfaceName,
 	string(ElementTypeInterfaceExtends):    ElementTypeInterfaceExtends,
 	string(ElementTypeInterfaceModifiers):  ElementTypeInterfaceModifiers,
+	string(ElementTypeStruct):              ElementTypeStruct,
+	string(ElementTypeStructName):          ElementTypeStructName,
+	string(ElementTypeStructType):          ElementTypeStructType,
+	string(ElementTypeStructExtends):       ElementTypeStructExtends,
 	string(ElementTypeEnum):                ElementTypeEnum,
 	string(ElementTypeUnion):               ElementTypeUnion,
 	string(ElementTypeTrait):               ElementTypeTrait,
@@ -141,6 +148,7 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeCallArguments):       ElementTypeCallArguments,
 	string(ElementTypeCallOwner):           ElementTypeCallOwner,
 	string(ElementTypeCallName):            ElementTypeCallName,
+	string(ElementTypeConstructor):         ElementTypeConstructor,
 	string(ElementTypeDestructor):          ElementTypeDestructor,
 	string(ElementTypeGlobalVariable):      ElementTypeGlobalVariable,
 	string(ElementTypeLocalVariable):       ElementTypeLocalVariable,

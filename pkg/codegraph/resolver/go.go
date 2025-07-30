@@ -549,11 +549,11 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 			updateRootElement(element, &capture, nodeCaptureName, rc.SourceFile.Content)
 
 			switch types.ToElementType(nodeCaptureName) {
-			case types.ElementTypeClassName:
+			case types.ElementTypeStruct:
 				element.Name = content
 				element.Scope = analyzeScope(content)
 
-			case types.ElementTypeClassType:
+			case types.ElementTypeStructType:
 				structTypeNode := capture.Node
 				// 获取field_declaration_list - 遍历所有子节点找到字段列表
 				var fieldListNode *sitter.Node
@@ -658,9 +658,6 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 			}
 		}
 	}
-
-	// 设置元素类型
-	element.Type = types.ElementTypeClass
 
 	// 添加引用元素到结果中
 	for _, ref := range references {

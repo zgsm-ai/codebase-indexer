@@ -80,7 +80,7 @@
 
 (type_declaration (type_spec name: (type_identifier) @definition.interface.name type: (interface_type) @definition.interface.type)) @definition.interface
 
-(type_declaration (type_spec name: (type_identifier) @definition.class.name type: (struct_type) @definition.class.type)) @definition.class
+(type_declaration (type_spec name: (type_identifier) @definition.struct.name type: (struct_type) @definition.struct.type)) @definition.struct
 
 (type_declaration (type_spec name: (type_identifier) @definition.type_alias.name type: (type_identifier))) @definition.type_alias
 
