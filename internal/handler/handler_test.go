@@ -8,20 +8,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"codebase-indexer/internal/scanner"
-	"codebase-indexer/internal/scheduler"
-	"codebase-indexer/internal/storage"
-	"codebase-indexer/internal/syncer"
+	"codebase-indexer/internal/repository"
+	"codebase-indexer/internal/service"
 	"codebase-indexer/test/mocks"
 )
 
 func TestNewGRPCHandler(t *testing.T) {
 	var mockLogger = &mocks.MockLogger{}
 	// Create test objects
-	httpSync := &syncer.HTTPSync{}
-	fileScanner := &scanner.FileScanner{}
-	storageManager := &storage.StorageManager{}
-	scheduler := &scheduler.Scheduler{}
+	httpSync := &repository.HTTPSync{}
+	fileScanner := &repository.FileScanner{}
+	storageManager := &repository.StorageManager{}
+	scheduler := &service.Scheduler{}
 
 	h := NewGRPCHandler(httpSync, fileScanner, storageManager, scheduler, mockLogger)
 	assert.NotNil(t, h)
@@ -36,10 +34,10 @@ func TestIsGitRepository(t *testing.T) {
 	err := os.Mkdir(filepath.Join(tmpDir, ".git"), 0755)
 	assert.NoError(t, err)
 
-	httpSync := &syncer.HTTPSync{}
-	fileScanner := &scanner.FileScanner{}
-	storageManager := &storage.StorageManager{}
-	scheduler := &scheduler.Scheduler{}
+	httpSync := &repository.HTTPSync{}
+	fileScanner := &repository.FileScanner{}
+	storageManager := &repository.StorageManager{}
+	scheduler := &service.Scheduler{}
 	h := NewGRPCHandler(httpSync, fileScanner, storageManager, scheduler, mockLogger)
 
 	// Test valid git repository
@@ -73,10 +71,10 @@ func TestFindCodebasePathsToRegister(t *testing.T) {
 	os.Mkdir(filepath.Join(subDir1, ".git"), 0755)
 	os.Mkdir(filepath.Join(subDir2, ".git"), 0755)
 
-	httpSync := &syncer.HTTPSync{}
-	fileScanner := &scanner.FileScanner{}
-	storageManager := &storage.StorageManager{}
-	scheduler := &scheduler.Scheduler{}
+	httpSync := &repository.HTTPSync{}
+	fileScanner := &repository.FileScanner{}
+	storageManager := &repository.StorageManager{}
+	scheduler := &service.Scheduler{}
 	h := NewGRPCHandler(httpSync, fileScanner, storageManager, scheduler, mockLogger)
 
 	// Test finding codebase paths

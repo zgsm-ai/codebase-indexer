@@ -1,6 +1,6 @@
 // config.go - Client configuration management
 
-package storage
+package config
 
 type ConfigServer struct {
 	RegisterExpireMinutes int `json:"registerExpireMinutes"`
@@ -97,6 +97,7 @@ func SetClientConfig(config ClientConfig) {
 	clientConfig = config
 }
 
+// AppInfo holds application metadata
 type AppInfo struct {
 	AppName  string `json:"appName"`
 	Version  string `json:"version"`

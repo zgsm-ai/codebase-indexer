@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"codebase-indexer/internal/config"
 	"codebase-indexer/internal/dto"
 	"codebase-indexer/internal/service"
 	"codebase-indexer/pkg/logger"
@@ -237,16 +238,17 @@ func (h *ExtensionHandler) GetVersion(c *gin.Context) {
 
 	h.logger.Info("version request from client: %s", req.ClientId)
 
+	appInfo := config.GetAppInfo()
 	// 返回版本信息
 	c.JSON(http.StatusOK, dto.VersionResponse{
 		Code:    http.StatusOK,
 		Success: true,
 		Message: "ok",
 		Data: dto.VersionResponseData{
-			AppName:  "Codebase Syncer",
-			Version:  "1.0.0",
-			OsName:   "cross-platform",
-			ArchName: "universal",
+			AppName:  appInfo.AppName,
+			Version:  appInfo.Version,
+			OsName:   appInfo.OSName,
+			ArchName: appInfo.ArchName,
 		},
 	})
 }

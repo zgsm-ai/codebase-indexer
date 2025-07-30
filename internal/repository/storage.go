@@ -1,5 +1,5 @@
 // storage/storage.go - Configuration and temporary file storage
-package storage
+package repository
 
 import (
 	"encoding/json"
@@ -9,30 +9,20 @@ import (
 	"sync"
 	"time"
 
+	"codebase-indexer/internal/config"
 	"codebase-indexer/pkg/logger"
 )
 
-// Codebase configuration
-type CodebaseConfig struct {
-	ClientID     string            `json:"clientId"`
-	CodebaseName string            `json:"codebaseName"`
-	CodebasePath string            `json:"codebasePath"`
-	CodebaseId   string            `json:"codebaseId"`
-	HashTree     map[string]string `json:"hashTree"`
-	LastSync     time.Time         `json:"lastSync"`
-	RegisterTime time.Time         `json:"registerTime"`
-}
-
 type SotrageInterface interface {
-	GetCodebaseConfigs() map[string]*CodebaseConfig
-	GetCodebaseConfig(codebaseId string) (*CodebaseConfig, error)
-	SaveCodebaseConfig(config *CodebaseConfig) error
+	GetCodebaseConfigs() map[string]*config.CodebaseConfig
+	GetCodebaseConfig(codebaseId string) (*config.CodebaseConfig, error)
+	SaveCodebaseConfig(config *config.CodebaseConfig) error
 	DeleteCodebaseConfig(codebaseId string) error
 }
 
 type StorageManager struct {
 	codebasePath    string
-	codebaseConfigs map[string]*CodebaseConfig // Stores all codebase configurations
+	codebaseConfigs map[string]*config.CodebaseConfig // Stores all codebase configurations
 	logger          logger.Logger
 	rwMutex         sync.RWMutex
 }
@@ -51,7 +41,7 @@ func NewStorageManager(cacheDir string, logger logger.Logger) (SotrageInterface,
 	sm := &StorageManager{
 		codebasePath:    codebasePath,
 		logger:          logger,
-		codebaseConfigs: make(map[string]*CodebaseConfig),
+		codebaseConfigs: make(map[string]*config.CodebaseConfig),
 	}
 
 	sm.loadAllConfigs()
@@ -59,7 +49,7 @@ func NewStorageManager(cacheDir string, logger logger.Logger) (SotrageInterface,
 }
 
 // GetCodebaseConfigs retrieves all project configurations
-func (s *StorageManager) GetCodebaseConfigs() map[string]*CodebaseConfig {
+func (s *StorageManager) GetCodebaseConfigs() map[string]*config.CodebaseConfig {
 	s.rwMutex.RLock()
 	defer s.rwMutex.RUnlock()
 	return s.codebaseConfigs
@@ -67,7 +57,7 @@ func (s *StorageManager) GetCodebaseConfigs() map[string]*CodebaseConfig {
 
 // GetCodebaseConfig loads codebase configuration
 // First checks in memory, if not found then loads from filesystem
-func (s *StorageManager) GetCodebaseConfig(codebaseId string) (*CodebaseConfig, error) {
+func (s *StorageManager) GetCodebaseConfig(codebaseId string) (*config.CodebaseConfig, error) {
 	s.rwMutex.RLock()
 	config, exists := s.codebaseConfigs[codebaseId]
 	s.rwMutex.RUnlock()
@@ -112,7 +102,7 @@ func (s *StorageManager) loadAllConfigs() {
 }
 
 // loadCodebaseConfig loads a codebase configuration file
-func (s *StorageManager) loadCodebaseConfig(codebaseId string) (*CodebaseConfig, error) {
+func (s *StorageManager) loadCodebaseConfig(codebaseId string) (*config.CodebaseConfig, error) {
 	s.logger.Info("loading codebase file content: %s", codebaseId)
 
 	s.rwMutex.RLock()
@@ -128,7 +118,7 @@ func (s *StorageManager) loadCodebaseConfig(codebaseId string) (*CodebaseConfig,
 		return nil, fmt.Errorf("failed to read codebase file: %v", err)
 	}
 
-	var config CodebaseConfig
+	var config config.CodebaseConfig
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse codebase file: %v", err)
 	}
@@ -145,7 +135,7 @@ func (s *StorageManager) loadCodebaseConfig(codebaseId string) (*CodebaseConfig,
 }
 
 // SaveCodebaseConfig saves codebase configuration
-func (s *StorageManager) SaveCodebaseConfig(config *CodebaseConfig) error {
+func (s *StorageManager) SaveCodebaseConfig(config *config.CodebaseConfig) error {
 	if config == nil {
 		return fmt.Errorf("codebase config is empty: %v", config)
 	}

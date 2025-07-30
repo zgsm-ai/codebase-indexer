@@ -3,27 +3,25 @@ package daemon
 
 import (
 	"context"
-	"net"
+	// "net"
 	"sync"
 	"time"
 
-	"codebase-indexer/internal/scanner"
-	"codebase-indexer/internal/scheduler"
-	"codebase-indexer/internal/storage"
-	"codebase-indexer/internal/syncer"
+	"codebase-indexer/internal/config"
+	"codebase-indexer/internal/repository"
+	"codebase-indexer/internal/service"
 	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/logger"
-
-	"google.golang.org/grpc"
+	// "google.golang.org/grpc"
 )
 
 type Daemon struct {
-	scheduler   *scheduler.Scheduler
-	grpcServer  *grpc.Server
-	grpcListen  net.Listener
-	httpSync    syncer.SyncInterface
-	fileScanner scanner.ScannerInterface
-	storage     storage.SotrageInterface
+	scheduler *service.Scheduler
+	// grpcServer  *grpc.Server
+	// grpcListen  net.Listener
+	httpSync    repository.SyncInterface
+	fileScanner repository.ScannerInterface
+	storage     repository.SotrageInterface
 	logger      logger.Logger
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -31,13 +29,16 @@ type Daemon struct {
 	schedWG     sync.WaitGroup // Used to wait for scheduler restart
 }
 
-func NewDaemon(scheduler *scheduler.Scheduler, grpcServer *grpc.Server, grpcListen net.Listener,
-	httpSync syncer.SyncInterface, fileScanner scanner.ScannerInterface, storage storage.SotrageInterface, logger logger.Logger) *Daemon {
+// func NewDaemon(scheduler *scheduler.Scheduler, grpcServer *grpc.Server, grpcListen net.Listener,
+//
+//	httpSync syncer.SyncInterface, fileScanner scanner.ScannerInterface, storage storage.SotrageInterface, logger logger.Logger) *Daemon {
+func NewDaemon(scheduler *service.Scheduler, httpSync repository.SyncInterface,
+	fileScanner repository.ScannerInterface, storage repository.SotrageInterface, logger logger.Logger) *Daemon {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Daemon{
-		scheduler:   scheduler,
-		grpcServer:  grpcServer,
-		grpcListen:  grpcListen,
+		scheduler: scheduler,
+		// grpcServer:  grpcServer,
+		// grpcListen:  grpcListen,
 		httpSync:    httpSync,
 		fileScanner: fileScanner,
 		storage:     storage,
@@ -57,13 +58,13 @@ func (d *Daemon) Start() {
 	}
 
 	// Start gRPC server
-	go func() {
-		d.logger.Info("starting gRPC server, listening on: %s", d.grpcListen.Addr().String())
-		if err := d.grpcServer.Serve(d.grpcListen); err != nil {
-			d.logger.Fatal("gRPC server failed to serve: %v", err)
-			return
-		}
-	}()
+	// go func() {
+	// 	d.logger.Info("starting gRPC server, listening on: %s", d.grpcListen.Addr().String())
+	// 	if err := d.grpcServer.Serve(d.grpcListen); err != nil {
+	// 		d.logger.Fatal("gRPC server failed to serve: %v", err)
+	// 		return
+	// 	}
+	// }()
 
 	// Start sync task
 	d.wg.Add(1)
@@ -122,22 +123,22 @@ func (d *Daemon) updateConfig() {
 	d.logger.Info("latest client config retrieved: %+v", newConfig)
 
 	// Value current configuration
-	currentConfig := storage.GetClientConfig()
+	currentConfig := config.GetClientConfig()
 	if !configChanged(currentConfig, newConfig) {
 		d.logger.Info("client config unchanged")
 		return
 	}
 
 	// Update storage configuration
-	storage.SetClientConfig(newConfig)
+	config.SetClientConfig(newConfig)
 	// Update scheduler configuration
-	d.scheduler.SetSchedulerConfig(&scheduler.SchedulerConfig{
+	d.scheduler.SetSchedulerConfig(&service.SchedulerConfig{
 		IntervalMinutes:       newConfig.Sync.IntervalMinutes,
 		RegisterExpireMinutes: newConfig.Server.RegisterExpireMinutes,
 		HashTreeExpireHours:   newConfig.Server.HashTreeExpireHours,
 	})
 	// Update file scanner configuration
-	d.fileScanner.SetScannerConfig(&scanner.ScannerConfig{
+	d.fileScanner.SetScannerConfig(&config.ScannerConfig{
 		FileIgnorePatterns:   newConfig.Sync.FileIgnorePatterns,
 		FolderIgnorePatterns: newConfig.Sync.FolderIgnorePatterns,
 		MaxFileSizeKB:        newConfig.Sync.MaxFileSizeKB,
@@ -159,14 +160,14 @@ func (d *Daemon) checkAndLoadConfig() {
 	d.logger.Info("latest client config retrieved: %+v", newConfig)
 
 	// Value current configuration
-	currentConfig := storage.GetClientConfig()
+	currentConfig := config.GetClientConfig()
 	if !configChanged(currentConfig, newConfig) {
 		d.logger.Info("client config unchanged")
 		return
 	}
 
 	// Update stored configuration
-	storage.SetClientConfig(newConfig)
+	config.SetClientConfig(newConfig)
 	// Check if scheduler needs restart
 	if currentConfig.Sync.IntervalMinutes != newConfig.Sync.IntervalMinutes {
 		d.schedWG.Add(1)
@@ -184,7 +185,7 @@ func (d *Daemon) checkAndLoadConfig() {
 }
 
 // configChanged checks if configuration has changed
-func configChanged(current, new storage.ClientConfig) bool {
+func configChanged(current, new config.ClientConfig) bool {
 	return current.Server.RegisterExpireMinutes != new.Server.RegisterExpireMinutes ||
 		current.Server.HashTreeExpireHours != new.Server.HashTreeExpireHours ||
 		current.Sync.IntervalMinutes != new.Sync.IntervalMinutes ||
@@ -241,9 +242,9 @@ func (d *Daemon) Stop() {
 	utils.CleanUploadTmpDir()
 	d.logger.Info("temp directory cleaned up")
 	d.wg.Wait()
-	if d.grpcServer != nil {
-		d.grpcServer.GracefulStop()
-		d.logger.Info("gRPC service stopped")
-	}
+	// if d.grpcServer != nil {
+	// 	d.grpcServer.GracefulStop()
+	// 	d.logger.Info("gRPC service stopped")
+	// }
 	d.logger.Info("daemon process stopped")
 }

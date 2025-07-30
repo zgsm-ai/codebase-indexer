@@ -7,22 +7,21 @@ import (
 	"path/filepath"
 	"time"
 
-	"codebase-indexer/internal/scanner"
-	"codebase-indexer/internal/storage"
-	"codebase-indexer/internal/syncer"
+	"codebase-indexer/internal/config"
+	"codebase-indexer/internal/repository"
 	"codebase-indexer/pkg/logger"
 )
 
 // ExtensionService 处理扩展接口相关的业务逻辑
 type ExtensionService interface {
 	// RegisterCodebase 注册代码库
-	RegisterCodebase(ctx context.Context, clientID, workspacePath, workspaceName string) ([]*storage.CodebaseConfig, error)
+	RegisterCodebase(ctx context.Context, clientID, workspacePath, workspaceName string) ([]*config.CodebaseConfig, error)
 
 	// UnregisterCodebase 注销代码库
-	UnregisterCodebase(ctx context.Context, clientID, workspacePath, workspaceName string) ([]*storage.CodebaseConfig, error)
+	UnregisterCodebase(ctx context.Context, clientID, workspacePath, workspaceName string) ([]*config.CodebaseConfig, error)
 
 	// SyncCodebase 同步代码库
-	SyncCodebase(ctx context.Context, clientID, workspacePath, workspaceName string, filePaths []string) ([]*storage.CodebaseConfig, error)
+	SyncCodebase(ctx context.Context, clientID, workspacePath, workspaceName string, filePaths []string) ([]*config.CodebaseConfig, error)
 
 	// UpdateSyncConfig 更新同步配置
 	UpdateSyncConfig(ctx context.Context, clientID, serverEndpoint, accessToken string) error
@@ -40,9 +39,9 @@ type CheckIgnoreResult struct {
 
 // NewExtensionService 创建新的扩展接口服务
 func NewExtensionService(
-	storage storage.SotrageInterface,
-	httpSync syncer.SyncInterface,
-	fileScanner scanner.ScannerInterface,
+	storage repository.SotrageInterface,
+	httpSync repository.SyncInterface,
+	fileScanner repository.ScannerInterface,
 	codebaseService CodebaseService,
 	logger logger.Logger,
 ) ExtensionService {
@@ -56,37 +55,37 @@ func NewExtensionService(
 }
 
 type extensionService struct {
-	storage         storage.SotrageInterface
-	httpSync        syncer.SyncInterface
-	fileScanner     scanner.ScannerInterface
+	storage         repository.SotrageInterface
+	httpSync        repository.SyncInterface
+	fileScanner     repository.ScannerInterface
 	codebaseService CodebaseService
 	logger          logger.Logger
 }
 
 // RegisterCodebase 注册代码库
-func (s *extensionService) RegisterCodebase(ctx context.Context, clientID, workspacePath, workspaceName string) ([]*storage.CodebaseConfig, error) {
+func (s *extensionService) RegisterCodebase(ctx context.Context, clientID, workspacePath, workspaceName string) ([]*config.CodebaseConfig, error) {
 	s.logger.Info("registering codebase for client %s, path: %s", clientID, workspacePath)
 
 	// 查找代码库配置
-	configs, err := s.codebaseService.FindCodebasePaths(ctx, workspacePath, workspaceName)
+	codebaseConfigs, err := s.codebaseService.FindCodebasePaths(ctx, workspacePath, workspaceName)
 	if err != nil {
 		s.logger.Error("failed to find codebase paths: %v", err)
 		return nil, fmt.Errorf("failed to find codebase paths: %w", err)
 	}
 
-	var registeredConfigs []*storage.CodebaseConfig
+	var registeredConfigs []*config.CodebaseConfig
 
 	// 注册每个代码库
-	for _, config := range configs {
+	for _, codebaseConfig := range codebaseConfigs {
 		// 生成代码库ID
-		codebaseID := s.codebaseService.GenerateCodebaseID(config.CodebaseName, config.CodebasePath)
+		codebaseID := s.codebaseService.GenerateCodebaseID(codebaseConfig.CodebaseName, codebaseConfig.CodebasePath)
 
 		// 创建存储配置
-		storageConfig := &storage.CodebaseConfig{
+		storageConfig := &config.CodebaseConfig{
 			ClientID:     clientID,
 			CodebaseId:   codebaseID,
-			CodebaseName: config.CodebaseName,
-			CodebasePath: config.CodebasePath,
+			CodebaseName: codebaseConfig.CodebaseName,
+			CodebasePath: codebaseConfig.CodebasePath,
 			HashTree:     make(map[string]string),
 			LastSync:     time.Time{},
 			RegisterTime: time.Now(),
@@ -94,33 +93,33 @@ func (s *extensionService) RegisterCodebase(ctx context.Context, clientID, works
 
 		// 保存到存储
 		if err := s.storage.SaveCodebaseConfig(storageConfig); err != nil {
-			s.logger.Error("failed to save codebase config for %s: %v", config.CodebasePath, err)
+			s.logger.Error("failed to save codebase config for %s: %v", codebaseConfig.CodebasePath, err)
 			continue
 		}
 
 		registeredConfigs = append(registeredConfigs, storageConfig)
-		s.logger.Info("registered codebase %s (%s) for client %s", config.CodebaseName, codebaseID, clientID)
+		s.logger.Info("registered codebase %s (%s) for client %s", codebaseConfig.CodebaseName, codebaseID, clientID)
 	}
 
 	return registeredConfigs, nil
 }
 
 // UnregisterCodebase 注销代码库
-func (s *extensionService) UnregisterCodebase(ctx context.Context, clientID, workspacePath, workspaceName string) ([]*storage.CodebaseConfig, error) {
+func (s *extensionService) UnregisterCodebase(ctx context.Context, clientID, workspacePath, workspaceName string) ([]*config.CodebaseConfig, error) {
 	s.logger.Info("unregistering codebase for client %s, path: %s", clientID, workspacePath)
 
 	// 查找代码库配置
-	configs, err := s.codebaseService.FindCodebasePaths(ctx, workspacePath, workspaceName)
+	codebaseConfigs, err := s.codebaseService.FindCodebasePaths(ctx, workspacePath, workspaceName)
 	if err != nil {
 		s.logger.Error("failed to find codebase paths: %v", err)
 		return nil, fmt.Errorf("failed to find codebase paths: %w", err)
 	}
 
-	var unregisteredConfigs []*storage.CodebaseConfig
+	var unregisteredConfigs []*config.CodebaseConfig
 
 	// 注销每个代码库
-	for _, config := range configs {
-		codebaseID := s.codebaseService.GenerateCodebaseID(config.CodebaseName, config.CodebasePath)
+	for _, codebaseConfig := range codebaseConfigs {
+		codebaseID := s.codebaseService.GenerateCodebaseID(codebaseConfig.CodebaseName, codebaseConfig.CodebasePath)
 
 		// 获取现有配置
 		existingConfig, err := s.storage.GetCodebaseConfig(codebaseID)
@@ -142,22 +141,22 @@ func (s *extensionService) UnregisterCodebase(ctx context.Context, clientID, wor
 		}
 
 		// 创建已注销的配置信息
-		unregisteredConfig := &storage.CodebaseConfig{
+		unregisteredConfig := &config.CodebaseConfig{
 			ClientID:     clientID,
 			CodebaseId:   codebaseID,
-			CodebaseName: config.CodebaseName,
-			CodebasePath: config.CodebasePath,
+			CodebaseName: codebaseConfig.CodebaseName,
+			CodebasePath: codebaseConfig.CodebasePath,
 		}
 
 		unregisteredConfigs = append(unregisteredConfigs, unregisteredConfig)
-		s.logger.Info("unregistered codebase %s (%s) for client %s", config.CodebaseName, codebaseID, clientID)
+		s.logger.Info("unregistered codebase %s (%s) for client %s", codebaseConfig.CodebaseName, codebaseID, clientID)
 	}
 
 	return unregisteredConfigs, nil
 }
 
 // SyncCodebase 同步代码库
-func (s *extensionService) SyncCodebase(ctx context.Context, clientID, workspacePath, workspaceName string, filePaths []string) ([]*storage.CodebaseConfig, error) {
+func (s *extensionService) SyncCodebase(ctx context.Context, clientID, workspacePath, workspaceName string, filePaths []string) ([]*config.CodebaseConfig, error) {
 	s.logger.Info("syncing codebase for client %s, path: %s", clientID, workspacePath)
 
 	// 查找代码库配置
@@ -167,7 +166,7 @@ func (s *extensionService) SyncCodebase(ctx context.Context, clientID, workspace
 		return nil, fmt.Errorf("failed to find codebase paths: %w", err)
 	}
 
-	var syncedConfigs []*storage.CodebaseConfig
+	var syncedConfigs []*config.CodebaseConfig
 
 	// 同步每个代码库
 	for _, config := range configs {
@@ -219,7 +218,7 @@ func (s *extensionService) UpdateSyncConfig(ctx context.Context, clientID, serve
 	s.logger.Info("updating sync config for client %s", clientID)
 
 	// 更新同步器配置
-	syncConfig := &syncer.SyncConfig{
+	syncConfig := &config.SyncConfig{
 		ClientId:  clientID,
 		Token:     accessToken,
 		ServerURL: serverEndpoint,

@@ -1,5 +1,5 @@
 // syncer/syncer.go - HTTP sync implementation
-package syncer
+package repository
 
 import (
 	"bytes"
@@ -13,7 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"codebase-indexer/internal/storage"
+	"codebase-indexer/internal/config"
+	"codebase-indexer/internal/dto"
 	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/logger"
 
@@ -22,32 +23,28 @@ import (
 
 // Server API paths
 const (
-	API_UPLOAD_FILE       = "/codebase-indexer/api/v1/files/upload"
-	API_GET_CODEBASE_HASH = "/codebase-indexer/api/v1/codebases/hash"
+	API_UPLOAD_TOKEN      = "/codebase-embedder/api/v1/files/token"
+	API_UPLOAD_FILE       = "/codebase-embedder/api/v1/files/upload"
+	API_FILE_STATUS       = "/codebase-embedder/api/v1/files/status"
+	API_GET_CODEBASE_HASH = "/codebase-embedder/api/v1/codebases/hash"
 )
 
-type SyncConfig struct {
-	ClientId  string
-	Token     string
-	ServerURL string
-}
-
 type SyncInterface interface {
-	SetSyncConfig(config *SyncConfig)
-	GetSyncConfig() *SyncConfig
+	SetSyncConfig(config *config.SyncConfig)
+	GetSyncConfig() *config.SyncConfig
 	FetchServerHashTree(codebasePath string) (map[string]string, error)
-	UploadFile(codebasePath string, uploadRe UploadReq) error
-	GetClientConfig() (storage.ClientConfig, error)
+	UploadFile(filePath string, uploadReq dto.UploadReq) error
+	GetClientConfig() (config.ClientConfig, error)
 }
 
 type HTTPSync struct {
-	syncConfig *SyncConfig
+	syncConfig *config.SyncConfig
 	httpClient *fasthttp.Client
 	logger     logger.Logger
 	rwMutex    sync.RWMutex
 }
 
-func NewHTTPSync(syncConfig *SyncConfig, logger logger.Logger) SyncInterface {
+func NewHTTPSync(syncConfig *config.SyncConfig, logger logger.Logger) SyncInterface {
 	return &HTTPSync{
 		syncConfig: syncConfig,
 		httpClient: &fasthttp.Client{
@@ -80,36 +77,16 @@ func (hs *HTTPSync) calculateTimeout(fileSize int64) time.Duration {
 	return totalTimeout
 }
 
-func (hs *HTTPSync) SetSyncConfig(config *SyncConfig) {
+func (hs *HTTPSync) SetSyncConfig(config *config.SyncConfig) {
 	hs.rwMutex.Lock()
 	defer hs.rwMutex.Unlock()
 	hs.syncConfig = config
 }
 
-func (hs *HTTPSync) GetSyncConfig() *SyncConfig {
+func (hs *HTTPSync) GetSyncConfig() *config.SyncConfig {
 	hs.rwMutex.RLock()
 	defer hs.rwMutex.RUnlock()
 	return hs.syncConfig
-}
-
-type CodebaseHashReq struct {
-	ClientId     string `json:"clientId"`
-	CodebasePath string `json:"codebasePath"`
-}
-
-type CodebaseHashResp struct {
-	Code    int                  `json:"code"`
-	Message string               `json:"message"`
-	Data    CodebaseHashRespData `json:"data"`
-}
-
-type CodebaseHashRespData struct {
-	List []HashItem `json:"list"`
-}
-
-type HashItem struct {
-	Path string `json:"path"`
-	Hash string `json:"hash"`
 }
 
 // Fetch server hash tree
@@ -148,7 +125,7 @@ func (hs *HTTPSync) FetchServerHashTree(codebasePath string) (map[string]string,
 			resp.StatusCode(), string(resp.Body()))
 	}
 
-	var responseData CodebaseHashResp
+	var responseData dto.CodebaseHashResp
 	if err := json.Unmarshal(resp.Body(), &responseData); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %v", err)
 	}
@@ -175,14 +152,8 @@ func (wc *writeCounter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-type UploadReq struct {
-	ClientId     string `json:"clientId"`
-	CodebasePath string `json:"codebasePath"`
-	CodebaseName string `json:"codebaseName"`
-}
-
 // UploadFile uploads file to server
-func (hs *HTTPSync) UploadFile(filePath string, uploadReq UploadReq) error {
+func (hs *HTTPSync) UploadFile(filePath string, uploadReq dto.UploadReq) error {
 	mu := sync.Mutex{}
 	hs.logger.Info("uploading file: %s", filePath)
 
@@ -278,16 +249,16 @@ const (
 )
 
 // Value client configuration
-func (hs *HTTPSync) GetClientConfig() (storage.ClientConfig, error) {
+func (hs *HTTPSync) GetClientConfig() (config.ClientConfig, error) {
 	hs.logger.Info("fetching client config from server")
 
 	// Check if config fields are empty
 	if hs.syncConfig == nil || hs.syncConfig.ServerURL == "" || hs.syncConfig.ClientId == "" || hs.syncConfig.Token == "" {
-		return storage.ClientConfig{}, fmt.Errorf("sync config is not properly set, please check clientId, serverURL and token")
+		return config.ClientConfig{}, fmt.Errorf("sync config is not properly set, please check clientId, serverURL and token")
 	}
 
 	uri := fmt.Sprintf(API_GET_CLIENT_CONFIG, "")
-	appInfo := storage.GetAppInfo()
+	appInfo := config.GetAppInfo()
 	if appInfo.Version != "" {
 		uri = fmt.Sprintf(API_GET_CLIENT_CONFIG, appInfo.Version+"/")
 	}
@@ -309,18 +280,18 @@ func (hs *HTTPSync) GetClientConfig() (storage.ClientConfig, error) {
 
 	hs.logger.Info("sending client config request to: %s", url)
 	if err := hs.httpClient.Do(req, resp); err != nil {
-		return storage.ClientConfig{}, fmt.Errorf("failed to send request: %v", err)
+		return config.ClientConfig{}, fmt.Errorf("failed to send request: %v", err)
 	}
 
 	// Process the response
 	if resp.StatusCode() != fasthttp.StatusOK {
-		return storage.ClientConfig{}, fmt.Errorf("failed to get client config, status: %d, response: %s",
+		return config.ClientConfig{}, fmt.Errorf("failed to get client config, status: %d, response: %s",
 			resp.StatusCode(), string(resp.Body()))
 	}
 
-	var clientConfig storage.ClientConfig
+	var clientConfig config.ClientConfig
 	if err := json.Unmarshal(resp.Body(), &clientConfig); err != nil {
-		return storage.ClientConfig{}, fmt.Errorf("failed to parse response: %v", err)
+		return config.ClientConfig{}, fmt.Errorf("failed to parse response: %v", err)
 	}
 
 	hs.logger.Info("client config fetched successfully")

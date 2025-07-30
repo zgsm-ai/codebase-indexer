@@ -5,26 +5,24 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"net"
+
+	// "net"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	api "codebase-indexer/api"
+	// api "codebase-indexer/api"
+	"codebase-indexer/internal/config"
 	"codebase-indexer/internal/daemon"
 	"codebase-indexer/internal/handler"
-	"codebase-indexer/internal/scanner"
-	"codebase-indexer/internal/scheduler"
+	"codebase-indexer/internal/repository"
 	"codebase-indexer/internal/server"
 	"codebase-indexer/internal/service"
-	"codebase-indexer/internal/storage"
-	"codebase-indexer/internal/syncer"
 	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/logger"
-
-	"google.golang.org/grpc"
+	// "google.golang.org/grpc"
 )
 
 var (
@@ -47,7 +45,7 @@ func main() {
 
 	// Parse command line arguments
 	appName := flag.String("appname", "zgsm", "app name")
-	grpcServer := flag.String("grpc", "localhost:51353", "gRPC server address")
+	// grpcServer := flag.String("grpc", "localhost:51353", "gRPC server address")
 	httpServer := flag.String("http", "localhost:11380", "HTTP server address")
 	logLevel := flag.String("loglevel", "info", "log level (debug, info, warn, error)")
 	clientId := flag.String("clientid", "", "client id")
@@ -73,36 +71,43 @@ func main() {
 	logger.Info("OS: %s, Arch: %s, App: %s, Version: %s, Starting...", osName, archName, *appName, version)
 
 	// Initialize infrastructure layer
-	storageManager, err := storage.NewStorageManager(utils.CacheDir, logger)
+	storageManager, err := repository.NewStorageManager(utils.CacheDir, logger)
 	if err != nil {
 		logger.Fatal("failed to initialize storage manager: %v", err)
 		return
 	}
-	fileScanner := scanner.NewFileScanner(logger)
-	var syncConfig *syncer.SyncConfig
-	if *clientId != "" && *serverEndpoint != "" && *token != "" {
-		syncConfig = &syncer.SyncConfig{ClientId: *clientId, ServerURL: *serverEndpoint, Token: *token}
-	}
-	httpSync := syncer.NewHTTPSync(syncConfig, logger)
-	syncScheduler := scheduler.NewScheduler(httpSync, fileScanner, storageManager, logger)
+	// fileScanner := scanner.NewFileScanner(logger)
+	// var syncConfig *syncer.SyncConfig
+	// if *clientId != "" && *serverEndpoint != "" && *token != "" {
+	// 	syncConfig = &syncer.SyncConfig{ClientId: *clientId, ServerURL: *serverEndpoint, Token: *token}
+	// }
+	// httpSync := syncer.NewHTTPSync(syncConfig, logger)
+	// syncScheduler := scheduler.NewScheduler(httpSync, fileScanner, storageManager, logger)
 
 	// Initialize service layer
+	var syncServiceConfig *config.SyncConfig
+	if *clientId != "" && *serverEndpoint != "" && *token != "" {
+		syncServiceConfig = &config.SyncConfig{ClientId: *clientId, ServerURL: *serverEndpoint, Token: *token}
+	}
+	scanService := repository.NewFileScanner(logger)
+	syncService := repository.NewHTTPSync(syncServiceConfig, logger)
 	codebaseService := service.NewCodebaseService(logger)
-	extensionService := service.NewExtensionService(storageManager, httpSync, fileScanner, codebaseService, logger)
+	schedulerService := service.NewScheduler(syncService, scanService, storageManager, logger)
+	extensionService := service.NewExtensionService(storageManager, syncService, scanService, codebaseService, logger)
 
 	// Initialize handler layer
-	grpcHandler := handler.NewGRPCHandler(httpSync, fileScanner, storageManager, syncScheduler, logger)
+	// grpcHandler := handler.NewGRPCHandler(syncService, scanService, storageManager, schedulerService, logger)
 	extensionHandler := handler.NewExtensionHandler(extensionService, logger)
 	backendHandler := handler.NewBackendHandler(codebaseService, logger)
 
 	// Initialize gRPC server
-	lis, err := net.Listen("tcp", *grpcServer)
-	if err != nil {
-		logger.Fatal("failed to listen: %v", err)
-		return
-	}
-	s := grpc.NewServer()
-	api.RegisterSyncServiceServer(s, grpcHandler)
+	// lis, err := net.Listen("tcp", *grpcServer)
+	// if err != nil {
+	// 	logger.Fatal("failed to listen: %v", err)
+	// 	return
+	// }
+	// s := grpc.NewServer()
+	// api.RegisterSyncServiceServer(s, grpcHandler)
 
 	// Initialize HTTP server
 	httpServerInstance := server.NewServer(extensionHandler, backendHandler, logger)
@@ -112,7 +117,8 @@ func main() {
 	}
 
 	// Start daemon process
-	daemon := daemon.NewDaemon(syncScheduler, s, lis, httpSync, fileScanner, storageManager, logger)
+	// daemon := daemon.NewDaemon(syncScheduler, s, lis, httpSync, fileScanner, storageManager, logger)
+	daemon := daemon.NewDaemon(schedulerService, syncService, scanService, storageManager, logger)
 	go daemon.Start()
 
 	// Start HTTP server
@@ -123,7 +129,7 @@ func main() {
 	}()
 
 	logger.Info("application started successfully")
-	logger.Info("gRPC server listening on %s", *grpcServer)
+	// logger.Info("gRPC server listening on %s", *grpcServer)
 	logger.Info("HTTP server listening on %s", *httpServer)
 	if *enableSwagger {
 		logger.Info("swagger documentation available at http://localhost%s/docs", *httpServer)
@@ -183,13 +189,13 @@ func initDir(appName string) error {
 // initConfig initializes configuration
 func initConfig(appName string) {
 	// Set app info
-	appInfo := storage.AppInfo{
+	appInfo := config.AppInfo{
 		AppName:  appName,
 		ArchName: archName,
 		OSName:   osName,
 		Version:  version,
 	}
-	storage.SetAppInfo(appInfo)
+	config.SetAppInfo(appInfo)
 	// Set client default configuration
-	storage.SetClientConfig(storage.DefaultClientConfig)
+	config.SetClientConfig(config.DefaultClientConfig)
 }

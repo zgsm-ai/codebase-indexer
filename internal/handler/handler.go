@@ -13,26 +13,25 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	api "codebase-indexer/api"
-	"codebase-indexer/internal/scanner"
-	"codebase-indexer/internal/scheduler"
-	"codebase-indexer/internal/storage"
-	"codebase-indexer/internal/syncer"
+	"codebase-indexer/internal/config"
+	"codebase-indexer/internal/repository"
+	"codebase-indexer/internal/service"
 	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/logger"
 )
 
 // GRPCHandler handles gRPC services
 type GRPCHandler struct {
-	httpSync    syncer.SyncInterface
-	fileScanner scanner.ScannerInterface
-	storage     storage.SotrageInterface
-	scheduler   *scheduler.Scheduler
+	httpSync    repository.SyncInterface
+	fileScanner repository.ScannerInterface
+	storage     repository.SotrageInterface
+	scheduler   *service.Scheduler
 	logger      logger.Logger
 	api.UnimplementedSyncServiceServer
 }
 
 // NewGRPCHandler creates a new gRPC handler
-func NewGRPCHandler(httpSync syncer.SyncInterface, fileScanner scanner.ScannerInterface, storage storage.SotrageInterface, scheduler *scheduler.Scheduler, logger logger.Logger) *GRPCHandler {
+func NewGRPCHandler(httpSync repository.SyncInterface, fileScanner repository.ScannerInterface, storage repository.SotrageInterface, scheduler *service.Scheduler, logger logger.Logger) *GRPCHandler {
 	return &GRPCHandler{
 		httpSync:    httpSync,
 		fileScanner: fileScanner,
@@ -62,7 +61,7 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 		return &api.RegisterSyncResponse{Success: false, Message: "no codebase found"}, nil
 	}
 
-	var addCodebaseConfigs []*storage.CodebaseConfig
+	var addCodebaseConfigs []*config.CodebaseConfig
 	var registeredCount int
 	var lastError error
 
@@ -75,7 +74,7 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 		codebaseConfig, ok := codebaseConfigs[codebaseId]
 		if !ok {
 			h.logger.Warn("failed to get codebase config (Id: %s), will register", codebaseId)
-			codebaseConfig = &storage.CodebaseConfig{
+			codebaseConfig = &config.CodebaseConfig{
 				ClientID:     req.ClientId,
 				CodebaseName: pendingConfig.CodebaseName,
 				CodebasePath: pendingConfig.CodebasePath,
@@ -145,7 +144,7 @@ func (h *GRPCHandler) SyncCodebase(ctx context.Context, req *api.SyncCodebaseReq
 		return &api.SyncCodebaseResponse{Success: false, Code: "0010", Message: "no codebase found"}, nil
 	}
 
-	var syncCodebaseConfigs []*storage.CodebaseConfig
+	var syncCodebaseConfigs []*config.CodebaseConfig
 	var savedCount int
 	var lastError error
 
@@ -158,7 +157,7 @@ func (h *GRPCHandler) SyncCodebase(ctx context.Context, req *api.SyncCodebaseReq
 		codebaseConfig, ok := codebaseConfigs[codebaseId]
 		if !ok {
 			h.logger.Warn("codebase config not found: Id=%s, will register", codebaseId)
-			codebaseConfig = &storage.CodebaseConfig{
+			codebaseConfig = &config.CodebaseConfig{
 				ClientID:     req.ClientId,
 				CodebaseName: pendingConfig.CodebaseName,
 				CodebasePath: pendingConfig.CodebasePath,
@@ -283,7 +282,7 @@ func (h *GRPCHandler) ShareAccessToken(ctx context.Context, req *api.ShareAccess
 		h.logger.Error("invalid token synchronization parameters")
 		return &api.ShareAccessTokenResponse{Success: false, Message: "invalid parameters"}, nil
 	}
-	syncConfig := &syncer.SyncConfig{
+	syncConfig := &config.SyncConfig{
 		ClientId:  req.ClientId,
 		ServerURL: req.ServerEndpoint,
 		Token:     req.AccessToken,
@@ -300,7 +299,7 @@ func (h *GRPCHandler) GetVersion(ctx context.Context, req *api.VersionRequest) (
 		h.logger.Error("invalid version information parameters")
 		return &api.VersionResponse{Success: false, Message: "invalid parameters"}, nil
 	}
-	appInfo := storage.GetAppInfo()
+	appInfo := config.GetAppInfo()
 
 	return &api.VersionResponse{
 		Success: true,
@@ -417,8 +416,8 @@ func (h *GRPCHandler) CheckIgnoreFile(ctx context.Context, req *api.CheckIgnoreF
 }
 
 // syncCodebases actively syncs code repositories
-func (h *GRPCHandler) syncCodebases(codebaseConfigs []*storage.CodebaseConfig) error {
-	timeout := time.Duration(storage.DefaultConfigSync.IntervalMinutes) * time.Minute
+func (h *GRPCHandler) syncCodebases(codebaseConfigs []*config.CodebaseConfig) error {
+	timeout := time.Duration(config.DefaultConfigSync.IntervalMinutes) * time.Minute
 	if h.scheduler.GetSchedulerConfig() != nil && h.scheduler.GetSchedulerConfig().IntervalMinutes > 0 {
 		timeout = time.Duration(h.scheduler.GetSchedulerConfig().IntervalMinutes) * time.Minute
 	}
@@ -439,7 +438,7 @@ func (h *GRPCHandler) syncCodebases(codebaseConfigs []*storage.CodebaseConfig) e
 }
 
 // syncCodebasesWithFilePaths syncs code repositories with specified file paths
-func (h *GRPCHandler) syncCodebasesWithFilePaths(codebaseConfigs []*storage.CodebaseConfig, filePaths []string) error {
+func (h *GRPCHandler) syncCodebasesWithFilePaths(codebaseConfigs []*config.CodebaseConfig, filePaths []string) error {
 	for _, codebaseConfig := range codebaseConfigs {
 		if err := h.scheduler.PerformSyncForCodebaseWithFilePaths(codebaseConfig, filePaths); err != nil {
 			h.logger.Error("sync failed: %v", err)
@@ -468,12 +467,12 @@ func (h *GRPCHandler) isGitRepository(path string) bool {
 // 2. If not, check first-level subdirs and return any git repos
 // 3. If no git repos found in basePath or subdirs, return basePath
 // Returns slice of CodebaseConfig (only CodebasePath and CodebaseName filled)
-func (h *GRPCHandler) findCodebasePaths(basePath string, baseName string) ([]storage.CodebaseConfig, error) {
-	var configs []storage.CodebaseConfig
+func (h *GRPCHandler) findCodebasePaths(basePath string, baseName string) ([]config.CodebaseConfig, error) {
+	var configs []config.CodebaseConfig
 
 	if h.isGitRepository(basePath) {
 		h.logger.Info("path %s is a git repository", basePath)
-		configs = append(configs, storage.CodebaseConfig{CodebasePath: basePath, CodebaseName: baseName})
+		configs = append(configs, config.CodebaseConfig{CodebasePath: basePath, CodebaseName: baseName})
 		return configs, nil
 	}
 
@@ -488,14 +487,14 @@ func (h *GRPCHandler) findCodebasePaths(basePath string, baseName string) ([]sto
 		if entry.IsDir() {
 			subDirPath := filepath.Join(basePath, entry.Name())
 			if h.isGitRepository(subDirPath) {
-				configs = append(configs, storage.CodebaseConfig{CodebasePath: subDirPath, CodebaseName: entry.Name()})
+				configs = append(configs, config.CodebaseConfig{CodebasePath: subDirPath, CodebaseName: entry.Name()})
 				foundSubRepo = true
 			}
 		}
 	}
 
 	if !foundSubRepo {
-		configs = append(configs, storage.CodebaseConfig{CodebasePath: basePath, CodebaseName: baseName})
+		configs = append(configs, config.CodebaseConfig{CodebasePath: basePath, CodebaseName: baseName})
 	}
 
 	h.logger.Info("found %d codebase paths under %s: %+v", len(configs), basePath, configs)

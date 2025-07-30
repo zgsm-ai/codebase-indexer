@@ -8,14 +8,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"codebase-indexer/internal/storage"
+	"codebase-indexer/internal/config"
 	"codebase-indexer/pkg/logger"
 )
 
 // CodebaseService 处理代码库相关的业务逻辑
 type CodebaseService interface {
 	// FindCodebasePaths 查找指定路径下的代码库配置
-	FindCodebasePaths(ctx context.Context, basePath, baseName string) ([]storage.CodebaseConfig, error)
+	FindCodebasePaths(ctx context.Context, basePath, baseName string) ([]config.CodebaseConfig, error)
 
 	// IsGitRepository 检查路径是否为Git仓库
 	IsGitRepository(ctx context.Context, path string) bool
@@ -36,12 +36,12 @@ type codebaseService struct {
 }
 
 // FindCodebasePaths 查找指定路径下的代码库配置
-func (s *codebaseService) FindCodebasePaths(ctx context.Context, basePath, baseName string) ([]storage.CodebaseConfig, error) {
-	var configs []storage.CodebaseConfig
+func (s *codebaseService) FindCodebasePaths(ctx context.Context, basePath, baseName string) ([]config.CodebaseConfig, error) {
+	var configs []config.CodebaseConfig
 
 	if s.IsGitRepository(ctx, basePath) {
 		s.logger.Info("path %s is a git repository", basePath)
-		configs = append(configs, storage.CodebaseConfig{
+		configs = append(configs, config.CodebaseConfig{
 			CodebasePath: basePath,
 			CodebaseName: baseName,
 		})
@@ -59,7 +59,7 @@ func (s *codebaseService) FindCodebasePaths(ctx context.Context, basePath, baseN
 		if entry.IsDir() && !strings.HasPrefix(entry.Name(), ".") {
 			subDirPath := filepath.Join(basePath, entry.Name())
 			if s.IsGitRepository(ctx, subDirPath) {
-				configs = append(configs, storage.CodebaseConfig{
+				configs = append(configs, config.CodebaseConfig{
 					CodebasePath: subDirPath,
 					CodebaseName: entry.Name(),
 				})
@@ -69,7 +69,7 @@ func (s *codebaseService) FindCodebasePaths(ctx context.Context, basePath, baseN
 	}
 
 	if !foundSubRepo {
-		configs = append(configs, storage.CodebaseConfig{
+		configs = append(configs, config.CodebaseConfig{
 			CodebasePath: basePath,
 			CodebaseName: baseName,
 		})
@@ -97,7 +97,5 @@ func (s *codebaseService) IsGitRepository(ctx context.Context, path string) bool
 // GenerateCodebaseID 生成代码库唯一ID
 func (s *codebaseService) GenerateCodebaseID(name, path string) string {
 	// 使用MD5哈希生成唯一ID，结合名称和路径
-	data := fmt.Sprintf("%s:%s", name, path)
-	hash := md5.Sum([]byte(data))
-	return fmt.Sprintf("%x", hash)
+	return fmt.Sprintf("%s_%x", name, md5.Sum([]byte(path)))
 }
