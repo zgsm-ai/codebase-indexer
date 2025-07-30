@@ -1,24 +1,54 @@
+
+;; ------------------------------------import------------------------------------
 (import_statement
-  name: (dotted_name)* @import.name
-  name: (aliased_import
-          name: (dotted_name)* @import.name
-          alias: (identifier) @import.alias
-          )*
-  ) @import
-
-(import_from_statement
-  module_name: (dotted_name) @import.module_name
   name: (dotted_name) @import.name
-  )  @import
+)@import
 
+(import_statement
+  name: (aliased_import
+          name: (dotted_name) @import.name
+          alias: (identifier) @import.alias
+        )
+) @import
 
-;; Function definitions
+;; Python import_from_statement 语义捕获模式
+(import_from_statement
+  module_name: [
+    (dotted_name) @import.source
+    (relative_import) @import.source
+  ]?
+  [
+    ;; 处理通配符导入
+    (wildcard_import) @import.name
+    ;; 处理普通导入列表
+    name: [
+      ;; 处理带别名的导入
+      (aliased_import
+        name: (dotted_name) @import.name
+        alias: (identifier) @import.alias)
+      ;; 处理不带别名的导入  
+      (dotted_name) @import.name
+      ;; 处理标识符导入
+      (identifier) @import.name
+    ]
+  ]
+) @import
+
+;;------------------------------------function------------------------------------
+
 (function_definition
-  name: (identifier) @definition.function.name) @definition.function
+  name: (identifier) @definition.function.name
+  parameters: (parameters) @definition.function.parameters
+  return_type: (type)? @definition.function.return_type
+)@definition.function
 
-;; Class definitions
+
+;; -----------------------------------class-----------------------------------
 (class_definition
-  name: (identifier) @definition.class.name) @definition.class
+  name: (identifier) @definition.class.name
+  superclasses: (argument_list)? @definition.class.extends
+)@definition.class
+
 
 ;; Decorated functions
 (decorated_definition

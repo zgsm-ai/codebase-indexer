@@ -210,3 +210,96 @@ struct Circle1 : public Position, public Drawable {
 
 
 
+// 基本枚举
+enum Color {
+    RED,
+    GREEN,
+    BLUE
+};
+
+// 带值的枚举
+enum Status {
+    PENDING = 0,
+    RUNNING = 1,
+    COMPLETED = 2
+};
+
+// 指定底层类型的枚举
+enum Direction : int {
+    NORTH = 1,
+    SOUTH = 2,
+    EAST = 3,
+    WEST = 4
+};
+
+// 作用域枚举 (enum class)
+enum class Priority {
+    LOW,
+    MEDIUM,
+    HIGH
+};
+
+// 带底层类型的作用域枚举
+enum class ErrorCode : unsigned int {
+    SUCCESS = 0,
+    FAILURE = 1,
+    TIMEOUT = 2
+};
+
+// 匿名枚举
+enum {
+    MAX_SIZE = 100,
+    MIN_SIZE = 1
+};
+
+// 嵌套在类中的枚举
+class NetworkManager {
+public:
+    enum Protocol {
+        HTTP,
+        HTTPS,
+        FTP
+    };
+
+    enum class State : char {
+        DISCONNECTED = 'D',
+        CONNECTING = 'C',
+        CONNECTED = 'N'
+    };
+};
+
+// 带位字段的枚举
+enum Flags {
+    READ = 1 << 0,
+    WRITE = 1 << 1,
+    EXECUTE = 1 << 2
+};
+
+// 复杂的枚举定义
+enum class LogLevel : short {
+    DEBUG = -1,
+    INFO = 0,
+    WARNING = 1,
+    ERROR = 2,
+    CRITICAL = 3
+};
+
+// 跨行枚举定义
+enum DatabaseType {
+    MYSQL,
+    POSTGRESQL,
+    SQLITE,
+    ORACLE,
+    MSSQL
+};
+
+// 带注释的枚举
+enum FilePermission {
+    NONE1 = 0,        // 无权限
+    READ1 = 1,        // 读权限
+    WRITE1 = 2,       // 写权限
+    EXECUTE1 = 4      // 执行权限
+};
+
+class Derived1 : public Outer<Base<Inner<int>>> {};
+class Derived2 : virtual public Base1, public Base2 {};

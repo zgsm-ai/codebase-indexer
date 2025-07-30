@@ -18,7 +18,6 @@
 ) @definition.class
 
 
-
 ;; Struct declarations
 (struct_specifier
   name: (type_identifier) @definition.struct.name
@@ -101,9 +100,19 @@
 (union_specifier
   name: (type_identifier) @definition.union.name) @definition.union
 
-;; Enum declarations
+;; Enum declarations - treat enum name as class
 (enum_specifier
-  name: (type_identifier) @definition.enum.name) @definition.enum
+  name: (type_identifier) ? @definition.enum.name
+)@definition.enum
+
+;; Enum constants - treat enum values as fields  
+(enumerator 
+  name: (identifier) @definition.enum.constant.name
+  value: (_)? @definition.enum.constant.value
+)@definition.enum.constant
+
+
+
 
 ;; Type alias declarations (these are definitions)
 (alias_declaration

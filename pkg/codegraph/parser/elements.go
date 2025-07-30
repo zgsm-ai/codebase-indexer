@@ -63,6 +63,12 @@ func newRootElement(elementTypeValue string, rootIndex uint32) resolver.Element 
 	case types.ElementTypeConstant:
 		base.Type = types.ElementTypeConstant
 		return &resolver.Variable{BaseElement: base}
+	case types.ElementTypeEnum:
+		base.Type = types.ElementTypeEnum
+		return &resolver.Class{BaseElement: base}
+	case types.ElementTypeEnumConstant:
+		base.Type = types.ElementTypeEnumConstant
+		return &resolver.Variable{BaseElement: base}
 	default:
 		base.Type = types.ElementTypeUndefined
 		return base

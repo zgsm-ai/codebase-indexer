@@ -108,26 +108,15 @@ func (c *CppResolver) resolveClass(ctx context.Context, element *Class, rc *Reso
 		}
 		content := cap.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(captureName) {
-		case types.ElementTypeClassName, types.ElementTypeStructName:
+		case types.ElementTypeClassName, types.ElementTypeStructName, types.ElementTypeEnumName:
+			// 枚举类型只考虑name
 			element.BaseElement.Name = strings.TrimSpace(content)
 		case types.ElementTypeClassExtends, types.ElementTypeStructExtends:
-			content = strings.TrimSpace(content)
-			content = strings.TrimPrefix(content, ":")
-			params := getFilteredParameters(content)
-			for _, param := range params {
-				typNames := getFilteredTypes(param.Name)
-				element.SuperClasses = append(element.SuperClasses, param.Name)
-				// 类里面有可能包含其他类型
-				for _, typName := range typNames {
-					if typName == types.PrimitiveType {
-						continue
-					}
-					refs = append(refs, &Reference{
-						BaseElement: &BaseElement{
-							Name: typName,
-						},
-					})
-				}
+			// 不考虑cpp的ns调用，owner暂时无用
+			typs := parseBaseClassClause(&cap.Node, rc.SourceFile.Content)
+			for _, typ := range typs {
+				refs = append(refs, NewReference(element, &cap.Node, typ, types.EmptyString))
+				element.SuperClasses = append(element.SuperClasses, typ)
 			}
 		}
 	}
@@ -155,26 +144,16 @@ func (c *CppResolver) resolveVariable(ctx context.Context, element *Variable, rc
 			element.BaseElement.Name = CleanParam(content)
 		case types.ElementTypeVariableType, types.ElementTypeFieldType:
 			element.VariableType = getFilteredTypes(content)
+		case types.ElementTypeEnumConstantName:
+			// 枚举的类型不考虑，都是基础类型（有匿名枚举）
+			element.BaseElement.Name = CleanParam(content)
+			element.VariableType = []string{types.PrimitiveType}
 		case types.ElementTypeVariableValue, types.ElementTypeFieldValue:
 			// 有可能是字面量，也有可能是类和结构体的创建，和方法调用
 			// 只能处理一个 new 的创建
 			// 字面量不处理，方法调用由resolveCall处理，只处理类的创建
 			val := parseLocalVariableValue(&cap.Node, rc.SourceFile.Content)
-			ref := &Reference{
-				BaseElement: &BaseElement{
-					Name:    val,
-					Type:    types.ElementTypeReference,
-					Content: rc.SourceFile.Content,
-					Range: []int32{
-						int32(cap.Node.StartPosition().Row),
-						int32(cap.Node.StartPosition().Column),
-						int32(cap.Node.EndPosition().Row),
-						int32(cap.Node.EndPosition().Column),
-					},
-				},
-				Owner: "", // 待定
-			}
-			refs = append(refs, ref)
+			refs = append(refs, NewReference(element, &cap.Node, val, types.EmptyString))
 		}
 	}
 	element.BaseElement.Scope = types.ScopeFunction

@@ -6,6 +6,7 @@ const (
 	DoubleQuote       = "\""
 	Slash             = "/"
 	Comma             = ","
+	Colon             = ":"
 	Identifier        = "identifier"
 	Dot               = "."
 	CurrentDir        = "./"
@@ -52,8 +53,14 @@ const (
 	ElementTypeStructExtends       ElementType = "definition.struct.extends"
 	ElementTypeStructType          ElementType = "definition.struct.type"
 	ElementTypeEnum                ElementType = "definition.enum"
+	ElementTypeEnumName            ElementType = "definition.enum.name"
+	ElementTypeEnumImplements      ElementType = "definition.enum.implements"
+	ElementTypeEnumModifiers       ElementType = "definition.enum.modifiers"
 	ElementTypeUnion               ElementType = "definition.union"
 	ElementTypeTrait               ElementType = "definition.trait"
+	ElementTypeEnumConstant        ElementType = "definition.enum.constant"
+	ElementTypeEnumConstantName    ElementType = "definition.enum.constant.name"
+	ElementTypeEnumConstantValue   ElementType = "definition.enum.constant.value"
 	ElementTypeTypeAlias           ElementType = "definition.type_alias"
 	ElementTypeFunction            ElementType = "definition.function"
 	ElementTypeFunctionName        ElementType = "definition.function.name"
@@ -126,6 +133,12 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeStructType):          ElementTypeStructType,
 	string(ElementTypeStructExtends):       ElementTypeStructExtends,
 	string(ElementTypeEnum):                ElementTypeEnum,
+	string(ElementTypeEnumName):            ElementTypeEnumName,
+	string(ElementTypeEnumImplements):      ElementTypeEnumImplements,
+	string(ElementTypeEnumModifiers):       ElementTypeEnumModifiers,
+	string(ElementTypeEnumConstant):        ElementTypeEnumConstant,
+	string(ElementTypeEnumConstantName):    ElementTypeEnumConstantName,
+	string(ElementTypeEnumConstantValue):   ElementTypeEnumConstantValue,
 	string(ElementTypeUnion):               ElementTypeUnion,
 	string(ElementTypeTrait):               ElementTypeTrait,
 	string(ElementTypeTypeAlias):           ElementTypeTypeAlias,
@@ -203,6 +216,14 @@ const (
 	NodeKindVariableDeclaration                NodeKind = "variable_declaration"
 	NodeKindModifier                           NodeKind = "modifiers"
 	NodeKindIdentifier                         NodeKind = "identifier"
+	NodeKindKeywordArgument                    NodeKind = "keyword_argument"
+	NodeKindSubscript                          NodeKind = "subscript"
+	NodeKindAttribute                          NodeKind = "attribute"
+	NodeKindType                               NodeKind = "type"
+	NodeKindListSplatPattern                   NodeKind = "list_splat_pattern"
+	NodeKindDictSplatPattern                   NodeKind = "dictionary_splat_pattern"
+	NodeKindDefaultParameter                   NodeKind = "default_parameter"
+	NodeKindTypedParameter                     NodeKind = "typed_parameter"
 	NodeKindFormalParameters                   NodeKind = "formal_parameters"
 	NodeKindUndefined                          NodeKind = "undefined"
 	NodeKindFuncLiteral                        NodeKind = "func_literal"
@@ -257,6 +278,8 @@ const (
 	NodeKindClassSpecifier       NodeKind = "class_specifier"
 	NodeKindStructSpecifier      NodeKind = "struct_specifier"
 	NodeKindAccessSpecifier      NodeKind = "access_specifier"
+	NodeKindTypeList             NodeKind = "type_list"
+	NodeKindBaseClassClause      NodeKind = "base_class_clause"
 )
 
 var NodeKindMappings = map[string]NodeKind{
@@ -272,6 +295,14 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindVariableDeclaration):                NodeKindVariableDeclaration,
 	string(NodeKindModifier):                           NodeKindModifier,
 	string(NodeKindIdentifier):                         NodeKindIdentifier,
+	string(NodeKindType):                               NodeKindType,
+	string(NodeKindKeywordArgument):                    NodeKindKeywordArgument,
+	string(NodeKindSubscript):                          NodeKindSubscript,
+	string(NodeKindAttribute):                          NodeKindAttribute,
+	string(NodeKindListSplatPattern):                   NodeKindListSplatPattern,
+	string(NodeKindDictSplatPattern):                   NodeKindDictSplatPattern,
+	string(NodeKindDefaultParameter):                   NodeKindDefaultParameter,
+	string(NodeKindTypedParameter):                     NodeKindTypedParameter,
 	string(NodeKindFormalParameters):                   NodeKindFormalParameters,
 	string(NodeKindMethodElem):                         NodeKindMethodElem,
 	string(NodeKindMethodSpec):                         NodeKindMethodSpec,
@@ -326,6 +357,8 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindStructSpecifier):      NodeKindStructSpecifier,
 	string(NodeKindAccessSpecifier):      NodeKindAccessSpecifier,
 	string(NodeKindQualifiedIdentifier):  NodeKindQualifiedIdentifier,
+	string(NodeKindTypeList):             NodeKindTypeList,
+	string(NodeKindBaseClassClause):      NodeKindBaseClassClause,
 }
 
 // 用于接收函数的返回类型和字段的类型
