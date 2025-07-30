@@ -549,10 +549,9 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 			updateRootElement(element, &capture, nodeCaptureName, rc.SourceFile.Content)
 
 			switch types.ToElementType(nodeCaptureName) {
-			case types.ElementTypeStruct:
+			case types.ElementTypeStructName:
 				element.Name = content
 				element.Scope = analyzeScope(content)
-
 			case types.ElementTypeStructType:
 				structTypeNode := capture.Node
 				// 获取field_declaration_list - 遍历所有子节点找到字段列表
@@ -613,6 +612,7 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 									ref := &Reference{
 										BaseElement: &BaseElement{
 											Type: types.ElementTypeReference,
+											Path: element.Path,
 											Range: []int32{
 												int32(typeNode.StartPosition().Row),
 												int32(typeNode.StartPosition().Column),
@@ -621,13 +621,11 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 											},
 										},
 									}
-
-									// 处理可能包含点号的类型名称 (如 x.Person)
 									if strings.Contains(fieldType, ".") {
 										parts := strings.Split(fieldType, ".")
 										if len(parts) == 2 {
-											ref.BaseElement.Name = parts[1] // Person
-											ref.Owner = parts[0]            // x
+											ref.BaseElement.Name = parts[1]
+											ref.Owner = parts[0]
 										} else {
 											ref.BaseElement.Name = fieldType
 										}
@@ -773,19 +771,14 @@ func (r *GoResolver) processMultipleVariableDeclaration(rootCapture treesitter.Q
 					continue
 				}
 
-				// 创建新的变量元素
-				newBase := NewBaseElement(uint32(i + 1000)) // 使用一个不会与现有捕获冲突的ID
 				newVariable := &Variable{
-					BaseElement: newBase,
+					BaseElement: &BaseElement{
+						Name:  nameNode.Utf8Text(rc.SourceFile.Content),
+						Path:  element.Path,
+						Type:  types.ElementTypeVariable,
+						Scope: element.Scope,
+					},
 				}
-
-				// 设置变量名称
-				newVariable.BaseElement.Name = nameNode.Utf8Text(rc.SourceFile.Content)
-				newVariable.BaseElement.Path = element.Path
-				// 设置类型和作用域
-				newVariable.Type = element.Type
-				newVariable.Scope = element.Scope
-
 				// 设置范围
 				newVariable.SetRange([]int32{
 					int32(nameNode.StartPosition().Row),
@@ -980,8 +973,24 @@ func (r *GoResolver) resolveCall(ctx context.Context, element *Call, rc *Resolve
 		case types.ElementTypeStructCall:
 			// 创建引用元素
 			refType := content
-			ref := createReferenceElement(refType, &capture.Node, uint32(1000+len(references)), rc.SourceFile.Content, element)
-			ref.BaseElement.Path = element.Path
+
+			ref := &Reference{
+				BaseElement: &BaseElement{
+					Name: refType,
+					Type: types.ElementTypeReference,
+					Path: element.Path,
+				},
+			}
+			updateElementRange(ref, &capture)
+			if strings.Contains(refType, ".") {
+				parts := strings.Split(refType, ".")
+				if len(parts) == 2 {
+					ref.Owner = parts[0]
+					ref.BaseElement.Name = parts[1]
+				}
+			} else {
+				ref.Owner = ""
+			}
 			references = append(references, ref)
 		}
 	}
@@ -1131,41 +1140,6 @@ func (r *GoResolver) isStandardLibrary(pkgPath string) (bool, error) {
 
 	// 标准库包的PkgPath以"internal/"或非模块路径开头
 	return !strings.Contains(pkgs[0].PkgPath, "."), nil
-}
-
-// createReferenceElement 创建并返回引用类型的元素
-func createReferenceElement(refType string, node *sitter.Node, elementID uint32, content []byte, element *Call) *Reference {
-	// 创建引用元素
-	baseRef := NewBaseElement(elementID)
-	ref := &Reference{
-		BaseElement: baseRef,
-		Owner:       refType,
-	}
-	ref.Path = element.Path
-	ref.BaseElement.Name = refType
-	ref.BaseElement.Type = types.ElementTypeReference
-	// 设置范围
-	ref.SetRange([]int32{
-		int32(node.StartPosition().Row),
-		int32(node.StartPosition().Column),
-		int32(node.EndPosition().Row),
-		int32(node.EndPosition().Column),
-	})
-
-	// 确定引用类型
-	if strings.Contains(refType, ".") {
-		// 如果包含点，可能是包限定的函数调用或类型引用
-		parts := strings.Split(refType, ".")
-		if len(parts) == 2 {
-			ref.Owner = parts[0]
-			ref.BaseElement.Name = parts[1]
-		}
-	} else {
-		// 如果是单独的标识符，可能是本地类型或函数
-		ref.Owner = ""
-	}
-
-	return ref
 }
 
 // isPrimitiveType 检查类型名称是否为Go基本数据类型

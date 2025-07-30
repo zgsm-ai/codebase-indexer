@@ -3,7 +3,6 @@ package resolver
 import (
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
-	"fmt"
 
 	"strings"
 
@@ -211,7 +210,6 @@ func (js *JavaScriptResolver) resolveMethod(ctx context.Context, element *Method
 			parseJavaScriptMethodParameters(element, capture.Node, rc.SourceFile.Content)
 		}
 	}
-	// 获取方法所属的类，原方法在java.go中
 	ownerNode := findMethodOwner(&rootCap.Node)
 	var ownerKind types.NodeKind
 	if ownerNode != nil {
@@ -271,14 +269,20 @@ func (js *JavaScriptResolver) resolveClass(ctx context.Context, element *Class, 
 			element.SuperClasses = append(element.SuperClasses, content)
 		}
 	}
-	cls := parseJavaScriptClassBody(&rootCapure.Node, rc.SourceFile.Content, element.BaseElement.Name)
+	cls, references := parseJavaScriptClassBody(&rootCapure.Node, rc.SourceFile.Content, element.BaseElement.Name)
 	element.Fields = cls.Fields
 	element.Methods = cls.Methods
+
+	// 收集所有引用元素
+	for _, ref := range references {
+		elements = append(elements, ref)
+	}
+
 	return elements, nil
 }
 
 // parseJavaScriptClassBody 解析JavaScript类体，提取字段和方法
-func parseJavaScriptClassBody(node *sitter.Node, content []byte, className string) *Class {
+func parseJavaScriptClassBody(node *sitter.Node, content []byte, className string) (*Class, []Element) {
 	class := &Class{
 		BaseElement: &BaseElement{
 			Name:  className,
@@ -288,12 +292,16 @@ func parseJavaScriptClassBody(node *sitter.Node, content []byte, className strin
 		Methods: []*Method{},
 		Fields:  []*Field{},
 	}
+
+	// 收集引用元素
+	var references []Element
+
 	// 查找class_body节点
 	var classBodyNode *sitter.Node
 	// 类声明节点的最后一个子节点通常是类体
 	classBodyNode = node.Child(node.ChildCount() - 1)
 	if classBodyNode == nil {
-		return class
+		return class, references
 	}
 	// 遍历类体中的所有成员
 	for i := uint(0); i < classBodyNode.ChildCount(); i++ {
@@ -303,7 +311,6 @@ func parseJavaScriptClassBody(node *sitter.Node, content []byte, className strin
 		}
 
 		kind := memberNode.Kind()
-		fmt.Println("kind:", kind)
 		switch types.ToNodeKind(kind) {
 		case types.NodeKindMethodDefinition:
 			// 处理方法
@@ -314,13 +321,18 @@ func parseJavaScriptClassBody(node *sitter.Node, content []byte, className strin
 			}
 		case types.NodeKindFieldDefinition:
 			// 处理字段
-			field := parseJavaScriptFieldNode(memberNode, content)
+			field, ref := parseJavaScriptFieldNode(memberNode, content)
 			if field != nil {
 				class.Fields = append(class.Fields, field)
+				// 如果存在引用元素，添加到引用列表中
+				if ref != nil {
+					references = append(references, ref)
+				}
 			}
 		}
 	}
-	return class
+
+	return class, references
 }
 
 // parseJavaScriptMethodNode 解析JavaScript方法节点
@@ -358,12 +370,7 @@ func parseJavaScriptMethodNode(node *sitter.Node, content []byte, className stri
 		}
 	}
 
-	// 检查是否是构造函数
-	if nameNode != nil && nameNode.Utf8Text(content) == "constructor" {
-		method.Type = types.ElementTypeConstructor
-	} else {
-		method.Type = types.ElementTypeMethod
-	}
+	method.Type = types.ElementTypeMethod
 
 	// 检查修饰符
 	if strings.Contains(node.Utf8Text(content), "static") {
@@ -377,13 +384,13 @@ func parseJavaScriptMethodNode(node *sitter.Node, content []byte, className stri
 }
 
 // parseJavaScriptFieldNode 解析JavaScript字段节点
-func parseJavaScriptFieldNode(node *sitter.Node, content []byte) *Field {
+func parseJavaScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Reference) {
 	field := &Field{}
+	var ref *Reference
 
 	// 查找字段名
 	nameNode := node.ChildByFieldName("property")
 	if nameNode == nil {
-
 		// 尝试查找property_identifier子节点
 		for i := uint(0); i < node.ChildCount(); i++ {
 			child := node.Child(i)
@@ -394,7 +401,7 @@ func parseJavaScriptFieldNode(node *sitter.Node, content []byte) *Field {
 		}
 
 		if nameNode == nil {
-			return nil
+			return nil, nil
 		}
 	}
 
@@ -410,9 +417,116 @@ func parseJavaScriptFieldNode(node *sitter.Node, content []byte) *Field {
 	}
 
 	field.Name = fieldName
-	field.Type = "" // JavaScript中字段类型默认为any
 
-	return field
+	// 查找字段值（可能是引用类型）
+	valueNode := node.ChildByFieldName("value")
+	if valueNode != nil {
+		// 处理字段值，检查是否为引用类型
+		fieldType := ""
+		nodeKind := valueNode.Kind()
+
+		// 根据值节点的类型确定字段类型
+		switch nodeKind {
+		case string(types.NodeKindNewExpression):
+			// 从new表达式中提取类型
+			constructorNode := valueNode.Child(1)
+			if constructorNode != nil {
+				fieldType = constructorNode.Utf8Text(content)
+
+				// 检查是否是成员表达式
+				if constructorNode.Kind() == string(types.NodeKindMemberExpression) {
+					// 创建引用元素
+					ref = &Reference{
+						BaseElement: &BaseElement{
+							Type: types.ElementTypeReference,
+							Range: []int32{
+								int32(constructorNode.StartPosition().Row),
+								int32(constructorNode.StartPosition().Column),
+								int32(constructorNode.EndPosition().Row),
+								int32(constructorNode.EndPosition().Column),
+							},
+						},
+					}
+
+					// 处理成员表达式
+					objectNode := constructorNode.ChildByFieldName("object")
+					propertyNode := constructorNode.ChildByFieldName("property")
+					if objectNode != nil && propertyNode != nil {
+						ref.Owner = objectNode.Utf8Text(content)
+						ref.BaseElement.Name = propertyNode.Utf8Text(content)
+						fieldType = ref.Owner + "." + ref.BaseElement.Name
+					} else {
+						ref.BaseElement.Name = fieldType
+					}
+				}
+			}
+		case string(types.NodeKindIdentifier):
+			// 标识符可能是类型引用
+			fieldType = valueNode.Utf8Text(content)
+
+			// 如果不是基本类型，创建引用元素
+			if !isJavaScriptPrimitiveType(fieldType) {
+				ref = &Reference{
+					BaseElement: &BaseElement{
+						Name: fieldType,
+						Type: types.ElementTypeReference,
+						Range: []int32{
+							int32(valueNode.StartPosition().Row),
+							int32(valueNode.StartPosition().Column),
+							int32(valueNode.EndPosition().Row),
+							int32(valueNode.EndPosition().Column),
+						},
+					},
+				}
+			}
+		case string(types.NodeKindMemberExpression):
+			// 成员表达式是引用类型
+			objectNode := valueNode.ChildByFieldName("object")
+			propertyNode := valueNode.ChildByFieldName("property")
+
+			if objectNode != nil && propertyNode != nil {
+				// 创建引用元素
+				ref = &Reference{
+					BaseElement: &BaseElement{
+						Type: types.ElementTypeReference,
+						Range: []int32{
+							int32(valueNode.StartPosition().Row),
+							int32(valueNode.StartPosition().Column),
+							int32(valueNode.EndPosition().Row),
+							int32(valueNode.EndPosition().Column),
+						},
+					},
+					Owner: objectNode.Utf8Text(content),
+				}
+				ref.BaseElement.Name = propertyNode.Utf8Text(content)
+				fieldType = ref.Owner + "." + ref.BaseElement.Name
+			} else {
+				fieldType = valueNode.Utf8Text(content)
+			}
+		}
+		field.Type = fieldType
+	} else {
+		field.Type = "any" // JavaScript中字段类型默认为any
+	}
+
+	return field, ref
+}
+
+// isJavaScriptPrimitiveType 检查类型是否为JavaScript基本数据类型
+func isJavaScriptPrimitiveType(typeName string) bool {
+	primitiveTypes := []string{
+		"string", "number", "boolean", "null", "undefined",
+		"Symbol", "BigInt", "any", "void", "object", "array",
+		"function", "regexp", "date", "promise", "map", "set", "true", "false",
+	}
+
+	typeName = strings.ToLower(typeName)
+	for _, t := range primitiveTypes {
+		if typeName == t {
+			return true
+		}
+	}
+	return false
 }
 
 func (js *JavaScriptResolver) resolveVariable(ctx context.Context, element *Variable, rc *ResolveContext) ([]Element, error) {
@@ -500,23 +614,6 @@ func (js *JavaScriptResolver) resolveVariable(ctx context.Context, element *Vari
 
 				// 直接返回函数元素
 				elements = append(elements, functionElement)
-			} else if rightNode != nil && isClassOrStructReference(rightNode) {
-				// 存储引用路径
-				refPathMap := extractReferencePath(rightNode, rc.SourceFile.Content)
-
-				// 处理引用
-				refElement := &Reference{
-					BaseElement: &BaseElement{
-						Name:  refPathMap["property"],
-						Path:  element.Path,
-						Scope: types.ScopeFile,
-						Type:  types.ElementTypeReference,
-					},
-					Owner: refPathMap["object"],
-				}
-				// 设置范围
-				updateElementRange(refElement, &capture)
-				elements = append(elements, refElement)
 			}
 		}
 
@@ -570,32 +667,6 @@ func (js *JavaScriptResolver) handleDestructuringWithPath(node *sitter.Node, con
 
 	// 获取作用域
 	scope := determineVariableScope(node)
-
-	// 处理右侧引用
-	if isClassOrStructReference(valueNode) {
-		refPathMap := extractReferencePath(valueNode, content)
-
-		// 创建引用元素
-		refElement := &Reference{
-			BaseElement: &BaseElement{
-				Name:  refPathMap["property"],
-				Path:  rootPath,
-				Scope: types.ScopeFile,
-				Type:  types.ElementTypeReference,
-			},
-			Owner: refPathMap["object"],
-		}
-
-		// 设置范围
-		refElement.SetRange([]int32{
-			int32(valueNode.StartPosition().Row),
-			int32(valueNode.StartPosition().Column),
-			int32(valueNode.EndPosition().Row),
-			int32(valueNode.EndPosition().Column),
-		})
-
-		elements = append(elements, refElement)
-	}
 
 	// 处理左侧变量
 	nodeKind := types.ToNodeKind(nameNode.Kind())
@@ -817,22 +888,38 @@ func parseArrowFunctionParameters(functionElement *Function, node *sitter.Node, 
 // extractReferencePath 递归提取 member_expression 的 object 路径和 property 名称
 func extractReferencePath(node *sitter.Node, content []byte) map[string]string {
 	result := map[string]string{"object": "", "property": ""}
+
 	// 如果是标识符，直接返回名称
 	if node.Kind() == string(types.NodeKindIdentifier) {
 		result["property"] = string(node.Utf8Text(content))
 		return result
 	}
 
-	// 如果是成员表达式，尝试构建完整路径
+	// 如果是成员表达式，提取对象和属性
 	if node.Kind() == string(types.NodeKindMemberExpression) {
 		objectNode := node.ChildByFieldName("object")
 		propertyNode := node.ChildByFieldName("property")
 
 		if objectNode != nil && propertyNode != nil {
-			objectText := objectNode.Utf8Text(content)
+			// 获取属性名（最右侧部分）
 			propertyText := propertyNode.Utf8Text(content)
-			result["object"] = string(objectText)
 			result["property"] = string(propertyText)
+
+			// 获取对象部分（左侧部分）
+			// 如果对象是另一个成员表达式，则需要递归处理
+			if objectNode.Kind() == string(types.NodeKindMemberExpression) {
+				// 对于嵌套的成员表达式，递归处理
+				subResult := extractReferencePath(objectNode, content)
+				if subResult["object"] != "" {
+					result["object"] = subResult["object"] + "." + subResult["property"]
+				} else {
+					result["object"] = subResult["property"]
+				}
+			} else {
+				// 简单对象，直接获取文本
+				result["object"] = string(objectNode.Utf8Text(content))
+			}
+
 			return result
 		}
 	}
@@ -841,10 +928,16 @@ func extractReferencePath(node *sitter.Node, content []byte) map[string]string {
 	if node.Kind() == string(types.NodeKindNewExpression) {
 		constructorNode := node.Child(1) // new之后的第一个子节点通常是构造函数
 		if constructorNode != nil {
-			result["property"] = string(constructorNode.Utf8Text(content))
-			return result
+			// 检查构造函数是否是成员表达式
+			if constructorNode.Kind() == string(types.NodeKindMemberExpression) {
+				return extractReferencePath(constructorNode, content)
+			} else {
+				result["property"] = string(constructorNode.Utf8Text(content))
+				return result
+			}
 		}
 	}
+
 	return result
 }
 
@@ -864,28 +957,6 @@ func isArrowFunction(node *sitter.Node) string {
 	return types.EmptyString
 }
 
-// isClassOrStructReference 判断节点是否为类或结构体引用
-func isClassOrStructReference(node *sitter.Node) bool {
-	nodeKind := node.Kind()
-
-	// 检查常见的引用类型
-	if nodeKind == string(types.NodeKindIdentifier) || nodeKind == string(types.NodeKindMemberExpression) {
-		return true
-	}
-
-	// 检查是否为new表达式
-	if nodeKind == string(types.NodeKindNewExpression) {
-		return true
-	}
-
-	// 检查对象表达式 (可能是结构体字面量)
-	if nodeKind == string(types.NodeKindObject) {
-		return false // 这是字面量，不是引用
-	}
-
-	return false
-}
-
 func (js *JavaScriptResolver) resolveInterface(ctx context.Context, element *Interface, rc *ResolveContext) ([]Element, error) {
 	//TODO implement me
 	panic("not support")
@@ -895,17 +966,12 @@ func (js *JavaScriptResolver) resolveCall(ctx context.Context, element *Call, rc
 	// 检查是否为require调用
 	if isRequireCallCapture(rc) {
 		// 处理为import而不是call
-		return js.handleRequireCall(ctx, rc)
+		return js.handleRequireCall(rc)
 	}
 
 	elements := []Element{element}
 	rootCapture := rc.Match.Captures[0]
 	updateRootElement(element, &rootCapture, rc.CaptureNames[rootCapture.Index], rc.SourceFile.Content)
-	// 如果没有匹配信息，直接返回
-	if rc.Match == nil || rc.Match.Captures == nil || len(rc.Match.Captures) == 0 {
-		return elements, nil
-	}
-
 	// 设置默认类型（初始默认为函数调用）
 	element.Type = types.ElementTypeFunctionCall
 	// 处理所有捕获节点
@@ -947,13 +1013,23 @@ func (js *JavaScriptResolver) resolveCall(ctx context.Context, element *Call, rc
 				// 如果不是成员表达式，直接获取函数名
 				element.BaseElement.Name = capture.Node.Utf8Text(rc.SourceFile.Content)
 			}
+		case types.ElementTypeStructCall:
+			// 存储引用路径
+			refPathMap := extractReferencePath(&capture.Node, rc.SourceFile.Content)
+			// 处理引用
+			refElement := &Reference{
+				BaseElement: &BaseElement{
+					Name:  refPathMap["property"],
+					Path:  element.Path,
+					Scope: types.ScopeFile,
+					Type:  types.ElementTypeReference,
+				},
+				Owner: refPathMap["object"],
+			}
+			// 设置范围
+			updateElementRange(refElement, &capture)
+			elements = append(elements, refElement)
 		}
-	}
-
-	// 根据是否有所有者来区分方法调用和函数调用
-	if element.Owner != types.EmptyString {
-		// 如果有所有者，则为方法调用
-		element.Type = types.ElementTypeMethodCall
 	}
 
 	return elements, nil
@@ -1060,6 +1136,7 @@ func extractCallNameAndOwner(node *sitter.Node, call *Call, content []byte) {
 			// 前面的部分组成所有者
 			if len(parts) > 1 {
 				call.Owner = strings.Join(parts[:len(parts)-1], ".")
+				call.Type = types.ElementTypeMethodCall
 			}
 		}
 	} else {
@@ -1108,7 +1185,7 @@ func isRequireCallCapture(rc *ResolveContext) bool {
 }
 
 // handleRequireCall 将require函数调用处理为import
-func (js *JavaScriptResolver) handleRequireCall(ctx context.Context, rc *ResolveContext) ([]Element, error) {
+func (js *JavaScriptResolver) handleRequireCall(rc *ResolveContext) ([]Element, error) {
 	// 创建import元素
 	importElement := &Import{
 		BaseElement: &BaseElement{
@@ -1155,12 +1232,7 @@ func (js *JavaScriptResolver) handleRequireCall(ctx context.Context, rc *Resolve
 	}
 
 	// 设置范围
-	importElement.SetRange([]int32{
-		int32(rootCapture.Node.StartPosition().Row),
-		int32(rootCapture.Node.StartPosition().Column),
-		int32(rootCapture.Node.EndPosition().Row),
-		int32(rootCapture.Node.EndPosition().Column),
-	})
+	updateElementRange(importElement, &rootCapture)
 
 	return []Element{importElement}, nil
 }

@@ -63,18 +63,27 @@
 
 ;; Function declarations
 (function_declaration
-  name: (identifier) @name) @definition.function
+  name: (identifier) @definition.function.name
+  parameters: (formal_parameters)? @definition.function.parameters
+  return_type:(type_annotation)? @definition.function.return_type
+  ) @definition.function
 
 
-;; Method definitions (inside classes)
+;; 类方法
 (method_definition
-  name: (property_identifier) @name) @definition.method
+  (accessibility_modifier)? @definition.method.modifier
+  name: (property_identifier) @definition.method.name
+  parameters: (formal_parameters)? @definition.method.parameters
+  return_type:(type_annotation)?@definition.method.return_type
+  ) @definition.method
 
 ;; Interface declarations
 (interface_declaration
   name: (type_identifier) @definition.interface.name
   (extends_type_clause)? @definition.interface.extends
   ) @definition.interface
+
+;; Interface declaration Type类型
 
 
 ;; Type declarations（TypeScript 中通常用 type_alias_declaration 表示类型别名）
@@ -90,7 +99,7 @@
   (identifier) @name) @definition.decorator
 
 ;; Abstract class declarations
-(class_declaration
+(abstract_class_declaration
   name: (type_identifier) @definition.class.name
   (class_heritage
     (extends_clause (identifier) @definition.class.extends)
@@ -98,9 +107,14 @@
   (implements_clause)? @definition.class.implements
   ) @definition.class
 
-;; Abstract method declarations
-(method_definition
-  name: (property_identifier) @name) @definition.method
+;;class declarations
+(class_declaration
+  name: (type_identifier) @definition.class.name
+  (class_heritage
+    (extends_clause (identifier) @definition.class.extends)
+    )?
+  (implements_clause)? @definition.class.implements
+  ) @definition.class
 
 (import_statement) @import_declaration
 
@@ -119,3 +133,7 @@
   function: (identifier) @call.function.owner
   arguments: (arguments) @call.function.arguments
   ) @call.function
+
+(new_expression
+  constructor:[(member_expression)(identifier)@call.struct]
+)
