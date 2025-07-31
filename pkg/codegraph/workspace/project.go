@@ -5,7 +5,7 @@ import (
 	"codebase-indexer/pkg/codegraph/types"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -14,20 +14,20 @@ type Project struct {
 	Name     string
 	Path     string
 	GoModule string
+	Uuid     string
 }
 
-func (p *Project) Uuid() (string, error) {
-	if p.Name == types.EmptyString {
-		return types.EmptyString, fmt.Errorf("get_uuid project %s %s missing name", p.Name, p.Path)
+// generateUuid 生成项目UUID
+func generateUuid(name, path string) string {
+	if name == types.EmptyString {
+		name = "unknown"
+	}
+	if path == types.EmptyString {
+		path = "unknown"
 	}
 
-	if p.Path == types.EmptyString {
-		return types.EmptyString, fmt.Errorf("get_uuid project %s %s missing path", p.Name, p.Path)
-	}
-
-	hash := sha256.Sum256([]byte(p.Path))
-
-	return p.Name + types.Underline + hex.EncodeToString(hash[:]), nil
+	hash := sha256.Sum256([]byte(path))
+	return name + types.Underline + hex.EncodeToString(hash[:])
 }
 
 type FileElementTables []*codegraphpb.FileElementTable

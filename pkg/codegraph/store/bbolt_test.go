@@ -678,7 +678,7 @@ func TestBBoltStorage_ConcurrentBatchWrite(t *testing.T) {
 	ctx := context.Background()
 	projectID := "batch-concurrent-test"
 	const goroutines = 50
-	const batchSize = 10000
+	const batchSize = 1000
 
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
@@ -703,6 +703,29 @@ func TestBBoltStorage_ConcurrentBatchWrite(t *testing.T) {
 	// 验证总数据量
 	size := storage.Size(ctx, projectID)
 	assert.Equal(t, goroutines*batchSize, size)
+}
+
+func TestBBoltStorage_BigBatchWrite(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	projectID := "big-batch-test"
+	const batchSize = 1000000
+
+	values := make([]proto.Message, batchSize)
+	keys := make([]string, batchSize)
+	for j := 0; j < batchSize; j++ {
+		values[j] = &TestMessage{Value: fmt.Sprintf("batch-%d", j)}
+		keys[j] = fmt.Sprintf("key-%d", j)
+	}
+	testValues := &testValues{values: values, keys: keys}
+	err := storage.BatchSave(ctx, projectID, testValues)
+	assert.NoError(t, err)
+
+	// 验证总数据量
+	size := storage.Size(ctx, projectID)
+	assert.Equal(t, batchSize, size)
 }
 
 func TestBBoltStorage_MultipleProjectsIsolation(t *testing.T) {

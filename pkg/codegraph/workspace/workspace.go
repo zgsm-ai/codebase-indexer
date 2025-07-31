@@ -44,9 +44,11 @@ func (w *WorkspaceReader) FindProjects(workspace string, visitPattern types.Visi
 
 	// 1. 当前目录是 git 仓库
 	if hasGitDir(workspace) {
+		projectName := filepath.Base(workspace)
 		projects = append(projects, &Project{
 			Path: workspace,
-			Name: filepath.Base(workspace),
+			Name: projectName,
+			Uuid: generateUuid(projectName, workspace),
 		})
 		foundGit = true
 	} else {
@@ -91,9 +93,11 @@ func (w *WorkspaceReader) FindProjects(workspace string, visitPattern types.Visi
 					}
 
 					if hasGitDir(subDir) {
+						projectName := filepath.Base(subDir)
 						projects = append(projects, &Project{
 							Path: subDir,
-							Name: filepath.Base(subDir),
+							Name: projectName,
+							Uuid: generateUuid(projectName, subDir),
 						})
 						foundGit = true
 						// 不递归 .git 仓库下的子目录
@@ -109,9 +113,11 @@ func (w *WorkspaceReader) FindProjects(workspace string, visitPattern types.Visi
 
 	// 3. 没有发现任何 git 仓库，将当前目录作为唯一项目
 	if !foundGit {
+		projectName := filepath.Base(workspace)
 		projects = append(projects, &Project{
 			Path: workspace,
-			Name: filepath.Base(workspace),
+			Name: projectName,
+			Uuid: generateUuid(projectName, workspace),
 		})
 	}
 

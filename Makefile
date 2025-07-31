@@ -7,8 +7,7 @@ init:
 
 .PHONY:mock
 mock:
-	mockgen -source=./internal/store/codegraph/store.go -destination=./internal/store/codegraph/mocks/graph_store_mock.go -package=mocks
-	mockgen -source=./internal/store/codebase/codebase_store.go -destination=./internal/store/codebase/mocks/codebase_store_mock.go -package=mocks
+	mockgen -source=./pkg/codegraph/store/storage.go -destination=./test/mocks/mock_graph_store.go -package=mocks
 
 .PHONY:proto
 proto:

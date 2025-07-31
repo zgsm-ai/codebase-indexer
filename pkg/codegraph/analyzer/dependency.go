@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"codebase-indexer/pkg/codegraph/parser"
+	"codebase-indexer/pkg/codegraph/proto"
 	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
 	"codebase-indexer/pkg/codegraph/resolver"
 	"codebase-indexer/pkg/codegraph/store"
@@ -33,12 +34,9 @@ func NewDependencyAnalyzer(logger logger.Logger,
 
 func (da *DependencyAnalyzer) Analyze(ctx context.Context,
 	projectInfo *workspace.Project, fileElementTables []*parser.FileElementTable) error {
-	projectUuid, err := projectInfo.Uuid()
-	if err != nil {
-		return err
-	}
+	projectUuid := projectInfo.Uuid
 	// 1. 处理 import
-	if err = da.preprocessImport(ctx, projectInfo, fileElementTables); err != nil {
+	if err := da.preprocessImport(ctx, projectInfo, fileElementTables); err != nil {
 		da.logger.Error("analyze import error: %v", err)
 	}
 
@@ -144,6 +142,10 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context,
 // SaveSymbolDefinitions 保存符号定义位置
 func (da *DependencyAnalyzer) SaveSymbolDefinitions(ctx context.Context, projectUuid string,
 	fileElementTables []*parser.FileElementTable) error {
+	if da.store == nil {
+		return fmt.Errorf("dependency analyzer store is nil")
+	}
+
 	// 2. 构建项目定义符号表  符号名 -> 元素列表，先根据符号名匹配，匹配符号名后，再根据导入路径、包名进行过滤。
 	definitionSymbolsMap := make(map[string]*codegraphpb.SymbolDefinition)
 	for _, fileTable := range fileElementTables {
@@ -159,7 +161,7 @@ func (da *DependencyAnalyzer) SaveSymbolDefinitions(ctx context.Context, project
 				d.Definitions = append(d.Definitions, &codegraphpb.Definition{
 					Path:        fileTable.Path,
 					Range:       elem.GetRange(),
-					ElementType: types.ElementTypeToProto(elem.GetType()),
+					ElementType: proto.ElementTypeToProto(elem.GetType()),
 				})
 				definitionSymbolsMap[key] = d
 			}
@@ -197,7 +199,7 @@ func (da *DependencyAnalyzer) findReferredElement(ctx context.Context,
 		element := &resolver.BaseElement{
 			Name:  referredName,
 			Path:  def.Path,
-			Type:  types.ElementTypeFromProto(def.ElementType),
+			Type:  proto.ElementTypeFromProto(def.ElementType),
 			Range: def.Range,
 		}
 		if def.Path == types.EmptyString {
@@ -228,7 +230,7 @@ func (da *DependencyAnalyzer) findReferredElement(ctx context.Context,
 	return foundDef, nil
 }
 
-// bindRelation establishes a bi-directional relationship between two elements.
+// bindRelation establishes a bidirectional relationship between two elements.
 func bindRelation(from resolver.Element, to resolver.Element,
 	fromRelType resolver.RelationType, toRelType resolver.RelationType) {
 

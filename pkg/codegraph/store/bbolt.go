@@ -93,7 +93,7 @@ func (s *BBoltStorage) createDB(projectUuid string) (*bbolt.DB, error) {
 	dbPath := filepath.Join(projectDir, "data.db")
 	s.logger.Debug("create_db: opening database", "project", projectUuid, "path", dbPath)
 
-	db, err := bbolt.Open(dbPath, 0600, &bbolt.Options{Timeout: 1 * time.Second})
+	db, err := openBboltDb(dbPath)
 	if err != nil {
 		s.logger.Warn("create_db: database open failed, attempting to recreate", "project", projectUuid, "error", err)
 
@@ -104,7 +104,7 @@ func (s *BBoltStorage) createDB(projectUuid string) (*bbolt.DB, error) {
 		}
 
 		// 重新尝试创建数据库
-		db, err = bbolt.Open(dbPath, 0600, &bbolt.Options{Timeout: 1 * time.Second})
+		db, err = openBboltDb(dbPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to recreate project database %s: %w", dbPath, err)
 		}
@@ -124,6 +124,11 @@ func (s *BBoltStorage) createDB(projectUuid string) (*bbolt.DB, error) {
 	return db, nil
 }
 
+func openBboltDb(dbPath string) (*bbolt.DB, error) {
+	return bbolt.Open(dbPath, 0600, &bbolt.Options{Timeout: 1 * time.Second, NoSync: true,
+		NoFreelistSync: true, FreelistType: bbolt.FreelistMapType, InitialMmapSize: 1 << 30}) // 预分配 1GB 内存映射
+}
+
 // BatchSave saves multiple values in batch
 func (s *BBoltStorage) BatchSave(ctx context.Context, projectUuid string, values Values) error {
 	if err := utils.CheckContext(ctx); err != nil {
@@ -136,8 +141,10 @@ func (s *BBoltStorage) BatchSave(ctx context.Context, projectUuid string, values
 		return fmt.Errorf("failed to get database: %w", err)
 	}
 
-	s.logger.Debug("batch_save: starting transaction", "project", projectUuid, "count", values.Len())
-	return db.Update(func(tx *bbolt.Tx) error {
+	s.logger.Debug("batch_save: starting batch transaction", "project", projectUuid, "count", values.Len())
+
+	// 使用 bbolt 的 Batch API 来提高并发性能
+	err = db.Batch(func(tx *bbolt.Tx) error {
 		bucket := tx.Bucket([]byte("data"))
 		if bucket == nil {
 			return fmt.Errorf("data bucket not found in project %s", projectUuid)
@@ -172,9 +179,10 @@ func (s *BBoltStorage) BatchSave(ctx context.Context, projectUuid string, values
 			}
 		}
 
-		s.logger.Debug("batch_save: completed", "project", projectUuid, "count", values.Len())
 		return nil
 	})
+	s.logger.Debug("batch_save: completed", "project", projectUuid, "count", values.Len())
+	return err
 }
 
 // Save saves single value

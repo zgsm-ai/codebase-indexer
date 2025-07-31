@@ -1,27 +1,29 @@
-package types
+package proto
 
 import (
 	"codebase-indexer/pkg/codegraph/parser"
 	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
 	"codebase-indexer/pkg/codegraph/resolver"
+	"codebase-indexer/pkg/codegraph/types"
 )
 
 // ElementTypeToProto 将 types.ElementType 转换为 codegraphpb.ElementType
-func ElementTypeToProto(t ElementType) codegraphpb.ElementType {
+func ElementTypeToProto(t types.ElementType) codegraphpb.ElementType {
 	switch t {
-	case ElementTypeFunction, ElementTypeFunctionName, ElementTypeFunctionDeclaration:
+	case types.ElementTypeFunction, types.ElementTypeFunctionName, types.ElementTypeFunctionDeclaration:
 		return codegraphpb.ElementType_ELEMENT_TYPE_FUNCTION
-	case ElementTypeMethod, ElementTypeMethodName:
+	case types.ElementTypeMethod, types.ElementTypeMethodName:
 		return codegraphpb.ElementType_ELEMENT_TYPE_METHOD
-	case ElementTypeMethodCall, ElementTypeFunctionCall, ElementTypeCallName:
+	case types.ElementTypeMethodCall, types.ElementTypeFunctionCall, types.ElementTypeCallName:
 		return codegraphpb.ElementType_ELEMENT_TYPE_CALL
-	case ElementTypeReference:
+	case types.ElementTypeReference:
 		return codegraphpb.ElementType_ELEMENT_TYPE_REFERENCE
-	case ElementTypeClass, ElementTypeClassName:
+	case types.ElementTypeClass, types.ElementTypeClassName:
 		return codegraphpb.ElementType_ELEMENT_TYPE_CLASS
-	case ElementTypeInterface, ElementTypeInterfaceName:
+	case types.ElementTypeInterface, types.ElementTypeInterfaceName:
 		return codegraphpb.ElementType_ELEMENT_TYPE_INTERFACE
-	case ElementTypeVariable, ElementTypeVariableName, ElementTypeLocalVariable, ElementTypeLocalVariableName, ElementTypeGlobalVariable:
+	case types.ElementTypeVariable, types.ElementTypeVariableName, types.ElementTypeLocalVariable,
+		types.ElementTypeLocalVariableName, types.ElementTypeGlobalVariable:
 		return codegraphpb.ElementType_ELEMENT_TYPE_VARIABLE
 	default:
 		return codegraphpb.ElementType_ELEMENT_TYPE_UNDEFINED
@@ -29,42 +31,42 @@ func ElementTypeToProto(t ElementType) codegraphpb.ElementType {
 }
 
 // ElementTypeFromProto 将 codegraphpb.ElementType 转换为 types.ElementType
-func ElementTypeFromProto(t codegraphpb.ElementType) ElementType {
+func ElementTypeFromProto(t codegraphpb.ElementType) types.ElementType {
 	switch t {
 	case codegraphpb.ElementType_ELEMENT_TYPE_FUNCTION:
-		return ElementTypeFunction
+		return types.ElementTypeFunction
 	case codegraphpb.ElementType_ELEMENT_TYPE_METHOD:
-		return ElementTypeMethod
+		return types.ElementTypeMethod
 	case codegraphpb.ElementType_ELEMENT_TYPE_CALL:
-		return ElementTypeMethodCall
+		return types.ElementTypeMethodCall
 	case codegraphpb.ElementType_ELEMENT_TYPE_REFERENCE:
-		return ElementTypeReference
+		return types.ElementTypeReference
 	case codegraphpb.ElementType_ELEMENT_TYPE_CLASS:
-		return ElementTypeClass
+		return types.ElementTypeClass
 	case codegraphpb.ElementType_ELEMENT_TYPE_INTERFACE:
-		return ElementTypeInterface
+		return types.ElementTypeInterface
 	case codegraphpb.ElementType_ELEMENT_TYPE_VARIABLE:
-		return ElementTypeVariable
+		return types.ElementTypeVariable
 	case codegraphpb.ElementType_ELEMENT_TYPE_UNDEFINED:
-		return ElementTypeUndefined
+		return types.ElementTypeUndefined
 	default:
-		return ElementTypeUndefined
+		return types.ElementTypeUndefined
 	}
 }
 
 // ElementTypeSliceToProto 将 []types.ElementType 转换为 []codegraphpb.ElementType
-func ElementTypeSliceToProto(types []ElementType) []codegraphpb.ElementType {
-	result := make([]codegraphpb.ElementType, len(types))
-	for i, t := range types {
+func ElementTypeSliceToProto(elementTypes []types.ElementType) []codegraphpb.ElementType {
+	result := make([]codegraphpb.ElementType, len(elementTypes))
+	for i, t := range elementTypes {
 		result[i] = ElementTypeToProto(t)
 	}
 	return result
 }
 
 // ElementTypeSliceFromProto 将 []codegraphpb.ElementType 转换为 []types.ElementType
-func ElementTypeSliceFromProto(types []codegraphpb.ElementType) []ElementType {
-	result := make([]ElementType, len(types))
-	for i, t := range types {
+func ElementTypeSliceFromProto(elementTypes []codegraphpb.ElementType) []types.ElementType {
+	result := make([]types.ElementType, len(elementTypes))
+	for i, t := range elementTypes {
 		result[i] = ElementTypeFromProto(t)
 	}
 	return result
@@ -175,9 +177,9 @@ func FileElementTablesToProto(fileElementTables []*parser.FileElementTable) []*c
 				Range:       e.GetRange(),
 			}
 			// 定义：class interface method function variable
-			if e.GetType() == ElementTypeClass || e.GetType() == ElementTypeInterface ||
-				e.GetType() == ElementTypeMethod || e.GetType() == ElementTypeFunction ||
-				e.GetType() == ElementTypeVariable {
+			if e.GetType() == types.ElementTypeClass || e.GetType() == types.ElementTypeInterface ||
+				e.GetType() == types.ElementTypeMethod || e.GetType() == types.ElementTypeFunction ||
+				e.GetType() == types.ElementTypeVariable {
 				pbe.IsDefinition = true
 			}
 
