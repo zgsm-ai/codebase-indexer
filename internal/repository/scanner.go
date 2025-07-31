@@ -1,5 +1,5 @@
 // scanner/scanner.go - File Scanner
-package scanner
+package repository
 
 import (
 	"bytes"
@@ -14,35 +14,16 @@ import (
 	"sync"
 	"time"
 
-	"codebase-indexer/internal/storage"
+	"codebase-indexer/internal/config"
+	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/logger"
 
 	gitignore "github.com/sabhiram/go-gitignore"
 )
 
-// File status constants
-const (
-	FILE_STATUS_ADDED    = "add"
-	FILE_STATUS_MODIFIED = "modify"
-	FILE_STATUS_DELETED  = "delete"
-)
-
-// File synchronization information
-type FileStatus struct {
-	Path   string `json:"path"`
-	Hash   string `json:"hash"`
-	Status string `json:"status"`
-}
-
-type ScannerConfig struct {
-	FileIgnorePatterns   []string
-	FolderIgnorePatterns []string
-	MaxFileSizeKB        int // File size limit in KB
-}
-
 type ScannerInterface interface {
-	SetScannerConfig(config *ScannerConfig)
-	GetScannerConfig() *ScannerConfig
+	SetScannerConfig(config *config.ScannerConfig)
+	GetScannerConfig() *config.ScannerConfig
 	CalculateFileHash(filePath string) (string, error)
 	LoadIgnoreRules(codebasePath string) *gitignore.GitIgnore
 	LoadFileIgnoreRules(codebasePath string) *gitignore.GitIgnore
@@ -51,12 +32,12 @@ type ScannerInterface interface {
 	ScanFilePaths(codebasePath string, filePaths []string) (map[string]string, error)
 	ScanDirectory(codebasePath, dirPath string) (map[string]string, error)
 	ScanFile(codebasePath, filePath string) (string, error)
-	CalculateFileChanges(local, remote map[string]string) []*FileStatus
-	CalculateFileChangesWithoutDelete(local, remote map[string]string) []*FileStatus
+	CalculateFileChanges(local, remote map[string]string) []*utils.FileStatus
+	CalculateFileChangesWithoutDelete(local, remote map[string]string) []*utils.FileStatus
 }
 
 type FileScanner struct {
-	scannerConfig *ScannerConfig
+	scannerConfig *config.ScannerConfig
 	logger        logger.Logger
 	rwMutex       sync.RWMutex
 }
@@ -69,16 +50,16 @@ func NewFileScanner(logger logger.Logger) ScannerInterface {
 }
 
 // defaultScannerConfig returns default scanner configuration
-func defaultScannerConfig() *ScannerConfig {
-	return &ScannerConfig{
-		FileIgnorePatterns:   storage.DefaultConfigSync.FileIgnorePatterns,
-		FolderIgnorePatterns: storage.DefaultConfigSync.FolderIgnorePatterns,
-		MaxFileSizeKB:        storage.DefaultConfigSync.MaxFileSizeKB,
+func defaultScannerConfig() *config.ScannerConfig {
+	return &config.ScannerConfig{
+		FileIgnorePatterns:   config.DefaultConfigSync.FileIgnorePatterns,
+		FolderIgnorePatterns: config.DefaultConfigSync.FolderIgnorePatterns,
+		MaxFileSizeKB:        config.DefaultConfigSync.MaxFileSizeKB,
 	}
 }
 
 // SetScannerConfig sets the scanner configuration
-func (s *FileScanner) SetScannerConfig(config *ScannerConfig) {
+func (s *FileScanner) SetScannerConfig(config *config.ScannerConfig) {
 	if config == nil {
 		return
 	}
@@ -96,7 +77,7 @@ func (s *FileScanner) SetScannerConfig(config *ScannerConfig) {
 }
 
 // GetScannerConfig returns current scanner configuration
-func (s *FileScanner) GetScannerConfig() *ScannerConfig {
+func (s *FileScanner) GetScannerConfig() *config.ScannerConfig {
 	s.rwMutex.RLock()
 	defer s.rwMutex.RUnlock()
 	return s.scannerConfig
@@ -426,24 +407,24 @@ func (s *FileScanner) ScanFile(codebasePath, filePath string) (string, error) {
 }
 
 // Calculate file differences
-func (s *FileScanner) CalculateFileChanges(local, remote map[string]string) []*FileStatus {
-	var changes []*FileStatus
+func (s *FileScanner) CalculateFileChanges(local, remote map[string]string) []*utils.FileStatus {
+	var changes []*utils.FileStatus
 
 	// Check for added or modified files
 	for path, localHash := range local {
 		if remoteHash, exists := remote[path]; !exists {
 			// New file
-			changes = append(changes, &FileStatus{
+			changes = append(changes, &utils.FileStatus{
 				Path:   path,
 				Hash:   localHash,
-				Status: FILE_STATUS_ADDED,
+				Status: utils.FILE_STATUS_ADDED,
 			})
 		} else if localHash != remoteHash {
 			// Modified file
-			changes = append(changes, &FileStatus{
+			changes = append(changes, &utils.FileStatus{
 				Path:   path,
 				Hash:   localHash,
-				Status: FILE_STATUS_MODIFIED,
+				Status: utils.FILE_STATUS_MODIFIED,
 			})
 		}
 	}
@@ -451,10 +432,10 @@ func (s *FileScanner) CalculateFileChanges(local, remote map[string]string) []*F
 	// Check for deleted files
 	for path := range remote {
 		if _, exists := local[path]; !exists {
-			changes = append(changes, &FileStatus{
+			changes = append(changes, &utils.FileStatus{
 				Path:   path,
 				Hash:   "",
-				Status: FILE_STATUS_DELETED,
+				Status: utils.FILE_STATUS_DELETED,
 			})
 		}
 	}
@@ -463,24 +444,24 @@ func (s *FileScanner) CalculateFileChanges(local, remote map[string]string) []*F
 }
 
 // CalculateFileChangesWithoutDelete compares local and remote files, only recording added and modified files
-func (s *FileScanner) CalculateFileChangesWithoutDelete(local, remote map[string]string) []*FileStatus {
-	var changes []*FileStatus
+func (s *FileScanner) CalculateFileChangesWithoutDelete(local, remote map[string]string) []*utils.FileStatus {
+	var changes []*utils.FileStatus
 
 	// Check for added or modified files
 	for path, localHash := range local {
 		if remoteHash, exists := remote[path]; !exists {
 			// New file
-			changes = append(changes, &FileStatus{
+			changes = append(changes, &utils.FileStatus{
 				Path:   path,
 				Hash:   localHash,
-				Status: FILE_STATUS_ADDED,
+				Status: utils.FILE_STATUS_ADDED,
 			})
 		} else if localHash != remoteHash {
 			// Modified file
-			changes = append(changes, &FileStatus{
+			changes = append(changes, &utils.FileStatus{
 				Path:   path,
 				Hash:   localHash,
-				Status: FILE_STATUS_MODIFIED,
+				Status: utils.FILE_STATUS_MODIFIED,
 			})
 		}
 	}

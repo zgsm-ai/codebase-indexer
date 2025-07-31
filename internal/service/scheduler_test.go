@@ -1,4 +1,4 @@
-package scheduler
+package service
 
 import (
 	"errors"
@@ -7,9 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"codebase-indexer/internal/scanner"
-	"codebase-indexer/internal/storage"
-	"codebase-indexer/internal/syncer"
+	"codebase-indexer/internal/config"
+	"codebase-indexer/internal/dto"
 	"codebase-indexer/internal/utils"
 	"codebase-indexer/test/mocks"
 
@@ -53,7 +52,7 @@ func TestPerformSync(t *testing.T) {
 
 	t.Run("NormalSync", func(t *testing.T) {
 		utils.UploadTmpDir = t.TempDir()
-		codebaseConfigs := map[string]*storage.CodebaseConfig{
+		codebaseConfigs := map[string]*config.CodebaseConfig{
 			"test-id": {
 				CodebaseId:   "test-id",
 				CodebasePath: "/test/path",
@@ -64,8 +63,8 @@ func TestPerformSync(t *testing.T) {
 		mockStorage.On("GetCodebaseConfigs").Return(codebaseConfigs)
 		mockStorage.On("SaveCodebaseConfig", mock.Anything).Return(nil)
 		mockStorage.On("DeleteCodebaseConfig", mock.Anything).Return(nil)
-		mockFileScanner.On("ScanDirectory", mock.Anything).Return(make(map[string]string), nil)
-		mockFileScanner.On("CalculateFileChanges", mock.Anything, mock.Anything).Return([]*scanner.FileStatus{})
+		mockFileScanner.On("ScanCodebase", mock.Anything).Return(make(map[string]string), nil)
+		mockFileScanner.On("CalculateFileChanges", mock.Anything, mock.Anything).Return([]*utils.FileStatus{})
 		mockHttpSync.On("FetchServerHashTree", mock.Anything).Return(make(map[string]string), nil)
 
 		s.performSync()
@@ -93,16 +92,16 @@ func TestPerformSyncForCodebase(t *testing.T) {
 		logger:          mockLogger,
 	}
 
-	t.Run("ScanDirectoryError", func(t *testing.T) {
-		config := &storage.CodebaseConfig{
+	t.Run("ScanCodebaseError", func(t *testing.T) {
+		config := &config.CodebaseConfig{
 			CodebaseId:   "test-id",
 			CodebasePath: "/test/path",
 		}
 
-		mockFileScanner.On("ScanDirectory", config.CodebasePath).
+		mockFileScanner.On("ScanCodebase", config.CodebasePath).
 			Return(nil, errors.New("scan error")).
 			Once()
-		mockFileScanner.On("CalculateFileChanges", mock.Anything, mock.Anything).Return([]*scanner.FileStatus{})
+		mockFileScanner.On("CalculateFileChanges", mock.Anything, mock.Anything).Return([]*utils.FileStatus{})
 
 		err := s.performSyncForCodebase(config)
 		assert.Error(t, err)
@@ -135,14 +134,14 @@ func TestProcessFileChanges(t *testing.T) {
 		tmp := t.TempDir()
 		utils.UploadTmpDir = tmp
 		codebasePath := filepath.Join(tmp, "test", "zipSuccess")
-		config := &storage.CodebaseConfig{
+		config := &config.CodebaseConfig{
 			CodebaseId:   "test-id",
 			CodebasePath: codebasePath,
 		}
-		changes := []*scanner.FileStatus{
+		changes := []*utils.FileStatus{
 			{
 				Path:   filepath.Join(codebasePath, "file1.go"),
-				Status: scanner.FILE_STATUS_MODIFIED,
+				Status: utils.FILE_STATUS_MODIFIED,
 			},
 		}
 
@@ -165,14 +164,14 @@ func TestProcessFileChanges(t *testing.T) {
 		defer file.Close()
 		utils.UploadTmpDir = tmpFile
 		codebasePath := filepath.Join(tmpFile, "test", "zipFail")
-		config := &storage.CodebaseConfig{
+		config := &config.CodebaseConfig{
 			CodebaseId:   "test-id",
 			CodebasePath: codebasePath,
 		}
-		changes := []*scanner.FileStatus{
+		changes := []*utils.FileStatus{
 			{
 				Path:   filepath.Join(codebasePath, "file1.go"),
-				Status: scanner.FILE_STATUS_MODIFIED,
+				Status: utils.FILE_STATUS_MODIFIED,
 			},
 		}
 
@@ -186,14 +185,14 @@ func TestProcessFileChanges(t *testing.T) {
 		tmp := t.TempDir()
 		utils.UploadTmpDir = tmp
 		codebasePath := filepath.Join(tmp, "test", "zipSuccess")
-		config := &storage.CodebaseConfig{
+		config := &config.CodebaseConfig{
 			CodebaseId:   "test-id",
 			CodebasePath: codebasePath,
 		}
-		changes := []*scanner.FileStatus{
+		changes := []*utils.FileStatus{
 			{
 				Path:   filepath.Join(codebasePath, "file1.go"),
-				Status: scanner.FILE_STATUS_MODIFIED,
+				Status: utils.FILE_STATUS_MODIFIED,
 			},
 		}
 		newMockHttpSync := &mocks.MockHTTPSync{}
@@ -228,14 +227,14 @@ func TestCreateChangesZip(t *testing.T) {
 		tmp := t.TempDir()
 		utils.UploadTmpDir = tmp
 		codebasePath := filepath.Join(tmp, "test", "normalChanges")
-		config := &storage.CodebaseConfig{
+		config := &config.CodebaseConfig{
 			CodebaseId:   "test-id",
 			CodebasePath: codebasePath,
 		}
-		changes := []*scanner.FileStatus{
+		changes := []*utils.FileStatus{
 			{
 				Path:   filepath.Join(codebasePath, "file1.go"),
-				Status: scanner.FILE_STATUS_MODIFIED,
+				Status: utils.FILE_STATUS_MODIFIED,
 			},
 		}
 
@@ -273,7 +272,7 @@ func TestUploadChangesZip(t *testing.T) {
 		}
 		defer zipfile.Close()
 
-		uploadReq := syncer.UploadReq{
+		uploadReq := dto.UploadReq{
 			ClientId:     "test-client",
 			CodebasePath: "/test/path",
 		}

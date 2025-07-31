@@ -1,7 +1,8 @@
 package mocks
 
 import (
-	"codebase-indexer/internal/scanner"
+	"codebase-indexer/internal/config"
+	"codebase-indexer/internal/utils"
 
 	gitignore "github.com/sabhiram/go-gitignore"
 	"github.com/stretchr/testify/mock"
@@ -11,13 +12,13 @@ type MockScanner struct {
 	mock.Mock
 }
 
-func (m *MockScanner) SetScannerConfig(config *scanner.ScannerConfig) {
+func (m *MockScanner) SetScannerConfig(config *config.ScannerConfig) {
 	m.Called(config)
 }
 
-func (m *MockScanner) GetScannerConfig() *scanner.ScannerConfig {
+func (m *MockScanner) GetScannerConfig() *config.ScannerConfig {
 	args := m.Called()
-	return args.Get(0).(*scanner.ScannerConfig)
+	return args.Get(0).(*config.ScannerConfig)
 }
 
 func (m *MockScanner) CalculateFileHash(filePath string) (string, error) {
@@ -69,18 +70,18 @@ func (m *MockScanner) ScanFile(codebasePath, filePath string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockScanner) CalculateFileChanges(local, remote map[string]string) []*scanner.FileStatus {
+func (m *MockScanner) CalculateFileChanges(local, remote map[string]string) []*utils.FileStatus {
 	args := m.Called(local, remote)
 	if args.Get(0) != nil {
-		return args.Get(0).([]*scanner.FileStatus)
+		return args.Get(0).([]*utils.FileStatus)
 	}
 	return nil
 }
 
-func (m *MockScanner) CalculateFileChangesWithoutDelete(local, remote map[string]string) []*scanner.FileStatus {
+func (m *MockScanner) CalculateFileChangesWithoutDelete(local, remote map[string]string) []*utils.FileStatus {
 	args := m.Called(local, remote)
 	if args.Get(0) != nil {
-		return args.Get(0).([]*scanner.FileStatus)
+		return args.Get(0).([]*utils.FileStatus)
 	}
 	return nil
 }

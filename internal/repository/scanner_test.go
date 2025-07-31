@@ -1,6 +1,9 @@
-package scanner
+package repository
 
 import (
+	"codebase-indexer/internal/config"
+	"codebase-indexer/internal/utils"
+	"codebase-indexer/test/mocks"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -8,11 +11,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 var (
-	scannerConfig = &ScannerConfig{
+	scannerConfig = &config.ScannerConfig{
 		// IgnorePatterns: []string{".git", ".idea", "node_modules/", "vendor/", "dist/", "build/"},
 		FileIgnorePatterns:   []string{".*", "*.bak"},
 		FolderIgnorePatterns: []string{".*", "build/", "dist/", "node_modules/", "vendor/"},
@@ -21,19 +25,9 @@ var (
 	}
 )
 
-// MockLogger is a mock logger for testing
-type MockLogger struct {
-	t *testing.T
-}
-
-func (m *MockLogger) Debug(format string, v ...interface{}) {}
-func (m *MockLogger) Info(format string, v ...interface{})  {}
-func (m *MockLogger) Warn(format string, v ...interface{})  {}
-func (m *MockLogger) Error(format string, v ...interface{}) {}
-func (m *MockLogger) Fatal(format string, v ...interface{}) {}
-
 func TestCalculateFileHash(t *testing.T) {
-	logger := &MockLogger{t}
+	logger := &mocks.MockLogger{}
+	logger.On("Debug", mock.Anything, mock.Anything).Return()
 	fs := NewFileScanner(logger)
 
 	t.Run("Calculate file hash", func(t *testing.T) {
@@ -45,6 +39,7 @@ func TestCalculateFileHash(t *testing.T) {
 		hash, err := fs.CalculateFileHash(testFile)
 		require.NoError(t, err)
 		assert.NotEmpty(t, hash)
+		logger.AssertCalled(t, "Debug", "file hash calculated for %s, time taken: %v, hash: %s", mock.Anything, mock.Anything)
 	})
 
 	t.Run("Handle nonexistent file", func(t *testing.T) {
@@ -54,12 +49,14 @@ func TestCalculateFileHash(t *testing.T) {
 }
 
 func TestLoadIgnoreRules(t *testing.T) {
-	logger := &MockLogger{t}
+	logger := &mocks.MockLogger{}
+	logger.On("Warn", mock.Anything, mock.Anything).Return()
 	fs := &FileScanner{scannerConfig: scannerConfig, logger: logger}
 
 	t.Run("Use default rules only", func(t *testing.T) {
 		tempDir := t.TempDir()
 		ignore := fs.LoadIgnoreRules(tempDir)
+		logger.AssertCalled(t, "Warn", "Failed to read .gitignore file: %v", mock.Anything)
 		require.NotNil(t, ignore)
 
 		// Test default rules
@@ -87,7 +84,9 @@ func TestLoadIgnoreRules(t *testing.T) {
 }
 
 func TestScanDirectory(t *testing.T) {
-	logger := &MockLogger{t}
+	logger := &mocks.MockLogger{}
+	logger.On("Info", mock.Anything, mock.Anything).Return()
+	logger.On("Debug", mock.Anything, mock.Anything).Return()
 	fs := NewFileScanner(logger)
 
 	setupTestDir := func(t *testing.T) string {
@@ -118,6 +117,7 @@ func TestScanDirectory(t *testing.T) {
 	t.Run("Scan codebase and filter files", func(t *testing.T) {
 		codebasePath := setupTestDir(t)
 		hashTree, err := fs.ScanCodebase(codebasePath)
+		logger.AssertCalled(t, "Info", "starting codebase scan: %s", mock.Anything)
 		require.NoError(t, err)
 
 		// Verify included files
@@ -148,8 +148,8 @@ func TestScanDirectory(t *testing.T) {
 	})
 }
 
-func benchmarkScanCodebase(t *testing.T, fileCount int) (*MockLogger, ScannerInterface, string) {
-	logger := &MockLogger{t}
+func benchmarkScanCodebase(t *testing.T, fileCount int) (*mocks.MockLogger, ScannerInterface, string) {
+	logger := &mocks.MockLogger{}
 	fs := NewFileScanner(logger)
 
 	tempDir := t.TempDir()
@@ -186,7 +186,7 @@ func BenchmarkScanCodebase_10000Files(b *testing.B) {
 }
 
 func TestCalculateFileChanges(t *testing.T) {
-	logger := &MockLogger{t}
+	logger := &mocks.MockLogger{}
 	fs := NewFileScanner(logger)
 
 	t.Run("Detect file changes", func(t *testing.T) {
@@ -206,7 +206,7 @@ func TestCalculateFileChanges(t *testing.T) {
 		assert.Equal(t, 3, len(changes))
 
 		// Verify added file
-		var added *FileStatus
+		var added *utils.FileStatus
 		for _, c := range changes {
 			if c.Path == "added.txt" {
 				added = c
@@ -214,10 +214,10 @@ func TestCalculateFileChanges(t *testing.T) {
 			}
 		}
 		require.NotNil(t, added)
-		assert.Equal(t, FILE_STATUS_ADDED, added.Status)
+		assert.Equal(t, utils.FILE_STATUS_ADDED, added.Status)
 
 		// Verify modified file
-		var modified *FileStatus
+		var modified *utils.FileStatus
 		for _, c := range changes {
 			if c.Path == "modified.txt" {
 				modified = c
@@ -225,10 +225,10 @@ func TestCalculateFileChanges(t *testing.T) {
 			}
 		}
 		require.NotNil(t, modified)
-		assert.Equal(t, FILE_STATUS_MODIFIED, modified.Status)
+		assert.Equal(t, utils.FILE_STATUS_MODIFIED, modified.Status)
 
 		// Verify deleted file
-		var deleted *FileStatus
+		var deleted *utils.FileStatus
 		for _, c := range changes {
 			if c.Path == "deleted.txt" {
 				deleted = c
@@ -236,6 +236,6 @@ func TestCalculateFileChanges(t *testing.T) {
 			}
 		}
 		require.NotNil(t, deleted)
-		assert.Equal(t, FILE_STATUS_DELETED, deleted.Status)
+		assert.Equal(t, utils.FILE_STATUS_DELETED, deleted.Status)
 	})
 }

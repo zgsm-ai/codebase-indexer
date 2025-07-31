@@ -38,17 +38,15 @@
 ;; 函数、变量
 (variable_declarator
   name: (identifier) @variable.name
-  value: (_) @variable.value
   ) @variable
 
 ;;解构变量
-  (variable_declarator
-    name: [(array_pattern 
-            (identifier) @variable.name)
-           (object_pattern 
-            (shorthand_property_identifier_pattern) @variable.name)]
-    value: (_) @variable.value) @variable
-
+(variable_declarator
+  name: [(array_pattern 
+          (identifier) @variable.name)
+          (object_pattern 
+          (shorthand_property_identifier_pattern) @variable.name)]
+  ) @variable
 
 
 ;; Export declarations
@@ -84,3 +82,7 @@
   function: (member_expression)@call.method.name
   arguments: (arguments) @call.method.arguments
   ) @call.method
+
+(new_expression
+  constructor:(member_expression)@call.struct
+)

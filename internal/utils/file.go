@@ -9,6 +9,20 @@ import (
 	"runtime"
 )
 
+// File status constants
+const (
+	FILE_STATUS_ADDED    = "add"
+	FILE_STATUS_MODIFIED = "modify"
+	FILE_STATUS_DELETED  = "delete"
+)
+
+// File synchronization information
+type FileStatus struct {
+	Path   string `json:"path"`
+	Hash   string `json:"hash"`
+	Status string `json:"status"`
+}
+
 // AddFileToZip adds a file to zip archive
 func AddFileToZip(zipWriter *zip.Writer, fileRelPath string, basePath string) error {
 	file, err := os.Open(filepath.Join(basePath, fileRelPath))

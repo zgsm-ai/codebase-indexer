@@ -1,5 +1,5 @@
 // scheduler/scheduler.go - Scheduler Manager
-package scheduler
+package service
 
 import (
 	"archive/zip"
@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"codebase-indexer/internal/scanner"
-	"codebase-indexer/internal/storage"
-	"codebase-indexer/internal/syncer"
+	"codebase-indexer/internal/config"
+	"codebase-indexer/internal/dto"
+	"codebase-indexer/internal/repository"
 	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/logger"
 )
@@ -30,9 +30,9 @@ type SchedulerConfig struct {
 }
 
 type Scheduler struct {
-	httpSync        syncer.SyncInterface
-	fileScanner     scanner.ScannerInterface
-	storage         storage.SotrageInterface
+	httpSync        repository.SyncInterface
+	fileScanner     repository.ScannerInterface
+	storage         repository.SotrageInterface
 	schedulerConfig *SchedulerConfig
 	logger          logger.Logger
 	mutex           sync.Mutex
@@ -43,7 +43,7 @@ type Scheduler struct {
 	currentTicker   *time.Ticker
 }
 
-func NewScheduler(httpSync syncer.SyncInterface, fileScanner scanner.ScannerInterface, storageManager storage.SotrageInterface,
+func NewScheduler(httpSync repository.SyncInterface, fileScanner repository.ScannerInterface, storageManager repository.SotrageInterface,
 	logger logger.Logger) *Scheduler {
 	return &Scheduler{
 		httpSync:        httpSync,
@@ -59,11 +59,11 @@ func NewScheduler(httpSync syncer.SyncInterface, fileScanner scanner.ScannerInte
 // defaultSchedulerConfig Default scheduler configuration
 func defaultSchedulerConfig() *SchedulerConfig {
 	return &SchedulerConfig{
-		IntervalMinutes:       storage.DefaultConfigSync.IntervalMinutes,
-		RegisterExpireMinutes: storage.DefaultConfigServer.RegisterExpireMinutes,
-		HashTreeExpireHours:   storage.DefaultConfigServer.HashTreeExpireHours,
-		MaxRetries:            storage.DefaultConfigSync.MaxRetries,
-		RetryIntervalSeconds:  storage.DefaultConfigSync.RetryDelaySeconds,
+		IntervalMinutes:       config.DefaultConfigSync.IntervalMinutes,
+		RegisterExpireMinutes: config.DefaultConfigServer.RegisterExpireMinutes,
+		HashTreeExpireHours:   config.DefaultConfigServer.HashTreeExpireHours,
+		MaxRetries:            config.DefaultConfigSync.MaxRetries,
+		RetryIntervalSeconds:  config.DefaultConfigSync.RetryDelaySeconds,
 	}
 }
 
@@ -122,22 +122,22 @@ func (s *Scheduler) LoadConfig(ctx context.Context) {
 	s.logger.Info("scheduler config load signal sent")
 	time.Sleep(100 * time.Millisecond) // Wait for scheduler update
 
-	config := storage.GetClientConfig()
+	clientConfig := config.GetClientConfig()
 	// Update scheduler configuration
 	schedulerConfig := &SchedulerConfig{
-		IntervalMinutes:       config.Sync.IntervalMinutes,
-		RegisterExpireMinutes: config.Server.RegisterExpireMinutes,
-		HashTreeExpireHours:   config.Server.HashTreeExpireHours,
-		MaxRetries:            config.Sync.MaxRetries,
-		RetryIntervalSeconds:  config.Sync.RetryDelaySeconds,
+		IntervalMinutes:       clientConfig.Sync.IntervalMinutes,
+		RegisterExpireMinutes: clientConfig.Server.RegisterExpireMinutes,
+		HashTreeExpireHours:   clientConfig.Server.HashTreeExpireHours,
+		MaxRetries:            clientConfig.Sync.MaxRetries,
+		RetryIntervalSeconds:  clientConfig.Sync.RetryDelaySeconds,
 	}
 	s.SetSchedulerConfig(schedulerConfig)
 
 	// Update scanner configuration
-	scannerConfig := &scanner.ScannerConfig{
-		FileIgnorePatterns:   config.Sync.FileIgnorePatterns,
-		FolderIgnorePatterns: config.Sync.FolderIgnorePatterns,
-		MaxFileSizeKB:        config.Sync.MaxFileSizeKB,
+	scannerConfig := &config.ScannerConfig{
+		FileIgnorePatterns:   clientConfig.Sync.FileIgnorePatterns,
+		FolderIgnorePatterns: clientConfig.Sync.FolderIgnorePatterns,
+		MaxFileSizeKB:        clientConfig.Sync.MaxFileSizeKB,
 	}
 	s.fileScanner.SetScannerConfig(scannerConfig)
 }
@@ -220,7 +220,7 @@ func (s *Scheduler) performSync() {
 }
 
 // performSyncForCodebase Perform sync task for single codebase
-func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) error {
+func (s *Scheduler) performSyncForCodebase(config *config.CodebaseConfig) error {
 	s.logger.Info("starting sync for codebase: %s", config.CodebaseId)
 	nowTime := time.Now()
 	localHashTree, err := s.fileScanner.ScanCodebase(config.CodebasePath)
@@ -279,7 +279,7 @@ func (s *Scheduler) performSyncForCodebase(config *storage.CodebaseConfig) error
 }
 
 // PerformSyncForCodebaseWithFilePaths Perform sync for codebase with specified file paths
-func (s *Scheduler) PerformSyncForCodebaseWithFilePaths(config *storage.CodebaseConfig, filePaths []string) error {
+func (s *Scheduler) PerformSyncForCodebaseWithFilePaths(config *config.CodebaseConfig, filePaths []string) error {
 	s.logger.Info("performing sync for codebase: %s, file paths: %v", config.CodebaseId, filePaths)
 	nowTime := time.Now()
 	localHashTree, err := s.fileScanner.ScanFilePaths(config.CodebasePath, filePaths)
@@ -326,7 +326,7 @@ func (s *Scheduler) PerformSyncForCodebaseWithFilePaths(config *storage.Codebase
 }
 
 // ProcessFileChanges Process file changes and encapsulate upload logic
-func (s *Scheduler) ProcessFileChanges(config *storage.CodebaseConfig, changes []*scanner.FileStatus) error {
+func (s *Scheduler) ProcessFileChanges(config *config.CodebaseConfig, changes []*utils.FileStatus) error {
 	// Create zip with all changed files (new and modified)
 	zipPath, err := s.createChangesZip(config, changes)
 	if err != nil {
@@ -334,7 +334,7 @@ func (s *Scheduler) ProcessFileChanges(config *storage.CodebaseConfig, changes [
 	}
 
 	// Upload zip file
-	uploadReq := syncer.UploadReq{
+	uploadReq := dto.UploadReq{
 		ClientId:     config.ClientID,
 		CodebasePath: config.CodebasePath,
 		CodebaseName: config.CodebaseName,
@@ -356,7 +356,7 @@ type SyncMetadata struct {
 }
 
 // createChangesZip Create zip file containing file changes and metadata
-func (s *Scheduler) createChangesZip(config *storage.CodebaseConfig, changes []*scanner.FileStatus) (string, error) {
+func (s *Scheduler) createChangesZip(config *config.CodebaseConfig, changes []*utils.FileStatus) (string, error) {
 	zipDir := filepath.Join(utils.UploadTmpDir, "zip")
 	if err := os.MkdirAll(zipDir, 0755); err != nil {
 		return "", err
@@ -399,7 +399,7 @@ func (s *Scheduler) createChangesZip(config *storage.CodebaseConfig, changes []*
 		metadata.FileList[filePath] = change.Status
 
 		// Only add new and modified files to zip
-		if change.Status == scanner.FILE_STATUS_ADDED || change.Status == scanner.FILE_STATUS_MODIFIED {
+		if change.Status == utils.FILE_STATUS_ADDED || change.Status == utils.FILE_STATUS_MODIFIED {
 			if err := utils.AddFileToZip(zipWriter, change.Path, config.CodebasePath); err != nil {
 				// Continue trying to add other files but log error
 				s.logger.Warn("failed to add file to zip: %s, error: %v", change.Path, err)
@@ -427,7 +427,7 @@ func (s *Scheduler) createChangesZip(config *storage.CodebaseConfig, changes []*
 	return zipPath, nil
 }
 
-func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq syncer.UploadReq) error {
+func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq dto.UploadReq) error {
 	maxRetries := s.schedulerConfig.MaxRetries
 	retryDelay := time.Duration(s.schedulerConfig.RetryIntervalSeconds) * time.Second
 
@@ -477,7 +477,7 @@ func isTimeoutError(err error) bool {
 }
 
 // SyncForCodebases Batch sync codebases
-func (s *Scheduler) SyncForCodebases(ctx context.Context, codebaseConfig []*storage.CodebaseConfig) error {
+func (s *Scheduler) SyncForCodebases(ctx context.Context, codebaseConfig []*config.CodebaseConfig) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 

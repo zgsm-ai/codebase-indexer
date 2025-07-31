@@ -14,11 +14,10 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	api "codebase-indexer/api"
+	"codebase-indexer/internal/config"
 	"codebase-indexer/internal/handler"
-	"codebase-indexer/internal/scanner"
-	"codebase-indexer/internal/scheduler"
-	"codebase-indexer/internal/storage"
-	"codebase-indexer/internal/syncer"
+	"codebase-indexer/internal/repository"
+	"codebase-indexer/internal/service"
 	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/logger"
 	"codebase-indexer/test/mocks"
@@ -27,11 +26,11 @@ import (
 type IntegrationTestSuite struct {
 	suite.Suite
 	handler   *handler.GRPCHandler
-	scheduler *scheduler.Scheduler
+	scheduler *service.Scheduler
 }
 
 var httpSync = new(mocks.MockHTTPSync)
-var appInfo = storage.AppInfo{
+var appInfo = config.AppInfo{
 	AppName:  "test-app",
 	OSName:   "windows",
 	ArchName: "amd64",
@@ -61,18 +60,18 @@ func (s *IntegrationTestSuite) SetupTest() {
 	}
 	fmt.Printf("upload temp directory: %s\n", uploadTmpPath)
 
-	storage.SetAppInfo(appInfo)
+	config.SetAppInfo(appInfo)
 
 	logger, err := logger.NewLogger(logPath, "info")
 	if err != nil {
 		s.T().Fatalf("failed to initialize logger: %v", err)
 	}
-	storageManager, err := storage.NewStorageManager(cachePath, logger)
+	storageManager, err := repository.NewStorageManager(cachePath, logger)
 	if err != nil {
 		s.T().Fatalf("failed to initialize storage system: %v", err)
 	}
-	fileScanner := scanner.NewFileScanner(logger)
-	s.scheduler = scheduler.NewScheduler(httpSync, fileScanner, storageManager, logger)
+	fileScanner := repository.NewFileScanner(logger)
+	s.scheduler = service.NewScheduler(httpSync, fileScanner, storageManager, logger)
 	s.handler = handler.NewGRPCHandler(httpSync, fileScanner, storageManager, s.scheduler, logger)
 }
 
@@ -133,7 +132,7 @@ func (s *IntegrationTestSuite) TestSyncCodebases() {
 	assert.NoError(s.T(), err)
 	defer os.RemoveAll(workspaceDir)
 
-	httpSync.On("GetSyncConfig").Return(&syncer.SyncConfig{ClientId: "client1"}, nil)
+	httpSync.On("GetSyncConfig").Return(&config.SyncConfig{ClientId: "client1"}, nil)
 	httpSync.On("FetchServerHashTree", mock.Anything).Return(map[string]string{}, nil)
 	httpSync.On("UploadFile", mock.Anything, mock.Anything).Return(nil)
 
@@ -350,7 +349,7 @@ func (s *IntegrationTestSuite) TestCheckIgnoreFile() {
 
 func (s *IntegrationTestSuite) TestFullIntegrationFlow() {
 	httpSync.On("SetSyncConfig", mock.Anything).Return()
-	httpSync.On("GetSyncConfig", mock.Anything).Return(&syncer.SyncConfig{})
+	httpSync.On("GetSyncConfig", mock.Anything).Return(&config.SyncConfig{})
 	httpSync.On("FetchServerHashTree", mock.Anything).Return(map[string]string{}, nil)
 	httpSync.On("Sync", mock.Anything, mock.Anything).Return(nil)
 	// Create workspace directory in advance
@@ -435,7 +434,7 @@ func (s *IntegrationTestSuite) TestSyncForCodebases() {
 	assert.NoError(s.T(), err)
 
 	// 2. Value codebase configuration
-	codebaseConfigs := []*storage.CodebaseConfig{
+	codebaseConfigs := []*config.CodebaseConfig{
 		{
 			ClientID:     "test-client",
 			CodebaseId:   fmt.Sprintf("%s_%x", "sync-test", md5.Sum([]byte(workspaceDir))),
@@ -455,7 +454,7 @@ func (s *IntegrationTestSuite) TestSyncForCodebases() {
 	assert.NoError(s.T(), err)
 
 	// 4. Test empty configuration
-	err = s.scheduler.SyncForCodebases(ctx, []*storage.CodebaseConfig{})
+	err = s.scheduler.SyncForCodebases(ctx, []*config.CodebaseConfig{})
 	assert.NoError(s.T(), err)
 }
 
@@ -476,7 +475,7 @@ func (s *IntegrationTestSuite) TestSyncForCodebasesWithContextCancellation() {
 	_, err = s.handler.RegisterSync(ctx, registerReq)
 	assert.NoError(s.T(), err)
 
-	codebaseConfigs := []*storage.CodebaseConfig{
+	codebaseConfigs := []*config.CodebaseConfig{
 		{
 			ClientID:     "test-client",
 			CodebaseId:   fmt.Sprintf("%s_%x", "sync-cancel-test", md5.Sum([]byte(workspaceDir))),

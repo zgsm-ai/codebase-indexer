@@ -1,6 +1,8 @@
-package storage
+package repository
 
 import (
+	"codebase-indexer/internal/config"
+	"codebase-indexer/test/mocks"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -15,38 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// MockLogger implements a mock logger
-type MockLogger struct {
-	mock.Mock
-}
-
-func (m *MockLogger) Debug(format string, v ...interface{}) {
-	fmt.Printf("[MOCK DEBUG] %s\n", fmt.Sprintf(format, v...)) // Log output
-	m.Called(format, v)
-}
-
-func (m *MockLogger) Info(format string, v ...interface{}) {
-	fmt.Printf("[MOCK INFO] %s\n", fmt.Sprintf(format, v...)) // Log output
-	m.Called(format, v)
-}
-
-func (m *MockLogger) Warn(format string, v ...interface{}) {
-	fmt.Printf("[MOCK WARN] %s\n", fmt.Sprintf(format, v...)) // Log output
-	m.Called(format, v)
-}
-
-func (m *MockLogger) Error(format string, v ...interface{}) {
-	fmt.Printf("[MOCK ERROR] %s\n", fmt.Sprintf(format, v...)) // Log output
-	m.Called(format, v)
-}
-
-func (m *MockLogger) Fatal(format string, v ...interface{}) {
-	fmt.Printf("[MOCK FATAL] %s\n", fmt.Sprintf(format, v...)) // Log output
-	m.Called(format, v)
-}
-
 func TestNewStorageManager(t *testing.T) {
-	logger := &MockLogger{}
+	logger := &mocks.MockLogger{}
 
 	t.Run("create new directory", func(t *testing.T) {
 		// Set up temp directory
@@ -105,7 +77,7 @@ func TestNewStorageManager(t *testing.T) {
 func TestGetCodebaseConfigs(t *testing.T) {
 	t.Run("empty config", func(t *testing.T) {
 		cm := &StorageManager{
-			codebaseConfigs: make(map[string]*CodebaseConfig),
+			codebaseConfigs: make(map[string]*config.CodebaseConfig),
 		}
 
 		configs := cm.GetCodebaseConfigs()
@@ -115,7 +87,7 @@ func TestGetCodebaseConfigs(t *testing.T) {
 
 	t.Run("with config data", func(t *testing.T) {
 		cm := &StorageManager{
-			codebaseConfigs: map[string]*CodebaseConfig{
+			codebaseConfigs: map[string]*config.CodebaseConfig{
 				"test1": {},
 				"test2": {},
 			},
@@ -128,11 +100,11 @@ func TestGetCodebaseConfigs(t *testing.T) {
 
 	t.Run("returns reference", func(t *testing.T) {
 		cm := &StorageManager{
-			codebaseConfigs: make(map[string]*CodebaseConfig),
+			codebaseConfigs: make(map[string]*config.CodebaseConfig),
 		}
 
 		configs := cm.GetCodebaseConfigs()
-		configs["test"] = &CodebaseConfig{} // Modify the returned map
+		configs["test"] = &config.CodebaseConfig{} // Modify the returned map
 
 		// Verify if modification affected original data
 		assert.NotEmpty(t, cm.codebaseConfigs)
@@ -141,11 +113,11 @@ func TestGetCodebaseConfigs(t *testing.T) {
 }
 
 func TestGetCodebaseConfig(t *testing.T) {
-	logger := &MockLogger{}
+	logger := &mocks.MockLogger{}
 	logger.On("Info", mock.Anything, mock.Anything).Return()
 
 	t.Run("get existing config from memory", func(t *testing.T) {
-		configs := map[string]*CodebaseConfig{
+		configs := map[string]*config.CodebaseConfig{
 			"test1": {CodebaseId: "test1"},
 		}
 		cm := &StorageManager{
@@ -167,12 +139,12 @@ func TestGetCodebaseConfig(t *testing.T) {
 		}
 		cm := &StorageManager{
 			codebasePath:    tempDir,
-			codebaseConfigs: make(map[string]*CodebaseConfig),
+			codebaseConfigs: make(map[string]*config.CodebaseConfig),
 			logger:          logger,
 			rwMutex:         sync.RWMutex{},
 		}
 
-		expectedConfig := &CodebaseConfig{CodebaseId: file}
+		expectedConfig := &config.CodebaseConfig{CodebaseId: file}
 
 		config, err := cm.GetCodebaseConfig(file)
 		assert.NoError(t, err)
@@ -187,7 +159,7 @@ func TestGetCodebaseConfig(t *testing.T) {
 		tempDir := t.TempDir()
 		cm := &StorageManager{
 			codebasePath:    tempDir,
-			codebaseConfigs: make(map[string]*CodebaseConfig),
+			codebaseConfigs: make(map[string]*config.CodebaseConfig),
 			logger:          logger,
 			rwMutex:         sync.RWMutex{},
 		}
@@ -204,7 +176,7 @@ func TestGetCodebaseConfig(t *testing.T) {
 		tempDir := t.TempDir()
 		cm := &StorageManager{
 			codebasePath:    tempDir,
-			codebaseConfigs: make(map[string]*CodebaseConfig),
+			codebaseConfigs: make(map[string]*config.CodebaseConfig),
 			logger:          logger,
 			rwMutex:         sync.RWMutex{},
 		}
@@ -233,7 +205,7 @@ func TestGetCodebaseConfig(t *testing.T) {
 }
 
 func TestConfigManager_loadAllConfigs(t *testing.T) {
-	logger := &MockLogger{}
+	logger := &mocks.MockLogger{}
 	logger.On("Info", mock.Anything, mock.Anything).Return()
 	logger.On("Error", mock.Anything, mock.Anything).Return()
 
@@ -241,7 +213,7 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 		// No-permission directory
 		cm := &StorageManager{
 			codebasePath:    "/root", // No-permission dir on Linux
-			codebaseConfigs: make(map[string]*CodebaseConfig),
+			codebaseConfigs: make(map[string]*config.CodebaseConfig),
 			logger:          logger,
 			rwMutex:         sync.RWMutex{},
 		}
@@ -256,7 +228,7 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 		tempDir := t.TempDir()
 		cm := &StorageManager{
 			codebasePath:    tempDir,
-			codebaseConfigs: make(map[string]*CodebaseConfig),
+			codebaseConfigs: make(map[string]*config.CodebaseConfig),
 			logger:          logger,
 			rwMutex:         sync.RWMutex{},
 		}
@@ -277,7 +249,7 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 
 		cm := &StorageManager{
 			codebasePath:    tempDir,
-			codebaseConfigs: make(map[string]*CodebaseConfig),
+			codebaseConfigs: make(map[string]*config.CodebaseConfig),
 			logger:          logger,
 			rwMutex:         sync.RWMutex{},
 		}
@@ -301,7 +273,7 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 
 		cm := &StorageManager{
 			codebasePath:    tempDir,
-			codebaseConfigs: make(map[string]*CodebaseConfig),
+			codebaseConfigs: make(map[string]*config.CodebaseConfig),
 			logger:          logger,
 			rwMutex:         sync.RWMutex{},
 		}
@@ -334,7 +306,7 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 
 		cm := &StorageManager{
 			codebasePath:    tempDir,
-			codebaseConfigs: make(map[string]*CodebaseConfig),
+			codebaseConfigs: make(map[string]*config.CodebaseConfig),
 			logger:          logger,
 			rwMutex:         sync.RWMutex{},
 		}
@@ -352,14 +324,14 @@ func TestConfigManager_loadAllConfigs(t *testing.T) {
 }
 
 func TestConfigManager_loadCodebaseConfig(t *testing.T) {
-	logger := &MockLogger{}
+	logger := &mocks.MockLogger{}
 	logger.On("Info", mock.Anything, mock.Anything).Return()
 
 	t.Run("file not exists", func(t *testing.T) {
 		tempDir := t.TempDir()
 		cm := &StorageManager{
 			codebasePath:    tempDir,
-			codebaseConfigs: make(map[string]*CodebaseConfig),
+			codebaseConfigs: make(map[string]*config.CodebaseConfig),
 			logger:          logger,
 			rwMutex:         sync.RWMutex{},
 		}
@@ -383,7 +355,7 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 
 		cm := &StorageManager{
 			codebasePath:    tempDir,
-			codebaseConfigs: make(map[string]*CodebaseConfig),
+			codebaseConfigs: make(map[string]*config.CodebaseConfig),
 			logger:          logger,
 		}
 
@@ -407,7 +379,7 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 
 		cm := &StorageManager{
 			codebasePath:    tempDir,
-			codebaseConfigs: make(map[string]*CodebaseConfig),
+			codebaseConfigs: make(map[string]*config.CodebaseConfig),
 			logger:          logger,
 			rwMutex:         sync.RWMutex{},
 		}
@@ -432,7 +404,7 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 
 		cm := &StorageManager{
 			codebasePath:    tempDir,
-			codebaseConfigs: make(map[string]*CodebaseConfig),
+			codebaseConfigs: make(map[string]*config.CodebaseConfig),
 			logger:          logger,
 			rwMutex:         sync.RWMutex{},
 		}
@@ -459,7 +431,7 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 
 		cm := &StorageManager{
 			codebasePath:    tempDir,
-			codebaseConfigs: make(map[string]*CodebaseConfig),
+			codebaseConfigs: make(map[string]*config.CodebaseConfig),
 			logger:          logger,
 		}
 
@@ -480,10 +452,10 @@ func TestConfigManager_loadCodebaseConfig(t *testing.T) {
 }
 
 func TestSaveCodebaseConfig(t *testing.T) {
-	logger := &MockLogger{}
+	logger := &mocks.MockLogger{}
 	logger.On("Info", mock.Anything, mock.Anything).Return()
 
-	config := &CodebaseConfig{
+	codebaseConfig := &config.CodebaseConfig{
 		CodebaseId:   "test123",
 		CodebasePath: "/test/path",
 	}
@@ -494,7 +466,7 @@ func TestSaveCodebaseConfig(t *testing.T) {
 	tests := []struct {
 		name        string
 		prepare     func() *StorageManager
-		config      *CodebaseConfig
+		config      *config.CodebaseConfig
 		wantErr     bool
 		expectError string
 	}{
@@ -504,11 +476,11 @@ func TestSaveCodebaseConfig(t *testing.T) {
 				return &StorageManager{
 					logger:          logger,
 					codebasePath:    tempDir,
-					codebaseConfigs: make(map[string]*CodebaseConfig),
+					codebaseConfigs: make(map[string]*config.CodebaseConfig),
 					rwMutex:         sync.RWMutex{},
 				}
 			},
-			config:  config,
+			config:  codebaseConfig,
 			wantErr: false,
 		},
 		{
@@ -517,11 +489,11 @@ func TestSaveCodebaseConfig(t *testing.T) {
 				return &StorageManager{
 					logger:          logger,
 					codebasePath:    invalidPath,
-					codebaseConfigs: make(map[string]*CodebaseConfig),
+					codebaseConfigs: make(map[string]*config.CodebaseConfig),
 					rwMutex:         sync.RWMutex{},
 				}
 			},
-			config:      config,
+			config:      codebaseConfig,
 			wantErr:     true,
 			expectError: "failed to write config file",
 		},
@@ -564,7 +536,7 @@ func TestSaveCodebaseConfig(t *testing.T) {
 }
 
 func TestDeleteCodebaseConfig(t *testing.T) {
-	logger := &MockLogger{}
+	logger := &mocks.MockLogger{}
 	logger.On("Info", mock.Anything, mock.Anything).Return()
 
 	t.Run("delete config from both memory and file", func(t *testing.T) {
@@ -579,14 +551,14 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 
 		cm := &StorageManager{
 			codebasePath: tempDir,
-			codebaseConfigs: map[string]*CodebaseConfig{
+			codebaseConfigs: map[string]*config.CodebaseConfig{
 				codebaseId: {},
 			},
 			logger:  logger,
 			rwMutex: sync.RWMutex{},
 		}
 		// Create test JSON file content
-		configData, _ := json.Marshal(&CodebaseConfig{
+		configData, _ := json.Marshal(&config.CodebaseConfig{
 			CodebaseId: codebaseId,
 			LastSync:   time.Now(),
 		})
@@ -612,7 +584,7 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 
 		cm := &StorageManager{
 			codebasePath: tempDir,
-			codebaseConfigs: map[string]*CodebaseConfig{
+			codebaseConfigs: map[string]*config.CodebaseConfig{
 				codebaseId: {},
 			},
 			logger:  logger,
@@ -641,7 +613,7 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 
 		cm := &StorageManager{
 			codebasePath:    tempDir,
-			codebaseConfigs: map[string]*CodebaseConfig{},
+			codebaseConfigs: map[string]*config.CodebaseConfig{},
 			logger:          logger,
 			rwMutex:         sync.RWMutex{},
 		}
@@ -661,7 +633,7 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 		tempDir := t.TempDir()
 		cm := &StorageManager{
 			codebasePath:    tempDir,
-			codebaseConfigs: map[string]*CodebaseConfig{},
+			codebaseConfigs: map[string]*config.CodebaseConfig{},
 			logger:          logger,
 			rwMutex:         sync.RWMutex{},
 		}
@@ -688,7 +660,7 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 
 		cm := &StorageManager{
 			codebasePath: tempDir,
-			codebaseConfigs: map[string]*CodebaseConfig{
+			codebaseConfigs: map[string]*config.CodebaseConfig{
 				codebaseId: {},
 			},
 			logger:  logger,
@@ -708,7 +680,7 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 		tempDir := t.TempDir()
 		codebaseCount := 100
 		filePaths := make([]string, codebaseCount)
-		codebaseConfigs := make(map[string]*CodebaseConfig, codebaseCount)
+		codebaseConfigs := make(map[string]*config.CodebaseConfig, codebaseCount)
 
 		// Create test files and in-memory configs
 		for i := 0; i < codebaseCount; i++ {
@@ -718,7 +690,7 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 				t.Fatal("failed to create test file:", err)
 			}
 			filePaths[i] = filePath
-			codebaseConfigs[codebaseId] = &CodebaseConfig{}
+			codebaseConfigs[codebaseId] = &config.CodebaseConfig{}
 		}
 
 		cm := &StorageManager{
