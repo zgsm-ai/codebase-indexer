@@ -14,6 +14,7 @@ var (
 	LogsDir      = "./.zgsm/logs"
 	CacheDir     = "./.zgsm/cache"
 	UploadTmpDir = "./.zgsm/tmp"
+	DbDir        = "./.zgsm/cache/db"
 )
 
 // GetRootDir gets cross-platform root directory
@@ -127,6 +128,22 @@ func GetUploadTmpDir(rootPath string) (string, error) {
 	UploadTmpDir = tmpPath
 
 	return tmpPath, nil
+}
+
+func GetCacheDbDir(cachePath string) (string, error) {
+	if _, err := os.Stat(cachePath); os.IsNotExist(err) {
+		return "", fmt.Errorf("cache path %s does not exist", cachePath)
+	}
+
+	dbPath := filepath.Join(cachePath, "db")
+	// Ensure config directory exists
+	if err := os.MkdirAll(dbPath, 0755); err != nil {
+		return "", err
+	}
+
+	DbDir = dbPath
+
+	return dbPath, nil
 }
 
 // CleanUploadTmpDir cleans temporary upload directory
