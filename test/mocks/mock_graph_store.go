@@ -37,7 +37,7 @@ func (m *MockGraphStorage) EXPECT() *MockGraphStorageMockRecorder {
 }
 
 // BatchSave mocks base method.
-func (m *MockGraphStorage) BatchSave(ctx context.Context, projectUuid string, values store.Values) error {
+func (m *MockGraphStorage) BatchSave(ctx context.Context, projectUuid string, values store.Entries) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BatchSave", ctx, projectUuid, values)
 	ret0, _ := ret[0].(error)
@@ -265,7 +265,7 @@ func (mr *MockKeyMockRecorder) Get() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockKey)(nil).Get))
 }
 
-// MockValues is a mock of Values interface.
+// MockValues is a mock of Entries interface.
 type MockValues struct {
 	ctrl     *gomock.Controller
 	recorder *MockValuesMockRecorder

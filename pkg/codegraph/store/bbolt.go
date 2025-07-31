@@ -90,7 +90,7 @@ func (s *BBoltStorage) createDB(projectUuid string) (*bbolt.DB, error) {
 		return nil, fmt.Errorf("failed to create project directory %s: %w", projectDir, err)
 	}
 
-	dbPath := filepath.Join(projectDir, "data.db")
+	dbPath := filepath.Join(projectDir, dataDir)
 	s.logger.Debug("create_db: opening database", "project", projectUuid, "path", dbPath)
 
 	db, err := openBboltDb(dbPath)
@@ -130,7 +130,7 @@ func openBboltDb(dbPath string) (*bbolt.DB, error) {
 }
 
 // BatchSave saves multiple values in batch
-func (s *BBoltStorage) BatchSave(ctx context.Context, projectUuid string, values Values) error {
+func (s *BBoltStorage) BatchSave(ctx context.Context, projectUuid string, values Entries) error {
 	if err := utils.CheckContext(ctx); err != nil {
 		return fmt.Errorf("context cancelled: %w", err)
 	}
@@ -186,7 +186,7 @@ func (s *BBoltStorage) BatchSave(ctx context.Context, projectUuid string, values
 }
 
 // Save saves single value
-func (s *BBoltStorage) Save(ctx context.Context, projectUuid string, value proto.Message) error {
+func (s *BBoltStorage) Save(ctx context.Context, projectUuid string, entry *Entry) error {
 	if err := utils.CheckContext(ctx); err != nil {
 		return fmt.Errorf("context cancelled: %w", err)
 	}
@@ -197,7 +197,7 @@ func (s *BBoltStorage) Save(ctx context.Context, projectUuid string, value proto
 		return fmt.Errorf("failed to get database: %w", err)
 	}
 
-	key := fmt.Sprintf("%T", value)
+	key := entry.Key.Get()
 	s.logger.Debug("save: starting transaction", "project", projectUuid, "type", key)
 
 	return db.Update(func(tx *bbolt.Tx) error {
@@ -208,16 +208,8 @@ func (s *BBoltStorage) Save(ctx context.Context, projectUuid string, value proto
 
 		var data []byte
 		var err error
-
 		// 处理自定义测试消息类型
-		if customMsg, ok := value.(interface {
-			Marshal() ([]byte, error)
-		}); ok {
-			data, err = customMsg.Marshal()
-		} else {
-			data, err = proto.Marshal(value)
-		}
-
+		data, err = proto.Marshal(entry.Value)
 		if err != nil {
 			return fmt.Errorf("failed to marshal data for type %s: %w", key, err)
 		}
@@ -232,7 +224,7 @@ func (s *BBoltStorage) Save(ctx context.Context, projectUuid string, value proto
 }
 
 // Get retrieves data by key
-func (s *BBoltStorage) Get(ctx context.Context, projectUuid string, key Key) (proto.Message, error) {
+func (s *BBoltStorage) Get(ctx context.Context, projectUuid string, key Key) ([]byte, error) {
 	if err := utils.CheckContext(ctx); err != nil {
 		return nil, fmt.Errorf("context cancelled: %w", err)
 	}
@@ -243,7 +235,7 @@ func (s *BBoltStorage) Get(ctx context.Context, projectUuid string, key Key) (pr
 		return nil, fmt.Errorf("failed to get database: %w", err)
 	}
 
-	var result proto.Message
+	var result []byte
 	s.logger.Debug("get: starting transaction", "project", projectUuid, "key", key.Get())
 
 	err = db.View(func(tx *bbolt.Tx) error {
@@ -252,12 +244,10 @@ func (s *BBoltStorage) Get(ctx context.Context, projectUuid string, key Key) (pr
 			return fmt.Errorf("data bucket not found in project %s", projectUuid)
 		}
 
-		data := bucket.Get([]byte(key.Get()))
-		if data == nil {
-			return fmt.Errorf("key %s not found in project %s", key.Get(), projectUuid)
+		result = bucket.Get([]byte(key.Get()))
+		if result == nil {
+			return ErrKeyNotFound
 		}
-
-		result = &RawMessage{Data: data}
 		return nil
 	})
 
@@ -488,15 +478,4 @@ func (r *RawMessage) ProtoMessage() {}
 // ProtoReflect implements proto.Message interface
 func (r *RawMessage) ProtoReflect() protoreflect.Message {
 	return nil
-}
-
-// checkDirWritable checks if directory is writable
-func checkDirWritable(dir string) error {
-	testFile := filepath.Join(dir, ".test-write")
-	file, err := os.Create(testFile)
-	if err != nil {
-		return err
-	}
-	file.Close()
-	return os.Remove(testFile)
 }

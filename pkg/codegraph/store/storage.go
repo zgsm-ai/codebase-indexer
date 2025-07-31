@@ -4,15 +4,18 @@ import (
 	"codebase-indexer/pkg/codegraph/utils"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+
 	"google.golang.org/protobuf/proto"
 )
 
 // TODO 使用项目名+路径hash作为项目索引的目录
 
 type GraphStorage interface {
-	BatchSave(ctx context.Context, projectUuid string, values Values) error
-	Save(ctx context.Context, projectUuid string, value proto.Message) error
-	Get(ctx context.Context, projectUuid string, key Key) (proto.Message, error)
+	BatchSave(ctx context.Context, projectUuid string, values Entries) error
+	Save(ctx context.Context, projectUuid string, entry *Entry) error
+	Get(ctx context.Context, projectUuid string, key Key) ([]byte, error)
 	Delete(ctx context.Context, projectUuid string, key Key) error
 	Iter(ctx context.Context, projectUuid string) Iterator
 	Size(ctx context.Context, projectUuid string) int
@@ -40,6 +43,7 @@ type Iterator interface {
 const (
 	pathPrefix = "path"
 	symPrefix  = "sym"
+	dataDir    = "data"
 )
 
 //// ElementPathKey 键生成函数  unix path
@@ -67,8 +71,28 @@ func (s SymbolNameKey) Get() string {
 	return fmt.Sprintf("%s:%s", symPrefix, string(s))
 }
 
-type Values interface {
+type Entries interface {
 	Len() int
 	Value(i int) proto.Message
 	Key(i int) string
+}
+type Entry struct {
+	Key   Key
+	Value proto.Message
+}
+
+// checkDirWritable checks if directory is writable
+func checkDirWritable(dir string) error {
+	testFile := filepath.Join(dir, ".test-write")
+	file, err := os.Create(testFile)
+	if err != nil {
+		return err
+	}
+	file.Close()
+	return os.Remove(testFile)
+}
+
+// UnmarshalValue 将value解析成target
+func UnmarshalValue(value []byte, target proto.Message) error {
+	return proto.Unmarshal(value, target)
 }

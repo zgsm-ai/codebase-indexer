@@ -21,62 +21,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// 枚举类型定义
-type Scope int32
-
-const (
-	Scope_SCOPE_UNDEFINED Scope = 0
-	Scope_SCOPE_PUBLIC    Scope = 1
-	Scope_SCOPE_PRIVATE   Scope = 2
-	Scope_SCOPE_PROTECTED Scope = 3
-	Scope_SCOPE_PACKAGE   Scope = 4
-)
-
-// Enum value maps for Scope.
-var (
-	Scope_name = map[int32]string{
-		0: "SCOPE_UNDEFINED",
-		1: "SCOPE_PUBLIC",
-		2: "SCOPE_PRIVATE",
-		3: "SCOPE_PROTECTED",
-		4: "SCOPE_PACKAGE",
-	}
-	Scope_value = map[string]int32{
-		"SCOPE_UNDEFINED": 0,
-		"SCOPE_PUBLIC":    1,
-		"SCOPE_PRIVATE":   2,
-		"SCOPE_PROTECTED": 3,
-		"SCOPE_PACKAGE":   4,
-	}
-)
-
-func (x Scope) Enum() *Scope {
-	p := new(Scope)
-	*p = x
-	return p
-}
-
-func (x Scope) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (Scope) Descriptor() protoreflect.EnumDescriptor {
-	return file_pkg_codegraph_proto_file_element_proto_enumTypes[0].Descriptor()
-}
-
-func (Scope) Type() protoreflect.EnumType {
-	return &file_pkg_codegraph_proto_file_element_proto_enumTypes[0]
-}
-
-func (x Scope) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use Scope.Descriptor instead.
-func (Scope) EnumDescriptor() ([]byte, []int) {
-	return file_pkg_codegraph_proto_file_element_proto_rawDescGZIP(), []int{0}
-}
-
 type RelationType int32
 
 const (
@@ -122,11 +66,11 @@ func (x RelationType) String() string {
 }
 
 func (RelationType) Descriptor() protoreflect.EnumDescriptor {
-	return file_pkg_codegraph_proto_file_element_proto_enumTypes[1].Descriptor()
+	return file_pkg_codegraph_proto_file_element_proto_enumTypes[0].Descriptor()
 }
 
 func (RelationType) Type() protoreflect.EnumType {
-	return &file_pkg_codegraph_proto_file_element_proto_enumTypes[1]
+	return &file_pkg_codegraph_proto_file_element_proto_enumTypes[0]
 }
 
 func (x RelationType) Number() protoreflect.EnumNumber {
@@ -135,7 +79,7 @@ func (x RelationType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use RelationType.Descriptor instead.
 func (RelationType) EnumDescriptor() ([]byte, []int) {
-	return file_pkg_codegraph_proto_file_element_proto_rawDescGZIP(), []int{1}
+	return file_pkg_codegraph_proto_file_element_proto_rawDescGZIP(), []int{0}
 }
 
 // FileElementTable 文件元素表，简化版本
@@ -204,12 +148,10 @@ type BaseElement struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
-	Scope         Scope                  `protobuf:"varint,3,opt,name=scope,proto3,enum=codegraphpb.Scope" json:"scope,omitempty"`
-	IsDefinition  bool                   `protobuf:"varint,4,opt,name=is_definition,json=isDefinition,proto3" json:"is_definition,omitempty"`
-	ElementType   ElementType            `protobuf:"varint,5,opt,name=element_type,json=elementType,proto3,enum=codegraphpb.ElementType" json:"element_type,omitempty"`
-	Content       []byte                 `protobuf:"bytes,6,opt,name=content,proto3" json:"content,omitempty"`
-	Range         []int32                `protobuf:"varint,7,rep,packed,name=range,proto3" json:"range,omitempty"`
-	Relations     []*Relation            `protobuf:"bytes,8,rep,name=relations,proto3" json:"relations,omitempty"`
+	IsDefinition  bool                   `protobuf:"varint,3,opt,name=is_definition,json=isDefinition,proto3" json:"is_definition,omitempty"`
+	ElementType   ElementType            `protobuf:"varint,4,opt,name=element_type,json=elementType,proto3,enum=codegraphpb.ElementType" json:"element_type,omitempty"`
+	Range         []int32                `protobuf:"varint,5,rep,packed,name=range,proto3" json:"range,omitempty"`
+	Relations     []*Relation            `protobuf:"bytes,6,rep,name=relations,proto3" json:"relations,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -258,13 +200,6 @@ func (x *BaseElement) GetPath() string {
 	return ""
 }
 
-func (x *BaseElement) GetScope() Scope {
-	if x != nil {
-		return x.Scope
-	}
-	return Scope_SCOPE_UNDEFINED
-}
-
 func (x *BaseElement) GetIsDefinition() bool {
 	if x != nil {
 		return x.IsDefinition
@@ -277,13 +212,6 @@ func (x *BaseElement) GetElementType() ElementType {
 		return x.ElementType
 	}
 	return ElementType_ELEMENT_TYPE_UNDEFINED
-}
-
-func (x *BaseElement) GetContent() []byte {
-	if x != nil {
-		return x.Content
-	}
-	return nil
 }
 
 func (x *BaseElement) GetRange() []int32 {
@@ -377,27 +305,19 @@ const file_pkg_codegraph_proto_file_element_proto_rawDesc = "" +
 	"\x10FileElementTable\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1a\n" +
 	"\blanguage\x18\x02 \x01(\tR\blanguage\x124\n" +
-	"\belements\x18\x03 \x03(\v2\x18.codegraphpb.BaseElementR\belements\"\xa6\x02\n" +
+	"\belements\x18\x03 \x03(\v2\x18.codegraphpb.BaseElementR\belements\"\xe2\x01\n" +
 	"\vBaseElement\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
-	"\x04path\x18\x02 \x01(\tR\x04path\x12(\n" +
-	"\x05scope\x18\x03 \x01(\x0e2\x12.codegraphpb.ScopeR\x05scope\x12#\n" +
-	"\ris_definition\x18\x04 \x01(\bR\fisDefinition\x12;\n" +
-	"\felement_type\x18\x05 \x01(\x0e2\x18.codegraphpb.ElementTypeR\velementType\x12\x18\n" +
-	"\acontent\x18\x06 \x01(\fR\acontent\x12\x14\n" +
-	"\x05range\x18\a \x03(\x05R\x05range\x123\n" +
-	"\trelations\x18\b \x03(\v2\x15.codegraphpb.RelationR\trelations\"\xa6\x01\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12#\n" +
+	"\ris_definition\x18\x03 \x01(\bR\fisDefinition\x12;\n" +
+	"\felement_type\x18\x04 \x01(\x0e2\x18.codegraphpb.ElementTypeR\velementType\x12\x14\n" +
+	"\x05range\x18\x05 \x03(\x05R\x05range\x123\n" +
+	"\trelations\x18\x06 \x03(\v2\x15.codegraphpb.RelationR\trelations\"\xa6\x01\n" +
 	"\bRelation\x12!\n" +
 	"\felement_name\x18\x01 \x01(\tR\velementName\x12!\n" +
 	"\felement_path\x18\x02 \x01(\tR\velementPath\x12\x14\n" +
 	"\x05range\x18\x03 \x03(\x05R\x05range\x12>\n" +
-	"\rrelation_type\x18\x04 \x01(\x0e2\x19.codegraphpb.RelationTypeR\frelationType*i\n" +
-	"\x05Scope\x12\x13\n" +
-	"\x0fSCOPE_UNDEFINED\x10\x00\x12\x10\n" +
-	"\fSCOPE_PUBLIC\x10\x01\x12\x11\n" +
-	"\rSCOPE_PRIVATE\x10\x02\x12\x13\n" +
-	"\x0fSCOPE_PROTECTED\x10\x03\x12\x11\n" +
-	"\rSCOPE_PACKAGE\x10\x04*\xe0\x01\n" +
+	"\rrelation_type\x18\x04 \x01(\x0e2\x19.codegraphpb.RelationTypeR\frelationType*\xe0\x01\n" +
 	"\fRelationType\x12\x1b\n" +
 	"\x17RELATION_TYPE_UNDEFINED\x10\x00\x12\x1c\n" +
 	"\x18RELATION_TYPE_DEFINITION\x10\x01\x12\x1b\n" +
@@ -419,27 +339,25 @@ func file_pkg_codegraph_proto_file_element_proto_rawDescGZIP() []byte {
 	return file_pkg_codegraph_proto_file_element_proto_rawDescData
 }
 
-var file_pkg_codegraph_proto_file_element_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_pkg_codegraph_proto_file_element_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_pkg_codegraph_proto_file_element_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_pkg_codegraph_proto_file_element_proto_goTypes = []any{
-	(Scope)(0),               // 0: codegraphpb.Scope
-	(RelationType)(0),        // 1: codegraphpb.RelationType
-	(*FileElementTable)(nil), // 2: codegraphpb.FileElementTable
-	(*BaseElement)(nil),      // 3: codegraphpb.BaseElement
-	(*Relation)(nil),         // 4: codegraphpb.Relation
-	(ElementType)(0),         // 5: codegraphpb.ElementType
+	(RelationType)(0),        // 0: codegraphpb.RelationType
+	(*FileElementTable)(nil), // 1: codegraphpb.FileElementTable
+	(*BaseElement)(nil),      // 2: codegraphpb.BaseElement
+	(*Relation)(nil),         // 3: codegraphpb.Relation
+	(ElementType)(0),         // 4: codegraphpb.ElementType
 }
 var file_pkg_codegraph_proto_file_element_proto_depIdxs = []int32{
-	3, // 0: codegraphpb.FileElementTable.elements:type_name -> codegraphpb.BaseElement
-	0, // 1: codegraphpb.BaseElement.scope:type_name -> codegraphpb.Scope
-	5, // 2: codegraphpb.BaseElement.element_type:type_name -> codegraphpb.ElementType
-	4, // 3: codegraphpb.BaseElement.relations:type_name -> codegraphpb.Relation
-	1, // 4: codegraphpb.Relation.relation_type:type_name -> codegraphpb.RelationType
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	2, // 0: codegraphpb.FileElementTable.elements:type_name -> codegraphpb.BaseElement
+	4, // 1: codegraphpb.BaseElement.element_type:type_name -> codegraphpb.ElementType
+	3, // 2: codegraphpb.BaseElement.relations:type_name -> codegraphpb.Relation
+	0, // 3: codegraphpb.Relation.relation_type:type_name -> codegraphpb.RelationType
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_pkg_codegraph_proto_file_element_proto_init() }
@@ -453,7 +371,7 @@ func file_pkg_codegraph_proto_file_element_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_codegraph_proto_file_element_proto_rawDesc), len(file_pkg_codegraph_proto_file_element_proto_rawDesc)),
-			NumEnums:      2,
+			NumEnums:      1,
 			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,

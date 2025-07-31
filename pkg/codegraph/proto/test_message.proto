@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package codegraphpb;
+
+option go_package = "pkg/codegraph/proto/codegraphpb;codegraphpb";
+
+message TestMessage {
+  string value = 1;
+}

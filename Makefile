@@ -14,6 +14,7 @@ proto:
 	protoc --go_out=. pkg/codegraph/proto/file_element.proto
 	protoc --go_out=. pkg/codegraph/proto/symbol_definition.proto
 	protoc --go_out=. pkg/codegraph/proto/types.proto
+	protoc --go_out=. pkg/codegraph/proto/test_message.proto
 
 .PHONY:test
 test:

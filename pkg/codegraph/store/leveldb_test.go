@@ -18,12 +18,12 @@ import (
 )
 
 // setupBBoltTestStorage 创建测试用的存储实例
-func setupBBoltTestStorage(t *testing.T) (*BBoltStorage, func()) {
-	tempDir, err := os.MkdirTemp("", "bbolt-test-*")
+func setupLeveldbTestStorage(t *testing.T) (*LevelDBStorage, func()) {
+	tempDir, err := os.MkdirTemp("", "leveldb-test-*")
 	require.NoError(t, err)
 
 	logger := &MockLogger{}
-	storage, err := NewBBoltStorage(tempDir, logger)
+	storage, err := NewLevelDBStorage(tempDir, logger)
 	require.NoError(t, err)
 
 	cleanup := func() {
@@ -34,7 +34,7 @@ func setupBBoltTestStorage(t *testing.T) (*BBoltStorage, func()) {
 	return storage, cleanup
 }
 
-func TestNewBBoltStorage(t *testing.T) {
+func TestNewLevelDBStorage(t *testing.T) {
 	tests := []struct {
 		name        string
 		baseDir     string
@@ -79,7 +79,7 @@ func TestNewBBoltStorage(t *testing.T) {
 				baseDir = filepath.Join(t.TempDir(), baseDir)
 			}
 
-			storage, err := NewBBoltStorage(baseDir, &MockLogger{})
+			storage, err := NewLevelDBStorage(baseDir, &MockLogger{})
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -98,8 +98,8 @@ func TestNewBBoltStorage(t *testing.T) {
 	}
 }
 
-func TestBBoltStorage_Save(t *testing.T) {
-	storage, cleanup := setupBBoltTestStorage(t)
+func TestLevelDBStorage_Save(t *testing.T) {
+	storage, cleanup := setupLeveldbTestStorage(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -147,7 +147,7 @@ func TestBBoltStorage_Save(t *testing.T) {
 				<-testCtx.Done() // 确保上下文已取消
 			}
 
-			err := storage.Save(testCtx, projectID, &Entry{Key: ElementPathKey("test-value"), Value: tt.value})
+			err := storage.Save(testCtx, projectID, &Entry{Key: ElementPathKey(tt.name), Value: tt.value})
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -157,8 +157,8 @@ func TestBBoltStorage_Save(t *testing.T) {
 	}
 }
 
-func TestBBoltStorage_BatchSave(t *testing.T) {
-	storage, cleanup := setupBBoltTestStorage(t)
+func TestLevelDBStorage_BatchSave(t *testing.T) {
+	storage, cleanup := setupLeveldbTestStorage(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -221,8 +221,8 @@ func TestBBoltStorage_BatchSave(t *testing.T) {
 	}
 }
 
-func TestBBoltStorage_Get(t *testing.T) {
-	storage, cleanup := setupBBoltTestStorage(t)
+func TestLevelDBStorage_Get(t *testing.T) {
+	storage, cleanup := setupLeveldbTestStorage(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -292,8 +292,8 @@ func TestBBoltStorage_Get(t *testing.T) {
 	}
 }
 
-func TestBBoltStorage_Delete(t *testing.T) {
-	storage, cleanup := setupBBoltTestStorage(t)
+func TestLevelDBStorage_Delete(t *testing.T) {
+	storage, cleanup := setupLeveldbTestStorage(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -360,8 +360,8 @@ func TestBBoltStorage_Delete(t *testing.T) {
 	}
 }
 
-func TestBBoltStorage_Size(t *testing.T) {
-	storage, cleanup := setupBBoltTestStorage(t)
+func TestLevelDBStorage_Size(t *testing.T) {
+	storage, cleanup := setupLeveldbTestStorage(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -402,7 +402,11 @@ func TestBBoltStorage_Size(t *testing.T) {
 
 			if len(tt.setupData) > 0 {
 				// 创建测试用的Values实现
-				values := CreateTestValues(tt.setupData, CreateTestKeys(len(tt.setupData), "key"))
+				keys := make([]string, len(tt.setupData))
+				for i := range tt.setupData {
+					keys[i] = fmt.Sprintf("key-%d", i+1)
+				}
+				values := CreateTestValues(tt.setupData, keys)
 				storage.BatchSave(ctx, testProjectID, values)
 			}
 
@@ -412,15 +416,15 @@ func TestBBoltStorage_Size(t *testing.T) {
 	}
 }
 
-func TestBBoltStorage_Close(t *testing.T) {
-	storage, cleanup := setupBBoltTestStorage(t)
+func TestLevelDBStorage_Close(t *testing.T) {
+	storage, cleanup := setupLeveldbTestStorage(t)
 	defer cleanup()
 
 	ctx := context.Background()
 	projectID := "test-project"
 
 	// 预填充数据以确保有数据库连接
-	err := storage.Save(ctx, projectID, &Entry{Key: ElementPathKey("test"), Value: &codegraphpb.TestMessage{Value: "test"}})
+	err := storage.Save(ctx, projectID, &Entry{Key: ElementPathKey("test-value"), Value: &codegraphpb.TestMessage{Value: "test"}})
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -446,7 +450,7 @@ func TestBBoltStorage_Close(t *testing.T) {
 
 			// 验证关闭后操作失败
 			if tt.name == "正常关闭" {
-				err := storage.Save(context.Background(), projectID, &Entry{Key: ElementPathKey("test"), Value: &codegraphpb.TestMessage{Value: "test"}})
+				err := storage.Save(context.Background(), projectID, &Entry{Key: ElementPathKey("test-value"), Value: &codegraphpb.TestMessage{Value: "test"}})
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "storage is closed")
 			}
@@ -454,8 +458,8 @@ func TestBBoltStorage_Close(t *testing.T) {
 	}
 }
 
-func TestBBoltStorage_Iter(t *testing.T) {
-	storage, cleanup := setupBBoltTestStorage(t)
+func TestLevelDBStorage_Iter(t *testing.T) {
+	storage, cleanup := setupLeveldbTestStorage(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -472,7 +476,7 @@ func TestBBoltStorage_Iter(t *testing.T) {
 	}
 
 	for _, data := range testData {
-		storage.Save(ctx, projectID, &Entry{Key: ElementPathKey(data.key), Value: &codegraphpb.TestMessage{Value: data.value}})
+		storage.Save(ctx, projectID, &Entry{Key: ElementPathKey("test-value"), Value: &codegraphpb.TestMessage{Value: data.value}})
 	}
 
 	tests := []struct {
@@ -518,8 +522,29 @@ func TestBBoltStorage_Iter(t *testing.T) {
 	}
 }
 
-func TestBBoltStorage_ConcurrentReadWrite(t *testing.T) {
-	storage, cleanup := setupBBoltTestStorage(t)
+// leveldbTestValues 用于测试的 Entries 实现
+type leveldbTestValues struct {
+	values []proto.Message
+	keys   []string
+}
+
+func (tv *leveldbTestValues) Len() int {
+	return len(tv.values)
+}
+func (tv *leveldbTestValues) Key(i int) string {
+	if i < len(tv.keys) {
+		return tv.keys[i]
+	}
+	return fmt.Sprintf("key-%d", i)
+}
+func (tv *leveldbTestValues) Value(i int) proto.Message {
+	if i < len(tv.values) {
+		return tv.values[i]
+	}
+	return &codegraphpb.TestMessage{Value: "default"}
+}
+func TestLevelDBStorage_ConcurrentReadWrite(t *testing.T) {
+	storage, cleanup := setupLeveldbTestStorage(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -578,8 +603,8 @@ func TestBBoltStorage_ConcurrentReadWrite(t *testing.T) {
 	iter := storage.Iter(ctx, projectID)
 	for iter.Next() {
 		data := iter.Value()
-		if msg, ok := data.(*codegraphpb.TestMessage); ok {
-			allData = append(allData, msg)
+		if msg, ok := data.(*RawMessage); ok {
+			allData = append(allData, &codegraphpb.TestMessage{Value: string(msg.Data)})
 		}
 	}
 	assert.GreaterOrEqual(t, len(allData), 0)
@@ -587,8 +612,8 @@ func TestBBoltStorage_ConcurrentReadWrite(t *testing.T) {
 	iter.Close()
 }
 
-func TestBBoltStorage_ConcurrentBatchWrite(t *testing.T) {
-	storage, cleanup := setupBBoltTestStorage(t)
+func TestLevelDBStorage_ConcurrentBatchWrite(t *testing.T) {
+	storage, cleanup := setupLeveldbTestStorage(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -608,7 +633,7 @@ func TestBBoltStorage_ConcurrentBatchWrite(t *testing.T) {
 				values[j] = &codegraphpb.TestMessage{Value: fmt.Sprintf("batch-%d-%d", id, j)}
 				keys[j] = fmt.Sprintf("key-%d-%d", id, j)
 			}
-			testValues := CreateTestValues(values, keys)
+			testValues := &leveldbTestValues{values: values, keys: keys}
 			err := storage.BatchSave(ctx, projectID, testValues)
 			assert.NoError(t, err)
 		}(i)
@@ -621,13 +646,13 @@ func TestBBoltStorage_ConcurrentBatchWrite(t *testing.T) {
 	assert.Equal(t, goroutines*batchSize, size)
 }
 
-func TestBBoltStorage_BigBatchWrite(t *testing.T) {
-	storage, cleanup := setupBBoltTestStorage(t)
+func TestLevelDBStorage_BigBatchWrite(t *testing.T) {
+	storage, cleanup := setupLeveldbTestStorage(t)
 	defer cleanup()
 
 	ctx := context.Background()
 	projectID := "big-batch-test"
-	const batchSize = 1000
+	const batchSize = 100000
 
 	values := make([]proto.Message, batchSize)
 	keys := make([]string, batchSize)
@@ -635,7 +660,7 @@ func TestBBoltStorage_BigBatchWrite(t *testing.T) {
 		values[j] = &codegraphpb.TestMessage{Value: fmt.Sprintf("batch-%d", j)}
 		keys[j] = fmt.Sprintf("key-%d", j)
 	}
-	testValues := CreateTestValues(values, keys)
+	testValues := &leveldbTestValues{values: values, keys: keys}
 	err := storage.BatchSave(ctx, projectID, testValues)
 	assert.NoError(t, err)
 
@@ -644,8 +669,8 @@ func TestBBoltStorage_BigBatchWrite(t *testing.T) {
 	assert.Equal(t, batchSize, size)
 }
 
-func TestBBoltStorage_MultipleProjectsIsolation(t *testing.T) {
-	storage, cleanup := setupBBoltTestStorage(t)
+func TestLevelDBStorage_MultipleProjectsIsolation(t *testing.T) {
+	storage, cleanup := setupLeveldbTestStorage(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -658,10 +683,14 @@ func TestBBoltStorage_MultipleProjectsIsolation(t *testing.T) {
 		projectID := GenerateTestProjectUUID(projectName, projectPath)
 
 		// 创建测试用的Values实现
-		values := CreateTestValues(
-			CreateTestMessages(p+1, fmt.Sprintf("project-%d-value", p)),
-			CreateTestKeys(p+1, "key"),
-		)
+		values := &leveldbTestValues{
+			values: make([]proto.Message, p+1),
+			keys:   make([]string, p+1),
+		}
+		for i := 0; i < p+1; i++ {
+			values.values[i] = &codegraphpb.TestMessage{Value: fmt.Sprintf("project-%d-value-%d", p, i)}
+			values.keys[i] = fmt.Sprintf("key-%d", i)
+		}
 
 		err := storage.BatchSave(ctx, projectID, values)
 		assert.NoError(t, err)
@@ -677,13 +706,13 @@ func TestBBoltStorage_MultipleProjectsIsolation(t *testing.T) {
 	}
 }
 
-func TestBBoltStorage_CorruptedFileHandling(t *testing.T) {
+func TestLevelDBStorage_CorruptedFileHandling(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "corruption-test-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
 	// 创建正常存储
-	storage, err := NewBBoltStorage(tempDir, &MockLogger{})
+	storage, err := NewLevelDBStorage(tempDir, &MockLogger{})
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -693,6 +722,7 @@ func TestBBoltStorage_CorruptedFileHandling(t *testing.T) {
 	key := ElementPathKey("test-value")
 	// 写入一些数据
 	err = storage.Save(ctx, projectID, &Entry{Key: key, Value: &codegraphpb.TestMessage{Value: "test-data"}})
+	assert.NoError(t, err)
 	_, err = storage.Get(ctx, projectID, key)
 	assert.NoError(t, err)
 	err = storage.Close()
@@ -700,8 +730,6 @@ func TestBBoltStorage_CorruptedFileHandling(t *testing.T) {
 
 	// 模拟文件损坏：直接修改数据库文件
 	dbPath := filepath.Join(tempDir, projectID, dataDir)
-	require.NoError(t, err)
-
 	err = filepath.Walk(dbPath, func(path string, info fs.FileInfo, err error) error {
 		if info.IsDir() {
 			return nil
@@ -718,19 +746,19 @@ func TestBBoltStorage_CorruptedFileHandling(t *testing.T) {
 		}
 		return err
 	})
-
-	// 尝试重新打开损坏的文件
-	storage, err = NewBBoltStorage(tempDir, &MockLogger{})
+	assert.NoError(t, err)
+	// 尝试重新打开损坏的文件，会重建，则会查不到数据
+	storage, err = NewLevelDBStorage(tempDir, &MockLogger{})
 	assert.NoError(t, err)
 	_, err = storage.Get(ctx, projectID, key)
 	assert.ErrorIs(t, err, ErrKeyNotFound)
 }
 
-func TestBBoltStorage_NonexistentDirectory(t *testing.T) {
+func TestLevelDBStorage_NonexistentDirectory(t *testing.T) {
 	tempDir := filepath.Join(os.TempDir(), "nonexistent", "deep", "path", fmt.Sprintf("%d", time.Now().UnixNano()))
 	defer os.RemoveAll(filepath.Dir(tempDir))
 
-	storage, err := NewBBoltStorage(tempDir, &MockLogger{})
+	storage, err := NewLevelDBStorage(tempDir, &MockLogger{})
 	assert.NoError(t, err)
 	assert.NotNil(t, storage)
 
@@ -739,7 +767,7 @@ func TestBBoltStorage_NonexistentDirectory(t *testing.T) {
 	}
 }
 
-func TestBBoltStorage_ReadOnlyFileSystem(t *testing.T) {
+func TestLevelDBStorage_ReadOnlyFileSystem(t *testing.T) {
 	if testing.Short() {
 		t.Skip("跳过只读文件系统测试")
 	}
@@ -754,7 +782,7 @@ func TestBBoltStorage_ReadOnlyFileSystem(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	// 创建存储并写入数据
-	storage, err := NewBBoltStorage(tempDir, &MockLogger{})
+	storage, err := NewLevelDBStorage(tempDir, &MockLogger{})
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -771,12 +799,12 @@ func TestBBoltStorage_ReadOnlyFileSystem(t *testing.T) {
 	defer os.Chmod(tempDir, 0755) // 恢复权限
 
 	// 尝试在只读目录中创建新存储
-	_, err = NewBBoltStorage(tempDir, &MockLogger{})
+	_, err = NewLevelDBStorage(tempDir, &MockLogger{})
 	assert.Error(t, err)
 }
 
-func TestBBoltStorage_LargeDataHandling(t *testing.T) {
-	storage, cleanup := setupBBoltTestStorage(t)
+func TestLevelDBStorage_LargeDataHandling(t *testing.T) {
+	storage, cleanup := setupLeveldbTestStorage(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -786,10 +814,14 @@ func TestBBoltStorage_LargeDataHandling(t *testing.T) {
 
 	// 测试大数据量
 	const dataCount = 1000
-	values := CreateTestValues(
-		CreateTestMessages(dataCount, "large-value"),
-		CreateTestKeys(dataCount, "key"),
-	)
+	values := &leveldbTestValues{
+		values: make([]proto.Message, dataCount),
+		keys:   make([]string, dataCount),
+	}
+	for i := 0; i < dataCount; i++ {
+		values.values[i] = &codegraphpb.TestMessage{Value: fmt.Sprintf("large-value-%d", i)}
+		values.keys[i] = fmt.Sprintf("key-%d", i)
+	}
 	err := storage.BatchSave(ctx, projectID, values)
 	assert.NoError(t, err)
 
@@ -809,8 +841,8 @@ func TestBBoltStorage_LargeDataHandling(t *testing.T) {
 	assert.Equal(t, bytes, retrieved)
 }
 
-func TestBBoltStorage_SpecialProjectNames(t *testing.T) {
-	storage, cleanup := setupBBoltTestStorage(t)
+func TestLevelDBStorage_SpecialProjectNames(t *testing.T) {
+	storage, cleanup := setupLeveldbTestStorage(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -836,15 +868,17 @@ func TestBBoltStorage_SpecialProjectNames(t *testing.T) {
 		key := ElementPathKey("test-value")
 		err := storage.Save(ctx, projectID, &Entry{Key: key, Value: value})
 		assert.NoError(t, err)
+
 		bytes, err := proto.Marshal(value)
+		assert.NoError(t, err)
 		retrieved, err := storage.Get(ctx, projectID, key)
 		assert.NoError(t, err)
 		assert.Equal(t, bytes, retrieved)
 	}
 }
 
-func TestBBoltStorage_CloseDuringOperations(t *testing.T) {
-	storage, cleanup := setupBBoltTestStorage(t)
+func TestLevelDBStorage_CloseDuringOperations(t *testing.T) {
+	storage, cleanup := setupLeveldbTestStorage(t)
 	defer cleanup()
 
 	ctx := context.Background()
@@ -870,7 +904,7 @@ func TestBBoltStorage_CloseDuringOperations(t *testing.T) {
 			err := storage.Save(ctx, projectID, &Entry{Key: ElementPathKey("test-value"), Value: &codegraphpb.TestMessage{Value: fmt.Sprintf("concurrent-%d", i)}})
 			if err != nil {
 				// 期望在关闭后操作失败
-				assert.Contains(t, err.Error(), "database not open")
+				assert.Contains(t, err.Error(), "storage is closed")
 				break
 			}
 		}

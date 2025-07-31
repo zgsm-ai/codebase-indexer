@@ -3,12 +3,14 @@ package store
 import (
 	"codebase-indexer/pkg/codegraph/utils"
 	"context"
+	"errors"
 	"fmt"
-	"github.com/syndtr/goleveldb/leveldb/iterator"
-	"github.com/syndtr/goleveldb/leveldb/opt"
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/syndtr/goleveldb/leveldb/iterator"
+	"github.com/syndtr/goleveldb/leveldb/opt"
 
 	"codebase-indexer/pkg/logger"
 
@@ -89,16 +91,10 @@ func (s *LevelDBStorage) createDB(projectUuid string) (*leveldb.DB, error) {
 		return nil, fmt.Errorf("failed to create project directory %s: %w", projectDir, err)
 	}
 
-	dbPath := filepath.Join(projectDir, "leveldb")
+	dbPath := filepath.Join(projectDir, dataDir)
 	s.logger.Debug("create_db: opening database", "project", projectUuid, "path", dbPath)
 
-	// 配置LevelDB选项
-	dbOptions := &opt.Options{
-		BlockCacheCapacity: 64 * 1024 * 1024, // 64MB block cache
-		WriteBuffer:        16 * 1024 * 1024, // 16MB write buffer
-	}
-
-	db, err := leveldb.OpenFile(dbPath, dbOptions)
+	db, err := openLevelDB(dbPath)
 	if err != nil {
 		s.logger.Warn("create_db: database open failed, attempting to recreate", "project", projectUuid, "error", err)
 
@@ -109,7 +105,7 @@ func (s *LevelDBStorage) createDB(projectUuid string) (*leveldb.DB, error) {
 		}
 
 		// 重新尝试创建数据库
-		db, err = leveldb.OpenFile(dbPath, dbOptions)
+		db, err = openLevelDB(dbPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to recreate project database %s: %w", dbPath, err)
 		}
@@ -119,8 +115,23 @@ func (s *LevelDBStorage) createDB(projectUuid string) (*leveldb.DB, error) {
 	return db, nil
 }
 
+func openLevelDB(dbPath string) (*leveldb.DB, error) {
+	// 配置LevelDB选项
+	dbOptions := &opt.Options{
+		BlockCacheCapacity: 64 * 1024 * 1024, // 64MB block cache
+		WriteBuffer:        16 * 1024 * 1024, // 16MB write buffer
+	}
+
+	db, err := leveldb.OpenFile(dbPath, dbOptions)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database %s: %w", dbPath, err)
+	}
+
+	return db, nil
+}
+
 // BatchSave saves multiple values in batch
-func (s *LevelDBStorage) BatchSave(ctx context.Context, projectUuid string, values Values) error {
+func (s *LevelDBStorage) BatchSave(ctx context.Context, projectUuid string, values Entries) error {
 	if err := utils.CheckContext(ctx); err != nil {
 		return fmt.Errorf("context cancelled: %w", err)
 	}
@@ -134,6 +145,7 @@ func (s *LevelDBStorage) BatchSave(ctx context.Context, projectUuid string, valu
 	s.logger.Debug("batch_save: starting batch transaction", "project", projectUuid, "count", values.Len())
 
 	batch := new(leveldb.Batch)
+
 	for i := 0; i < values.Len(); i++ {
 		if err := utils.CheckContext(ctx); err != nil {
 			return fmt.Errorf("context cancelled during batch save: %w", err)
@@ -167,7 +179,7 @@ func (s *LevelDBStorage) BatchSave(ctx context.Context, projectUuid string, valu
 }
 
 // Save saves single value
-func (s *LevelDBStorage) Save(ctx context.Context, projectUuid string, value proto.Message) error {
+func (s *LevelDBStorage) Save(ctx context.Context, projectUuid string, entry *Entry) error {
 	if err := utils.CheckContext(ctx); err != nil {
 		return fmt.Errorf("context cancelled: %w", err)
 	}
@@ -178,31 +190,23 @@ func (s *LevelDBStorage) Save(ctx context.Context, projectUuid string, value pro
 		return fmt.Errorf("failed to get database: %w", err)
 	}
 
-	key := fmt.Sprintf("%T", value)
+	key := entry.Key.Get()
 	s.logger.Debug("save: starting transaction", "project", projectUuid, "type", key)
 
 	var data []byte
-
-	// 处理自定义测试消息类型
-	if customMsg, ok := value.(interface {
-		Marshal() ([]byte, error)
-	}); ok {
-		data, err = customMsg.Marshal()
-	} else {
-		data, err = proto.Marshal(value)
-	}
-
+	data, err = proto.Marshal(entry.Value)
 	if err != nil {
 		return fmt.Errorf("failed to marshal data for type %s: %w", key, err)
 	}
 
 	err = db.Put([]byte(key), data, nil)
+
 	s.logger.Debug("save: completed", "project", projectUuid, "type", key)
 	return err
 }
 
 // Get retrieves data by key
-func (s *LevelDBStorage) Get(ctx context.Context, projectUuid string, key Key) (proto.Message, error) {
+func (s *LevelDBStorage) Get(ctx context.Context, projectUuid string, key Key) ([]byte, error) {
 	if err := utils.CheckContext(ctx); err != nil {
 		return nil, fmt.Errorf("context cancelled: %w", err)
 	}
@@ -217,13 +221,13 @@ func (s *LevelDBStorage) Get(ctx context.Context, projectUuid string, key Key) (
 
 	data, err := db.Get([]byte(key.Get()), nil)
 	if err != nil {
-		if err == leveldb.ErrNotFound {
-			return nil, fmt.Errorf("key %s not found in project %s", key.Get(), projectUuid)
+		if errors.Is(err, leveldb.ErrNotFound) {
+			return nil, ErrKeyNotFound
 		}
 		return nil, fmt.Errorf("failed to get key %s: %w", key.Get(), err)
 	}
 
-	return &RawMessage{Data: data}, nil
+	return data, nil
 }
 
 // Delete deletes data by key
@@ -241,7 +245,7 @@ func (s *LevelDBStorage) Delete(ctx context.Context, projectUuid string, key Key
 	s.logger.Debug("delete: starting transaction", "project", projectUuid, "key", key.Get())
 
 	err = db.Delete([]byte(key.Get()), nil)
-	if err != nil && err != leveldb.ErrNotFound {
+	if err != nil && !errors.Is(err, leveldb.ErrNotFound) {
 		return fmt.Errorf("failed to delete key %s: %w", key.Get(), err)
 	}
 
@@ -300,6 +304,10 @@ func (s *LevelDBStorage) Size(ctx context.Context, projectUuid string) int {
 
 // Close closes all database connections
 func (s *LevelDBStorage) Close() error {
+	if s.closed {
+		return nil
+	}
+
 	s.logger.Info("close: closing all connections")
 
 	var errs []error
@@ -355,6 +363,7 @@ func (it *leveldbIterator) Next() bool {
 		return false
 	default:
 	}
+
 	if it.iter == nil {
 		it.storage.logger.Debug("next: getting database", "project", it.projectID)
 		db, err := it.storage.getDB(it.projectID)
@@ -366,6 +375,10 @@ func (it *leveldbIterator) Next() bool {
 
 		it.storage.logger.Debug("next: creating iterator", "project", it.projectID)
 		it.iter = db.NewIterator(nil, nil)
+		if it.iter == nil {
+			it.err = fmt.Errorf("failed to create iterator")
+			return false
+		}
 		it.iter.First()
 	} else {
 		it.iter.Next()
@@ -407,11 +420,12 @@ func (it *leveldbIterator) Close() error {
 	}
 
 	it.closed = true
+	var err error
 	if it.iter != nil {
+		err = it.iter.Error()
 		it.iter.Release()
 		it.iter = nil
 	}
-	err := it.Close()
 	it.currentK = nil
 	it.currentV = nil
 	it.db = nil

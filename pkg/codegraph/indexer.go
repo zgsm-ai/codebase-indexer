@@ -41,6 +41,8 @@ type Indexer struct {
 	logger          logger.Logger
 }
 
+// TODO 多子项目、多语言支持。monorepo, 不光通过语言隔离、还要通过子项目隔离。
+
 // NewCodeIndexer 创建新的代码索引器
 func NewCodeIndexer(
 	parser *parser.SourceFileParser,
@@ -324,7 +326,7 @@ func (i *Indexer) cleanupReferences(ctx context.Context, puuid string, referedEl
 		}
 
 		// 保存更新后的文件表
-		if err := i.storage.Save(ctx, puuid, refTable); err != nil {
+		if err := i.storage.Save(ctx, puuid, &store.Entry{Key: store.ElementPathKey(refTable.Path), Value: refTable}); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -364,7 +366,7 @@ func (i *Indexer) cleanupSymbolDefinitions(ctx context.Context, puuid string, de
 					newSymDefs.Definitions = append(newSymDefs.Definitions, d)
 				}
 				// 保存更新后的文件表
-				if err := i.storage.Save(ctx, puuid, newSymDefs); err != nil {
+				if err := i.storage.Save(ctx, puuid, &store.Entry{Key: store.SymbolNameKey(newSymDefs.Name), Value: newSymDefs}); err != nil {
 					errs = append(errs, err)
 				}
 			}
