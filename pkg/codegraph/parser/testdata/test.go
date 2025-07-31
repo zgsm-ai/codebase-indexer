@@ -18,12 +18,17 @@ type Person struct {
 }
 
 type Man struct {
+	MyPerson Person
+	x.Person
 	*Person
 	Sex string
 }
 
 // 接口定义
 type Shape interface {
+	Person
+	x.Person
+	*Person
 	Brea(a, b int, c string) (d, f int)
 	Area() float64
 }
@@ -57,6 +62,7 @@ func main() {
 	x = 10
 	y := 20
 	aa := &Person{Name: "Alice", Age: 30}
+	a := &Person{Name: "Alice", Age: 30}
 	// 常量
 	const pi = 3.14159
 

@@ -26,6 +26,16 @@
 
   ) @definition.function
 
+;; arrow_function declarations
+(variable_declarator
+  name:(identifier)@definition.function.name
+  value:(arrow_function
+    [
+      parameter:(identifier) @definition.function.parameters
+      parameters:(formal_parameters) @definition.function.parameters
+    ]
+  )
+)@definition.function
 
 ;; Object properties
 (pair

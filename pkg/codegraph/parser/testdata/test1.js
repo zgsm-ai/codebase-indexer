@@ -20,7 +20,9 @@
     const nullVal = null;
     const undefinedVal = undefined;
     const sym = Symbol('key');
-
+	const man = new Person('Tom', 30);
+    const man = new p.Person('Tom', 30);
+    man = new p.Person('Tom', 30);
     // 对象
     const person = {
         name: 'Alice',
@@ -84,12 +86,13 @@
     }
 
     class Dog extends Animal {
+        Person = p.Animal
         static name = 'Dog';
         #age = 10;
         speak() {
             super.speak();
             console.log('Woof!');
-        }
+        } 
     }
 
     // DOM 操作 (模拟)

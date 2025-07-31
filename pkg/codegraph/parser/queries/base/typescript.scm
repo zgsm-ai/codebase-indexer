@@ -23,7 +23,7 @@
   name:(identifier) @import.name
   (call_expression
     function:(import)@import.declaration
-    arguments:(arguments)@import.source
+    arguments:(arguments(string)@import.source)
   )
 )@import
 
@@ -33,26 +33,44 @@
   value:(await_expression
     (call_expression
       function:(import)@import.declaration
-      arguments:(arguments)@import.source
+      arguments:(arguments(string)@import.source)
     )
   )
 )@import
 
-;; 函数、变量
+(variable_declarator
+  name:(identifier)@import.name
+  value:(arrow_function
+    body:(call_expression
+      function:(import) @import.declaration
+      arguments:(arguments
+        (string)@import.source
+      )
+    )
+  )
+)@import
+
+
+;;-----------------------------变量定义--------------------------
+
+;; 函数
 (variable_declarator
   name: (identifier) @variable.name
   type: (type_annotation)? @variable.type
-  value: (_) @variable.value
 ) @variable
+
+;; Enum declarations
+(enum_declaration
+  name: (identifier) @variable.name) @variable
 
 ;;解构变量
 (variable_declarator
   name: [(array_pattern 
           (identifier) @variable.name)
           (object_pattern 
-          (shorthand_property_identifier_pattern) @variable.name)]
+          (shorthand_property_identifier_pattern) @variable.name
+          )]
   type: (type_annotation)? @variable.type
-  value: (_) @variable.value
 ) @variable
 
 ;;type variable
@@ -61,6 +79,8 @@
   type_parameters: (type_parameters)? @variable.type
 ) @variable
 
+;;-----------------------------函数定义--------------------------
+
 ;; Function declarations
 (function_declaration
   name: (identifier) @definition.function.name
@@ -68,6 +88,26 @@
   return_type:(type_annotation)? @definition.function.return_type
   ) @definition.function
 
+;; Generator declaration
+(generator_function_declaration
+  name: (identifier) @definition.function.name
+  parameters: (formal_parameters)? @definition.function.parameters
+  return_type:(type_annotation)? @definition.function.return_type
+  ) @definition.function
+
+;;箭头函数
+(variable_declarator
+  name:(identifier)@definition.function.name
+  value:(arrow_function
+    [
+      parameter:(identifier) @definition.function.parameters
+      parameters:(formal_parameters) @definition.function.parameters 
+    ]
+    return_type:(type_annotation)? @definition.function.return_type
+  )
+)@definition.function
+
+;;-----------------------------方法定义--------------------------
 
 ;; 类方法
 (method_definition
@@ -77,26 +117,14 @@
   return_type:(type_annotation)?@definition.method.return_type
   ) @definition.method
 
+;;-----------------------------接口声明--------------------------
 ;; Interface declarations
 (interface_declaration
   name: (type_identifier) @definition.interface.name
   (extends_type_clause)? @definition.interface.extends
   ) @definition.interface
 
-;; Interface declaration Type类型
-
-
-;; Type declarations（TypeScript 中通常用 type_alias_declaration 表示类型别名）
-;; 注：type_declaration 可能不是标准节点，建议统一使用 type_alias_declaration
-
-;; Enum declarations
-(enum_declaration
-  name: (identifier) @variable.name) @variable
-
-
-;; Decorator declarations
-(decorator
-  (identifier) @name) @definition.decorator
+;;-----------------------------类声明--------------------------
 
 ;; Abstract class declarations
 (abstract_class_declaration
@@ -116,16 +144,10 @@
   (implements_clause)? @definition.class.implements
   ) @definition.class
 
-(import_statement) @import_declaration
-
-;; Export type declarations
-(export_statement) @export_declaration
-
+;;-----------------------------方法调用--------------------------
 ;; method call
 (call_expression
-  function: (_
-              (identifier) @call.method.owner
-              )
+  function: (member_expression) @call.method.owner
   arguments: (arguments) @call.method.arguments
   ) @call.method
 

@@ -256,6 +256,8 @@ const (
 	NodeKindOptionalParameter                  NodeKind = "optional_parameter"
 	NodeKindMethodSignature                    NodeKind = "method_signature"
 	NodeKindQualifiedType                      NodeKind = "qualified_type"
+	NodeKindPairPattern                        NodeKind = "pair_pattern"
+	NodeKindRestPattern                        NodeKind = "rest_pattern"
 	// 用于接收函数的返回类型和字段的类型
 	NodeKindIntegralType         NodeKind = "integral_type"
 	NodeKindFloatingPointType    NodeKind = "floating_point_type"
@@ -336,6 +338,8 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindMethodSignature):                    NodeKindMethodSignature,
 	string(NodeKindQualifiedType):                      NodeKindQualifiedType,
 	string(NodeKindTypeElem):                           NodeKindTypeElem,
+	string(NodeKindPairPattern):                        NodeKindPairPattern,
+	string(NodeKindRestPattern):                        NodeKindRestPattern,
 	// 用于接收函数的返回类型和字段的类型
 	string(NodeKindIntegralType):         NodeKindIntegralType,
 	string(NodeKindFloatingPointType):    NodeKindFloatingPointType,
