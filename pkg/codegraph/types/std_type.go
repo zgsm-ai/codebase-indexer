@@ -9,7 +9,8 @@ var javaStdTypes = map[string]struct{}{
 	"File": {}, "InputStream": {}, "OutputStream": {}, "Reader": {}, "Writer": {},
 	"BufferedReader": {}, "BufferedWriter": {}, "FileInputStream": {}, "FileOutputStream": {},
 	"Path": {}, "Paths": {}, "Files": {}, "ByteBuffer": {},
-	"URL": {}, "HttpURLConnection": {}, "Socket": {},
+	"URL": {}, "HttpURLConnection": {}, "Socket": {},"ConcurrentHashMap":{},"Function":{},"Predicate":{},
+	"AtomicInteger":{},"AtomicBoolean":{},
 	// java基本数据类型
 	"int": {}, "boolean": {}, "void": {},
 	"byte": {}, "short": {}, "char": {}, "long": {}, "float": {}, "double": {},

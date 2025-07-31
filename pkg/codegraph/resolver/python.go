@@ -4,6 +4,9 @@ import (
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
 	"fmt"
+	"strings"
+
+	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 type PythonResolver struct {
@@ -16,45 +19,244 @@ func (py *PythonResolver) Resolve(ctx context.Context, element Element, rc *Reso
 }
 
 func (py *PythonResolver) resolveImport(ctx context.Context, element *Import, rc *ResolveContext) ([]Element, error) {
-	if element.Name == types.EmptyString {
-		return nil, fmt.Errorf("import is empty")
+	rootCap := rc.Match.Captures[0]
+	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
+	for _, cap := range rc.Match.Captures {
+		captureName := rc.CaptureNames[cap.Index]
+		if cap.Node.IsMissing() || cap.Node.IsError() {
+			continue
+		}
+		content := cap.Node.Utf8Text(rc.SourceFile.Content)
+		switch types.ToElementType(captureName) {
+		case types.ElementTypeImportName:
+			element.BaseElement.Name = content
+		case types.ElementTypeImportSource:
+			element.Source = content
+		case types.ElementTypeImportAlias:
+			element.Alias = content
+		}
 	}
-
-	return []Element{element}, nil
+	// 处理类导入
+	elements := []Element{element}
+	element.BaseElement.Scope = types.ScopePackage
+	return elements, nil
 
 }
 
 func (py *PythonResolver) resolvePackage(ctx context.Context, element *Package, rc *ResolveContext) ([]Element, error) {
-	//TODO implement me
-	panic("implement me")
+	// python 不支持 package 类型
+	return nil, fmt.Errorf("python not support package")
 }
 
 func (py *PythonResolver) resolveFunction(ctx context.Context, element *Function, rc *ResolveContext) ([]Element, error) {
-	//TODO implement me
-	panic("implement me")
+	rootCap := rc.Match.Captures[0]
+	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
+	for _, cap := range rc.Match.Captures {
+		captureName := rc.CaptureNames[cap.Index]
+		if cap.Node.IsMissing() || cap.Node.IsError() {
+			continue
+		}
+		content := cap.Node.Utf8Text(rc.SourceFile.Content)
+		switch types.ToElementType(captureName) {
+		case types.ElementTypeFunctionName:
+			element.BaseElement.Name = content
+			element.Declaration.Name = content
+		case types.ElementTypeFunctionParameters:
+			element.Declaration.Parameters = parsePyParameters(&cap.Node, rc.SourceFile.Content)
+		case types.ElementTypeFunctionReturnType:
+			// TODO 这个有问题，不一定identifiers都是要的
+			element.Declaration.ReturnType = findAllIdentifiers(&cap.Node, rc.SourceFile.Content)
+		}
+	}
+	return []Element{element}, nil
 }
 
 func (py *PythonResolver) resolveMethod(ctx context.Context, element *Method, rc *ResolveContext) ([]Element, error) {
 	//TODO implement me
-	panic("implement me")
+	return nil, fmt.Errorf("not supported method yet")
 }
 
 func (py *PythonResolver) resolveClass(ctx context.Context, element *Class, rc *ResolveContext) ([]Element, error) {
 	//TODO implement me
-	panic("implement me")
+	rootCap := rc.Match.Captures[0]
+	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
+	for _, cap := range rc.Match.Captures {
+		captureName := rc.CaptureNames[cap.Index]
+		if cap.Node.IsMissing() || cap.Node.IsError() {
+			continue
+		}
+		content := cap.Node.Utf8Text(rc.SourceFile.Content)
+		switch types.ToElementType(captureName) {
+		case types.ElementTypeClassName:
+			element.BaseElement.Name = content
+		case types.ElementTypeClassExtends:
+			element.SuperClasses = parsePyExtends(&cap.Node, rc.SourceFile.Content)
+		}
+	}
+	return []Element{element}, nil
 }
 
 func (py *PythonResolver) resolveVariable(ctx context.Context, element *Variable, rc *ResolveContext) ([]Element, error) {
 	//TODO implement me
-	panic("implement me")
+	return nil, fmt.Errorf("not supported variable yet")
 }
 
 func (py *PythonResolver) resolveInterface(ctx context.Context, element *Interface, rc *ResolveContext) ([]Element, error) {
 	//TODO implement me
-	panic("implement me")
+	return nil, fmt.Errorf("not supported interface yet")
 }
 
 func (py *PythonResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
 	//TODO implement me
-	panic("implement me")
+	return nil, fmt.Errorf("not supported call yet")
 }
+
+func parsePyParameters(node *sitter.Node, content []byte) []Parameter {
+	if node == nil {
+		return nil
+	}
+	var params []Parameter
+	for i := uint(0); i < node.ChildCount(); i++ {
+		child := node.Child(i)
+		if child.IsMissing() || child.IsError() {
+			continue
+		}
+		// fmt.Println("child", child.Kind())
+		switch types.ToNodeKind(child.Kind()) {
+		case types.NodeKindIdentifier:
+			params = append(params, Parameter{
+				Name: child.Utf8Text(content),
+			})
+		case types.NodeKindListSplatPattern:
+			name := child.Utf8Text(content)
+			name = strings.ReplaceAll(name, "*", "...")
+			params = append(params, Parameter{
+				Name: name,
+			})
+		case types.NodeKindDictSplatPattern:
+			name := child.Utf8Text(content)
+			name = strings.ReplaceAll(name, "**", "...")
+			params = append(params, Parameter{
+				Name: name,
+			})
+		case types.NodeKindDefaultParameter:
+			name := child.ChildByFieldName("name").Utf8Text(content)
+			params = append(params, Parameter{
+				Name: name,
+			})
+		case types.NodeKindTypedParameter:
+			name := child.Child(0).Utf8Text(content)
+			typs := findAllIdentifiers(child.ChildByFieldName("type"), content)
+			params = append(params, Parameter{
+				Name: name,
+				Type: typs,
+			})
+		}
+	}
+	// fmt.Println("----------------------")
+	return params
+}
+
+// 递归查找python函数单个参数类型里面所有标识符
+func findAllIdentifiers(node *sitter.Node, content []byte) []string {
+	if node == nil {
+		return nil
+	}
+	var identifiers []string
+	var walk func(n *sitter.Node)
+	walk = func(n *sitter.Node) {
+		for i := uint(0); i < n.ChildCount(); i++ {
+			child := n.Child(i)
+			if child.IsMissing() || child.IsError() {
+				continue
+			}
+			switch types.ToNodeKind(child.Kind()) {
+			case types.NodeKindIdentifier:
+				identifiers = append(identifiers, child.Utf8Text(content))
+			default:
+				// 递归查找类型中的标识符
+				walk(child)
+			}
+		}
+	}
+	walk(node)
+	return identifiers
+}
+// func parsePyExtends(node *sitter.Node, content []byte) []string {
+// 	if node == nil {
+// 		return nil
+// 	}
+// 	var identifiers []string
+// 	for i := uint(0); i < node.ChildCount(); i++ {
+// 		child := node.Child(i)
+// 		if child.IsMissing() || child.IsError() {
+// 			continue
+// 		}
+// 		switch types.ToNodeKind(child.Kind()) {
+// 		case types.NodeKindIdentifier:
+// 			identifiers = append(identifiers, child.Utf8Text(content))
+// 		case types.NodeKindKeywordArgument:
+// 			name := child.ChildByFieldName("name").Utf8Text(content)
+// 			if name != "metaclass" {
+// 				continue
+// 			}
+// 			// 处理value字段
+// 			value := child.ChildByFieldName("value")
+			
+// 		case types.NodeKindSubscript:
+// 			identifier := findAllIdentifiers(child.ChildByFieldName("value"), content)
+// 			identifiers = append(identifiers, identifier...)
+// 		case types.NodeKindAttribute:
+// 			identifier := findAllIdentifiers(child.ChildByFieldName("attribute"), content)
+// 			identifiers = append(identifiers, identifier...)
+// 		}
+// 	}
+// 	return identifiers
+// }
+
+func parsePyExtends(node *sitter.Node, content []byte) []string {
+	if node == nil {
+		return nil
+	}
+	var results []string
+	var walk func(n *sitter.Node)
+	walk = func(n *sitter.Node) {
+		if n == nil || n.IsMissing() || n.IsError() {
+			return
+		}
+		switch types.ToNodeKind(n.Kind()) {
+		case types.NodeKindIdentifier:
+			results = append(results, n.Utf8Text(content))
+		case types.NodeKindAttribute:
+			// 只取最末尾的 attribute 字段
+			attr := n.ChildByFieldName("attribute")
+			if attr != nil {
+				walk(attr)
+			}
+		case types.NodeKindSubscript:
+			// 分别递归 value 和 subscript 字段
+			// 捕获所有 subscript（可能有多个参数）
+			for i := uint(0); i < n.NamedChildCount(); i++ {
+				child := n.NamedChild(i)
+				if child == nil || child.IsMissing() || child.IsError() {
+					continue
+				}
+				walk(child)
+			}
+		case types.NodeKindKeywordArgument:
+			name := n.ChildByFieldName("name").Utf8Text(content)
+			if name != "metaclass" {
+				return
+			}
+			value := n.ChildByFieldName("value")
+			walk(value)
+		default:
+			for i := uint(0); i < n.ChildCount(); i++ {
+				walk(n.Child(i))
+			}
+		}
+	}
+	walk(node)
+	return results
+}
+

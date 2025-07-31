@@ -3,7 +3,6 @@ package repository
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -17,8 +16,6 @@ import (
 	"codebase-indexer/internal/dto"
 	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/logger"
-
-	"github.com/valyala/fasthttp"
 )
 
 // Server API paths
@@ -35,11 +32,13 @@ type SyncInterface interface {
 	FetchServerHashTree(codebasePath string) (map[string]string, error)
 	UploadFile(filePath string, uploadReq dto.UploadReq) error
 	GetClientConfig() (config.ClientConfig, error)
+	FetchUploadToken(req dto.UploadTokenReq) (*dto.UploadTokenResp, error)
+	FetchFileStatus(req dto.FileStatusReq) (*dto.FileStatusResp, error)
 }
 
 type HTTPSync struct {
 	syncConfig *config.SyncConfig
-	httpClient *fasthttp.Client
+	httpClient *utils.HTTPClient
 	logger     logger.Logger
 	rwMutex    sync.RWMutex
 }
@@ -47,13 +46,8 @@ type HTTPSync struct {
 func NewHTTPSync(syncConfig *config.SyncConfig, logger logger.Logger) SyncInterface {
 	return &HTTPSync{
 		syncConfig: syncConfig,
-		httpClient: &fasthttp.Client{
-			MaxIdleConnDuration: 90 * time.Second,
-			ReadTimeout:         60 * time.Second,
-			WriteTimeout:        utils.BaseWriteTimeoutSeconds * time.Second,
-			MaxConnsPerHost:     500,
-		},
-		logger: logger,
+		httpClient: utils.NewHTTPClient(),
+		logger:     logger,
 	}
 }
 
@@ -77,6 +71,27 @@ func (hs *HTTPSync) calculateTimeout(fileSize int64) time.Duration {
 	return totalTimeout
 }
 
+// ValidateSyncConfig 验证同步配置
+func (hs *HTTPSync) ValidateSyncConfig() error {
+	if hs.syncConfig == nil {
+		return fmt.Errorf("sync config is nil")
+	}
+
+	if hs.syncConfig.ServerURL == "" {
+		return fmt.Errorf("serverURL is empty")
+	}
+
+	if hs.syncConfig.ClientId == "" {
+		return fmt.Errorf("clientId is empty")
+	}
+
+	if hs.syncConfig.Token == "" {
+		return fmt.Errorf("token is empty")
+	}
+
+	return nil
+}
+
 func (hs *HTTPSync) SetSyncConfig(config *config.SyncConfig) {
 	hs.rwMutex.Lock()
 	defer hs.rwMutex.Unlock()
@@ -93,43 +108,31 @@ func (hs *HTTPSync) GetSyncConfig() *config.SyncConfig {
 func (hs *HTTPSync) FetchServerHashTree(codebasePath string) (map[string]string, error) {
 	hs.logger.Info("fetching hash tree from server: %s", codebasePath)
 
-	// Check if config fields are empty
-	if hs.syncConfig == nil || hs.syncConfig.ServerURL == "" || hs.syncConfig.ClientId == "" || hs.syncConfig.Token == "" {
-		return nil, fmt.Errorf("sync config is not properly set, please check clientId, serverURL and token")
+	// 验证配置
+	if err := hs.ValidateSyncConfig(); err != nil {
+		return nil, err
 	}
 
-	// Prepare the request
-	url := fmt.Sprintf("%s%s?clientId=%s&codebasePath=%s",
-		hs.syncConfig.ServerURL, API_GET_CODEBASE_HASH, hs.syncConfig.ClientId, codebasePath)
+	// 构建请求URL
+	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_GET_CODEBASE_HASH)
 
-	req := fasthttp.AcquireRequest()
-	resp := fasthttp.AcquireResponse()
-	defer func() {
-		fasthttp.ReleaseRequest(req)
-		fasthttp.ReleaseResponse(resp)
-	}()
-
-	req.SetRequestURI(url)
-	req.Header.SetMethod("GET")
-	req.Header.SetContentType("application/json")
-	req.Header.Set("Authorization", "Bearer "+hs.syncConfig.Token)
-
-	hs.logger.Info("sending hash tree request to: %s", url)
-	if err := hs.httpClient.Do(req, resp); err != nil {
-		return nil, fmt.Errorf("failed to send request: %v", err)
+	// 构建查询参数
+	queryParams := map[string]string{
+		"clientId":     hs.syncConfig.ClientId,
+		"codebasePath": codebasePath,
 	}
 
-	// Process the response
-	if resp.StatusCode() != fasthttp.StatusOK {
-		return nil, fmt.Errorf("failed to get hash tree, status: %d, response: %s",
-			resp.StatusCode(), string(resp.Body()))
-	}
-
+	// 执行请求
 	var responseData dto.CodebaseHashResp
-	if err := json.Unmarshal(resp.Body(), &responseData); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %v", err)
+	hs.logger.Info("sending HTTP %s request to: %s", "GET", url)
+	startTime := time.Now()
+	if err := hs.httpClient.DoGetRequest(url, queryParams, hs.syncConfig.Token, &responseData); err != nil {
+		return nil, err
 	}
+	duration := time.Since(startTime)
+	hs.logger.Info("HTTP %s %s completed in %v, status: %d", "GET", url, duration, responseData.Code)
 
+	// 处理响应数据
 	hashTree := make(map[string]string)
 	for _, item := range responseData.Data.List {
 		path := item.Path
@@ -157,9 +160,9 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq dto.UploadReq) error {
 	mu := sync.Mutex{}
 	hs.logger.Info("uploading file: %s", filePath)
 
-	// Check if config fields are empty
-	if hs.syncConfig == nil || hs.syncConfig.ServerURL == "" || hs.syncConfig.ClientId == "" || hs.syncConfig.Token == "" {
-		return fmt.Errorf("sync config is not properly set, please check clientId, serverURL and token")
+	// 验证配置
+	if err := hs.ValidateSyncConfig(); err != nil {
+		return err
 	}
 
 	file, err := os.Open(filePath)
@@ -180,11 +183,7 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq dto.UploadReq) error {
 
 	// 设置动态超时
 	timeout := hs.calculateTimeout(fileSize)
-	mu.Lock()
-	hs.httpClient.WriteTimeout = timeout
-	mu.Unlock()
 
-	body := &bytes.Buffer{}
 	counter := &writeCounter{}
 	startTime := time.Now()
 	defer func() {
@@ -194,52 +193,90 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq dto.UploadReq) error {
 		hs.logger.Info("upload stats - file: %s, size: %d bytes, uploaded: %d bytes (%.1f%%), duration: %v, speed: %.2f KB/s",
 			filePath, fileSize, counter.n, float64(counter.n)/float64(fileSize)*100, duration, float64(counter.n)/1024/duration.Seconds())
 	}()
+
+	// 构建multipart表单数据
+	formData := &utils.MultipartFormData{
+		Files: map[string]*utils.MultipartFile{
+			"file": {
+				FileName: filepath.Base(filePath),
+				Reader:   file, // 直接使用文件读取器
+			},
+		},
+		Fields: map[string]string{
+			"clientId":     uploadReq.ClientId,
+			"codebasePath": uploadReq.CodebasePath,
+			"codebaseName": uploadReq.CodebaseName,
+		},
+	}
+
+	// 执行上传请求
+	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_UPLOAD_FILE)
+
+	// 创建带有超时的HTTP请求
+	httpReq := &utils.HTTPRequest{
+		Method:      "POST",
+		URL:         url,
+		Timeout:     timeout,
+		ContentType: "multipart/form-data",
+	}
+
+	// 使用自定义执行方法处理multipart请求
+	hs.logger.Info("sending HTTP %s request to: %s", "POST", url)
+	if err := hs.executeMultipartUpload(httpReq, formData, file, counter); err != nil {
+		return err
+	}
+
+	hs.logger.Info("file uploaded successfully: %s", filePath)
+	return nil
+}
+
+// executeMultipartUpload 执行multipart上传
+func (hs *HTTPSync) executeMultipartUpload(httpReq *utils.HTTPRequest, formData *utils.MultipartFormData, file io.Reader, counter *writeCounter) error {
+	// 创建multipart表单
+	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
-	// Add zip file
-	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
-	if err != nil {
-		return fmt.Errorf("failed to create form file: %v", err)
+	// 添加文件
+	for fieldName, fileData := range formData.Files {
+		part, err := writer.CreateFormFile(fieldName, fileData.FileName)
+		if err != nil {
+			return fmt.Errorf("failed to create form file: %v", err)
+		}
+
+		// 使用多写入器同时写入计数器和表单
+		multiWriter := io.MultiWriter(part, counter)
+		if _, err := io.Copy(multiWriter, file); err != nil {
+			return fmt.Errorf("failed to copy file content: %v", err)
+		}
 	}
 
-	if _, err := io.Copy(io.MultiWriter(part, counter), file); err != nil {
-		return fmt.Errorf("failed to copy file content: %v", err)
+	// 添加普通字段
+	for fieldName, value := range formData.Fields {
+		if err := writer.WriteField(fieldName, value); err != nil {
+			return fmt.Errorf("failed to write field: %v", err)
+		}
 	}
 
-	// Add form fields
-	writer.WriteField("clientId", uploadReq.ClientId)
-	writer.WriteField("codebasePath", uploadReq.CodebasePath)
-	writer.WriteField("codebaseName", uploadReq.CodebaseName)
-
+	// 关闭writer
 	if err := writer.Close(); err != nil {
 		return fmt.Errorf("failed to close writer: %v", err)
 	}
 
-	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_UPLOAD_FILE)
+	// 设置请求体和内容类型
+	httpReq.Body = body.Bytes()
+	httpReq.ContentType = writer.FormDataContentType()
 
-	req := fasthttp.AcquireRequest()
-	resp := fasthttp.AcquireResponse()
-	defer func() {
-		fasthttp.ReleaseRequest(req)
-		fasthttp.ReleaseResponse(resp)
-	}()
-
-	req.SetRequestURI(url)
-	req.Header.SetMethod("POST")
-	req.Header.SetContentType(writer.FormDataContentType())
-	req.Header.Set("Authorization", "Bearer "+hs.syncConfig.Token)
-	req.SetBody(body.Bytes())
-
-	hs.logger.Info("sending file upload request to: %s", url)
-	if err := hs.httpClient.Do(req, resp); err != nil {
-		return fmt.Errorf("failed to send request: %v", err)
+	// 执行请求
+	resp, err := hs.httpClient.DoHTTPRequest(httpReq, hs.syncConfig.Token)
+	if err != nil {
+		return err
 	}
 
-	if resp.StatusCode() != fasthttp.StatusOK {
-		return fmt.Errorf("upload failed, status: %d, response: %s", resp.StatusCode(), string(resp.Body()))
+	// 检查响应状态
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("upload failed, status: %d, response: %s", resp.StatusCode, string(resp.Body))
 	}
 
-	hs.logger.Info("file uploaded successfully: %s", filePath)
 	return nil
 }
 
@@ -252,48 +289,82 @@ const (
 func (hs *HTTPSync) GetClientConfig() (config.ClientConfig, error) {
 	hs.logger.Info("fetching client config from server")
 
-	// Check if config fields are empty
-	if hs.syncConfig == nil || hs.syncConfig.ServerURL == "" || hs.syncConfig.ClientId == "" || hs.syncConfig.Token == "" {
-		return config.ClientConfig{}, fmt.Errorf("sync config is not properly set, please check clientId, serverURL and token")
+	// 验证配置
+	if err := hs.ValidateSyncConfig(); err != nil {
+		return config.ClientConfig{}, err
 	}
 
+	// 构建请求URL
 	uri := fmt.Sprintf(API_GET_CLIENT_CONFIG, "")
 	appInfo := config.GetAppInfo()
 	if appInfo.Version != "" {
 		uri = fmt.Sprintf(API_GET_CLIENT_CONFIG, appInfo.Version+"/")
 	}
 
-	// Prepare the request
 	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, uri)
 
-	req := fasthttp.AcquireRequest()
-	resp := fasthttp.AcquireResponse()
-	defer func() {
-		fasthttp.ReleaseRequest(req)
-		fasthttp.ReleaseResponse(resp)
-	}()
-
-	req.SetRequestURI(url)
-	req.Header.SetMethod("GET")
-	req.Header.SetContentType("application/json")
-	req.Header.Set("Authorization", "Bearer "+hs.syncConfig.Token)
-
-	hs.logger.Info("sending client config request to: %s", url)
-	if err := hs.httpClient.Do(req, resp); err != nil {
-		return config.ClientConfig{}, fmt.Errorf("failed to send request: %v", err)
-	}
-
-	// Process the response
-	if resp.StatusCode() != fasthttp.StatusOK {
-		return config.ClientConfig{}, fmt.Errorf("failed to get client config, status: %d, response: %s",
-			resp.StatusCode(), string(resp.Body()))
-	}
-
+	// 执行请求
 	var clientConfig config.ClientConfig
-	if err := json.Unmarshal(resp.Body(), &clientConfig); err != nil {
-		return config.ClientConfig{}, fmt.Errorf("failed to parse response: %v", err)
+	hs.logger.Info("sending HTTP %s request to: %s", "GET", url)
+	startTime := time.Now()
+	if err := hs.httpClient.DoGetRequest(url, nil, hs.syncConfig.Token, &clientConfig); err != nil {
+		return config.ClientConfig{}, err
 	}
+	duration := time.Since(startTime)
+	hs.logger.Info("HTTP %s %s completed in %v", "GET", url, duration)
 
 	hs.logger.Info("client config fetched successfully")
 	return clientConfig, nil
+}
+
+// FetchUploadToken fetches upload token from server
+func (hs *HTTPSync) FetchUploadToken(req dto.UploadTokenReq) (*dto.UploadTokenResp, error) {
+	hs.logger.Info("fetching upload token from server")
+
+	// 验证配置
+	if err := hs.ValidateSyncConfig(); err != nil {
+		return nil, err
+	}
+
+	// 构建请求URL
+	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_UPLOAD_TOKEN)
+
+	// 执行JSON请求
+	var responseData dto.UploadTokenResp
+	hs.logger.Info("sending HTTP %s request to: %s", "GET", url)
+	startTime := time.Now()
+	if err := hs.httpClient.DoJSONRequest("POST", url, req, hs.syncConfig.Token, &responseData); err != nil {
+		return nil, err
+	}
+	duration := time.Since(startTime)
+	hs.logger.Info("HTTP %s %s completed in %v, status: %d", "POST", url, duration, responseData.Code)
+
+	hs.logger.Info("upload token fetched successfully")
+	return &responseData, nil
+}
+
+// FetchFileStatus fetches file status from server
+func (hs *HTTPSync) FetchFileStatus(req dto.FileStatusReq) (*dto.FileStatusResp, error) {
+	hs.logger.Info("fetching file status from server")
+
+	// 验证配置
+	if err := hs.ValidateSyncConfig(); err != nil {
+		return nil, err
+	}
+
+	// 构建请求URL
+	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_FILE_STATUS)
+
+	// 执行JSON请求
+	var responseData dto.FileStatusResp
+	hs.logger.Info("sending HTTP %s request to: %s", "POST", url)
+	startTime := time.Now()
+	if err := hs.httpClient.DoJSONRequest("POST", url, req, hs.syncConfig.Token, &responseData); err != nil {
+		return nil, err
+	}
+	duration := time.Since(startTime)
+	hs.logger.Info("HTTP %s %s completed in %v, status: %d", "POST", url, duration, responseData.Code)
+
+	hs.logger.Info("file status fetched successfully")
+	return &responseData, nil
 }

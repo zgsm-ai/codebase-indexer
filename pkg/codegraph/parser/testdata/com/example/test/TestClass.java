@@ -103,3 +103,8 @@ public class FinancialReport extends User implements Printable, Savable {
         return revenue - cost;
     }
 }
+public class UserServiceImpl
+        extends com.example.base.BaseService
+        implements com.example.api.UserApi<java.lang.String>,
+                   com.example.api.Loggable,
+                   java.io.Serializable {}

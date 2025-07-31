@@ -76,13 +76,6 @@ func main() {
 		logger.Fatal("failed to initialize storage manager: %v", err)
 		return
 	}
-	// fileScanner := scanner.NewFileScanner(logger)
-	// var syncConfig *syncer.SyncConfig
-	// if *clientId != "" && *serverEndpoint != "" && *token != "" {
-	// 	syncConfig = &syncer.SyncConfig{ClientId: *clientId, ServerURL: *serverEndpoint, Token: *token}
-	// }
-	// httpSync := syncer.NewHTTPSync(syncConfig, logger)
-	// syncScheduler := scheduler.NewScheduler(httpSync, fileScanner, storageManager, logger)
 
 	// Initialize service layer
 	var syncServiceConfig *config.SyncConfig
@@ -182,6 +175,13 @@ func initDir(appName string) error {
 		return fmt.Errorf("failed to get upload temporary directory: %v", err)
 	}
 	fmt.Printf("upload temporary directory: %s\n", uploadTmpPath)
+
+	// Initialize cache db directory
+	cacheDbPath, err := utils.GetCacheDbDir(cachePath)
+	if err != nil {
+		return fmt.Errorf("failed to get cache db directory: %v", err)
+	}
+	fmt.Printf("cache db directory: %s\n", cacheDbPath)
 
 	return nil
 }

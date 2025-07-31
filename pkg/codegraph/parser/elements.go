@@ -43,25 +43,31 @@ func newRootElement(elementTypeValue string, rootIndex uint32) resolver.Element 
 		base.Type = types.ElementTypeMethodCall
 		return &resolver.Call{BaseElement: base}
 	case types.ElementTypeStructCall:
-		base.Type = types.ElementTypeReference
+		base.Type = types.ElementTypeMethodCall
 		return &resolver.Call{BaseElement: base}
 	case types.ElementTypeInterface:
 		base.Type = types.ElementTypeInterface
 		return &resolver.Interface{BaseElement: base}
 	case types.ElementTypeField:
-		base.Type = types.ElementTypeField
+		base.Type = types.ElementTypeVariable
 		return &resolver.Variable{BaseElement: base}
 	case types.ElementTypeVariable:
 		base.Type = types.ElementTypeVariable
 		return &resolver.Variable{BaseElement: base}
 	case types.ElementTypeGlobalVariable:
-		base.Type = types.ElementTypeGlobalVariable
+		base.Type = types.ElementTypeVariable
 		return &resolver.Variable{BaseElement: base}
 	case types.ElementTypeLocalVariable:
-		base.Type = types.ElementTypeLocalVariable
+		base.Type = types.ElementTypeVariable
 		return &resolver.Variable{BaseElement: base}
 	case types.ElementTypeConstant:
-		base.Type = types.ElementTypeConstant
+		base.Type = types.ElementTypeVariable
+		return &resolver.Variable{BaseElement: base}
+	case types.ElementTypeEnum:
+		base.Type = types.ElementTypeVariable
+		return &resolver.Variable{BaseElement: base}
+	case types.ElementTypeEnumConstant:
+		base.Type = types.ElementTypeVariable
 		return &resolver.Variable{BaseElement: base}
 	default:
 		base.Type = types.ElementTypeUndefined

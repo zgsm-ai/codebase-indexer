@@ -125,3 +125,171 @@ func updateElementRange(element Element, capture *sitter.QueryCapture) {
 		int32(capture.Node.EndPosition().Column),
 	})
 }
+func NewReference(rootElement Element, curNode *sitter.Node, name string, owner string) *Reference {
+	return &Reference{
+		BaseElement: &BaseElement{
+			Name: name,
+			Path: rootElement.GetPath(),
+			Type: types.ElementTypeReference,
+			Range: []int32{
+				int32(curNode.StartPosition().Row),
+				int32(curNode.StartPosition().Column),
+				int32(curNode.EndPosition().Row),
+				int32(curNode.EndPosition().Column),
+			},
+		},
+		Owner: owner,
+	}
+}
+
+// 解析java语法中的type_list类型，返回类型列表
+func parseTypeList(node *sitter.Node, content []byte) []string {
+	if node == nil {
+		return nil
+	}
+	if types.ToNodeKind(node.Kind()) != types.NodeKindTypeList {
+		return []string{node.Utf8Text(content)}
+	}
+	typs := []string{}
+	for i := uint(0); i < node.ChildCount(); i++ {
+		child := node.Child(i)
+		if child == nil || child.Kind() == types.Comma {
+			continue
+		}
+		switch types.ToNodeKind(child.Kind()) {
+		case types.NodeKindScopedTypeIdentifier:
+			// TODO owner以后可能有用
+			_, superType := parseScopedTypeIdentifier(child, content)
+			typs = append(typs, superType)
+		case types.NodeKindTypeIdentifier:
+			typs = append(typs, child.Utf8Text(content))
+		case types.NodeKindGenericType:
+			typs = append(typs, parseGenericType(child, content)...)
+		}
+
+	}
+	return typs
+}
+
+// scoped_type_identifier
+//
+//	scoped_type_identifier
+//	  scoped_type_identifier
+//	    type_identifier (A)
+//	    type_identifier (B)
+//	  type_identifier (C)
+//	type_identifier (D)
+//
+// 获取第二层的identifier，即返回D
+func parseScopedTypeIdentifier(node *sitter.Node, content []byte) (owner string, superType string) {
+	if node == nil {
+		return "", ""
+	}
+	kind := types.ToNodeKind(node.Kind())
+	if kind != types.NodeKindScopedTypeIdentifier {
+		return "", ""
+	}
+	// 找到最后一个 type_identifier 子节点
+
+	for i := int(node.ChildCount()) - 1; i >= 0; i-- {
+		child := node.Child(uint(i))
+		if superType == types.EmptyString && types.ToNodeKind(child.Kind()) == types.NodeKindTypeIdentifier {
+			superType = child.Utf8Text(content)
+		} else if owner == types.EmptyString && types.ToNodeKind(child.Kind()) == types.NodeKindScopedTypeIdentifier {
+			owner = child.Utf8Text(content)
+		}
+	}
+	return owner, superType
+}
+
+// 递归查找节点下所有的type_identifier
+func findAllTypeIdentifiers(node *sitter.Node, content []byte) []string {
+	if node == nil {
+		return nil
+	}
+	// 如果当前节点就是type_identifier，直接返回
+	if types.ToNodeKind(node.Kind()) == types.NodeKindTypeIdentifier {
+		return []string{node.Utf8Text(content)}
+	}
+
+	// 使用栈进行迭代遍历，避免递归
+	stack := []*sitter.Node{node}
+	identifiers := make([]string, 0, 4) // 预分配容量，大多数情况下基础类不会太多
+
+	for len(stack) > 0 {
+		// 弹出栈顶元素
+		current := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		if current == nil {
+			continue
+		}
+
+		// 如果是type_identifier，添加到结果中
+		if types.ToNodeKind(current.Kind()) == types.NodeKindTypeIdentifier {
+			identifiers = append(identifiers, current.Utf8Text(content))
+			continue
+		}
+
+		// 将子节点压入栈中（倒序压入以保持遍历顺序）
+		for i := int(current.ChildCount()) - 1; i >= 0; i-- {
+			child := current.Child(uint(i))
+			if child != nil {
+				stack = append(stack, child)
+			}
+		}
+	}
+
+	return identifiers
+}
+
+// 处理cpp语法中的base_class_clause类型，返回类型列表
+func parseBaseClassClause(node *sitter.Node, content []byte) []string {
+	if node == nil {
+		return nil
+	}
+
+	// 如果不是base_class_clause节点，直接返回节点内容
+	if types.ToNodeKind(node.Kind()) != types.NodeKindBaseClassClause {
+		return []string{node.Utf8Text(content)}
+	}
+
+	typs := []string{}
+
+	// 从后往前遍历所有子节点
+	for i := int(node.ChildCount()) - 1; i >= 0; i-- {
+		child := node.Child(uint(i))
+		if child == nil || child.Kind() == types.Comma || child.Kind() == types.Colon {
+			continue
+		}
+
+		// 处理类型节点
+		var baseClasses []string
+
+		if types.ToNodeKind(child.Kind()) == types.NodeKindTypeIdentifier {
+			// 直接是type_identifier
+			baseClasses = []string{child.Utf8Text(content)}
+		} else {
+			// 不是type_identifier，递归查找所有的type_identifier
+			baseClasses = findAllTypeIdentifiers(child, content)
+		}
+
+		// 如果找到了类型标识符，添加到结果中
+		if len(baseClasses) > 0 {
+			typs = append(typs, baseClasses...)
+		}
+	}
+
+	return typs
+}
+func removeDuplicates(slice []string) []string {
+	seen := make(map[string]struct{})
+	var result []string
+	for _, item := range slice {
+		if _, ok := seen[item]; !ok {
+			seen[item] = struct{}{}
+			result = append(result, item)
+		}
+	}
+	return result
+}
