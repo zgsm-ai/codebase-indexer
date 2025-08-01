@@ -26,6 +26,12 @@
 
   ) @definition.function
 
+;; Generator declaration
+(generator_function_declaration
+  name: (identifier) @definition.function.name
+  parameters: (formal_parameters)? @definition.function.parameters
+  ) @definition.function
+
 ;; arrow_function declarations
 (variable_declarator
   name:(identifier)@definition.function.name

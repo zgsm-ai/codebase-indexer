@@ -35,7 +35,7 @@ import React, { useState, useEffect } from 'react';`),
 			wantImports: []resolver.Import{
 				{BaseElement: &resolver.BaseElement{Name: "Component", Type: types.ElementTypeImport}, Source: "@angular/core"},
 				{BaseElement: &resolver.BaseElement{Name: "OnInit", Type: types.ElementTypeImport}, Source: "@angular/core"},
-				{BaseElement: &resolver.BaseElement{Name: "", Type: types.ElementTypeImport}, Source: "lodash", Alias: "_"},
+				{BaseElement: &resolver.BaseElement{Name: "lodash", Type: types.ElementTypeImport}, Source: "lodash", Alias: "_"},
 				{BaseElement: &resolver.BaseElement{Name: "moment", Type: types.ElementTypeImport}, Source: "moment"},
 				{BaseElement: &resolver.BaseElement{Name: "User", Type: types.ElementTypeImport}, Source: "./types"},
 				{BaseElement: &resolver.BaseElement{Name: "UserSettings", Type: types.ElementTypeImport}, Source: "./types"},
@@ -75,7 +75,7 @@ import * as lodash from 'lodash';`),
 			wantImports: []resolver.Import{
 				{BaseElement: &resolver.BaseElement{Name: "Component", Type: types.ElementTypeImport}, Source: "@angular/core", Alias: "AngularComponent"},
 				{BaseElement: &resolver.BaseElement{Name: "useState", Type: types.ElementTypeImport}, Source: "react", Alias: "useStateHook"},
-				{BaseElement: &resolver.BaseElement{Name: "", Type: types.ElementTypeImport}, Source: "lodash", Alias: "lodash"},
+				{BaseElement: &resolver.BaseElement{Name: "lodash", Type: types.ElementTypeImport}, Source: "lodash", Alias: "lodash"},
 			},
 			description: "测试TypeScript重命名导入语法",
 		},
@@ -113,7 +113,14 @@ import type { ThemeConfig } from './theme';`),
 
 				// 创建实际导入的映射
 				actualImports := make(map[string]*resolver.Import)
-				for _, importItem := range res.Imports {
+				for i, importItem := range res.Imports {
+					// 添加基础字段断言
+					assert.NotEmpty(t, importItem.GetPath(), "Import[%d] Path 不能为空", i)
+					assert.NotEmpty(t, importItem.GetRange(), "Import[%d] Range 不能为空", i)
+					assert.Equal(t, 4, len(importItem.GetRange()), "Import[%d] Range 应该包含4个元素", i)
+					assert.NotEqual(t, types.ElementTypeUndefined, importItem.GetType(), "Import[%d] Type 不能为 undefined", i)
+					assert.NotEmpty(t, string(importItem.Scope), "Import[%d] Scope 不能为空", i)
+
 					key := fmt.Sprintf("%s_%s", importItem.GetName(), importItem.Source)
 					actualImports[key] = importItem
 				}
@@ -246,7 +253,15 @@ func TestTypeScriptResolver_ResolveVariable(t *testing.T) {
 
 				// 创建实际变量的映射
 				actualVarMap := make(map[string]*resolver.Variable)
-				for _, variable := range actualVariables {
+				for i, variable := range actualVariables {
+					// 添加基础字段断言
+					assert.NotEmpty(t, variable.GetName(), "Variable[%d] Name 不能为空", i)
+					assert.NotEmpty(t, variable.GetPath(), "Variable[%d] Path 不能为空", i)
+					assert.NotEmpty(t, variable.GetRange(), "Variable[%d] Range 不能为空", i)
+					assert.Equal(t, 4, len(variable.GetRange()), "Variable[%d] Range 应该包含4个元素", i)
+					assert.NotEqual(t, types.ElementTypeUndefined, variable.GetType(), "Variable[%d] Type 不能为 undefined", i)
+					assert.NotEmpty(t, string(variable.Scope), "Variable[%d] Scope 不能为空", i)
+
 					actualVarMap[variable.GetName()] = variable
 					fmt.Printf("变量: %s, Type: %s, VariableType: %v\n",
 						variable.GetName(), variable.GetType(), variable.VariableType)
@@ -488,7 +503,15 @@ func TestTypeScriptResolver_ResolveFunction(t *testing.T) {
 
 				// 创建实际函数的映射
 				actualFuncMap := make(map[string]*resolver.Function)
-				for _, function := range actualFunctions {
+				for i, function := range actualFunctions {
+					// 添加基础字段断言
+					assert.NotEmpty(t, function.GetName(), "Function[%d] Name 不能为空", i)
+					assert.NotEmpty(t, function.GetPath(), "Function[%d] Path 不能为空", i)
+					assert.NotEmpty(t, function.GetRange(), "Function[%d] Range 不能为空", i)
+					assert.Equal(t, 4, len(function.GetRange()), "Function[%d] Range 应该包含4个元素", i)
+					assert.NotEqual(t, types.ElementTypeUndefined, function.GetType(), "Function[%d] Type 不能为 undefined", i)
+					assert.NotEmpty(t, string(function.Scope), "Function[%d] Scope 不能为空", i)
+
 					actualFuncMap[function.GetName()] = function
 					fmt.Printf("函数: %s, 参数数量: %d, 返回类型: %v\n",
 						function.GetName(), len(function.Parameters), function.Declaration.ReturnType)
@@ -670,7 +693,15 @@ func TestTypeScriptResolver_ResolveInterface(t *testing.T) {
 
 				// 创建实际接口的映射
 				actualIfaceMap := make(map[string]*resolver.Interface)
-				for _, iface := range actualInterfaces {
+				for i, iface := range actualInterfaces {
+					// 添加基础字段断言
+					assert.NotEmpty(t, iface.GetName(), "Interface[%d] Name 不能为空", i)
+					assert.NotEmpty(t, iface.GetPath(), "Interface[%d] Path 不能为空", i)
+					assert.NotEmpty(t, iface.GetRange(), "Interface[%d] Range 不能为空", i)
+					assert.Equal(t, 4, len(iface.GetRange()), "Interface[%d] Range 应该包含4个元素", i)
+					assert.NotEqual(t, types.ElementTypeUndefined, iface.GetType(), "Interface[%d] Type 不能为 undefined", i)
+					assert.NotEmpty(t, string(iface.Scope), "Interface[%d] Scope 不能为空", i)
+
 					actualIfaceMap[iface.GetName()] = iface
 					fmt.Printf("接口: %s, 方法数量: %d, 继承: %v\n",
 						iface.GetName(), len(iface.Methods), iface.SuperInterfaces)
@@ -908,7 +939,15 @@ func TestTypeScriptResolver_ResolveClass(t *testing.T) {
 
 				// 创建实际类的映射
 				actualClassMap := make(map[string]*resolver.Class)
-				for _, class := range actualClasses {
+				for i, class := range actualClasses {
+					// 添加基础字段断言
+					assert.NotEmpty(t, class.GetName(), "Class[%d] Name 不能为空", i)
+					assert.NotEmpty(t, class.GetPath(), "Class[%d] Path 不能为空", i)
+					assert.NotEmpty(t, class.GetRange(), "Class[%d] Range 不能为空", i)
+					assert.Equal(t, 4, len(class.GetRange()), "Class[%d] Range 应该包含4个元素", i)
+					assert.NotEqual(t, types.ElementTypeUndefined, class.GetType(), "Class[%d] Type 不能为 undefined", i)
+					assert.NotEmpty(t, string(class.Scope), "Class[%d] Scope 不能为空", i)
+
 					actualClassMap[class.GetName()] = class
 					fmt.Printf("类: %s, 字段数量: %d, 方法数量: %d, 继承: %v, 实现: %v\n",
 						class.GetName(), len(class.Fields), len(class.Methods),
@@ -1015,68 +1054,22 @@ func TestTypeScriptResolver_ResolveClass(t *testing.T) {
 	}
 }
 
-func TestTypeScriptResolver_ResolveComprehensive(t *testing.T) {
-	logger := initLogger()
-	parser := NewSourceFileParser(logger)
-
-	// 使用已有测试文件
-	sourceFile := &types.SourceFile{
-		Path:    "testdata/test.ts",
-		Content: readFile("testdata/test.ts"),
-	}
-
-	res, err := parser.Parse(context.Background(), sourceFile)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-
-	// 统计各种类型的元素
-	countByType := make(map[types.ElementType]int)
-	for _, elem := range res.Elements {
-		countByType[elem.GetType()]++
-	}
-
-	// 打印统计结果
-	fmt.Println("\nTypeScript文件解析结果统计:")
-	fmt.Printf("导入语句: %d\n", len(res.Imports))
-	fmt.Printf("函数: %d\n", countByType[types.ElementTypeFunction])
-	fmt.Printf("变量: %d\n", countByType[types.ElementTypeVariable])
-	fmt.Printf("类: %d\n", countByType[types.ElementTypeClass])
-	fmt.Printf("方法: %d\n", countByType[types.ElementTypeMethod])
-	fmt.Printf("方法调用: %d\n", countByType[types.ElementTypeMethodCall])
-	fmt.Printf("函数调用: %d\n", countByType[types.ElementTypeFunctionCall])
-	fmt.Printf("接口: %d\n", countByType[types.ElementTypeInterface])
-	fmt.Printf("引用: %d\n", countByType[types.ElementTypeReference])
-}
-
 func TestTypeScriptResolver_ResolveMethodCalls(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
 
-	tsCode := `
-	class Calculator {
-		private value: number = 0;
-		
-		constructor(initialValue: number) {
-			this.value = initialValue;
-		}
-		
-		add(x: number): number {
-			this.value += x;
-			return this.value;
-		}
-		
-		multiply(x: number): number {
-			this.value *= x;
-			return this.value;
-		}
-		
-		static sqrt(x: number): number {
-			return Math.sqrt(x);
-		}
-	}
-	
-
-	
+	testCases := []struct {
+		name        string
+		sourceFile  *types.SourceFile
+		wantErr     error
+		wantCalls   []resolver.Call
+		description string
+	}{
+		{
+			name: "TypeScript方法调用",
+			sourceFile: &types.SourceFile{
+				Path: "testdata/ts_method_calls.ts",
+				Content: []byte(`
 	// 链式方法调用
 	const result = calc.add(10).multiply(2);
 	
@@ -1102,35 +1095,100 @@ func TestTypeScriptResolver_ResolveMethodCalls(t *testing.T) {
 	log('Info message');
 	warn('Warning message');
 	error('Error message');
-	`
-
-	sourceFile := &types.SourceFile{
-		Path:    "testdata/ts_method_calls.ts",
-		Content: []byte(tsCode),
+	`),
+			},
+			wantErr: nil,
+			wantCalls: []resolver.Call{
+				{BaseElement: &resolver.BaseElement{Name: "add", Type: types.ElementTypeMethodCall}, Owner: "calc"},
+				{BaseElement: &resolver.BaseElement{Name: "multiply", Type: types.ElementTypeMethodCall}, Owner: "calc.add(10)"},
+				{BaseElement: &resolver.BaseElement{Name: "sum", Type: types.ElementTypeMethodCall}, Owner: "math"},
+				{BaseElement: &resolver.BaseElement{Name: "diff", Type: types.ElementTypeMethodCall}, Owner: "math"},
+				{BaseElement: &resolver.BaseElement{Name: "getElementById", Type: types.ElementTypeMethodCall}, Owner: "document"},
+				{BaseElement: &resolver.BaseElement{Name: "addEventListener", Type: types.ElementTypeMethodCall}, Owner: "document.getElementById('app')"},
+				{BaseElement: &resolver.BaseElement{Name: "log", Type: types.ElementTypeMethodCall}, Owner: "console"},
+				{BaseElement: &resolver.BaseElement{Name: "log", Type: types.ElementTypeMethodCall}, Owner: "console"},
+				{BaseElement: &resolver.BaseElement{Name: "sum", Type: types.ElementTypeMethodCall}, Owner: "math"},
+				{BaseElement: &resolver.BaseElement{Name: "add", Type: types.ElementTypeMethodCall}, Owner: "calc"},
+				{BaseElement: &resolver.BaseElement{Name: "multiply", Type: types.ElementTypeMethodCall}, Owner: "calc"},
+				{BaseElement: &resolver.BaseElement{Name: "log", Type: types.ElementTypeFunctionCall}},
+				{BaseElement: &resolver.BaseElement{Name: "warn", Type: types.ElementTypeFunctionCall}},
+				{BaseElement: &resolver.BaseElement{Name: "error", Type: types.ElementTypeFunctionCall}},
+			},
+			description: "测试TypeScript各种方法调用的解析",
+		},
 	}
 
-	res, err := parser.Parse(context.Background(), sourceFile)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := parser.Parse(context.Background(), tt.sourceFile)
+			assert.ErrorIs(t, err, tt.wantErr)
+			assert.NotNil(t, res)
 
-	callCount := 0
-	fmt.Println("\n方法调用详情:")
-	for _, elem := range res.Elements {
-		if elem.GetType() == types.ElementTypeMethodCall || elem.GetType() == types.ElementTypeFunctionCall {
-			callCount++
-			call, ok := elem.(*resolver.Call)
-			if ok {
-				fmt.Printf("[%d] 调用: %s\n", callCount, call.GetName())
-				if call.Owner != "" {
-					fmt.Printf("  所有者: %s\n", call.Owner)
+			if err == nil {
+				fmt.Printf("测试用例: %s\n", tt.name)
+				fmt.Printf("期望调用数量: %d\n", len(tt.wantCalls))
+
+				// 收集所有方法调用
+				var actualCalls []*resolver.Call
+				for _, element := range res.Elements {
+					if element.GetType() == types.ElementTypeMethodCall || element.GetType() == types.ElementTypeFunctionCall {
+						if call, ok := element.(*resolver.Call); ok {
+							actualCalls = append(actualCalls, call)
+						}
+					}
 				}
-				if len(call.Parameters) > 0 {
-					fmt.Printf("  参数数量: %d\n", len(call.Parameters))
+
+				fmt.Printf("实际调用数量: %d\n", len(actualCalls))
+
+				// 打印所有找到的调用
+				for i, call := range actualCalls {
+					fmt.Printf("[%d] 调用: %s, 类型: %s, 所有者: %s\n",
+						i+1, call.GetName(), call.GetType(), call.Owner)
 				}
+
+				// 验证调用数量精确匹配
+				assert.Equal(t, len(tt.wantCalls), len(actualCalls),
+					"调用数量不匹配，期望 %d，实际 %d", len(tt.wantCalls), len(actualCalls))
+
+				// 创建实际调用的映射
+				actualCallMap := make(map[string]*resolver.Call)
+				for i, call := range actualCalls {
+					// 添加基础字段断言
+					assert.NotEmpty(t, call.GetName(), "Call[%d] Name 不能为空", i)
+					assert.NotEmpty(t, call.GetPath(), "Call[%d] Path 不能为空", i)
+					assert.NotEmpty(t, call.GetRange(), "Call[%d] Range 不能为空", i)
+					assert.Equal(t, 4, len(call.GetRange()), "Call[%d] Range 应该包含4个元素", i)
+					assert.NotEqual(t, types.ElementTypeUndefined, call.GetType(), "Call[%d] Type 不能为 undefined", i)
+					assert.NotEmpty(t, string(call.Scope), "Call[%d] Scope 不能为空", i)
+
+					key := fmt.Sprintf("%s_%s_%s", call.GetName(), call.Owner, call.GetType())
+					actualCallMap[key] = call
+				}
+
+				// 验证每个期望的调用
+				foundCount := 0
+				for _, wantCall := range tt.wantCalls {
+					key := fmt.Sprintf("%s_%s_%s", wantCall.GetName(), wantCall.Owner, wantCall.GetType())
+					actualCall, exists := actualCallMap[key]
+					assert.True(t, exists, "未找到调用: %s (所有者: %s, 类型: %s)",
+						wantCall.GetName(), wantCall.Owner, wantCall.GetType())
+
+					if exists {
+						foundCount++
+						// 验证调用名称和类型
+						assert.Equal(t, wantCall.GetName(), actualCall.GetName(),
+							"调用名称不匹配")
+						assert.Equal(t, wantCall.GetType(), actualCall.GetType(),
+							"调用类型不匹配")
+						assert.Equal(t, wantCall.Owner, actualCall.Owner,
+							"调用所有者不匹配")
+					}
+				}
+
+				// 验证找到了所有期望的调用
+				assert.Equal(t, len(tt.wantCalls), foundCount,
+					"找到的调用数量不匹配，期望 %d，实际 %d", len(tt.wantCalls), foundCount)
 			}
-		}
+		})
 	}
-
-	fmt.Printf("方法调用总数: %d\n", callCount)
-	assert.Greater(t, callCount, 0, "应该找到至少一个方法调用")
 }

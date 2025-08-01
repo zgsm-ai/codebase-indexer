@@ -30,7 +30,6 @@ func (r *GoResolver) resolveImport(ctx context.Context, element *Import, rc *Res
 			switch types.ToElementType(nodeCaptureName) {
 			case types.ElementTypeImportName:
 				element.Name = content
-				element.Scope = types.ScopePackage
 			case types.ElementTypeImportAlias:
 				element.Alias = content
 			case types.ElementTypeImportPath:
@@ -43,8 +42,10 @@ func (r *GoResolver) resolveImport(ctx context.Context, element *Import, rc *Res
 						element.Name = path
 					}
 				}
+				element.Source = path
 			}
 		}
+		element.Scope = types.ScopePackage
 	}
 	return elements, nil
 }
@@ -591,20 +592,15 @@ func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc 
 	// 根据捕获名称设置元素类型和作用域
 	switch types.ToElementType(rootCaptureName) {
 	case types.ElementTypeGlobalVariable:
-		element.Type = types.ElementTypeGlobalVariable
 		// 根据名称首字母判断作用域
 		element.Scope = analyzeScope(element.BaseElement.Name)
 	case types.ElementTypeVariable:
-		element.Type = types.ElementTypeVariable
 		element.Scope = types.ScopeFunction
 	case types.ElementTypeLocalVariable:
-		element.Type = types.ElementTypeLocalVariable
 		element.Scope = types.ScopeFunction
 		// 处理多变量声明
 		elements = r.processMultipleVariableDeclaration(rootCapture, element, rc, elements, nil)
-
 	case types.ElementTypeConstant:
-		element.Type = types.ElementTypeConstant
 		element.Scope = types.ScopeFunction
 	}
 

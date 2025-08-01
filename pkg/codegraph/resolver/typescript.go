@@ -39,6 +39,16 @@ func (ts *TypeScriptResolver) resolveImport(ctx context.Context, element *Import
 			element.Source = strings.Trim(strings.Trim(content, "'"), "\"")
 		}
 	}
+	if element.Name == types.EmptyString && element.Source != types.EmptyString {
+		pathParts := strings.Split(element.Source, types.Slash)
+		if len(pathParts) > 0 {
+			element.Name = pathParts[len(pathParts)-1]
+		}
+		if strings.Contains(element.Name, types.Dot) {
+			element.Name = strings.SplitN(element.Name, types.Dot, 2)[0]
+		}
+	}
+	element.Scope = types.ScopePackage
 	return elements, nil
 }
 
@@ -299,6 +309,7 @@ func (ts *TypeScriptResolver) resolveInterface(ctx context.Context, element *Int
 	for _, ref := range references {
 		elements = append(elements, ref)
 	}
+	element.Scope = types.ScopeFile
 	return elements, nil
 }
 
@@ -342,6 +353,10 @@ func (ts *TypeScriptResolver) resolveCall(ctx context.Context, element *Call, rc
 			element.BaseElement.Name = refPathMap["property"]
 			element.Owner = refPathMap["object"]
 		}
+	}
+	// 设置默认Scope
+	if element.Scope == "" {
+		element.Scope = types.ScopeFunction
 	}
 	return elements, nil
 }
@@ -638,6 +653,7 @@ func parseTypeScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Refer
 							int32(child.EndPosition().Row),
 							int32(child.EndPosition().Column),
 						},
+						Scope: types.ScopeBlock,
 					},
 				}
 				if strings.Contains(typeText, ".") {
