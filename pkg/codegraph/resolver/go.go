@@ -929,12 +929,8 @@ func (r *GoResolver) resolveCall(ctx context.Context, element *Call, rc *Resolve
 		if capture.Node.IsMissing() || capture.Node.IsError() {
 			continue
 		}
-
 		nodeCaptureName := rc.CaptureNames[capture.Index]
-		content := capture.Node.Utf8Text(rc.SourceFile.Content)
-		// 更新元素的Range和其他基本属性
 		updateRootElement(element, &capture, nodeCaptureName, rc.SourceFile.Content)
-
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeFunctionCall:
 			// 处理整个函数调用表达式
@@ -971,27 +967,9 @@ func (r *GoResolver) resolveCall(ctx context.Context, element *Call, rc *Resolve
 
 		// 处理结构体实例化
 		case types.ElementTypeStructCall:
-			// 创建引用元素
-			refType := content
-
-			ref := &Reference{
-				BaseElement: &BaseElement{
-					Name: refType,
-					Type: types.ElementTypeReference,
-					Path: element.Path,
-				},
-			}
-			updateElementRange(ref, &capture)
-			if strings.Contains(refType, ".") {
-				parts := strings.Split(refType, ".")
-				if len(parts) == 2 {
-					ref.Owner = parts[0]
-					ref.BaseElement.Name = parts[1]
-				}
-			} else {
-				ref.Owner = ""
-			}
-			references = append(references, ref)
+			refPathMap := extractReferencePath(&capture.Node, rc.SourceFile.Content)
+			element.BaseElement.Name = refPathMap["property"]
+			element.Owner = refPathMap["object"]
 		}
 	}
 
