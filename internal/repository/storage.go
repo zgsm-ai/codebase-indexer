@@ -13,7 +13,7 @@ import (
 	"codebase-indexer/pkg/logger"
 )
 
-type SotrageInterface interface {
+type StorageInterface interface {
 	GetCodebaseConfigs() map[string]*config.CodebaseConfig
 	GetCodebaseConfig(codebaseId string) (*config.CodebaseConfig, error)
 	SaveCodebaseConfig(config *config.CodebaseConfig) error
@@ -28,7 +28,7 @@ type StorageManager struct {
 }
 
 // NewStorageManager creates a new configuration manager
-func NewStorageManager(cacheDir string, logger logger.Logger) (SotrageInterface, error) {
+func NewStorageManager(cacheDir string, logger logger.Logger) (StorageInterface, error) {
 	// Make sure codebase directory exists
 	codebasePath := filepath.Join(cacheDir, "codebase")
 	if _, err := os.Stat(codebasePath); os.IsNotExist(err) {

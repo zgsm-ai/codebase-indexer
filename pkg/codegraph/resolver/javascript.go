@@ -29,8 +29,6 @@ func (js *JavaScriptResolver) resolveImport(ctx context.Context, element *Import
 		nodeCaptureName := rc.CaptureNames[capture.Index]
 		content := capture.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(nodeCaptureName) {
-		case types.ElementTypeImport:
-			element.Type = types.ElementTypeImport
 		case types.ElementTypeImportName:
 			element.Name = content
 		case types.ElementTypeImportAlias:
@@ -41,6 +39,17 @@ func (js *JavaScriptResolver) resolveImport(ctx context.Context, element *Import
 		}
 	}
 
+	// 确保有名称：如果还没有名称且有Source，从Source路径中提取最后一个部分
+	if element.Name == types.EmptyString && element.Source != types.EmptyString {
+		pathParts := strings.Split(element.Source, types.Slash)
+		if len(pathParts) > 0 {
+			element.Name = pathParts[len(pathParts)-1]
+		}
+		if strings.Contains(element.Name, types.Dot) {
+			element.Name = strings.SplitN(element.Name, types.Dot, 2)[0]
+		}
+	}
+	element.Scope = types.ScopePackage
 	return elements, nil
 }
 
@@ -119,14 +128,38 @@ func extractModifiers(content string) string {
 func containsModifier(content string, modifier string) bool {
 	// 生成器函数特殊处理
 	if modifier == "*" {
-		// 检查是否包含 "function*" 或 "* "
-		return strings.Contains(content, "function*") || strings.Contains(content, "* ")
+		// 只在函数声明的开始部分查找生成器修饰符
+		// 检查 "function*" 或对象方法中的 "* methodName"
+		if strings.Contains(content, "function*") {
+			return true
+		}
+
+		// 对于对象方法: * methodName() { ... }
+		// 确保 * 出现在行首或大括号后，且后面跟着标识符
+		lines := strings.Split(content, "\n")
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "* ") {
+				// 确保 * 后面跟着的是标识符而不是运算符
+				rest := strings.TrimSpace(trimmed[2:])
+				if len(rest) > 0 && (rest[0] >= 'a' && rest[0] <= 'z' || rest[0] >= 'A' && rest[0] <= 'Z' || rest[0] == '_' || rest[0] == '$') {
+					return true
+				}
+			}
+		}
+		return false
 	}
 
-	// 其他修饰符需要确保是单独的单词
-	words := strings.Fields(content)
+	// 其他修饰符需要确保是单独的单词，且不在等号右边
+	// 分割成等号左右两部分，只在左边查找修饰符
+	parts := strings.SplitN(content, "=", 2)
+	searchArea := parts[0] // 只在等号左边查找修饰符
+
+	words := strings.Fields(searchArea)
 	for _, word := range words {
-		if word == modifier {
+		// 清理可能的标点符号
+		cleanWord := strings.Trim(word, "(){}[],;:")
+		if cleanWord == modifier {
 			return true
 		}
 	}
@@ -401,6 +434,7 @@ func parseJavaScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Refer
 					} else {
 						ref.BaseElement.Name = fieldType
 					}
+					ref.BaseElement.Scope = types.ScopeBlock
 				}
 			}
 		case string(types.NodeKindIdentifier):
@@ -421,6 +455,7 @@ func parseJavaScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Refer
 						},
 					},
 				}
+				ref.BaseElement.Scope = types.ScopeBlock
 			}
 		case string(types.NodeKindMemberExpression):
 			// 成员表达式是引用类型
@@ -441,6 +476,7 @@ func parseJavaScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Refer
 					},
 					Owner: objectNode.Utf8Text(content),
 				}
+				ref.BaseElement.Scope = types.ScopeBlock
 				ref.BaseElement.Name = propertyNode.Utf8Text(content)
 				fieldType = ref.Owner + "." + ref.BaseElement.Name
 			} else {
@@ -790,8 +826,8 @@ func extractReferencePath(node *sitter.Node, content []byte) map[string]string {
 			if objectNode.Kind() == string(types.NodeKindMemberExpression) {
 				// 对于嵌套的成员表达式，递归处理
 				subResult := extractReferencePath(objectNode, content)
-				if subResult["object"] != "" {
-					result["object"] = subResult["object"] + "." + subResult["property"]
+				if subResult["object"] != types.EmptyString {
+					result["object"] = subResult["object"] + types.Dot + subResult["property"]
 				} else {
 					result["object"] = subResult["property"]
 				}
@@ -818,6 +854,21 @@ func extractReferencePath(node *sitter.Node, content []byte) map[string]string {
 		}
 	}
 
+	if node.Kind() == string(types.NodeKindTypeIdentifier) {
+		result["property"] = string(node.Utf8Text(content))
+		return result
+	}
+
+	if node.Kind() == string(types.NodeKindQualifiedType) {
+		propertyNode := node.ChildByFieldName("name")
+		if propertyNode != nil {
+			result["property"] = string(propertyNode.Utf8Text(content))
+		}
+		objectNode := node.ChildByFieldName("package")
+		if objectNode != nil {
+			result["object"] = string(objectNode.Utf8Text(content))
+		}
+	}
 	return result
 }
 
@@ -867,6 +918,11 @@ func (js *JavaScriptResolver) resolveCall(ctx context.Context, element *Call, rc
 			element.BaseElement.Name = refPathMap["property"]
 			element.Owner = refPathMap["object"]
 		}
+	}
+
+	// 设置默认Scope
+	if element.Scope == "" {
+		element.Scope = types.ScopeFunction
 	}
 
 	return elements, nil
@@ -988,19 +1044,16 @@ func isRequireCallCapture(rc *ResolveContext) bool {
 		return false
 	}
 
-	// 检查第一个捕获是否为函数调用
 	rootCapture := rc.Match.Captures[0]
 	if rootCapture.Node.Kind() != string(types.NodeKindCallExpression) {
 		return false
 	}
 
-	// 获取函数名
 	funcNode := rootCapture.Node.ChildByFieldName("function")
 	if funcNode == nil {
 		return false
 	}
 
-	// 检查是否为"require"
 	return funcNode.Kind() == string(types.NodeKindIdentifier) && string(funcNode.Utf8Text(rc.SourceFile.Content)) == "require"
 }
 

@@ -6,21 +6,24 @@
 (import_declaration
   (import_spec_list
     (import_spec
-      name: (package_identifier) * @import.alias
+      name: [(package_identifier)(dot)] * @import.alias
       path: (interpreted_string_literal) @import.path
-      )
+      )@import
     ) *
+  ) 
 
+(import_declaration
   (import_spec
-    name: (package_identifier) * @import.alias
+    name: [(package_identifier)(dot)] * @import.alias
     path: (interpreted_string_literal) @import.path
-    ) *
-  ) @import
+    ) * @import
+  )
 
 ;; function
 (function_declaration
   name: (identifier) @definition.function.name
   parameters: (parameter_list) @definition.function.parameters
+  result:(parameter_list)? @definition.function.return_type
   ) @definition.function
 
 ;; 全局变量声明 - 直接捕获标识符节点
@@ -76,6 +79,7 @@
               )
   name: (field_identifier) @definition.method.name
   parameters: (parameter_list) @definition.method.parameters
+  result:(parameter_list)? @definition.function.return_type
   ) @definition.method
 
 (type_declaration (type_spec name: (type_identifier) @definition.interface.name type: (interface_type) @definition.interface.type)) @definition.interface

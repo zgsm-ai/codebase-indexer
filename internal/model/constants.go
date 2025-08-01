@@ -18,6 +18,7 @@ const (
 
 // EventType 事件类型常量
 const (
+	EventTypeUnknown      = "unknown"
 	EventTypeAddFile      = "add_file"      // 创建文件事件
 	EventTypeModifyFile   = "modify_file"   // 更新文件事件
 	EventTypeDeleteFile   = "delete_file"   // 删除文件事件

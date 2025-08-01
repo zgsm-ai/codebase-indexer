@@ -39,7 +39,7 @@ type CheckIgnoreResult struct {
 
 // NewExtensionService 创建新的扩展接口服务
 func NewExtensionService(
-	storage repository.SotrageInterface,
+	storage repository.StorageInterface,
 	httpSync repository.SyncInterface,
 	fileScanner repository.ScannerInterface,
 	codebaseService CodebaseService,
@@ -55,7 +55,7 @@ func NewExtensionService(
 }
 
 type extensionService struct {
-	storage         repository.SotrageInterface
+	storage         repository.StorageInterface
 	httpSync        repository.SyncInterface
 	fileScanner     repository.ScannerInterface
 	codebaseService CodebaseService

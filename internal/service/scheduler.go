@@ -32,7 +32,7 @@ type SchedulerConfig struct {
 type Scheduler struct {
 	httpSync        repository.SyncInterface
 	fileScanner     repository.ScannerInterface
-	storage         repository.SotrageInterface
+	storage         repository.StorageInterface
 	schedulerConfig *SchedulerConfig
 	logger          logger.Logger
 	mutex           sync.Mutex
@@ -43,7 +43,7 @@ type Scheduler struct {
 	currentTicker   *time.Ticker
 }
 
-func NewScheduler(httpSync repository.SyncInterface, fileScanner repository.ScannerInterface, storageManager repository.SotrageInterface,
+func NewScheduler(httpSync repository.SyncInterface, fileScanner repository.ScannerInterface, storageManager repository.StorageInterface,
 	logger logger.Logger) *Scheduler {
 	return &Scheduler{
 		httpSync:        httpSync,

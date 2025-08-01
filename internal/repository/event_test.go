@@ -112,7 +112,7 @@ func TestEventRepository(t *testing.T) {
 		}
 
 		// 获取工作区的所有事件
-		events, err := eventRepo.GetEventsByWorkspace(workspacePath)
+		events, err := eventRepo.GetEventsByWorkspace(workspacePath, 10, false)
 		require.NoError(t, err)
 		assert.True(t, len(events) >= 3)
 
@@ -153,7 +153,7 @@ func TestEventRepository(t *testing.T) {
 		require.NoError(t, err)
 
 		// 获取指定类型的事件
-		events, err := eventRepo.GetEventsByType(eventType)
+		events, err := eventRepo.GetEventsByType(eventType, 10, false)
 		require.NoError(t, err)
 		assert.True(t, len(events) >= 3)
 
@@ -207,7 +207,7 @@ func TestEventRepository(t *testing.T) {
 		require.NoError(t, err)
 
 		// 获取指定工作区和类型的事件
-		events, err := eventRepo.GetEventsByWorkspaceAndType(workspacePath, eventType)
+		events, err := eventRepo.GetEventsByWorkspaceAndType(workspacePath, eventType, 10, false)
 		require.NoError(t, err)
 		assert.True(t, len(events) >= 3)
 
@@ -326,21 +326,21 @@ func TestEventRepositoryErrorCases(t *testing.T) {
 
 	t.Run("GetEventsByWorkspaceNotFound", func(t *testing.T) {
 		// 获取不存在工作区的事件
-		events, err := eventRepo.GetEventsByWorkspace("/nonexistent/path")
+		events, err := eventRepo.GetEventsByWorkspace("/nonexistent/path", 10, false)
 		require.NoError(t, err)
 		assert.Equal(t, 0, len(events))
 	})
 
 	t.Run("GetEventsByTypeNotFound", func(t *testing.T) {
 		// 获取不存在类型的事件
-		events, err := eventRepo.GetEventsByType("nonexistent_type")
+		events, err := eventRepo.GetEventsByType("nonexistent_type", 10, false)
 		require.NoError(t, err)
 		assert.Equal(t, 0, len(events))
 	})
 
 	t.Run("GetEventsByWorkspaceAndTypeNotFound", func(t *testing.T) {
 		// 获取不存在工作区和类型的事件
-		events, err := eventRepo.GetEventsByWorkspaceAndType("/nonexistent/path", "nonexistent_type")
+		events, err := eventRepo.GetEventsByWorkspaceAndType("/nonexistent/path", "nonexistent_type", 10, false)
 		require.NoError(t, err)
 		assert.Equal(t, 0, len(events))
 	})
