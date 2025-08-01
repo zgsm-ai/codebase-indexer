@@ -17,6 +17,8 @@ type Element interface {
 	SetRange(range_ []int32)
 	SetContent(content []byte)
 	SetRelations(relations []*Relation)
+	GetScope() types.Scope
+	SetScope(scope types.Scope)
 }
 
 // BaseElement 提供接口的基础实现，其他类型嵌入该结构体
@@ -86,6 +88,14 @@ func (e *BaseElement) SetRelations(relations []*Relation) {
 }
 func (e *BaseElement) GetRelations() []*Relation {
 	return e.Relations
+}
+
+func (e *BaseElement) SetScope(scope types.Scope) {
+	e.Scope = scope
+}
+
+func (e *BaseElement) GetScope() types.Scope {
+	return e.Scope
 }
 
 // Import 表示导入语句

@@ -1,6 +1,8 @@
 package store
 
 import (
+	"codebase-indexer/pkg/codegraph/lang"
+	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/codegraph/utils"
 	"context"
 	"fmt"
@@ -17,6 +19,7 @@ type GraphStorage interface {
 	Save(ctx context.Context, projectUuid string, entry *Entry) error
 	Get(ctx context.Context, projectUuid string, key Key) ([]byte, error)
 	Delete(ctx context.Context, projectUuid string, key Key) error
+	DeleteAll(ctx context.Context, projectUuid string) error
 	Iter(ctx context.Context, projectUuid string) Iterator
 	Size(ctx context.Context, projectUuid string) int
 	Close() error
@@ -31,7 +34,7 @@ type Iterator interface {
 	Key() string
 
 	// Value 返回当前元素的值
-	Value() proto.Message
+	Value() []byte
 
 	// Error 返回迭代过程中发生的错误
 	Error() error
@@ -41,40 +44,49 @@ type Iterator interface {
 }
 
 const (
-	pathPrefix = "path"
-	symPrefix  = "sym"
-	dataDir    = "data"
+	PathKeyPrefix = "path"
+	SymKeyPrefix  = "sym"
+	dataDir       = "data"
 )
 
-//// ElementPathKey 键生成函数  unix path
-//func ElementPathKey(path string) string {
-//	return fmt.Sprintf("%s:%s", pathPrefix, utils.ToUnixPath(path))
-//}
-//
-//func SymbolNameKey(symbol string) string {
-//	return fmt.Sprintf("%s:%s", symPrefix, symbol)
-//}
-
 type Key interface {
-	Get() string
+	Get() (string, error)
 }
 
-type ElementPathKey string
-
-func (p ElementPathKey) Get() string {
-	return fmt.Sprintf("%s:%s", pathPrefix, utils.ToUnixPath(string(p)))
+type ElementPathKey struct {
+	Language lang.Language
+	Path     string
 }
 
-type SymbolNameKey string
+func (p ElementPathKey) Get() (string, error) {
+	if p.Language == types.EmptyString {
+		return types.EmptyString, fmt.Errorf("ElementPathKey field Language must not be empty")
+	}
+	if p.Path == types.EmptyString {
+		return types.EmptyString, fmt.Errorf("ElementPathKey field Path must not be empty")
+	}
+	return fmt.Sprintf("%s:%s:%s", PathKeyPrefix, p.Language, utils.ToUnixPath(p.Path)), nil
+}
 
-func (s SymbolNameKey) Get() string {
-	return fmt.Sprintf("%s:%s", symPrefix, string(s))
+type SymbolNameKey struct {
+	Language lang.Language
+	Name     string
+}
+
+func (s SymbolNameKey) Get() (string, error) {
+	if s.Language == types.EmptyString {
+		return types.EmptyString, fmt.Errorf("ElementPathKey field Language must not be empty")
+	}
+	if s.Name == types.EmptyString {
+		return types.EmptyString, fmt.Errorf("ElementPathKey field Name must not be empty")
+	}
+	return fmt.Sprintf("%s:%s:%s", SymKeyPrefix, s.Language, s.Name), nil
 }
 
 type Entries interface {
 	Len() int
 	Value(i int) proto.Message
-	Key(i int) string
+	Key(i int) Key
 }
 type Entry struct {
 	Key   Key

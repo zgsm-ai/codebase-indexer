@@ -93,8 +93,6 @@ func (p *SourceFileParser) Parse(ctx context.Context,
 		for _, element := range elems {
 			// 去重，主要针对variable
 			if position, ok := visited[element.GetName()]; ok && isSamePosition(position, element.GetRange()) {
-				p.logger.Debug("tree_sitter base_processor duplicate element visited: %s, %v",
-					element.GetName(), position)
 				continue
 			}
 			visited[element.GetName()] = element.GetRange()

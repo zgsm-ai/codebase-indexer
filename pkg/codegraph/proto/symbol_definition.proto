@@ -9,7 +9,8 @@ option go_package = "pkg/codegraph/proto/codegraphpb;codegraphpb";
 // SymbolDefinition 符号定义
 message SymbolDefinition {
   string name = 1;
-  repeated Definition definitions = 2;
+  string language = 2;
+  repeated Definition definitions = 3;
 }
 
 // Definition 定义详情

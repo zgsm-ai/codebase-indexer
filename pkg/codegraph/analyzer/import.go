@@ -5,8 +5,6 @@ import (
 	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/codegraph/workspace"
 	"context"
-	"fmt"
-	"golang.org/x/mod/modfile"
 	"path/filepath"
 	"strings"
 
@@ -27,7 +25,7 @@ func (da *DependencyAnalyzer) preprocessImport(ctx context.Context,
 		imports := make([]*resolver.Import, 0, len(p.Imports))
 		for _, imp := range p.Imports {
 			// TODO 过滤掉标准库、第三方库等非项目的库
-			if i := da.processImportByLanguage(imp, p.Path, p.Language, projectInfo.Path); i != nil {
+			if i := da.processImportByLanguage(imp, p.Path, p.Language, projectInfo); i != nil {
 				imports = append(imports, i)
 			}
 		}
@@ -38,14 +36,13 @@ func (da *DependencyAnalyzer) preprocessImport(ctx context.Context,
 
 // processImportByLanguage 根据语言类型统一处理导入
 func (da *DependencyAnalyzer) processImportByLanguage(imp *resolver.Import, currentFilePath string,
-	language lang.Language, projectPath string) *resolver.Import {
+	language lang.Language, project *workspace.Project) *resolver.Import {
 	// go项目，只处理 module前缀的，过滤非module前缀的
 	if language == lang.Go {
-		goModule, err := da.resolveGoModule(context.Background(), projectPath)
-		if err != nil {
-			da.logger.Error("process_import resolve go module err:%v", err)
+		goModule := project.GoModule
+		if goModule == types.EmptyString {
+			da.logger.Debug("process_import go module not recognized in project %s", project.Path)
 		} else {
-			da.logger.Debug("process_import resolved go module %s", goModule)
 			// 如果不以package 开头，则跳过
 			if !strings.HasPrefix(imp.Source, goModule) && !strings.HasPrefix(imp.Name, goModule) {
 				return nil
@@ -92,12 +89,4 @@ func (da *DependencyAnalyzer) resolveRelativePath(importPath, currentFilePath st
 func (da *DependencyAnalyzer) normalizeImportPath(path string) string {
 	path = strings.ReplaceAll(path, types.Dot, types.Slash)
 	return filepath.Clean(path)
-}
-
-func (da *DependencyAnalyzer) resolveGoModule(ctx context.Context, projectPath string) (string, error) {
-	goMod, err := da.workspaceReader.ReadFile(ctx, filepath.Join(projectPath, "go.mod"), types.ReadOptions{})
-	if err != nil {
-		return types.EmptyString, fmt.Errorf("resolve go project module failed: %v", err)
-	}
-	return modfile.ModulePath(goMod), nil
 }

@@ -30,7 +30,7 @@ type LevelDBStorage struct {
 
 // NewLevelDBStorage creates new LevelDB storage instance
 func NewLevelDBStorage(baseDir string, logger logger.Logger) (*LevelDBStorage, error) {
-	logger.Info("new_leveldb_storage: checking base directory", "baseDir", baseDir)
+	logger.Info("new_leveldb_storage: checking base directory baseDir %s", baseDir)
 	if err := os.MkdirAll(baseDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create base directory: %w", err)
 	}
@@ -45,7 +45,7 @@ func NewLevelDBStorage(baseDir string, logger logger.Logger) (*LevelDBStorage, e
 		logger:  logger,
 	}
 
-	logger.Info("new_leveldb_storage: initialized successfully", "baseDir", baseDir)
+	logger.Info("new_leveldb_storage: initialized successfully baseDir %s", baseDir)
 	return storage, nil
 }
 
@@ -62,8 +62,6 @@ func (s *LevelDBStorage) getDB(projectUuid string) (*leveldb.DB, error) {
 	// 加锁防止并发创建数据库
 	mutex.Lock()
 	defer mutex.Unlock()
-
-	s.logger.Debug("get_db: checking existing client", "project", projectUuid)
 
 	if db, exists := s.clients.Load(projectUuid); exists {
 		return db.(*leveldb.DB), nil
@@ -85,22 +83,22 @@ func (s *LevelDBStorage) getDB(projectUuid string) (*leveldb.DB, error) {
 
 // createDB creates new LevelDB instance
 func (s *LevelDBStorage) createDB(projectUuid string) (*leveldb.DB, error) {
-	s.logger.Debug("create_db: creating project directory", "project", projectUuid)
+	s.logger.Info("create_db: creating project directory project %s", projectUuid)
 	projectDir := filepath.Join(s.baseDir, projectUuid)
 	if err := os.MkdirAll(projectDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create project directory %s: %w", projectDir, err)
 	}
 
 	dbPath := filepath.Join(projectDir, dataDir)
-	s.logger.Debug("create_db: opening database", "project", projectUuid, "path", dbPath)
+	s.logger.Info("create_db: opening database project %s path %s", projectUuid, dbPath)
 
 	db, err := openLevelDB(dbPath)
 	if err != nil {
-		s.logger.Warn("create_db: database open failed, attempting to recreate", "project", projectUuid, "error", err)
+		s.logger.Warn("create_db: database open failed, attempting to recreate. project %s err:%v", projectUuid, err)
 
 		// 尝试删除损坏的数据库文件并重建
 		if removeErr := os.RemoveAll(dbPath); removeErr != nil {
-			s.logger.Error("create_db: failed to remove corrupted database", "project", projectUuid, "error", removeErr)
+			s.logger.Error("create_db: failed to remove corrupted database. project %s err:%v", projectUuid, removeErr)
 			return nil, fmt.Errorf("failed to open project database %s: %w (and failed to remove corrupted dir: %v)", dbPath, err, removeErr)
 		}
 
@@ -111,7 +109,7 @@ func (s *LevelDBStorage) createDB(projectUuid string) (*leveldb.DB, error) {
 		}
 	}
 
-	s.logger.Debug("create_db: created new project database", "project", projectUuid, "path", dbPath)
+	s.logger.Debug("create_db: created new project database. project %s path %s", projectUuid, dbPath)
 	return db, nil
 }
 
@@ -136,13 +134,10 @@ func (s *LevelDBStorage) BatchSave(ctx context.Context, projectUuid string, valu
 		return fmt.Errorf("context cancelled: %w", err)
 	}
 
-	s.logger.Debug("batch_save: getting database", "project", projectUuid)
 	db, err := s.getDB(projectUuid)
 	if err != nil {
 		return fmt.Errorf("failed to get database: %w", err)
 	}
-
-	s.logger.Debug("batch_save: starting batch transaction", "project", projectUuid, "count", values.Len())
 
 	batch := new(leveldb.Batch)
 
@@ -151,7 +146,11 @@ func (s *LevelDBStorage) BatchSave(ctx context.Context, projectUuid string, valu
 			return fmt.Errorf("context cancelled during batch save: %w", err)
 		}
 
-		key := values.Key(i)
+		key, err := values.Key(i).Get()
+		if err != nil {
+			s.logger.Error("level_db batch save error:%v", err)
+			continue
+		}
 		value := values.Value(i)
 
 		var data []byte
@@ -167,14 +166,14 @@ func (s *LevelDBStorage) BatchSave(ctx context.Context, projectUuid string, valu
 		}
 
 		if marshalErr != nil {
-			return fmt.Errorf("failed to marshal data for key %s: %w", key, marshalErr)
+			s.logger.Error("level_db batch save failed to marshal data for key %s, %v", key, marshalErr)
+			continue
 		}
 
 		batch.Put([]byte(key), data)
 	}
 
 	err = db.Write(batch, nil)
-	s.logger.Debug("batch_save: completed", "project", projectUuid, "count", values.Len())
 	return err
 }
 
@@ -184,24 +183,24 @@ func (s *LevelDBStorage) Save(ctx context.Context, projectUuid string, entry *En
 		return fmt.Errorf("context cancelled: %w", err)
 	}
 
-	s.logger.Debug("save: getting database", "project", projectUuid)
 	db, err := s.getDB(projectUuid)
 	if err != nil {
 		return fmt.Errorf("failed to get database: %w", err)
 	}
 
-	key := entry.Key.Get()
-	s.logger.Debug("save: starting transaction", "project", projectUuid, "type", key)
+	keyStr, err := entry.Key.Get()
+	if err != nil {
+		return err
+	}
 
 	var data []byte
 	data, err = proto.Marshal(entry.Value)
 	if err != nil {
-		return fmt.Errorf("failed to marshal data for type %s: %w", key, err)
+		return fmt.Errorf("failed to marshal data for type %s: %w", keyStr, err)
 	}
 
-	err = db.Put([]byte(key), data, nil)
+	err = db.Put([]byte(keyStr), data, nil)
 
-	s.logger.Debug("save: completed", "project", projectUuid, "type", key)
 	return err
 }
 
@@ -211,20 +210,24 @@ func (s *LevelDBStorage) Get(ctx context.Context, projectUuid string, key Key) (
 		return nil, fmt.Errorf("context cancelled: %w", err)
 	}
 
-	s.logger.Debug("get: getting database", "project", projectUuid)
 	db, err := s.getDB(projectUuid)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get database: %w", err)
 	}
+	keyStr, err := key.Get()
+	if err != nil {
+		return nil, err
+	}
 
-	s.logger.Debug("get: starting transaction", "project", projectUuid, "key", key.Get())
-
-	data, err := db.Get([]byte(key.Get()), nil)
+	if err != nil {
+		return nil, err
+	}
+	data, err := db.Get([]byte(keyStr), nil)
 	if err != nil {
 		if errors.Is(err, leveldb.ErrNotFound) {
 			return nil, ErrKeyNotFound
 		}
-		return nil, fmt.Errorf("failed to get key %s: %w", key.Get(), err)
+		return nil, fmt.Errorf("failed to get key %s: %w", keyStr, err)
 	}
 
 	return data, nil
@@ -236,56 +239,69 @@ func (s *LevelDBStorage) Delete(ctx context.Context, projectUuid string, key Key
 		return fmt.Errorf("context cancelled: %w", err)
 	}
 
-	s.logger.Debug("delete: getting database", "project", projectUuid)
 	db, err := s.getDB(projectUuid)
 	if err != nil {
 		return fmt.Errorf("failed to get database: %w", err)
 	}
-
-	s.logger.Debug("delete: starting transaction", "project", projectUuid, "key", key.Get())
-
-	err = db.Delete([]byte(key.Get()), nil)
-	if err != nil && !errors.Is(err, leveldb.ErrNotFound) {
-		return fmt.Errorf("failed to delete key %s: %w", key.Get(), err)
+	keyStr, err := key.Get()
+	if err != nil {
+		return err
 	}
 
-	s.logger.Debug("delete: completed", "project", projectUuid, "key", key.Get())
+	err = db.Delete([]byte(keyStr), nil)
+	if err != nil && !errors.Is(err, leveldb.ErrNotFound) {
+		return fmt.Errorf("failed to delete key %s: %w", keyStr, err)
+	}
+
 	return nil
+}
+
+func (s *LevelDBStorage) DeleteAll(ctx context.Context, projectUuid string) error {
+	db, err := s.getDB(projectUuid)
+	if err != nil {
+		s.logger.Debug("iter: failed to get database. project %s, error: %v", projectUuid, err)
+		return nil
+	}
+	s.logger.Info("level_db: start to delete all for project %s", projectUuid)
+	iter := s.Iter(ctx, projectUuid)
+	for iter.Next() {
+		_ = db.Delete([]byte(iter.Key()), nil)
+	}
+	err = iter.Close()
+	s.logger.Info("level_db: delete all for project %s end, after size: %d", projectUuid, s.Size(ctx, projectUuid))
+	return err
 }
 
 // Iter creates iterator
 func (s *LevelDBStorage) Iter(ctx context.Context, projectUuid string) Iterator {
-	s.logger.Debug("iter: creating iterator", "project", projectUuid)
 	db, err := s.getDB(projectUuid)
 	if err != nil {
-		s.logger.Debug("iter: failed to get database", "project", projectUuid, "error", err)
+		s.logger.Debug("iter: failed to get database. project %s, error: %v", projectUuid, err)
 		return nil
 	}
 	return &leveldbIterator{
-		storage:   s,
-		projectID: projectUuid,
-		ctx:       ctx,
-		db:        db,
-		iter:      db.NewIterator(nil, nil),
+		storage:     s,
+		projectUuid: projectUuid,
+		ctx:         ctx,
+		db:          db,
+		iter:        db.NewIterator(nil, nil),
 	}
 }
 
 // Size returns project data size
 func (s *LevelDBStorage) Size(ctx context.Context, projectUuid string) int {
 	if err := utils.CheckContext(ctx); err != nil {
-		s.logger.Debug("size: context cancelled", "project", projectUuid)
+		s.logger.Debug("size: context cancelled. project %s", projectUuid)
 		return 0
 	}
 
-	s.logger.Debug("size: getting database", "project", projectUuid)
 	db, err := s.getDB(projectUuid)
 	if err != nil {
-		s.logger.Debug("size: failed to get database", "project", projectUuid, "error", err)
+		s.logger.Debug("size: failed to get database. project %s, error:%v", projectUuid, err)
 		return 0
 	}
 
 	count := 0
-	s.logger.Debug("size: counting records", "project", projectUuid)
 
 	iter := db.NewIterator(nil, nil)
 	defer iter.Release()
@@ -295,7 +311,7 @@ func (s *LevelDBStorage) Size(ctx context.Context, projectUuid string) int {
 	}
 
 	if err := iter.Error(); err != nil {
-		s.logger.Debug("size: failed to count records", "project", projectUuid, "error", err)
+		s.logger.Debug("size: failed to count records. project %s error:%v", projectUuid, err)
 		return 0
 	}
 
@@ -308,47 +324,47 @@ func (s *LevelDBStorage) Close() error {
 		return nil
 	}
 
-	s.logger.Info("close: closing all connections")
+	s.logger.Info("leveldb_close: closing all connections")
 
 	var errs []error
 	s.clients.Range(func(key, value interface{}) bool {
 		projectID := key.(string)
 		db := value.(*leveldb.DB)
 
-		s.logger.Info("close: closing database", "projectID", projectID)
+		s.logger.Info("leveldb_close: closing database. projectUuid %s", projectID)
 		if err := db.Close(); err != nil {
-			s.logger.Error("close: failed to close database", "projectID", projectID, "error", err)
+			s.logger.Error("leveldb_close: failed to close database. projectUuid %s, err: %v", projectID, err)
 			errs = append(errs, fmt.Errorf("failed to close project %s database: %w", projectID, err))
 		} else {
-			s.logger.Info("close: successfully closed database", "projectID", projectID)
+			s.logger.Info("leveldb_close: successfully closed database. projectUuid %s", projectID)
 		}
 		return true
 	})
 
 	s.closeOnce.Do(func() {
 		s.closed = true
-		s.logger.Info("close: storage marked as closed")
+		s.logger.Info("leveldb_close: storage marked as closed")
 	})
 
 	if len(errs) > 0 {
 		return fmt.Errorf("errors occurred while closing storage: %v", errs)
 	}
 
-	s.logger.Info("close: storage closed successfully")
+	s.logger.Info("leveldb_close: storage closed successfully")
 	return nil
 }
 
 // leveldbIterator implements Iterator interface
 type leveldbIterator struct {
-	storage   *LevelDBStorage
-	projectID string
-	ctx       context.Context
-	db        *leveldb.DB
-	iter      iterator.Iterator
-	currentK  []byte
-	currentV  []byte
-	err       error
-	closed    bool
+	storage     *LevelDBStorage
+	projectUuid string
+	ctx         context.Context
+	db          *leveldb.DB
+	iter        iterator.Iterator
+	currentK    []byte
+	currentV    []byte
+	err         error
+	closed      bool
 }
 
 func (it *leveldbIterator) Next() bool {
@@ -365,15 +381,15 @@ func (it *leveldbIterator) Next() bool {
 	}
 
 	if it.iter == nil {
-		it.storage.logger.Debug("next: getting database", "project", it.projectID)
-		db, err := it.storage.getDB(it.projectID)
+		it.storage.logger.Debug("next: getting database project %s", it.projectUuid)
+		db, err := it.storage.getDB(it.projectUuid)
 		if err != nil {
 			it.err = fmt.Errorf("failed to get database: %w", err)
 			return false
 		}
 		it.db = db
 
-		it.storage.logger.Debug("next: creating iterator", "project", it.projectID)
+		it.storage.logger.Debug("next: creating iterator. project %s", it.projectUuid)
 		it.iter = db.NewIterator(nil, nil)
 		if it.iter == nil {
 			it.err = fmt.Errorf("failed to create iterator")
@@ -400,11 +416,11 @@ func (it *leveldbIterator) Key() string {
 	return string(it.currentK)
 }
 
-func (it *leveldbIterator) Value() proto.Message {
+func (it *leveldbIterator) Value() []byte {
 	if it.currentV == nil {
 		return nil
 	}
-	return &RawMessage{Data: it.currentV}
+	return it.currentV
 }
 
 func (it *leveldbIterator) Error() error {

@@ -8,6 +8,7 @@ import (
 var ErrFileExtNotFound = errors.New("file extension not found")
 var ErrLanguageParserNotFound = errors.New("tree_sitter language parser not found")
 var ErrQueryNotFound = errors.New("query not found")
+var UnSupportedLanguage = errors.New("unsupported language")
 
 // Custom errors
 var (

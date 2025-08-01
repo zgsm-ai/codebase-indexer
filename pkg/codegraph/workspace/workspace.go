@@ -7,6 +7,8 @@ import (
 	"codebase-indexer/pkg/logger"
 	"context"
 	"errors"
+	"fmt"
+	"golang.org/x/mod/modfile"
 	"io"
 	"os"
 	"path/filepath"
@@ -25,7 +27,7 @@ func NewWorkSpaceReader(logger logger.Logger) *WorkspaceReader {
 	}
 }
 
-func (w *WorkspaceReader) FindProjects(workspace string, visitPattern types.VisitPattern) []*Project {
+func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, visitPattern types.VisitPattern) []*Project {
 
 	w.logger.Info("find_projects start to scan workspace：%s", workspace)
 
@@ -120,8 +122,22 @@ func (w *WorkspaceReader) FindProjects(workspace string, visitPattern types.Visi
 			Uuid: generateUuid(projectName, workspace),
 		})
 	}
+	// resolve go module
+	for _, p := range projects {
+		goModule, err := w.resolveGoModule(ctx, p.Path)
+		if err != nil {
+			w.logger.Error("find_projects resolve go module err:%w", err)
+		} else {
+			w.logger.Error("find_projects resolved go module %s in project %s", goModule, p.Path)
+			p.GoModule = goModule
+		}
+	}
 
-	w.logger.Info("find_projects scan finish, found projects：%+v", projects)
+	var projectNames string
+	for _, p := range projects {
+		projectNames += p.Name + types.Space
+	}
+	w.logger.Info("find_projects scan finish, found projects：%s", projectNames)
 
 	return projects
 }
@@ -288,4 +304,13 @@ func (w *WorkspaceReader) Walk(ctx context.Context, dir string, walkFn types.Wal
 
 		return walkFn(walkCtx, file)
 	})
+}
+
+// TODO 子目录下的go.mod, go的import以module名开头，特殊处理
+func (da *WorkspaceReader) resolveGoModule(ctx context.Context, projectPath string) (string, error) {
+	goMod, err := da.ReadFile(ctx, filepath.Join(projectPath, "go.mod"), types.ReadOptions{})
+	if err != nil {
+		return types.EmptyString, fmt.Errorf("resolve go project module failed: %v", err)
+	}
+	return modfile.ModulePath(goMod), nil
 }

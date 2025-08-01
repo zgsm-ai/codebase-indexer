@@ -12,6 +12,7 @@ const (
 	CurrentDir        = "./"
 	ParentDir         = "../"
 	EmailAt           = "@"
+	Space             = " "
 	LF                = "\n"
 	Static            = "static"
 	Arrow             = "arrow"

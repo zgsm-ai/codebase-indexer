@@ -78,11 +78,25 @@ func (mr *MockGraphStorageMockRecorder) Delete(ctx, projectUuid, key interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockGraphStorage)(nil).Delete), ctx, projectUuid, key)
 }
 
+// DeleteAll mocks base method.
+func (m *MockGraphStorage) DeleteAll(ctx context.Context, projectUuid string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteAll", ctx, projectUuid)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteAll indicates an expected call of DeleteAll.
+func (mr *MockGraphStorageMockRecorder) DeleteAll(ctx, projectUuid interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteAll", reflect.TypeOf((*MockGraphStorage)(nil).DeleteAll), ctx, projectUuid)
+}
+
 // Get mocks base method.
-func (m *MockGraphStorage) Get(ctx context.Context, projectUuid string, key store.Key) (proto.Message, error) {
+func (m *MockGraphStorage) Get(ctx context.Context, projectUuid string, key store.Key) ([]byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get", ctx, projectUuid, key)
-	ret0, _ := ret[0].(proto.Message)
+	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -108,17 +122,17 @@ func (mr *MockGraphStorageMockRecorder) Iter(ctx, projectUuid interface{}) *gomo
 }
 
 // Save mocks base method.
-func (m *MockGraphStorage) Save(ctx context.Context, projectUuid string, value proto.Message) error {
+func (m *MockGraphStorage) Save(ctx context.Context, projectUuid string, entry *store.Entry) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Save", ctx, projectUuid, value)
+	ret := m.ctrl.Call(m, "Save", ctx, projectUuid, entry)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Save indicates an expected call of Save.
-func (mr *MockGraphStorageMockRecorder) Save(ctx, projectUuid, value interface{}) *gomock.Call {
+func (mr *MockGraphStorageMockRecorder) Save(ctx, projectUuid, entry interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockGraphStorage)(nil).Save), ctx, projectUuid, value)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockGraphStorage)(nil).Save), ctx, projectUuid, entry)
 }
 
 // Size mocks base method.
@@ -215,10 +229,10 @@ func (mr *MockIteratorMockRecorder) Next() *gomock.Call {
 }
 
 // Value mocks base method.
-func (m *MockIterator) Value() proto.Message {
+func (m *MockIterator) Value() []byte {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Value")
-	ret0, _ := ret[0].(proto.Message)
+	ret0, _ := ret[0].([]byte)
 	return ret0
 }
 
@@ -252,11 +266,12 @@ func (m *MockKey) EXPECT() *MockKeyMockRecorder {
 }
 
 // Get mocks base method.
-func (m *MockKey) Get() string {
+func (m *MockKey) Get() (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get")
 	ret0, _ := ret[0].(string)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Get indicates an expected call of Get.
@@ -265,45 +280,45 @@ func (mr *MockKeyMockRecorder) Get() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockKey)(nil).Get))
 }
 
-// MockValues is a mock of Entries interface.
-type MockValues struct {
+// MockEntries is a mock of Entries interface.
+type MockEntries struct {
 	ctrl     *gomock.Controller
-	recorder *MockValuesMockRecorder
+	recorder *MockEntriesMockRecorder
 }
 
-// MockValuesMockRecorder is the mock recorder for MockValues.
-type MockValuesMockRecorder struct {
-	mock *MockValues
+// MockEntriesMockRecorder is the mock recorder for MockEntries.
+type MockEntriesMockRecorder struct {
+	mock *MockEntries
 }
 
-// NewMockValues creates a new mock instance.
-func NewMockValues(ctrl *gomock.Controller) *MockValues {
-	mock := &MockValues{ctrl: ctrl}
-	mock.recorder = &MockValuesMockRecorder{mock}
+// NewMockEntries creates a new mock instance.
+func NewMockEntries(ctrl *gomock.Controller) *MockEntries {
+	mock := &MockEntries{ctrl: ctrl}
+	mock.recorder = &MockEntriesMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockValues) EXPECT() *MockValuesMockRecorder {
+func (m *MockEntries) EXPECT() *MockEntriesMockRecorder {
 	return m.recorder
 }
 
 // Key mocks base method.
-func (m *MockValues) Key(i int) string {
+func (m *MockEntries) Key(i int) store.Key {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Key", i)
-	ret0, _ := ret[0].(string)
+	ret0, _ := ret[0].(store.Key)
 	return ret0
 }
 
 // Key indicates an expected call of Key.
-func (mr *MockValuesMockRecorder) Key(i interface{}) *gomock.Call {
+func (mr *MockEntriesMockRecorder) Key(i interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Key", reflect.TypeOf((*MockValues)(nil).Key), i)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Key", reflect.TypeOf((*MockEntries)(nil).Key), i)
 }
 
 // Len mocks base method.
-func (m *MockValues) Len() int {
+func (m *MockEntries) Len() int {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Len")
 	ret0, _ := ret[0].(int)
@@ -311,13 +326,13 @@ func (m *MockValues) Len() int {
 }
 
 // Len indicates an expected call of Len.
-func (mr *MockValuesMockRecorder) Len() *gomock.Call {
+func (mr *MockEntriesMockRecorder) Len() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Len", reflect.TypeOf((*MockValues)(nil).Len))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Len", reflect.TypeOf((*MockEntries)(nil).Len))
 }
 
 // Value mocks base method.
-func (m *MockValues) Value(i int) proto.Message {
+func (m *MockEntries) Value(i int) proto.Message {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Value", i)
 	ret0, _ := ret[0].(proto.Message)
@@ -325,7 +340,7 @@ func (m *MockValues) Value(i int) proto.Message {
 }
 
 // Value indicates an expected call of Value.
-func (mr *MockValuesMockRecorder) Value(i interface{}) *gomock.Call {
+func (mr *MockEntriesMockRecorder) Value(i interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Value", reflect.TypeOf((*MockValues)(nil).Value), i)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Value", reflect.TypeOf((*MockEntries)(nil).Value), i)
 }

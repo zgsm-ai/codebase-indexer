@@ -1,6 +1,7 @@
 package store
 
 import (
+	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
 	"crypto/sha256"
 	"encoding/hex"
@@ -28,8 +29,8 @@ type TestKey struct {
 	key string
 }
 
-func (k TestKey) Get() string {
-	return k.key
+func (k TestKey) Get() (string, error) {
+	return k.key, nil
 }
 
 // MockLogger 用于测试的 mock logger
@@ -44,18 +45,18 @@ func (m *MockLogger) Fatal(msg string, keysAndValues ...interface{}) {}
 // TestValues 用于测试的 Entries 实现
 type TestValues struct {
 	values []proto.Message
-	keys   []string
+	keys   []Key
 }
 
 func (tv *TestValues) Len() int {
 	return len(tv.values)
 }
 
-func (tv *TestValues) Key(i int) string {
+func (tv *TestValues) Key(i int) Key {
 	if i < len(tv.keys) {
 		return tv.keys[i]
 	}
-	return fmt.Sprintf("key-%d", i)
+	return ElementPathKey{Language: lang.Go, Path: fmt.Sprintf("key-%d", i)}
 }
 
 func (tv *TestValues) Value(i int) proto.Message {
@@ -66,11 +67,11 @@ func (tv *TestValues) Value(i int) proto.Message {
 }
 
 // CreateTestValues 创建测试用的Values实现
-func CreateTestValues(values []proto.Message, keys []string) *TestValues {
+func CreateTestValues(values []proto.Message, keys []Key) *TestValues {
 	if keys == nil {
-		keys = make([]string, len(values))
+		keys = make([]Key, len(values))
 		for i := range values {
-			keys[i] = fmt.Sprintf("key-%d", i)
+			keys[i] = ElementPathKey{Language: lang.Go, Path: fmt.Sprintf("key-%d", i)}
 		}
 	}
 	return &TestValues{

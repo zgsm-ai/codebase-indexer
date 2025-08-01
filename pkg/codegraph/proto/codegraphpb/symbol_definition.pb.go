@@ -25,7 +25,8 @@ const (
 type SymbolDefinition struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Definitions   []*Definition          `protobuf:"bytes,2,rep,name=definitions,proto3" json:"definitions,omitempty"`
+	Language      string                 `protobuf:"bytes,2,opt,name=language,proto3" json:"language,omitempty"`
+	Definitions   []*Definition          `protobuf:"bytes,3,rep,name=definitions,proto3" json:"definitions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -63,6 +64,13 @@ func (*SymbolDefinition) Descriptor() ([]byte, []int) {
 func (x *SymbolDefinition) GetName() string {
 	if x != nil {
 		return x.Name
+	}
+	return ""
+}
+
+func (x *SymbolDefinition) GetLanguage() string {
+	if x != nil {
+		return x.Language
 	}
 	return ""
 }
@@ -139,10 +147,11 @@ var File_pkg_codegraph_proto_symbol_definition_proto protoreflect.FileDescriptor
 
 const file_pkg_codegraph_proto_symbol_definition_proto_rawDesc = "" +
 	"\n" +
-	"+pkg/codegraph/proto/symbol_definition.proto\x12\vcodegraphpb\x1a\x1fpkg/codegraph/proto/types.proto\"a\n" +
+	"+pkg/codegraph/proto/symbol_definition.proto\x12\vcodegraphpb\x1a\x1fpkg/codegraph/proto/types.proto\"}\n" +
 	"\x10SymbolDefinition\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x129\n" +
-	"\vdefinitions\x18\x02 \x03(\v2\x17.codegraphpb.DefinitionR\vdefinitions\"s\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
+	"\blanguage\x18\x02 \x01(\tR\blanguage\x129\n" +
+	"\vdefinitions\x18\x03 \x03(\v2\x17.codegraphpb.DefinitionR\vdefinitions\"s\n" +
 	"\n" +
 	"Definition\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x14\n" +

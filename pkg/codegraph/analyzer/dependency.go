@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/parser"
 	"codebase-indexer/pkg/codegraph/proto"
 	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
@@ -11,6 +12,7 @@ import (
 	"codebase-indexer/pkg/codegraph/workspace"
 	"codebase-indexer/pkg/logger"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -53,11 +55,10 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context,
 				// TODO 先通过参数数量过滤
 				foundElements, err := da.findReferredElement(ctx, projectUuid, e.Name, currentPath, imports)
 				if err != nil {
-					da.logger.Error("dependency_analyze find referred element %s err:%v", err)
+					da.logger.Error("dependency_analyze find call %s referred element err:%v", e.Name, err)
 					continue
 				}
 				if len(foundElements) == 0 {
-					da.logger.Debug("dependency_analyze %s referred element not found", e.Name)
 					continue
 				}
 
@@ -69,11 +70,10 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context,
 			case *resolver.Reference:
 				foundElements, err := da.findReferredElement(ctx, projectUuid, e.Name, currentPath, imports)
 				if err != nil {
-					da.logger.Error("dependency_analyze find referred element %s err:%v", e.Name, err)
+					da.logger.Error("dependency_analyze find reference %s referred element err:%v", e.Name, err)
 					continue
 				}
 				if len(foundElements) == 0 {
-					da.logger.Debug(" %s referred element not found", e.Name)
 					continue
 				}
 
@@ -87,11 +87,10 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context,
 				for _, superClassName := range e.SuperClasses {
 					foundElements, err := da.findReferredElement(ctx, projectUuid, superClassName, currentPath, imports)
 					if err != nil {
-						da.logger.Error("dependency_analyze find referred element %s err:%v", superClassName, err)
+						da.logger.Error("dependency_analyze find class %s referred element err:%v", e.Name, err)
 						continue
 					}
 					if len(foundElements) == 0 {
-						da.logger.Debug(" %s referred element not found", e.Name)
 						continue
 					}
 					for _, d := range foundElements {
@@ -103,11 +102,10 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context,
 				for _, superInterfaceName := range e.SuperInterfaces {
 					foundElements, err := da.findReferredElement(ctx, projectUuid, superInterfaceName, currentPath, imports)
 					if err != nil {
-						da.logger.Error("dependency_analyze find referred element %s err:%v", superInterfaceName, err)
+						da.logger.Error("dependency_analyze find class %s referred element err:%v", e.Name, err)
 						continue
 					}
 					if len(foundElements) == 0 {
-						da.logger.Debug(" %s referred element not found", e.Name)
 						continue
 					}
 					for _, d := range foundElements {
@@ -121,11 +119,10 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context,
 				for _, superInterfaceName := range e.SuperInterfaces {
 					foundElements, err := da.findReferredElement(ctx, projectUuid, superInterfaceName, currentPath, imports)
 					if err != nil {
-						da.logger.Error("dependency_analyze find referred element %s err:%v", superInterfaceName, err)
+						da.logger.Error("dependency_analyze find interface %s referred element err:%v", e.Name, err)
 						continue
 					}
 					if len(foundElements) == 0 {
-						da.logger.Debug(" %s referred element not found", e.Name)
 						continue
 					}
 					for _, d := range foundElements {
@@ -153,10 +150,17 @@ func (da *DependencyAnalyzer) SaveSymbolDefinitions(ctx context.Context, project
 		for _, elem := range fileTable.Elements {
 			switch elem.(type) {
 			case *resolver.Class, *resolver.Function, *resolver.Method, *resolver.Variable, *resolver.Interface:
+				// 跳过局部作用域的变量
+				if elem.GetType() == types.ElementTypeVariable && (elem.GetScope() == types.ScopeBlock ||
+					elem.GetScope() == types.ScopeFunction) {
+					continue
+				}
+
 				key := elem.GetName()
 				d, ok := definitionSymbolsMap[key]
 				if !ok {
-					d = &codegraphpb.SymbolDefinition{Name: key, Definitions: make([]*codegraphpb.Definition, 0)}
+					d = &codegraphpb.SymbolDefinition{Name: key, Language: string(fileTable.Language),
+						Definitions: make([]*codegraphpb.Definition, 0)}
 				}
 				d.Definitions = append(d.Definitions, &codegraphpb.Definition{
 					Path:        fileTable.Path,
@@ -176,6 +180,7 @@ func (da *DependencyAnalyzer) SaveSymbolDefinitions(ctx context.Context, project
 	if err := da.store.BatchSave(ctx, projectUuid, workspace.SymbolDefinitions(definitionSymbols)); err != nil {
 		return fmt.Errorf("dependency_analyze batch save symbol definitions error: %w", err)
 	}
+	da.logger.Info("dependency_analyze project %s saved %d symbols", projectUuid, len(definitionSymbols))
 	return nil
 }
 
@@ -185,14 +190,24 @@ func (da *DependencyAnalyzer) findReferredElement(ctx context.Context,
 	currentPath string,
 	imports []*resolver.Import,
 ) ([]resolver.Element, error) {
+	language, err := lang.InferLanguage(currentPath)
+	if err != nil {
+		return nil, nil
+	}
 
 	foundDef := make([]resolver.Element, 0)
 
-	value, err := da.store.Get(ctx, projectUuid, store.SymbolNameKey(referredName))
-	if err != nil {
-		return nil, fmt.Errorf("dependency_analyzer get symbol definitions error: %w", err)
+	value, err := da.store.Get(ctx, projectUuid, store.SymbolNameKey{Language: language, Name: referredName})
+	if errors.Is(err, store.ErrKeyNotFound) {
+		return nil, nil
 	}
-	symbolDefs := value.(*codegraphpb.SymbolDefinition)
+	if err != nil {
+		return nil, fmt.Errorf("get symbol path %s name %s definitions error: %w", currentPath, referredName, err)
+	}
+	symbolDefs := new(codegraphpb.SymbolDefinition)
+	if err = store.UnmarshalValue(value, symbolDefs); err != nil {
+		return nil, err
+	}
 
 	// 同名的所有定义
 	for _, def := range symbolDefs.Definitions {

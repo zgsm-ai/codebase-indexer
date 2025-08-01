@@ -6,6 +6,7 @@ import (
 	"codebase-indexer/pkg/codegraph/parser"
 	"codebase-indexer/pkg/codegraph/proto"
 	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
+	"codebase-indexer/pkg/codegraph/resolver"
 	"codebase-indexer/pkg/codegraph/store"
 	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/codegraph/utils"
@@ -65,7 +66,7 @@ func NewCodeIndexer(
 // IndexWorkspace 索引整个工作区
 func (i *Indexer) IndexWorkspace(ctx context.Context, workspace string) error {
 	i.logger.Info("index_workspace start to index workspace：%s", workspace)
-	projects := i.workspaceReader.FindProjects(workspace, types.VisitPattern{})
+	projects := i.workspaceReader.FindProjects(ctx, workspace, types.VisitPattern{})
 	if len(projects) == 0 {
 		return fmt.Errorf("index_workspace find no projects in workspace: %s", workspace)
 	}
@@ -120,6 +121,9 @@ func (i *Indexer) indexProject(ctx context.Context, p *workspace.Project) (types
 		return types.IndexTaskMetrics{}, errs
 	}
 
+	// 检查elements，剔除不合法的，并打印日志
+	i.checkElementTables(fileElementTables)
+
 	// 项目符号表构建与存储
 	if err = i.analyzer.SaveSymbolDefinitions(ctx, projectUuid, fileElementTables); err != nil {
 		errs = append(errs, err)
@@ -141,7 +145,7 @@ func (i *Indexer) indexProject(ctx context.Context, p *workspace.Project) (types
 		return types.IndexTaskMetrics{}, errs
 	}
 
-	i.logger.Info("index_project index project finish：%s", p.Path)
+	i.logger.Info("index_project: finish：%s, saved %d file element_tables", p.Path, len(protoElementTables))
 
 	return projectTaskMetrics, nil
 }
@@ -191,7 +195,7 @@ func (i *Indexer) RemoveIndexes(ctx context.Context, workspacePath string, fileP
 	start := time.Now()
 	i.logger.Info("remove_indexes start to remove workspace %s files: %v", workspacePath, filePaths)
 
-	projects := i.workspaceReader.FindProjects(workspacePath, types.VisitPattern{})
+	projects := i.workspaceReader.FindProjects(ctx, workspacePath, types.VisitPattern{})
 	if len(projects) == 0 {
 		return fmt.Errorf("no project found in workspace %s", workspacePath)
 	}
@@ -229,23 +233,23 @@ func (i *Indexer) removeProjectIndexes(ctx context.Context, puuid string, pfiles
 	}
 
 	// 2. 找到所有与它相关的引用关系
-	referedElements, err := i.findReferencedElements(deleteFileTables)
+	referredElements, err := i.findReferencedElements(deleteFileTables)
 	if err != nil {
 		return fmt.Errorf("find referenced elements failed: %w", err)
 	}
 
 	// 3. 清理引用关系
-	if err := i.cleanupReferences(ctx, puuid, referedElements, deletedPaths); err != nil {
+	if err = i.cleanupReferences(ctx, puuid, referredElements, deletedPaths); err != nil {
 		return fmt.Errorf("cleanup references failed: %w", err)
 	}
 
 	// 4. 清理符号定义
-	if err := i.cleanupSymbolDefinitions(ctx, puuid, deleteFileTables, deletedPaths); err != nil {
+	if err = i.cleanupSymbolDefinitions(ctx, puuid, deleteFileTables, deletedPaths); err != nil {
 		return fmt.Errorf("cleanup symbol definitions failed: %w", err)
 	}
 
 	// 5. 删除path索引
-	if err := i.deleteFileIndexes(ctx, puuid, pfiles.files); err != nil {
+	if err = i.deleteFileIndexes(ctx, puuid, pfiles.files); err != nil {
 		return fmt.Errorf("delete file indexes failed: %w", err)
 	}
 
@@ -259,12 +263,22 @@ func (i *Indexer) getFileTablesForDeletion(ctx context.Context, puuid string, fi
 	var errs []error
 
 	for _, fp := range filePaths {
-		fileTable, err := i.storage.Get(ctx, puuid, store.ElementPathKey(fp))
+		language, err := lang.InferLanguage(fp)
+		if err != nil {
+			continue
+		}
+		key := store.ElementPathKey{Language: language, Path: fp}
+
+		fileTable, err := i.storage.Get(ctx, puuid, key)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		ft := fileTable.(*codegraphpb.FileElementTable)
+		ft := new(codegraphpb.FileElementTable)
+		if err = store.UnmarshalValue(fileTable, ft); err != nil {
+			errs = append(errs, err)
+			continue
+		}
 		deleteFileTables = append(deleteFileTables, ft)
 		deletedPaths[ft.Path] = nil
 	}
@@ -303,14 +317,23 @@ func (i *Indexer) cleanupReferences(ctx context.Context, puuid string, referedEl
 	var errs []error
 
 	for _, ref := range referedElements {
+		language, err := lang.InferLanguage(ref.ElementPath)
+		if err != nil {
+			continue
+		}
+		key := store.ElementPathKey{Language: language, Path: ref.ElementPath}
 		// 获取引用该符号的文件
-		refFileTable, err := i.storage.Get(ctx, puuid, store.ElementPathKey(ref.ElementPath))
+		refFileTable, err := i.storage.Get(ctx, puuid, key)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
 
-		refTable := refFileTable.(*codegraphpb.FileElementTable)
+		refTable := new(codegraphpb.FileElementTable)
+		if err = store.UnmarshalValue(refFileTable, refTable); err != nil {
+			errs = append(errs, err)
+			continue
+		}
 
 		// 移除与该符号相关的relation
 		for _, e := range refTable.Elements {
@@ -325,8 +348,9 @@ func (i *Indexer) cleanupReferences(ctx context.Context, puuid string, referedEl
 			e.Relations = newRelations
 		}
 
+		key = store.ElementPathKey{Language: language, Path: refTable.Path}
 		// 保存更新后的文件表
-		if err := i.storage.Save(ctx, puuid, &store.Entry{Key: store.ElementPathKey(refTable.Path), Value: refTable}); err != nil {
+		if err = i.storage.Save(ctx, puuid, &store.Entry{Key: key, Value: refTable}); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -348,13 +372,20 @@ func (i *Indexer) cleanupSymbolDefinitions(ctx context.Context, puuid string, de
 				e.ElementType == codegraphpb.ElementType_ELEMENT_TYPE_FUNCTION ||
 				e.ElementType == codegraphpb.ElementType_ELEMENT_TYPE_INTERFACE ||
 				e.ElementType == codegraphpb.ElementType_ELEMENT_TYPE_CLASS {
-
-				sym, err := i.storage.Get(ctx, puuid, store.SymbolNameKey(e.GetName()))
+				language, err := lang.InferLanguage(e.GetPath())
+				if err != nil {
+					continue
+				}
+				sym, err := i.storage.Get(ctx, puuid, store.SymbolNameKey{Language: language, Name: e.GetName()})
 				if err != nil {
 					errs = append(errs, err)
 					continue
 				}
-				symDefs := sym.(*codegraphpb.SymbolDefinition)
+				symDefs := new(codegraphpb.SymbolDefinition)
+				if err = store.UnmarshalValue(sym, symDefs); err != nil {
+					return fmt.Errorf("unmarshal symbolDefinition error:%w", err)
+				}
+
 				newSymDefs := &codegraphpb.SymbolDefinition{
 					Name:        e.GetName(),
 					Definitions: make([]*codegraphpb.Definition, 0),
@@ -366,7 +397,7 @@ func (i *Indexer) cleanupSymbolDefinitions(ctx context.Context, puuid string, de
 					newSymDefs.Definitions = append(newSymDefs.Definitions, d)
 				}
 				// 保存更新后的文件表
-				if err := i.storage.Save(ctx, puuid, &store.Entry{Key: store.SymbolNameKey(newSymDefs.Name), Value: newSymDefs}); err != nil {
+				if err := i.storage.Save(ctx, puuid, &store.Entry{Key: store.SymbolNameKey{Language: language, Name: newSymDefs.Name}, Value: newSymDefs}); err != nil {
 					errs = append(errs, err)
 				}
 			}
@@ -386,7 +417,11 @@ func (i *Indexer) deleteFileIndexes(ctx context.Context, puuid string, filePaths
 
 	for _, fp := range filePaths {
 		// 删除path索引
-		if err := i.storage.Delete(ctx, puuid, store.ElementPathKey(fp)); err != nil {
+		language, err := lang.InferLanguage(fp)
+		if err != nil {
+			continue
+		}
+		if err = i.storage.Delete(ctx, puuid, store.ElementPathKey{Language: language, Path: fp}); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -402,7 +437,7 @@ func (i *Indexer) deleteFileIndexes(ctx context.Context, puuid string, filePaths
 func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePaths []string) error {
 	i.logger.Info("index_files start to index workspace %s files: %v", workspacePath, filePaths)
 
-	projects := i.workspaceReader.FindProjects(workspacePath, types.VisitPattern{})
+	projects := i.workspaceReader.FindProjects(ctx, workspacePath, types.VisitPattern{})
 	if len(projects) == 0 {
 		return fmt.Errorf("no project found in workspace %s", workspacePath)
 	}
@@ -489,10 +524,10 @@ func (i *Indexer) indexProjectFiles(ctx context.Context, puuid string, pfiles pr
 }
 
 // QueryElements 查询elements
-func (i *Indexer) QueryElements(workspacePath string, filePaths []string) ([]*codegraphpb.FileElementTable, error) {
+func (i *Indexer) QueryElements(ctx context.Context, workspacePath string, filePaths []string) ([]*codegraphpb.FileElementTable, error) {
 	i.logger.Info("query_elements start to query workspace %s files: %v", workspacePath, filePaths)
 
-	projects := i.workspaceReader.FindProjects(workspacePath, types.VisitPattern{})
+	projects := i.workspaceReader.FindProjects(ctx, workspacePath, types.VisitPattern{})
 	if len(projects) == 0 {
 		return nil, fmt.Errorf("no project found in workspace %s", workspacePath)
 	}
@@ -507,12 +542,20 @@ func (i *Indexer) QueryElements(workspacePath string, filePaths []string) ([]*co
 
 	for puuid, pfiles := range projectFilesMap {
 		for _, fp := range pfiles.files {
-			fileTable, err := i.storage.Get(context.Background(), puuid, store.ElementPathKey(fp))
+			language, err := lang.InferLanguage(fp)
+			if err != nil {
+				continue
+			}
+			fileTable, err := i.storage.Get(context.Background(), puuid, store.ElementPathKey{Language: language, Path: fp})
 			if err != nil {
 				errs = append(errs, fmt.Errorf("get file table %s failed: %w", fp, err))
 				continue
 			}
-			ft := fileTable.(*codegraphpb.FileElementTable)
+			ft := new(codegraphpb.FileElementTable)
+			if err = store.UnmarshalValue(fileTable, ft); err != nil {
+				errs = append(errs, err)
+				continue
+			}
 			results = append(results, ft)
 		}
 	}
@@ -526,10 +569,10 @@ func (i *Indexer) QueryElements(workspacePath string, filePaths []string) ([]*co
 }
 
 // QuerySymbols 查询symbols
-func (i *Indexer) QuerySymbols(workspacePath string, filePath string, symbolNames []string) ([]*codegraphpb.SymbolDefinition, error) {
+func (i *Indexer) QuerySymbols(ctx context.Context, workspacePath string, filePath string, symbolNames []string) ([]*codegraphpb.SymbolDefinition, error) {
 	i.logger.Info("query_symbols start to query workspace %s file %s symbols: %v", workspacePath, filePath, symbolNames)
 
-	projects := i.workspaceReader.FindProjects(workspacePath, types.VisitPattern{})
+	projects := i.workspaceReader.FindProjects(ctx, workspacePath, types.VisitPattern{})
 	if len(projects) == 0 {
 		return nil, fmt.Errorf("no project found in workspace %s", workspacePath)
 	}
@@ -543,16 +586,25 @@ func (i *Indexer) QuerySymbols(workspacePath string, filePath string, symbolName
 		return nil, fmt.Errorf("find project for file failed: %w", err)
 	}
 
+	language, err := lang.InferLanguage(filePath)
+	if err != nil {
+		return nil, lang.UnSupportedLanguage
+	}
 	// 查询每个符号名称
 	for _, symbolName := range symbolNames {
-		symbolDef, err := i.storage.Get(context.Background(), targetProjectUuid, store.SymbolNameKey(symbolName))
+		symbolDef, err := i.storage.Get(context.Background(), targetProjectUuid,
+			store.SymbolNameKey{Language: language, Name: symbolName})
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to get symbol definition %s: %w", symbolName, err))
 			continue
 		}
 
 		if symbolDef != nil {
-			sd := symbolDef.(*codegraphpb.SymbolDefinition)
+			sd := new(codegraphpb.SymbolDefinition)
+			if err = store.UnmarshalValue(symbolDef, sd); err != nil {
+				errs = append(errs, err)
+				continue
+			}
 			results = append(results, sd)
 		}
 	}
@@ -604,4 +656,41 @@ func (i *Indexer) findProjectForFile(projects []*workspace.Project, filePath str
 	}
 
 	return nil, types.EmptyString, fmt.Errorf("no project found for file path %s", filePath)
+}
+
+// checkElementTables 检查element_tables
+func (i *Indexer) checkElementTables(elementTables []*parser.FileElementTable) {
+	total, filtered := 0, 0
+	for _, ft := range elementTables {
+		newImports := make([]*resolver.Import, 0, len(ft.Imports))
+		newElements := make([]resolver.Element, 0, len(ft.Elements))
+		for _, imp := range ft.Imports {
+			if i.isValidElement(imp) {
+				newImports = append(newImports, imp)
+			} else {
+				i.logger.Debug("check_element: invalid language %s file %s import {name:%s type:%s path:%s range:%v}",
+					ft.Language, ft.Path, imp.Name, imp.Type, imp.Path, imp.Range)
+			}
+		}
+		for _, ele := range ft.Elements {
+			total++
+			if i.isValidElement(ele) {
+				newElements = append(newElements, ele)
+			} else {
+				filtered++
+				i.logger.Debug("check_element: invalid language %s file %s element {name:%s type:%s path:%s range:%v}",
+					ft.Language, ft.Path, ele.GetName(), ele.GetType(), ele.GetPath(), ele.GetRange())
+			}
+		}
+
+		ft.Imports = newImports
+		ft.Elements = newElements
+	}
+	i.logger.Info("check_element: files total %d, elements before total %d, filtered %d.",
+		len(elementTables), total, filtered)
+}
+
+func (i *Indexer) isValidElement(e resolver.Element) bool {
+	return e.GetName() != types.EmptyString && e.GetType() != types.EmptyString &&
+		e.GetPath() != types.EmptyString && len(e.GetRange()) > 0
 }

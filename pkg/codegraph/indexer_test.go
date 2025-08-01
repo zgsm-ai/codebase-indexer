@@ -1,14 +1,15 @@
 package codegraph
 
 import (
-	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/logger"
 	"context"
-	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"codebase-indexer/pkg/codegraph/analyzer"
 	"codebase-indexer/pkg/codegraph/parser"
@@ -25,8 +26,10 @@ var tempDir = "/tmp/"
 var visitPattern = types.VisitPattern{ExcludeDirs: []string{".git", ".idea"}, IncludeExts: []string{".go"}}
 
 // TODO 性能（内存、cpu）监控；各种路径、项目名（中文、符号）测试；索引数量统计；大仓库测试
-func TestIndexer_IndexWorkspace(t *testing.T) {
 
+func TestIndexer_IndexWorkspace(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
 	storageDir := filepath.Join(tempDir, "index")
 	err := os.MkdirAll(storageDir, 0755)
 	assert.NoError(t, err)
@@ -34,13 +37,10 @@ func TestIndexer_IndexWorkspace(t *testing.T) {
 	// 测试本项目
 	workspaceDir, err := filepath.Abs("../../")
 	assert.NoError(t, err)
-	newLogger, err := logger.NewLogger(utils.LogsDir, "info")
-	if err != nil {
-		fmt.Printf("failed to initialize logging system: %v\n", err)
-		return
-	}
+	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
+	assert.NoError(t, err)
 
-	storage, err := store.NewBBoltStorage(storageDir, newLogger)
+	storage, err := store.NewLevelDBStorage(storageDir, newLogger)
 	assert.NoError(t, err)
 	workspaceReader := workspace.NewWorkSpaceReader(newLogger)
 	sourceFileParser := parser.NewSourceFileParser(newLogger)
@@ -57,10 +57,43 @@ func TestIndexer_IndexWorkspace(t *testing.T) {
 		newLogger,
 	)
 
+	projects := workspaceReader.FindProjects(ctx, workspaceDir, visitPattern)
+
 	// 测试 IndexWorkspace
 	err = indexer.IndexWorkspace(context.Background(), workspaceDir)
 	assert.NoError(t, err)
+	for _, p := range projects {
+		t.Logf("=> storage size: %d", storage.Size(ctx, p.Uuid))
+	}
+	// 统计项目的go文件数量，确保索引数和文件数一致。
+	var goCount int
+	err = workspaceReader.Walk(ctx, workspaceDir, func(walkCtx *types.WalkContext, reader io.ReadCloser) error {
+		if walkCtx.Info.IsDir {
+			return nil
+		}
+		if strings.HasSuffix(walkCtx.Path, ".go") {
+			goCount++
+		}
+		return nil
+	}, types.WalkOptions{IgnoreError: true, VisitPattern: visitPattern})
+	assert.NoError(t, err)
 
+	var indexSize int
+	for _, p := range projects {
+		iter := storage.Iter(ctx, p.Uuid)
+		for iter.Next() {
+			key := iter.Key()
+			if strings.HasPrefix(key, store.PathKeyPrefix) {
+				indexSize++
+			}
+		}
+		iter.Close()
+		assert.True(t, storage.Size(ctx, p.Uuid) > 0)
+		err = storage.DeleteAll(ctx, p.Uuid)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, storage.Size(ctx, p.Uuid))
+	}
+	assert.Equal(t, goCount, indexSize)
 }
 
 func TestIndexer_IndexFiles(t *testing.T) {
@@ -97,7 +130,7 @@ func main() {
 	parser := parser.NewSourceFileParser(mockLogger)
 	analyzer := analyzer.NewDependencyAnalyzer(mockLogger, nil, nil)
 	workspaceReader := workspace.NewWorkSpaceReader(mockLogger)
-	storage, err := store.NewBBoltStorage(filepath.Join(tempDir, "storage"), mockLogger)
+	storage, err := store.NewLevelDBStorage(filepath.Join(tempDir, "storage"), mockLogger)
 	assert.NoError(t, err)
 	defer storage.Close()
 
@@ -152,7 +185,7 @@ func main() {
 	parser := parser.NewSourceFileParser(mockLogger)
 	analyzer := analyzer.NewDependencyAnalyzer(mockLogger, nil, nil)
 	workspaceReader := workspace.NewWorkSpaceReader(mockLogger)
-	storage, err := store.NewBBoltStorage(filepath.Join(tempDir, "storage"), mockLogger)
+	storage, err := store.NewLevelDBStorage(filepath.Join(tempDir, "storage"), mockLogger)
 	assert.NoError(t, err)
 	defer storage.Close()
 
@@ -178,6 +211,7 @@ func main() {
 }
 
 func TestIndexer_QueryElements(t *testing.T) {
+	ctx := context.Background()
 	// 创建临时测试目录
 	tempDir, err := os.MkdirTemp("", "test-query")
 	assert.NoError(t, err)
@@ -210,7 +244,7 @@ func main() {
 	mockLogger.On("Debug", mock.Anything, mock.Anything).Return()
 
 	parser := parser.NewSourceFileParser(mockLogger)
-	storage, err := store.NewBBoltStorage(filepath.Join(tempDir, "storage"), mockLogger)
+	storage, err := store.NewLevelDBStorage(filepath.Join(tempDir, "storage"), mockLogger)
 	assert.NoError(t, err)
 	defer storage.Close()
 	analyzer := analyzer.NewDependencyAnalyzer(mockLogger, nil, storage)
@@ -230,7 +264,7 @@ func main() {
 	assert.NoError(t, err)
 
 	// 测试 QueryElements
-	elements, err := indexer.QueryElements(tempDir, []string{testFile})
+	elements, err := indexer.QueryElements(ctx, tempDir, []string{testFile})
 	assert.NoError(t, err)
 	assert.NotEmpty(t, elements)
 
@@ -239,6 +273,7 @@ func main() {
 }
 
 func TestIndexer_QuerySymbols(t *testing.T) {
+	ctx := context.Background()
 	// 创建临时测试目录
 	tempDir, err := os.MkdirTemp("", "test-symbols")
 	assert.NoError(t, err)
@@ -270,7 +305,7 @@ func main() {
 	mockLogger.On("Error", mock.Anything, mock.Anything).Return()
 
 	parser := parser.NewSourceFileParser(mockLogger)
-	storage, err := store.NewBBoltStorage(filepath.Join(tempDir, "storage"), mockLogger)
+	storage, err := store.NewLevelDBStorage(filepath.Join(tempDir, "storage"), mockLogger)
 	assert.NoError(t, err)
 	defer storage.Close()
 	analyzer := analyzer.NewDependencyAnalyzer(mockLogger, nil, storage)
@@ -290,7 +325,7 @@ func main() {
 	assert.NoError(t, err)
 
 	// 测试 QuerySymbols
-	symbols, err := indexer.QuerySymbols(tempDir, testFile, []string{"main"})
+	symbols, err := indexer.QuerySymbols(ctx, tempDir, testFile, []string{"main"})
 	assert.NoError(t, err)
 	assert.NotEmpty(t, symbols)
 
@@ -310,7 +345,7 @@ func TestIndexer_IndexWorkspace_NoProjects(t *testing.T) {
 	mockLogger.On("Error", mock.Anything, mock.Anything).Return()
 
 	parser := parser.NewSourceFileParser(mockLogger)
-	storage, err := store.NewBBoltStorage(filepath.Join(tempDir, "storage"), mockLogger)
+	storage, err := store.NewLevelDBStorage(filepath.Join(tempDir, "storage"), mockLogger)
 	assert.NoError(t, err)
 	defer storage.Close()
 	analyzer := analyzer.NewDependencyAnalyzer(mockLogger, nil, storage)
@@ -343,7 +378,7 @@ func TestIndexer_IndexFiles_NoProject(t *testing.T) {
 	mockLogger.On("Error", mock.Anything, mock.Anything).Return()
 
 	parser := parser.NewSourceFileParser(mockLogger)
-	storage, err := store.NewBBoltStorage(filepath.Join(tempDir, "storage"), mockLogger)
+	storage, err := store.NewLevelDBStorage(filepath.Join(tempDir, "storage"), mockLogger)
 	assert.NoError(t, err)
 	defer storage.Close()
 	analyzer := analyzer.NewDependencyAnalyzer(mockLogger, nil, storage)
@@ -446,7 +481,7 @@ func main() { fmt.Println("Hello") }`), 0644)
 			parser := parser.NewSourceFileParser(mockLogger)
 			analyzer := analyzer.NewDependencyAnalyzer(mockLogger, nil, nil)
 			workspaceReader := workspace.NewWorkSpaceReader(mockLogger)
-			storage, err := store.NewBBoltStorage(filepath.Join(tempDir, "storage"), mockLogger)
+			storage, err := store.NewLevelDBStorage(filepath.Join(tempDir, "storage"), mockLogger)
 			assert.NoError(t, err)
 			defer storage.Close()
 
@@ -567,7 +602,7 @@ func TestIndexer_processProjectFiles(t *testing.T) {
 			parser := parser.NewSourceFileParser(mockLogger)
 			analyzer := analyzer.NewDependencyAnalyzer(mockLogger, nil, nil)
 			workspaceReader := workspace.NewWorkSpaceReader(mockLogger)
-			storage, err := store.NewBBoltStorage(filepath.Join(tempDir, "storage"), mockLogger)
+			storage, err := store.NewLevelDBStorage(filepath.Join(tempDir, "storage"), mockLogger)
 			assert.NoError(t, err)
 			defer storage.Close()
 
@@ -630,7 +665,7 @@ func TestIndexer_groupFilesByProject(t *testing.T) {
 	parser := parser.NewSourceFileParser(mockLogger)
 	analyzer := analyzer.NewDependencyAnalyzer(mockLogger, nil, nil)
 	workspaceReader := workspace.NewWorkSpaceReader(mockLogger)
-	storage, err := store.NewBBoltStorage(filepath.Join(tempDir, "storage"), mockLogger)
+	storage, err := store.NewLevelDBStorage(filepath.Join(tempDir, "storage"), mockLogger)
 	assert.NoError(t, err)
 	defer storage.Close()
 
@@ -701,6 +736,7 @@ func main() { fmt.Println("Hello") }`), 0644)
 
 // TestIndexer_QuerySymbols_BoundaryConditions 测试符号查询边界条件
 func TestIndexer_QuerySymbols_BoundaryConditions(t *testing.T) {
+	ctx := context.Background()
 	tests := []struct {
 		name          string
 		symbolNames   []string
@@ -759,7 +795,7 @@ func main() { fmt.Println("Hello") }`), 0644)
 			parser := parser.NewSourceFileParser(mockLogger)
 			analyzer := analyzer.NewDependencyAnalyzer(mockLogger, nil, nil)
 			workspaceReader := workspace.NewWorkSpaceReader(mockLogger)
-			storage, err := store.NewBBoltStorage(filepath.Join(tempDir, "storage"), mockLogger)
+			storage, err := store.NewLevelDBStorage(filepath.Join(tempDir, "storage"), mockLogger)
 			assert.NoError(t, err)
 			defer storage.Close()
 
@@ -777,7 +813,7 @@ func main() { fmt.Println("Hello") }`), 0644)
 			assert.NoError(t, err)
 
 			// 测试符号查询
-			symbols, err := indexer.QuerySymbols(tempDir, testFile, tt.symbolNames)
+			symbols, err := indexer.QuerySymbols(ctx, tempDir, testFile, tt.symbolNames)
 			assert.NoError(t, err)
 			assert.Len(t, symbols, tt.expectedCount)
 		})
