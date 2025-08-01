@@ -3,12 +3,10 @@ package resolver
 import (
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
-	"fmt"
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	treesitter "github.com/tree-sitter/go-tree-sitter"
-	"golang.org/x/tools/go/packages"
 )
 
 type GoResolver struct {
@@ -21,38 +19,23 @@ func (r *GoResolver) Resolve(ctx context.Context, element Element, rc *ResolveCo
 }
 
 func (r *GoResolver) resolveImport(ctx context.Context, element *Import, rc *ResolveContext) ([]Element, error) {
-	// Use the existing BaseElement to store import information
 	elements := []Element{element}
-
-	// Set default import type
-	element.Type = types.ElementTypeImport
-
-	// If we have node information, extract more details from the nodes
+	rootCapture := rc.Match.Captures[0]
+	rootCaptureName := rc.CaptureNames[rootCapture.Index]
+	updateRootElement(element, &rootCapture, rootCaptureName, rc.SourceFile.Content)
 	if rc.Match != nil && rc.Match.Captures != nil && len(rc.Match.Captures) > 0 {
 		for _, capture := range rc.Match.Captures {
-			// Skip missing or error nodes
-			if capture.Node.IsMissing() || capture.Node.IsError() {
-				continue
-			}
-
 			nodeCaptureName := rc.CaptureNames[capture.Index]
 			content := capture.Node.Utf8Text(rc.SourceFile.Content)
-
-			// Update root element's range and name
-			updateRootElement(element, &capture, nodeCaptureName, rc.SourceFile.Content)
-
 			switch types.ToElementType(nodeCaptureName) {
 			case types.ElementTypeImportName:
 				element.Name = content
+				element.Scope = types.ScopePackage
 			case types.ElementTypeImportAlias:
 				element.Alias = content
 			case types.ElementTypeImportPath:
-				// Extract the import path (removing quotes)
 				path := strings.Trim(content, `"'`)
-
-				// If there's no explicit name set (from import.name), use the last part of path as name
 				if element.Name == "" {
-					// Extract the last component of the path as the default name
 					pathParts := strings.Split(path, "/")
 					if len(pathParts) > 0 {
 						element.Name = pathParts[len(pathParts)-1]
@@ -60,99 +43,66 @@ func (r *GoResolver) resolveImport(ctx context.Context, element *Import, rc *Res
 						element.Name = path
 					}
 				}
-
 			}
 		}
 	}
-
 	return elements, nil
 }
 
 func (r *GoResolver) resolvePackage(ctx context.Context, element *Package, rc *ResolveContext) ([]Element, error) {
-	// 使用现有的BaseElement存储包信息
 	elements := []Element{element}
-
-	// 如果有节点信息，从节点中提取更多信息
 	if rc.Match != nil && rc.Match.Captures != nil && len(rc.Match.Captures) > 0 {
 		for _, capture := range rc.Match.Captures {
-			// 如果节点是missing或者error，则跳过
-			if capture.Node.IsMissing() || capture.Node.IsError() {
-				continue
-			}
-
 			nodeCaptureName := rc.CaptureNames[capture.Index]
 			content := capture.Node.Utf8Text(rc.SourceFile.Content)
 			updateRootElement(element, &capture, nodeCaptureName, rc.SourceFile.Content)
 			switch types.ToElementType(nodeCaptureName) {
 			case types.ElementTypePackageName:
 				element.Name = content
+				element.Scope = types.ScopePackage
 			}
 		}
 	}
-
-	// 如果是标准库包，直接返回
-	if yes, _ := r.isStandardLibrary(element.Name); yes {
-		return elements, nil
-	}
-
 	return elements, nil
 }
 
 func (r *GoResolver) resolveFunction(ctx context.Context, element *Function, rc *ResolveContext) ([]Element, error) {
 	// 使用现有的BaseElement存储函数信息
 	elements := []Element{element}
+	rootCapture := rc.Match.Captures[0]
+	rootCaptureName := rc.CaptureNames[rootCapture.Index]
+	updateRootElement(element, &rootCapture, rootCaptureName, rc.SourceFile.Content)
+	if rootCaptureName == string(types.ElementTypeFunction) {
+		// 获取函数声明节点
+		funcNode := rootCapture.Node
 
-	// 如果有节点信息，从节点中提取更多信息
-	if rc.Match != nil && rc.Match.Captures != nil && len(rc.Match.Captures) > 0 {
-		// 获取根捕获，它应该是 function_declaration 节点
-		rootCapture := rc.Match.Captures[0]
-		rootCaptureName := rc.CaptureNames[rootCapture.Index]
-		if rootCaptureName == string(types.ElementTypeFunction) {
-			// 获取函数声明节点
-			funcNode := rootCapture.Node
-
-			// 尝试获取返回类型节点
-			resultNode := funcNode.ChildByFieldName("result")
-			if resultNode != nil {
-				// 使用analyzeReturnTypes函数提取并格式化返回类型
-				element.ReturnType = analyzeReturnTypes(resultNode, rc.SourceFile.Content)
-			}
+		// 尝试获取返回类型节点
+		resultNode := funcNode.ChildByFieldName("result")
+		if resultNode != nil {
+			// 使用analyzeReturnTypes函数提取并格式化返回类型
+			element.ReturnType = analyzeReturnTypes(resultNode, rc.SourceFile.Content)
 		}
+	}
+	if rc.Match != nil && rc.Match.Captures != nil && len(rc.Match.Captures) > 0 {
 		for _, capture := range rc.Match.Captures {
-
-			// 如果节点是missing或者error，则跳过
-			if capture.Node.IsMissing() || capture.Node.IsError() {
-				continue
-			}
-
 			nodeCaptureName := rc.CaptureNames[capture.Index]
 			content := capture.Node.Utf8Text(rc.SourceFile.Content)
-
-			// 使用updateRootElement更新Range和Name
-			updateRootElement(element, &capture, nodeCaptureName, rc.SourceFile.Content)
-
 			// 处理函数名
 			switch types.ToElementType(nodeCaptureName) {
 			case types.ElementTypeFunctionName:
 				element.Declaration.Name = content
-				element.BaseElement.Name = content // 使用BaseElement中的Name
+				element.BaseElement.Name = content
 				element.Scope = analyzeScope(content)
 			case types.ElementTypeFunctionParameters:
-				// 去掉括号
 				parameters := strings.Trim(content, "()")
-				// 解析参数
 				if parameters != "" {
-					// 创建参数列表
 					element.Parameters = make([]Parameter, 0)
-
 					// 分析整个参数字符串
 					typeGroups := analyzeParameterGroups(parameters)
-
 					// 处理每个类型组
 					for _, group := range typeGroups {
 						// 获取参数类型
 						paramTypes := group.Type
-
 						// 处理每个参数名
 						for _, name := range group.Names {
 							element.Parameters = append(element.Parameters, Parameter{
@@ -163,10 +113,11 @@ func (r *GoResolver) resolveFunction(ctx context.Context, element *Function, rc 
 
 					}
 				}
+				// case types.ElementTypeFunctionReturnType:
+				// 	element.ReturnType = analyzeReturnType(&capture.Node, rc.SourceFile.Content)
 			}
 		}
 	}
-
 	return elements, nil
 }
 
@@ -428,76 +379,52 @@ func analyzeScope(content string) types.Scope {
 }
 
 func (r *GoResolver) resolveMethod(ctx context.Context, element *Method, rc *ResolveContext) ([]Element, error) {
-
-	// 使用现有的BaseElement存储方法信息
 	elements := []Element{element}
+	rootCapture := rc.Match.Captures[0]
+	rootCaptureName := rc.CaptureNames[rootCapture.Index]
+	updateRootElement(element, &rootCapture, rootCaptureName, rc.SourceFile.Content)
+	if rootCaptureName == string(types.ElementTypeFunction) {
+		// 获取函数声明节点
+		funcNode := rootCapture.Node
 
-	// 如果有节点信息，从节点中提取更多信息
-	if rc.Match != nil && rc.Match.Captures != nil && len(rc.Match.Captures) > 0 {
-		// 获取根捕获，它应该是 definition.method节点
-		rootCapture := rc.Match.Captures[0]
-		rootCaptureName := rc.CaptureNames[rootCapture.Index]
-		if rootCaptureName == string(types.ElementTypeMethod) {
-			// 获取方法声明节点
-			methodNode := rootCapture.Node
-
-			// 尝试获取返回类型节点
-			resultNode := methodNode.ChildByFieldName("result")
-			if resultNode != nil {
-				// 使用analyzeReturnTypes函数提取并格式化返回类型
-				element.ReturnType = analyzeReturnTypes(resultNode, rc.SourceFile.Content)
-			}
-
-			// 尝试获取接收器节点
-			receiverNode := methodNode.ChildByFieldName("receiver")
-			if receiverNode != nil {
-				receiverText := receiverNode.Utf8Text(rc.SourceFile.Content)
-				// 去掉括号
-				receiverText = strings.Trim(receiverText, "()")
-				parts := strings.Fields(receiverText)
-				if len(parts) >= 1 {
-					// 最后一个部分是类型，可能带*前缀
-					receiverType := parts[len(parts)-1]
-					element.Owner = strings.TrimPrefix(receiverType, "*")
-				}
+		// 尝试获取返回类型节点
+		resultNode := funcNode.ChildByFieldName("result")
+		if resultNode != nil {
+			// 使用analyzeReturnTypes函数提取并格式化返回类型
+			element.ReturnType = analyzeReturnTypes(resultNode, rc.SourceFile.Content)
+		}
+	}
+	//处理接收器
+	if rootCaptureName == string(types.ElementTypeMethod) {
+		methodNode := rootCapture.Node
+		receiverNode := methodNode.ChildByFieldName("receiver")
+		if receiverNode != nil {
+			receiverText := receiverNode.Utf8Text(rc.SourceFile.Content)
+			receiverText = strings.Trim(receiverText, "()")
+			parts := strings.Fields(receiverText)
+			if len(parts) >= 1 {
+				// 最后一个部分是类型，可能带*前缀
+				receiverType := parts[len(parts)-1]
+				element.Owner = strings.TrimPrefix(receiverType, "*")
 			}
 		}
-
+	}
+	if rc.Match != nil && rc.Match.Captures != nil && len(rc.Match.Captures) > 0 {
 		for _, capture := range rc.Match.Captures {
-			// 如果节点是missing或者error，则跳过
-			if capture.Node.IsMissing() || capture.Node.IsError() {
-				continue
-			}
-
 			nodeCaptureName := rc.CaptureNames[capture.Index]
 			content := capture.Node.Utf8Text(rc.SourceFile.Content)
-
-			// 使用updateRootElement更新Range和Name
-			updateRootElement(element, &capture, nodeCaptureName, rc.SourceFile.Content)
-
-			// 处理方法名
 			switch types.ToElementType(nodeCaptureName) {
 			case types.ElementTypeMethodName:
 				element.Declaration.Name = content
-				element.BaseElement.Name = content // 使用BaseElement中的Name
+				element.BaseElement.Name = content
 				element.Scope = analyzeScope(content)
 			case types.ElementTypeMethodParameters:
-				// 去掉括号
 				parameters := strings.Trim(content, "()")
-				// 解析参数
 				if parameters != "" {
-					// 创建参数列表
 					element.Parameters = make([]Parameter, 0)
-
-					// 分析整个参数字符串
 					typeGroups := analyzeParameterGroups(parameters)
-
-					// 处理每个类型组
 					for _, group := range typeGroups {
-						// 获取参数类型
 						paramTypes := group.Type
-
-						// 处理每个参数名
 						for _, name := range group.Names {
 							element.Parameters = append(element.Parameters, Parameter{
 								Name: name,
@@ -506,20 +433,8 @@ func (r *GoResolver) resolveMethod(ctx context.Context, element *Method, rc *Res
 						}
 					}
 				}
-			case types.ElementTypeMethodReceiver:
-				// 提取接收器类型
-				if element.Owner == "" {
-					// 去除可能的括号和前缀
-					receiverText := strings.Trim(content, "()")
-					parts := strings.Fields(receiverText)
-					if len(parts) >= 1 {
-						// 最后一个部分是类型，可能带*前缀
-						receiverType := parts[len(parts)-1]
-						element.Owner = strings.TrimPrefix(receiverType, "*")
-					} else {
-						element.Owner = content
-					}
-				}
+				// case types.ElementTypeFunctionReturnType:
+				// 	element.ReturnType = analyzeReturnType(&capture.Node, rc.SourceFile.Content)
 			}
 		}
 	}
@@ -528,26 +443,18 @@ func (r *GoResolver) resolveMethod(ctx context.Context, element *Method, rc *Res
 }
 
 func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *ResolveContext) ([]Element, error) {
-	// 将Go的struct视为类
 	elements := []Element{element}
-
+	rootCapture := rc.Match.Captures[0]
+	rootCaptureName := rc.CaptureNames[rootCapture.Index]
+	updateRootElement(element, &rootCapture, rootCaptureName, rc.SourceFile.Content)
 	// 存储可能的引用元素
 	var references []*Reference
 
 	// 如果有节点信息，从节点中提取更多信息
 	if rc.Match != nil && rc.Match.Captures != nil && len(rc.Match.Captures) > 0 {
 		for _, capture := range rc.Match.Captures {
-			// 如果节点是missing或者error，则跳过
-			if capture.Node.IsMissing() || capture.Node.IsError() {
-				continue
-			}
-
 			nodeCaptureName := rc.CaptureNames[capture.Index]
 			content := capture.Node.Utf8Text(rc.SourceFile.Content)
-
-			// 使用updateRootElement更新Range和Name
-			updateRootElement(element, &capture, nodeCaptureName, rc.SourceFile.Content)
-
 			switch types.ToElementType(nodeCaptureName) {
 			case types.ElementTypeStructName:
 				element.Name = content
@@ -564,7 +471,6 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 						fieldListNode = child
 						break
 					}
-
 				}
 				// 遍历所有field_declaration子节点
 				for j := uint(0); j < fieldListNode.ChildCount(); j++ {
@@ -589,24 +495,20 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 									typeName := nameNode.Utf8Text(rc.SourceFile.Content)
 									fieldType = pkgName + "." + typeName
 								} else {
-									// 备用方案：直接使用完整文本
 									fieldType = typeNode.Utf8Text(rc.SourceFile.Content)
 								}
 							} else {
-								// 普通类型
 								fieldType = typeNode.Utf8Text(rc.SourceFile.Content)
 							}
 
 							var fieldName string
 
 							if nameNode != nil {
-								// 有名称的普通字段
 								fieldName = nameNode.Utf8Text(rc.SourceFile.Content)
 							} else {
 								// 匿名嵌入字段，为父类
 								element.SuperClasses = append(element.SuperClasses, fieldType)
 
-								// 如果匿名嵌入字段不是基本类型，创建引用元素
 								if !isPrimitiveType(fieldType) {
 									// 创建引用元素
 									ref := &Reference{
@@ -632,7 +534,7 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 									} else {
 										ref.BaseElement.Name = fieldType
 									}
-
+									ref.Scope = types.ScopeFunction
 									references = append(references, ref)
 								}
 								continue
@@ -798,7 +700,9 @@ func (r *GoResolver) processMultipleVariableDeclaration(rootCapture treesitter.Q
 func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, rc *ResolveContext) ([]Element, error) {
 	// 使用现有的BaseElement存储接口信息
 	elements := []Element{element}
-
+	rootCapture := rc.Match.Captures[0]
+	rootCaptureName := rc.CaptureNames[rootCapture.Index]
+	updateRootElement(element, &rootCapture, rootCaptureName, rc.SourceFile.Content)
 	// 如果有节点信息，从节点中提取更多信息
 	if rc.Match != nil && rc.Match.Captures != nil && len(rc.Match.Captures) > 0 {
 		for _, capture := range rc.Match.Captures {
@@ -809,10 +713,6 @@ func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, r
 
 			nodeCaptureName := rc.CaptureNames[capture.Index]
 			content := capture.Node.Utf8Text(rc.SourceFile.Content)
-
-			// 使用updateRootElement更新Range和Name
-			updateRootElement(element, &capture, nodeCaptureName, rc.SourceFile.Content)
-
 			switch types.ToElementType(nodeCaptureName) {
 			case types.ElementTypeInterfaceName:
 				element.Name = content
@@ -820,7 +720,6 @@ func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, r
 			case types.ElementTypeInterfaceType:
 				// 处理接口类型节点
 				interfaceTypeNode := capture.Node
-
 				// 直接遍历接口类型节点的所有子节点
 				for i := uint(0); i < interfaceTypeNode.ChildCount(); i++ {
 					childNode := interfaceTypeNode.Child(i)
@@ -882,8 +781,7 @@ func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, r
 						element.Methods = append(element.Methods, decl)
 
 					case types.NodeKindTypeElem:
-						// 处理嵌入接口
-						typeNode := childNode.Child(0) // 获取第一个子节点，即类型名称
+						typeNode := childNode.Child(0)
 						if typeNode != nil {
 							interfaceName := typeNode.Utf8Text(rc.SourceFile.Content)
 							interfaceName = strings.TrimPrefix(interfaceName, "*")
@@ -905,9 +803,6 @@ func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, r
 		}
 	}
 
-	// 设置元素类型
-	element.Type = types.ElementTypeInterface
-
 	return elements, nil
 }
 
@@ -915,13 +810,9 @@ func (r *GoResolver) resolveCall(ctx context.Context, element *Call, rc *Resolve
 	// 使用现有的BaseElement存储调用信息
 	elements := []Element{element}
 
-	// 存储引用元素
-	var references []*Reference
-
-	// 如果没有匹配信息，直接返回
-	if rc.Match == nil || rc.Match.Captures == nil || len(rc.Match.Captures) == 0 {
-		return elements, nil
-	}
+	rootCapture := rc.Match.Captures[0]
+	rootCaptureName := rc.CaptureNames[rootCapture.Index]
+	updateRootElement(element, &rootCapture, rootCaptureName, rc.SourceFile.Content)
 
 	// 处理所有捕获节点
 	for _, capture := range rc.Match.Captures {
@@ -930,7 +821,6 @@ func (r *GoResolver) resolveCall(ctx context.Context, element *Call, rc *Resolve
 			continue
 		}
 		nodeCaptureName := rc.CaptureNames[capture.Index]
-		updateRootElement(element, &capture, nodeCaptureName, rc.SourceFile.Content)
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeFunctionCall:
 			// 处理整个函数调用表达式
@@ -946,6 +836,7 @@ func (r *GoResolver) resolveCall(ctx context.Context, element *Call, rc *Resolve
 				case types.NodeKindIdentifier:
 					// 简单函数调用
 					element.BaseElement.Name = funcNode.Utf8Text(rc.SourceFile.Content)
+					element.Scope = types.ScopeFunction
 				case types.NodeKindSelectorExpression:
 					// 带包名/接收者的函数调用，如pkg.Func()或obj.Method()
 					field := funcNode.ChildByFieldName("field")
@@ -960,22 +851,15 @@ func (r *GoResolver) resolveCall(ctx context.Context, element *Call, rc *Resolve
 					}
 				}
 			}
-
 		case types.ElementTypeFunctionArguments:
-			// 专门处理参数列表，仅收集参数位置信息
 			collectArgumentPositions(element, capture.Node, rc.SourceFile.Content)
 
-		// 处理结构体实例化
 		case types.ElementTypeStructCall:
 			refPathMap := extractReferencePath(&capture.Node, rc.SourceFile.Content)
 			element.BaseElement.Name = refPathMap["property"]
 			element.Owner = refPathMap["object"]
 		}
-	}
-
-	// 添加引用元素到结果中
-	for _, ref := range references {
-		elements = append(elements, ref)
+		element.Scope = types.ScopeFunction
 	}
 
 	return elements, nil
@@ -1102,24 +986,6 @@ func analyzeReturnTypes(resultNode *sitter.Node, content []byte) []string {
 	return returnTypes
 }
 
-func (r *GoResolver) isStandardLibrary(pkgPath string) (bool, error) {
-	cfg := &packages.Config{
-		Mode: packages.NeedName,
-	}
-
-	pkgs, err := packages.Load(cfg, pkgPath)
-	if err != nil {
-		return false, fmt.Errorf("import_resolver load package: %v", err)
-	}
-
-	if len(pkgs) == 0 {
-		return false, fmt.Errorf("import_resolver package not found: %s", pkgPath)
-	}
-
-	// 标准库包的PkgPath以"internal/"或非模块路径开头
-	return !strings.Contains(pkgs[0].PkgPath, "."), nil
-}
-
 // isPrimitiveType 检查类型名称是否为Go基本数据类型
 func isPrimitiveType(typeName string) bool {
 	// 去除可能的数组、切片或指针标记
@@ -1139,4 +1005,34 @@ func isPrimitiveType(typeName string) bool {
 		}
 	}
 	return false
+}
+
+// 暂时保留，后续有用
+// 判断返回类型是否为基本类型
+func analyzeReturnType(resultNode *sitter.Node, content []byte) []string {
+	var returnType []string
+	for i := uint(0); i < resultNode.ChildCount(); i++ {
+		child := resultNode.Child(i)
+		if child == nil {
+			continue
+		}
+		if child.Kind() == string(types.NodeKindTypeIdentifier) {
+			nameType := child.Utf8Text(content)
+			if isPrimitiveType(nameType) {
+				return []string{types.PrimitiveType}
+			}
+			returnType = append(returnType, nameType)
+		}
+		if child.Kind() == string(types.NodeKindParameterDeclaration) {
+			nameNode := child.ChildByFieldName("type")
+			if nameNode != nil {
+				nameType := nameNode.Utf8Text(content)
+				if isPrimitiveType(nameType) {
+					return []string{types.PrimitiveType}
+				}
+			}
+			returnType = append(returnType, nameNode.Utf8Text(content))
+		}
+	}
+	return returnType
 }
