@@ -16,7 +16,9 @@ import (
 	// api "codebase-indexer/api"
 	"codebase-indexer/internal/config"
 	"codebase-indexer/internal/daemon"
+	"codebase-indexer/internal/database"
 	"codebase-indexer/internal/handler"
+	"codebase-indexer/internal/job"
 	"codebase-indexer/internal/repository"
 	"codebase-indexer/internal/server"
 	"codebase-indexer/internal/service"
@@ -77,19 +79,40 @@ func main() {
 		return
 	}
 
-	// Initialize service layer
+	// Initialize database manager
+	dbConfig := config.DefaultDatabaseConfig()
+	dbManager := database.NewSQLiteManager(dbConfig, logger)
+	if err := dbManager.Initialize(); err != nil {
+		logger.Fatal("failed to initialize database manager: %v", err)
+		return
+	}
+
+	// Initialize repositories
+	workspaceRepo := repository.NewWorkspaceRepository(dbManager, logger)
+	eventRepo := repository.NewEventRepository(dbManager, logger)
+	embeddingStateRepo := repository.NewEmbeddingStateRepository(dbManager, logger)
 	var syncServiceConfig *config.SyncConfig
 	if *clientId != "" && *serverEndpoint != "" && *token != "" {
 		syncServiceConfig = &config.SyncConfig{ClientId: *clientId, ServerURL: *serverEndpoint, Token: *token}
 	}
-	scanService := repository.NewFileScanner(logger)
-	syncService := repository.NewHTTPSync(syncServiceConfig, logger)
+	scanRepo := repository.NewFileScanner(logger)
+	syncRepo := repository.NewHTTPSync(syncServiceConfig, logger)
+
+	// Initialize service layer
+	fileScanService := service.NewFileScanService(workspaceRepo, eventRepo, scanRepo, storageManager, logger)
+	eventProcessService := service.NewEventProcessService(eventRepo, embeddingStateRepo, logger)
+	embeddingStatusService := service.NewEmbeddingStatusService(embeddingStateRepo, workspaceRepo, logger)
 	codebaseService := service.NewCodebaseService(logger)
-	schedulerService := service.NewScheduler(syncService, scanService, storageManager, logger)
-	extensionService := service.NewExtensionService(storageManager, syncService, scanService, codebaseService, logger)
+	schedulerService := service.NewScheduler(syncRepo, scanRepo, storageManager, logger)
+	extensionService := service.NewExtensionService(storageManager, syncRepo, scanRepo, codebaseService, logger)
+
+	// Initialize job layer
+	fileScanJob := job.NewFileScanJob(fileScanService, logger, 5*time.Minute)
+	eventProcessorJob := job.NewEventProcessorJob(eventProcessService, logger)
+	statusCheckerJob := job.NewStatusCheckerJob(embeddingStatusService, logger, 3*time.Second)
 
 	// Initialize handler layer
-	// grpcHandler := handler.NewGRPCHandler(syncService, scanService, storageManager, schedulerService, logger)
+	// grpcHandler := handler.NewGRPCHandler(syncRepo, scanRepo, storageManager, schedulerService, logger)
 	extensionHandler := handler.NewExtensionHandler(extensionService, logger)
 	backendHandler := handler.NewBackendHandler(codebaseService, logger)
 
@@ -111,7 +134,7 @@ func main() {
 
 	// Start daemon process
 	// daemon := daemon.NewDaemon(syncScheduler, s, lis, httpSync, fileScanner, storageManager, logger)
-	daemon := daemon.NewDaemon(schedulerService, syncService, scanService, storageManager, logger)
+	daemon := daemon.NewDaemon(schedulerService, syncRepo, scanRepo, storageManager, logger, fileScanJob, eventProcessorJob, statusCheckerJob)
 	go daemon.Start()
 
 	// Start HTTP server

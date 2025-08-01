@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"codebase-indexer/internal/config"
+	"codebase-indexer/internal/job"
 	"codebase-indexer/internal/repository"
 	"codebase-indexer/internal/service"
 	"codebase-indexer/internal/utils"
@@ -21,30 +22,39 @@ type Daemon struct {
 	// grpcListen  net.Listener
 	httpSync    repository.SyncInterface
 	fileScanner repository.ScannerInterface
-	storage     repository.SotrageInterface
+	storage     repository.StorageInterface
 	logger      logger.Logger
 	ctx         context.Context
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
 	schedWG     sync.WaitGroup // Used to wait for scheduler restart
+
+	// 新增字段
+	scannerJob        *job.FileScanJob
+	eventProcessorJob *job.EventProcessorJob
+	statusCheckerJob  *job.StatusCheckerJob
 }
 
 // func NewDaemon(scheduler *scheduler.Scheduler, grpcServer *grpc.Server, grpcListen net.Listener,
 //
 //	httpSync syncer.SyncInterface, fileScanner scanner.ScannerInterface, storage storage.SotrageInterface, logger logger.Logger) *Daemon {
 func NewDaemon(scheduler *service.Scheduler, httpSync repository.SyncInterface,
-	fileScanner repository.ScannerInterface, storage repository.SotrageInterface, logger logger.Logger) *Daemon {
+	fileScanner repository.ScannerInterface, storage repository.StorageInterface, logger logger.Logger,
+	scannerJob *job.FileScanJob, eventProcessorJob *job.EventProcessorJob, statusCheckerJob *job.StatusCheckerJob) *Daemon {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Daemon{
 		scheduler: scheduler,
 		// grpcServer:  grpcServer,
 		// grpcListen:  grpcListen,
-		httpSync:    httpSync,
-		fileScanner: fileScanner,
-		storage:     storage,
-		logger:      logger,
-		ctx:         ctx,
-		cancel:      cancel,
+		httpSync:          httpSync,
+		fileScanner:       fileScanner,
+		storage:           storage,
+		logger:            logger,
+		ctx:               ctx,
+		cancel:            cancel,
+		scannerJob:        scannerJob,
+		eventProcessorJob: eventProcessorJob,
+		statusCheckerJob:  statusCheckerJob,
 	}
 }
 
@@ -108,6 +118,15 @@ func (d *Daemon) Start() {
 			}
 		}
 	}()
+
+	// 启动文件扫描任务（5分钟间隔）
+	d.startFileScannerTask()
+
+	// 启动事件处理协程任务
+	d.startEventProcessorTask()
+
+	// 启动状态检查任务（3秒间隔）
+	d.startStatusCheckerTask()
 }
 
 // updateConfig updates client configuration
@@ -239,6 +258,25 @@ func (d *Daemon) fetchServerHashTree() {
 func (d *Daemon) Stop() {
 	d.logger.Info("stopping daemon process...")
 	d.cancel()
+
+	// 停止文件扫描任务
+	if d.scannerJob != nil {
+		d.scannerJob.Stop()
+		d.logger.Info("file scanner task stopped")
+	}
+
+	// 停止事件处理协程任务
+	if d.eventProcessorJob != nil {
+		d.eventProcessorJob.Stop()
+		d.logger.Info("event processor task stopped")
+	}
+
+	// 停止状态检查任务
+	if d.statusCheckerJob != nil {
+		d.statusCheckerJob.Stop()
+		d.logger.Info("status checker task stopped")
+	}
+
 	utils.CleanUploadTmpDir()
 	d.logger.Info("temp directory cleaned up")
 	d.wg.Wait()
@@ -247,4 +285,22 @@ func (d *Daemon) Stop() {
 	// 	d.logger.Info("gRPC service stopped")
 	// }
 	d.logger.Info("daemon process stopped")
+}
+
+// startFileScannerTask 启动文件扫描任务
+func (d *Daemon) startFileScannerTask() {
+	d.logger.Info("starting file scanner task...")
+	d.scannerJob.Start()
+}
+
+// startEventProcessorTask 启动事件处理协程任务
+func (d *Daemon) startEventProcessorTask() {
+	d.logger.Info("starting event processor task...")
+	d.eventProcessorJob.Start()
+}
+
+// startStatusCheckerTask 启动状态检查任务
+func (d *Daemon) startStatusCheckerTask() {
+	d.logger.Info("starting status checker task...")
+	d.statusCheckerJob.Start()
 }

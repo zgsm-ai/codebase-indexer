@@ -19,13 +19,15 @@ type Workspace struct {
 
 // Event 事件数据模型
 type Event struct {
-	ID             int64     `json:"id" db:"id"`
-	WorkspacePath  string    `json:"workspacePath" db:"workspace_path"`
-	EventType      string    `json:"eventType" db:"event_type"`
-	SourceFilePath string    `json:"sourceFilePath" db:"source_file_path"`
-	TargetFilePath string    `json:"targetFilePath" db:"target_file_path"`
-	CreatedAt      time.Time `json:"createdAt" db:"created_at"`
-	UpdatedAt      time.Time `json:"updatedAt" db:"updated_at"`
+	ID              int64     `json:"id" db:"id"`
+	WorkspacePath   string    `json:"workspacePath" db:"workspace_path"`
+	EventType       string    `json:"eventType" db:"event_type"`
+	SourceFilePath  string    `json:"sourceFilePath" db:"source_file_path"`
+	TargetFilePath  string    `json:"targetFilePath" db:"target_file_path"`
+	EmbeddingStatus int       `json:"embeddingStatus" db:"embedding_status"`
+	CodegraphStatus int       `json:"codegraphStatus" db:"codegraph_status"`
+	CreatedAt       time.Time `json:"createdAt" db:"created_at"`
+	UpdatedAt       time.Time `json:"updatedAt" db:"updated_at"`
 }
 
 // EmbeddingState 语义构建状态数据模型

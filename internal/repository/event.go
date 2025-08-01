@@ -17,11 +17,11 @@ type EventRepository interface {
 	// GetEventByID 根据ID获取事件
 	GetEventByID(id int64) (*model.Event, error)
 	// GetEventsByWorkspace 根据工作区路径获取事件
-	GetEventsByWorkspace(workspacePath string) ([]*model.Event, error)
+	GetEventsByWorkspace(workspacePath string, limit int, isDesc bool) ([]*model.Event, error)
 	// GetEventsByType 根据事件类型获取事件
-	GetEventsByType(eventType string) ([]*model.Event, error)
+	GetEventsByType(eventType string, limit int, isDesc bool) ([]*model.Event, error)
 	// GetEventsByWorkspaceAndType 根据工作区路径和事件类型获取事件
-	GetEventsByWorkspaceAndType(workspacePath, eventType string) ([]*model.Event, error)
+	GetEventsByWorkspaceAndType(workspacePath, eventType string, limit int, isDesc bool) ([]*model.Event, error)
 	// UpdateEvent 更新事件
 	UpdateEvent(event *model.Event) error
 	// DeleteEvent 删除事件
@@ -47,8 +47,8 @@ func NewEventRepository(db database.DatabaseManager, logger logger.Logger) Event
 // CreateEvent 创建事件
 func (r *eventRepository) CreateEvent(event *model.Event) error {
 	query := `
-		INSERT INTO events (workspace_path, event_type, source_file_path, target_file_path)
-		VALUES (?, ?, ?, ?)
+		INSERT INTO events (workspace_path, event_type, source_file_path, target_file_path, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.GetDB().Exec(query,
@@ -56,6 +56,8 @@ func (r *eventRepository) CreateEvent(event *model.Event) error {
 		event.EventType,
 		event.SourceFilePath,
 		event.TargetFilePath,
+		event.CreatedAt,
+		event.UpdatedAt,
 	)
 	if err != nil {
 		r.logger.Error("Failed to create event: %v", err)
@@ -76,7 +78,7 @@ func (r *eventRepository) CreateEvent(event *model.Event) error {
 func (r *eventRepository) GetEventByID(id int64) (*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path, 
-			created_at, updated_at
+			embedding_status, codegraph_status, created_at, updated_at
 		FROM events 
 		WHERE id = ?
 	`
@@ -92,6 +94,8 @@ func (r *eventRepository) GetEventByID(id int64) (*model.Event, error) {
 		&event.EventType,
 		&event.SourceFilePath,
 		&event.TargetFilePath,
+		&event.EmbeddingStatus,
+		&event.CodegraphStatus,
 		&createdAt,
 		&updatedAt,
 	)
@@ -111,16 +115,21 @@ func (r *eventRepository) GetEventByID(id int64) (*model.Event, error) {
 }
 
 // GetEventsByWorkspace 根据工作区路径获取事件
-func (r *eventRepository) GetEventsByWorkspace(workspacePath string) ([]*model.Event, error) {
+func (r *eventRepository) GetEventsByWorkspace(workspacePath string, limit int, isDesc bool) ([]*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path, 
-			created_at, updated_at
+			embedding_status, codegraph_status, created_at, updated_at
 		FROM events 
 		WHERE workspace_path = ?
-		ORDER BY created_at DESC
+		ORDER BY created_at %s
+		LIMIT ?
 	`
-
-	rows, err := r.db.GetDB().Query(query, workspacePath)
+	if isDesc {
+		query = fmt.Sprintf(query, "DESC")
+	} else {
+		query = fmt.Sprintf(query, "ASC")
+	}
+	rows, err := r.db.GetDB().Query(query, workspacePath, limit)
 	if err != nil {
 		r.logger.Error("Failed to get events by workspace: %v", err)
 		return nil, fmt.Errorf("failed to get events by workspace: %w", err)
@@ -138,6 +147,8 @@ func (r *eventRepository) GetEventsByWorkspace(workspacePath string) ([]*model.E
 			&event.EventType,
 			&event.SourceFilePath,
 			&event.TargetFilePath,
+			&event.EmbeddingStatus,
+			&event.CodegraphStatus,
 			&createdAt,
 			&updatedAt,
 		)
@@ -156,16 +167,22 @@ func (r *eventRepository) GetEventsByWorkspace(workspacePath string) ([]*model.E
 }
 
 // GetEventsByType 根据事件类型获取事件
-func (r *eventRepository) GetEventsByType(eventType string) ([]*model.Event, error) {
+func (r *eventRepository) GetEventsByType(eventType string, limit int, isDesc bool) ([]*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path, 
-			created_at, updated_at
+			codegraph_status, embedding_status, created_at, updated_at
 		FROM events 
 		WHERE event_type = ?
-		ORDER BY created_at DESC
+		ORDER BY created_at %s
+		LIMIT ?
 	`
 
-	rows, err := r.db.GetDB().Query(query, eventType)
+	if isDesc {
+		query = fmt.Sprintf(query, "DESC")
+	} else {
+		query = fmt.Sprintf(query, "ASC")
+	}
+	rows, err := r.db.GetDB().Query(query, eventType, limit)
 	if err != nil {
 		r.logger.Error("Failed to get events by type: %v", err)
 		return nil, fmt.Errorf("failed to get events by type: %w", err)
@@ -183,6 +200,8 @@ func (r *eventRepository) GetEventsByType(eventType string) ([]*model.Event, err
 			&event.EventType,
 			&event.SourceFilePath,
 			&event.TargetFilePath,
+			&event.CodegraphStatus,
+			&event.EmbeddingStatus,
 			&createdAt,
 			&updatedAt,
 		)
@@ -201,16 +220,21 @@ func (r *eventRepository) GetEventsByType(eventType string) ([]*model.Event, err
 }
 
 // GetEventsByWorkspaceAndType 根据工作区路径和事件类型获取事件
-func (r *eventRepository) GetEventsByWorkspaceAndType(workspacePath, eventType string) ([]*model.Event, error) {
+func (r *eventRepository) GetEventsByWorkspaceAndType(workspacePath, eventType string, limit int, isDesc bool) ([]*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path, 
-			created_at, updated_at
+			codegraph_status, embedding_status, created_at, updated_at
 		FROM events 
 		WHERE workspace_path = ? AND event_type = ?
-		ORDER BY created_at DESC
+		ORDER BY created_at %s
+		LIMIT ?
 	`
-
-	rows, err := r.db.GetDB().Query(query, workspacePath, eventType)
+	if isDesc {
+		query = fmt.Sprintf(query, "DESC")
+	} else {
+		query = fmt.Sprintf(query, "ASC")
+	}
+	rows, err := r.db.GetDB().Query(query, workspacePath, eventType, limit)
 	if err != nil {
 		r.logger.Error("Failed to get events by workspace and type: %v", err)
 		return nil, fmt.Errorf("failed to get events by workspace and type: %w", err)
@@ -228,6 +252,8 @@ func (r *eventRepository) GetEventsByWorkspaceAndType(workspacePath, eventType s
 			&event.EventType,
 			&event.SourceFilePath,
 			&event.TargetFilePath,
+			&event.CodegraphStatus,
+			&event.EmbeddingStatus,
 			&createdAt,
 			&updatedAt,
 		)
@@ -250,7 +276,7 @@ func (r *eventRepository) UpdateEvent(event *model.Event) error {
 	query := `
 		UPDATE events 
 		SET workspace_path = ?, event_type = ?, source_file_path = ?, 
-			target_file_path = ?, updated_at = CURRENT_TIMESTAMP
+			target_file_path = ?, embedding_status = ?, codegraph_status = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
 	`
 
@@ -259,6 +285,8 @@ func (r *eventRepository) UpdateEvent(event *model.Event) error {
 		event.EventType,
 		event.SourceFilePath,
 		event.TargetFilePath,
+		event.EmbeddingStatus,
+		event.CodegraphStatus,
 		event.ID,
 	)
 	if err != nil {
@@ -306,7 +334,7 @@ func (r *eventRepository) DeleteEvent(id int64) error {
 func (r *eventRepository) GetRecentEvents(workspacePath string, limit int) ([]*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path, 
-			created_at, updated_at
+			codegraph_status, embedding_status, created_at, updated_at
 		FROM events 
 		WHERE workspace_path = ?
 		ORDER BY created_at DESC
@@ -331,6 +359,8 @@ func (r *eventRepository) GetRecentEvents(workspacePath string, limit int) ([]*m
 			&event.EventType,
 			&event.SourceFilePath,
 			&event.TargetFilePath,
+			&event.CodegraphStatus,
+			&event.EmbeddingStatus,
 			&createdAt,
 			&updatedAt,
 		)

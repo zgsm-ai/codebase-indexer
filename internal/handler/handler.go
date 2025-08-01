@@ -24,14 +24,14 @@ import (
 type GRPCHandler struct {
 	httpSync    repository.SyncInterface
 	fileScanner repository.ScannerInterface
-	storage     repository.SotrageInterface
+	storage     repository.StorageInterface
 	scheduler   *service.Scheduler
 	logger      logger.Logger
 	api.UnimplementedSyncServiceServer
 }
 
 // NewGRPCHandler creates a new gRPC handler
-func NewGRPCHandler(httpSync repository.SyncInterface, fileScanner repository.ScannerInterface, storage repository.SotrageInterface, scheduler *service.Scheduler, logger logger.Logger) *GRPCHandler {
+func NewGRPCHandler(httpSync repository.SyncInterface, fileScanner repository.ScannerInterface, storage repository.StorageInterface, scheduler *service.Scheduler, logger logger.Logger) *GRPCHandler {
 	return &GRPCHandler{
 		httpSync:    httpSync,
 		fileScanner: fileScanner,
