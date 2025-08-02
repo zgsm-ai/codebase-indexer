@@ -39,15 +39,22 @@
 
 ;; Struct declarations
 (struct_specifier
-  name: (type_identifier) @definition.struct.name) @definition.struct
+  name: (type_identifier) @definition.struct.name
+  body:(_)
+) @definition.struct
 
 ;; Enum declarations
 (enum_specifier
-  name: (type_identifier) @definition.enum.name) @definition.enum
+  name: (type_identifier) @definition.enum.name
+  body:()
+) @definition.enum
 
 ;; Union declarations
 (union_specifier
-  name: (type_identifier) @definition.union.name) @definition.union
+  name: (type_identifier) @definition.union.name
+  ;;做占位，用于区分声明和定义
+  body: (field_declaration_list)@body
+) @definition.union
 
 ;; Function declarations
 (declaration
@@ -60,21 +67,29 @@
 ;; Function definitions 不带指针
 (function_definition
   type: (_) @definition.function.return_type
-  declarator: (function_declarator
-                declarator: (identifier) @definition.function.name
-                parameters: (parameter_list) @definition.function.parameters
-              )
-) @definition.function
-
-;; Function definitions 带指针的返回值的匹配
-(function_definition
-  type: (_) @definition.function.return_type
-  declarator: (pointer_declarator
-    declarator: (function_declarator
+  declarator: [
+    ;; 直接函数声明符（如：void func14(...)）
+    (function_declarator
       declarator: (identifier) @definition.function.name
       parameters: (parameter_list) @definition.function.parameters
     )
-  )
+    ;; 指针函数声明符（如：int *func(...)）
+    (pointer_declarator
+      declarator: (function_declarator
+        declarator: (identifier) @definition.function.name
+        parameters: (parameter_list) @definition.function.parameters
+      )
+    )
+    ;; 双指针函数声明符（如：int **func(...)）
+    (pointer_declarator
+      declarator: (pointer_declarator
+        declarator: (function_declarator
+          declarator: (identifier) @definition.function.name
+          parameters: (parameter_list) @definition.function.parameters
+        )
+      )
+    )
+  ]
 ) @definition.function
 
 

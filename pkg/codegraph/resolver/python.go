@@ -62,22 +62,45 @@ func (py *PythonResolver) resolveFunction(ctx context.Context, element *Function
 			element.BaseElement.Name = content
 			element.Declaration.Name = content
 		case types.ElementTypeFunctionParameters:
-			element.Declaration.Parameters = parsePyParameters(&cap.Node, rc.SourceFile.Content)
+			element.Declaration.Parameters = parsePyFuncParams(&cap.Node, rc.SourceFile.Content)
 		case types.ElementTypeFunctionReturnType:
-			// TODO 这个有问题，不一定identifiers都是要的
-			element.Declaration.ReturnType = findAllIdentifiers(&cap.Node, rc.SourceFile.Content)
+			element.Declaration.ReturnType = collectPyTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
 		}
 	}
+	element.BaseElement.Scope = types.ScopePackage
 	return []Element{element}, nil
 }
 
 func (py *PythonResolver) resolveMethod(ctx context.Context, element *Method, rc *ResolveContext) ([]Element, error) {
 	//TODO implement me
-	return nil, fmt.Errorf("not supported method yet")
+	rootCap := rc.Match.Captures[0]
+	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
+	for _, cap := range rc.Match.Captures {	
+		captureName := rc.CaptureNames[cap.Index]
+		if cap.Node.IsMissing() || cap.Node.IsError() {
+			continue
+		}
+		content := cap.Node.Utf8Text(rc.SourceFile.Content)
+		switch types.ToElementType(captureName) {
+		case types.ElementTypeMethodName:
+			element.BaseElement.Name = content
+			element.Declaration.Name = content
+		case types.ElementTypeMethodOwner:
+			element.Owner = content
+		case types.ElementTypeMethodParameters:
+			element.Declaration.Parameters = parsePyFuncParams(&cap.Node, rc.SourceFile.Content)
+			// if len(element.Declaration.Parameters) > 0 && element.Declaration.Parameters[0].Name == "self" {
+			// 	element.Declaration.Parameters=element.Declaration.Parameters[1:]
+			// }
+		case types.ElementTypeMethodReturnType:
+			element.Declaration.ReturnType = collectPyTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
+		}
+	}
+	element.BaseElement.Scope = types.ScopeClass
+	return []Element{element}, nil
 }
 
 func (py *PythonResolver) resolveClass(ctx context.Context, element *Class, rc *ResolveContext) ([]Element, error) {
-	//TODO implement me
 	rootCap := rc.Match.Captures[0]
 	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
 	for _, cap := range rc.Match.Captures {
@@ -90,15 +113,41 @@ func (py *PythonResolver) resolveClass(ctx context.Context, element *Class, rc *
 		case types.ElementTypeClassName:
 			element.BaseElement.Name = content
 		case types.ElementTypeClassExtends:
-			element.SuperClasses = parsePyExtends(&cap.Node, rc.SourceFile.Content)
+			element.SuperClasses = collectPyTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
 		}
 	}
 	return []Element{element}, nil
 }
 
 func (py *PythonResolver) resolveVariable(ctx context.Context, element *Variable, rc *ResolveContext) ([]Element, error) {
-	//TODO implement me
-	return nil, fmt.Errorf("not supported variable yet")
+	rootCap := rc.Match.Captures[0]
+	var refs []*Reference
+	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
+	for _, cap := range rc.Match.Captures {
+		captureName := rc.CaptureNames[cap.Index]
+		if cap.Node.IsMissing() || cap.Node.IsError() {
+			continue
+		}	
+		content := cap.Node.Utf8Text(rc.SourceFile.Content)
+		switch types.ToElementType(captureName) {
+		case types.ElementTypeVariableName:
+			element.BaseElement.Name = content
+		case types.ElementTypeVariableType:
+			element.VariableType = collectPyTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
+			for _, typ := range element.VariableType {
+				refs = append(refs, NewReference(element, &cap.Node, typ, types.EmptyString))
+			}
+		// TODO 考虑枚举字段、类的字段，用scm来做
+		}
+	}
+	// fmt.Println("variable",element.BaseElement.Name)
+	// fmt.Println("variable type",element.VariableType)
+	// fmt.Println("----------------------------------------")
+	elements := []Element{element}
+	for _, r := range refs {
+		elements = append(elements, r)
+	}
+	return elements, nil
 }
 
 func (py *PythonResolver) resolveInterface(ctx context.Context, element *Interface, rc *ResolveContext) ([]Element, error) {
@@ -107,11 +156,59 @@ func (py *PythonResolver) resolveInterface(ctx context.Context, element *Interfa
 }
 
 func (py *PythonResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
-	//TODO implement me
-	return nil, fmt.Errorf("not supported call yet")
+	rootCap := rc.Match.Captures[0]
+	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
+	var refs []*Reference
+	for _, cap := range rc.Match.Captures {
+		captureName := rc.CaptureNames[cap.Index]
+		if cap.Node.IsMissing() || cap.Node.IsError() {
+			continue
+		}
+		// content := cap.Node.Utf8Text(rc.SourceFile.Content)
+		switch types.ToElementType(captureName) {
+		case types.ElementTypeFunctionCallName:
+			nameOrTypes:= collectPyTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
+			if len(nameOrTypes) > 1 {
+				// Dict[str, int] 考虑将类型抛出去
+				for _, typ := range nameOrTypes {
+					// TODO 过滤官方标准类型
+					refs = append(refs, NewReference(element, &cap.Node, typ,types.EmptyString))
+				}
+			}
+			element.BaseElement.Name = nameOrTypes[0]
+			fmt.Println("call.function.name",element.BaseElement.Name)
+		case types.ElementTypeFunctionArguments:
+			args:=getArgs(&cap.Node, rc.SourceFile.Content)
+			for _, arg := range args {
+				element.Parameters = append(element.Parameters, &Parameter{
+					Name: arg,
+				})
+			}
+		}
+	}
+	element.BaseElement.Scope = types.ScopeFunction		
+	elements := []Element{element}
+	for _, r := range refs {
+		elements = append(elements, r)
+	}
+	return elements, nil
 }
-
-func parsePyParameters(node *sitter.Node, content []byte) []Parameter {
+func getArgs(node *sitter.Node, content []byte) []string {
+	if node == nil {
+		return nil
+	}
+	var args []string
+	for i := uint(0); i < node.ChildCount(); i++ {
+		child := node.Child(i)
+		if child.IsMissing() || child.IsError() {
+			continue
+		}
+		args = append(args, child.Utf8Text(content))
+	}
+	return args
+}
+// 解析python函数参数，可能包含name和type，也可能只包含其中一个，也可能是可变参数
+func parsePyFuncParams(node *sitter.Node, content []byte) []Parameter {
 	if node == nil {
 		return nil
 	}
@@ -146,7 +243,22 @@ func parsePyParameters(node *sitter.Node, content []byte) []Parameter {
 			})
 		case types.NodeKindTypedParameter:
 			name := child.Child(0).Utf8Text(content)
+			name = strings.ReplaceAll(name, "**", "...")
+			name = strings.ReplaceAll(name, "*", "...")
 			typs := findAllIdentifiers(child.ChildByFieldName("type"), content)
+			params = append(params, Parameter{
+				Name: name,
+				Type: typs,
+			})
+		case types.NodeKindTypedDefaultParameter:
+			name := child.ChildByFieldName("name").Utf8Text(content)
+			name = strings.ReplaceAll(name, "**", "...")
+			name = strings.ReplaceAll(name, "*", "...")
+			typs := findAllIdentifiers(child.ChildByFieldName("type"), content)
+			if child.ChildByFieldName("value") != nil {
+				valueTyps := collectPyTypeIdentifiers(child.ChildByFieldName("value"), content)
+				typs = append(typs, valueTyps...)
+			}
 			params = append(params, Parameter{
 				Name: name,
 				Type: typs,
@@ -157,64 +269,10 @@ func parsePyParameters(node *sitter.Node, content []byte) []Parameter {
 	return params
 }
 
-// 递归查找python函数单个参数类型里面所有标识符
-func findAllIdentifiers(node *sitter.Node, content []byte) []string {
-	if node == nil {
-		return nil
-	}
-	var identifiers []string
-	var walk func(n *sitter.Node)
-	walk = func(n *sitter.Node) {
-		for i := uint(0); i < n.ChildCount(); i++ {
-			child := n.Child(i)
-			if child.IsMissing() || child.IsError() {
-				continue
-			}
-			switch types.ToNodeKind(child.Kind()) {
-			case types.NodeKindIdentifier:
-				identifiers = append(identifiers, child.Utf8Text(content))
-			default:
-				// 递归查找类型中的标识符
-				walk(child)
-			}
-		}
-	}
-	walk(node)
-	return identifiers
-}
-// func parsePyExtends(node *sitter.Node, content []byte) []string {
-// 	if node == nil {
-// 		return nil
-// 	}
-// 	var identifiers []string
-// 	for i := uint(0); i < node.ChildCount(); i++ {
-// 		child := node.Child(i)
-// 		if child.IsMissing() || child.IsError() {
-// 			continue
-// 		}
-// 		switch types.ToNodeKind(child.Kind()) {
-// 		case types.NodeKindIdentifier:
-// 			identifiers = append(identifiers, child.Utf8Text(content))
-// 		case types.NodeKindKeywordArgument:
-// 			name := child.ChildByFieldName("name").Utf8Text(content)
-// 			if name != "metaclass" {
-// 				continue
-// 			}
-// 			// 处理value字段
-// 			value := child.ChildByFieldName("value")
-			
-// 		case types.NodeKindSubscript:
-// 			identifier := findAllIdentifiers(child.ChildByFieldName("value"), content)
-// 			identifiers = append(identifiers, identifier...)
-// 		case types.NodeKindAttribute:
-// 			identifier := findAllIdentifiers(child.ChildByFieldName("attribute"), content)
-// 			identifiers = append(identifiers, identifier...)
-// 		}
-// 	}
-// 	return identifiers
-// }
 
-func parsePyExtends(node *sitter.Node, content []byte) []string {
+
+// collectPyTypeIdentifiers: 解析传参为类型的情况，也可处理单个复合参数解析为多个基础参数的情况
+func collectPyTypeIdentifiers(node *sitter.Node, content []byte) []string {
 	if node == nil {
 		return nil
 	}
@@ -234,6 +292,7 @@ func parsePyExtends(node *sitter.Node, content []byte) []string {
 				walk(attr)
 			}
 		case types.NodeKindSubscript:
+			// 这个还可以给解析返回值或单个参数类型使用
 			// 分别递归 value 和 subscript 字段
 			// 捕获所有 subscript（可能有多个参数）
 			for i := uint(0); i < n.NamedChildCount(); i++ {
@@ -250,6 +309,14 @@ func parsePyExtends(node *sitter.Node, content []byte) []string {
 			}
 			value := n.ChildByFieldName("value")
 			walk(value)
+		case types.NodeKindGenericType:
+			for i := uint(0); i < n.NamedChildCount(); i++ {
+				child := n.NamedChild(i)
+				if child == nil || child.IsMissing() || child.IsError() {
+					continue
+				}
+				walk(child)
+			}
 		default:
 			for i := uint(0); i < n.ChildCount(); i++ {
 				walk(n.Child(i))

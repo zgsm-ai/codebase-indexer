@@ -15,6 +15,7 @@
 (class_specifier
   name: (type_identifier) @definition.class.name
   (base_class_clause)? @definition.class.extends
+  body:(_)
 ) @definition.class
 
 
@@ -22,7 +23,28 @@
 (struct_specifier
   name: (type_identifier) @definition.struct.name
   (base_class_clause)? @definition.struct.extends
+  body:(_)
 )@definition.struct
+
+;; Union declarations
+(union_specifier
+  name: (type_identifier) @definition.union.name
+  ;;做占位，用于区分声明和定义
+  body: (_)
+) @definition.union
+
+;; Enum declarations - treat enum name as class
+(enum_specifier
+  name: (type_identifier) ? @definition.enum.name
+  ;;做占位，用于区分声明和定义
+  body: (_)
+)@definition.enum
+
+(type_definition
+  type: (_) @definition.type.original_type
+  declarator: (_) @definition.type.alias
+)@definition.type
+
 
 ;; ------------------------------变量声明----------------------------------
 ;; Variable declarations (keep as declaration)
@@ -92,19 +114,6 @@
   default_value: (_) @definition.field.value ?
 ) @definition.field
 
-
-
-
-
-;; Union declarations
-(union_specifier
-  name: (type_identifier) @definition.union.name) @definition.union
-
-;; Enum declarations - treat enum name as class
-(enum_specifier
-  name: (type_identifier) ? @definition.enum.name
-)@definition.enum
-
 ;; Enum constants - treat enum values as fields  
 (enumerator 
   name: (identifier) @definition.enum.constant.name
@@ -158,21 +167,29 @@
 ;; 返回值不带指针和引用的基础函数定义
 (function_definition
   type: (_) @definition.function.return_type
-  declarator: (function_declarator
-    declarator: (identifier) @definition.function.name
-    parameters: (parameter_list) @definition.function.parameters
-  )
-) @definition.function
-
-;; 返回值带指针的函数定义
-(function_definition
-  type: (_) @definition.function.return_type
-  declarator: (pointer_declarator
+  declarator: [
+    ;; 直接函数声明符（如：void func14(...)）
     (function_declarator
       declarator: (identifier) @definition.function.name
       parameters: (parameter_list) @definition.function.parameters
     )
-  ) @definition.function.reference
+    ;; 指针函数声明符（如：int *func(...)）
+    (pointer_declarator
+      declarator: (function_declarator
+        declarator: (identifier) @definition.function.name
+        parameters: (parameter_list) @definition.function.parameters
+      )
+    )
+    ;; 双指针函数声明符（如：int **func(...)）
+    (pointer_declarator
+      declarator: (pointer_declarator
+        declarator: (function_declarator
+          declarator: (identifier) @definition.function.name
+          parameters: (parameter_list) @definition.function.parameters
+        )
+      )
+    )
+  ]
 ) @definition.function
 
 ;; 返回值带引用的函数定义

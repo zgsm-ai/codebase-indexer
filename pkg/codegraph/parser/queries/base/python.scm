@@ -48,23 +48,53 @@
   name: (identifier) @definition.class.name
   superclasses: (argument_list)? @definition.class.extends
 )@definition.class
+;; 枚举和类不区分
 
 
-;; Decorated functions
-(decorated_definition
-  definition: (function_definition
-                name: (identifier) @definition.decorated_function.name)) @definition.decorated_function
 
+;; ------------------------------------method-----------------------------------
+;; 带装饰器
+(class_definition
+  name: (identifier) @definition.method.owner
+  body: (block
+    (decorated_definition
+      (decorator) @definition.method.decorator
+      definition: (function_definition
+        name: (identifier) @definition.method.name
+        parameters: (parameters) @definition.method.parameters
+        return_type: (type)? @definition.method.return_type
+      )
+    )
+  )
+) @definition.method
+
+;; 无装饰器
+(class_definition
+  name: (identifier) @definition.method.owner
+  body: (block
+    (function_definition
+      name: (identifier) @definition.method.name
+      parameters: (parameters) @definition.method.parameters
+      return_type: (type)? @definition.method.return_type
+    )
+  )
+) @definition.method
+
+;; ----------------------------------Variable-------------------------------------
 ;; Variable assignments
 (assignment
-  left: (identifier) @variable.name) @variable
+  left: (identifier) @variable.name
+  type: (type) @variable.type
+ )@variable
 
 
-;; Method definitions (inside classes)
-(class_definition
-  body: (block
-          (function_definition
-            name: (identifier) @definition.method.name))) @definition.method
+;; ---------------------------------Call---------------------------------
+(call
+  function: (_) @call.function.name
+  arguments: (argument_list) @call.function.arguments
+) @call.function
+
+
 
 ;; Type aliases
 (assignment
@@ -73,12 +103,7 @@
            function: (identifier)
            (#eq? @type.name "TypeVar"))) @type
 
-;; Enum definitions (Python 3.4+)
-(class_definition
-  name: (identifier) @definition.enum.name
-  superclasses: (argument_list
-                  (identifier) @base
-                  (#eq? @base "Enum"))) @definition.enum
+
 
 ;; Dataclass definitions
 (decorated_definition
@@ -96,18 +121,6 @@
                   (#eq? @base "Protocol"))
   ) @definition.protocol
 
-;; function call
-(call
-  function: (identifier) @call.function.name
-  arguments: (argument_list) @call.function.arguments
-  ) @call.function
 
 
-;; method call
-(call
-  function: (attribute
-              object: (identifier) @call.method.owner
-              attribute: (identifier) @call.method.name
-              )
-  arguments: (argument_list) @call.method.arguments
-  ) @call.method
+

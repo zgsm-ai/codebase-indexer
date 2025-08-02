@@ -3,6 +3,7 @@ package workspace
 import (
 	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/test/mocks"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -74,7 +75,7 @@ func TestFindProjects(t *testing.T) {
 			logger := &mocks.MockLogger{}
 			logger.On("Info", mock.Anything, mock.Anything).Return()
 			wr := NewWorkSpaceReader(logger)
-			projects := wr.FindProjects(dir, types.VisitPattern{})
+			projects := wr.FindProjects(context.Background(), dir, types.VisitPattern{})
 			assert.Equal(t, tt.expectNum, len(projects))
 			for _, rel := range tt.expectHas {
 				var found bool

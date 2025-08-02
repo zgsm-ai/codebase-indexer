@@ -9,7 +9,7 @@ def add(a, b):
 def greet(name="world"):
     print(f"Hello, {name}")
 
-def connect(host, port=8080, timeout=30):
+def connect(host,/, port=8080, timeout=30):
     pass
 
 def greet1(name: str) -> str:
@@ -34,3 +34,6 @@ def add_status(items: list[dict[str, int]]) -> list[dict[str, int]]:
         {**item, "status": 1 if item["value"] > 5 else 0}
         for item in items
     ]
+    
+def f_test(a) -> test.utils.Foo[test.utils.Foo1]:
+    ...

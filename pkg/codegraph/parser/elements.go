@@ -33,6 +33,12 @@ func newRootElement(elementTypeValue string, rootIndex uint32) resolver.Element 
 	case types.ElementTypeStruct:
 		base.Type = types.ElementTypeClass
 		return &resolver.Class{BaseElement: base}
+	case types.ElementTypeUnion:
+		base.Type = types.ElementTypeClass
+		return &resolver.Class{BaseElement: base}
+	case types.ElementTypeTypedef:
+		base.Type = types.ElementTypeClass
+		return &resolver.Class{BaseElement: base}
 	case types.ElementTypeMethod:
 		base.Type = types.ElementTypeMethod
 		return &resolver.Method{BaseElement: base}

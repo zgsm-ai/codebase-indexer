@@ -3,6 +3,7 @@ module codebase-indexer
 go 1.24.4
 
 require (
+	github.com/dgraph-io/badger/v4 v4.8.0
 	github.com/gin-gonic/gin v1.10.1
 	github.com/golang/mock v1.6.0
 	github.com/mattn/go-sqlite3 v1.14.30
@@ -66,6 +67,5 @@ require (
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250218202821-56aae31c358a // indirect
-	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
