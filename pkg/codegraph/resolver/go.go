@@ -3,7 +3,6 @@ package resolver
 import (
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
-	"fmt"
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -937,10 +936,10 @@ func analyzeReturnTypes(resultNode *sitter.Node, content []byte) []string {
 		} else if typeNode != nil {
 			// 这是一个无名返回值参数
 			paramType := typeNode.Utf8Text(content)
-			fmt.Println("paramType", paramType)
+			//fmt.Println("paramType", paramType)
 			// 处理可能积累的同类型名称
 			if len(currentNames) > 0 {
-				fmt.Println("currentNames", currentNames)
+				//fmt.Println("currentNames", currentNames)
 				for range currentNames {
 					returnTypes = append(returnTypes, lastType)
 				}

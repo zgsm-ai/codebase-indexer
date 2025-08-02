@@ -46,7 +46,7 @@
 ;; Enum declarations
 (enum_specifier
   name: (type_identifier) @definition.enum.name
-  body:()
+  body:(_)
 ) @definition.enum
 
 ;; Union declarations

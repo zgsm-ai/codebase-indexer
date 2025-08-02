@@ -66,6 +66,10 @@ func NewCodeIndexer(
 // IndexWorkspace 索引整个工作区
 func (i *Indexer) IndexWorkspace(ctx context.Context, workspace string) error {
 	i.logger.Info("index_workspace start to index workspace：%s", workspace)
+	exists, err := i.workspaceReader.Exists(ctx, workspace)
+	if err == nil && !exists {
+		return fmt.Errorf("index_workspace workspace %s not exists", workspace)
+	}
 	projects := i.workspaceReader.FindProjects(ctx, workspace, types.VisitPattern{})
 	if len(projects) == 0 {
 		return fmt.Errorf("index_workspace find no projects in workspace: %s", workspace)
@@ -435,7 +439,10 @@ func (i *Indexer) deleteFileIndexes(ctx context.Context, puuid string, filePaths
 // IndexFiles 根据工作区路径、文件路径，批量保存索引
 func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePaths []string) error {
 	i.logger.Info("index_files start to index workspace %s files: %v", workspacePath, filePaths)
-
+	exists, err := i.workspaceReader.Exists(ctx, workspacePath)
+	if err == nil && !exists {
+		return fmt.Errorf("index_files workspace %s not exists", workspacePath)
+	}
 	projects := i.workspaceReader.FindProjects(ctx, workspacePath, types.VisitPattern{})
 	if len(projects) == 0 {
 		return fmt.Errorf("no project found in workspace %s", workspacePath)
@@ -595,6 +602,9 @@ func (i *Indexer) QuerySymbols(ctx context.Context, workspacePath string, filePa
 	for _, symbolName := range symbolNames {
 		symbolDef, err := i.storage.Get(context.Background(), targetProjectUuid,
 			store.SymbolNameKey{Language: language, Name: symbolName})
+		if errors.Is(err, store.ErrKeyNotFound) {
+			continue
+		}
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to get symbol definition %s: %w", symbolName, err))
 			continue

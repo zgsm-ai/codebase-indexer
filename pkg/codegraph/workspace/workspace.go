@@ -126,7 +126,7 @@ func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, vi
 	for _, p := range projects {
 		goModule, err := w.resolveGoModule(ctx, p.Path)
 		if err != nil {
-			w.logger.Error("find_projects resolve go module err:%w", err)
+			w.logger.Error("find_projects resolve go module err:%v", err)
 		} else {
 			w.logger.Error("find_projects resolved go module %s in project %s", goModule, p.Path)
 			p.GoModule = goModule
