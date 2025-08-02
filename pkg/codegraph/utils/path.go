@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -78,4 +79,22 @@ func IsSameParentDir(a, b string) bool {
 	parentB := filepath.Dir(b)
 	// 比较父目录是否相同（已自动处理路径分隔符差异）
 	return parentA == parentB
+}
+
+// ListFiles 列出指定目录下的所有文件（不包含子目录）
+func ListFiles(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	var files []string
+	for _, entry := range entries {
+		if !entry.IsDir() { // 只保留文件，过滤目录
+			// 获取文件的完整路径
+			fullPath := filepath.Join(dir, entry.Name())
+			files = append(files, fullPath)
+		}
+	}
+	return files, nil
 }

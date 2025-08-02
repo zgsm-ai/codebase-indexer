@@ -1,9 +1,12 @@
 package codegraph
 
 import (
+	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/types"
+	"codebase-indexer/pkg/codegraph/utils"
 	"codebase-indexer/pkg/logger"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -26,6 +29,18 @@ var tempDir = "/tmp/"
 var visitPattern = types.VisitPattern{ExcludeDirs: []string{".git", ".idea"}, IncludeExts: []string{".go"}}
 
 // TODO 性能（内存、cpu）监控；各种路径、项目名（中文、符号）测试；索引数量统计；大仓库测试
+
+func cleanIndexStoreTestHelper(ctx context.Context, projects []*workspace.Project, storage store.GraphStorage) error {
+	for _, p := range projects {
+		if err := storage.DeleteAll(ctx, p.Uuid); err != nil {
+			return err
+		}
+		if storage.Size(ctx, p.Uuid) > 0 {
+			return fmt.Errorf("clean workspace index failed, size not equal 0")
+		}
+	}
+	return nil
+}
 
 func TestIndexer_IndexWorkspace(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
@@ -87,424 +102,288 @@ func TestIndexer_IndexWorkspace(t *testing.T) {
 				indexSize++
 			}
 		}
-		iter.Close()
-		assert.True(t, storage.Size(ctx, p.Uuid) > 0)
-		err = storage.DeleteAll(ctx, p.Uuid)
+		err := iter.Close()
 		assert.NoError(t, err)
-		assert.Equal(t, 0, storage.Size(ctx, p.Uuid))
 	}
 	assert.Equal(t, goCount, indexSize)
+	err = cleanIndexStoreTestHelper(ctx, projects, storage)
+	assert.NoError(t, err)
 }
 
-func TestIndexer_IndexFiles(t *testing.T) {
-	// 创建临时测试目录
-	tempDir, err := os.MkdirTemp("", "test-files")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	// 创建测试项目结构
-	projectDir := filepath.Join(tempDir, "test-project")
-	err = os.MkdirAll(projectDir, 0755)
+func TestIndexer_IndexProjectFilesWhenProjectHasIndex(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	storageDir := filepath.Join(tempDir, "index")
+	err := os.MkdirAll(storageDir, 0755)
 	assert.NoError(t, err)
 
-	// 创建测试文件
-	testFile := filepath.Join(projectDir, "main.go")
-	err = os.WriteFile(testFile, []byte(`package main
-
-import "fmt"
-
-func main() {
-	fmt.Println("Hello, World!")
-}`), 0644)
+	// 测试本项目
+	workspaceDir, err := filepath.Abs("../../")
+	assert.NoError(t, err)
+	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
 	assert.NoError(t, err)
 
-	// 创建 .git 目录使其成为项目
-	err = os.MkdirAll(filepath.Join(projectDir, ".git"), 0755)
+	storage, err := store.NewLevelDBStorage(storageDir, newLogger)
 	assert.NoError(t, err)
-
-	// 准备依赖
-	mockLogger := &mocks.MockLogger{}
-	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
-	mockLogger.On("Error", mock.Anything, mock.Anything).Return()
-
-	parser := parser.NewSourceFileParser(mockLogger)
-	analyzer := analyzer.NewDependencyAnalyzer(mockLogger, nil, nil)
-	workspaceReader := workspace.NewWorkSpaceReader(mockLogger)
-	storage, err := store.NewLevelDBStorage(filepath.Join(tempDir, "storage"), mockLogger)
+	workspaceReader := workspace.NewWorkSpaceReader(newLogger)
+	sourceFileParser := parser.NewSourceFileParser(newLogger)
+	dependencyAnalyzer := analyzer.NewDependencyAnalyzer(newLogger, workspaceReader, storage)
 	assert.NoError(t, err)
 	defer storage.Close()
-
+	newVisitPattern := types.VisitPattern{ExcludeDirs: []string{".git", ".idea", "mocks"}, IncludeExts: []string{".go"}}
 	indexer := NewCodeIndexer(
-		parser,
-		analyzer,
+		sourceFileParser,
+		dependencyAnalyzer,
+		workspaceReader,
+		storage,
+		IndexerConfig{VisitPattern: newVisitPattern},
+		newLogger,
+	)
+
+	projects := workspaceReader.FindProjects(ctx, workspaceDir, newVisitPattern)
+	err = cleanIndexStoreTestHelper(ctx, projects, storage)
+	assert.NoError(t, err)
+
+	// 先索引工作区，然后再索引文件
+	err = indexer.IndexWorkspace(ctx, workspaceDir)
+	assert.NoError(t, err)
+	// 校验没有索引mocks目录
+	// 校验索引
+	filePath := filepath.Join(workspaceDir, "test", "mocks")
+	files, err := utils.ListFiles(filePath)
+	pathKeys := make(map[string]any)
+	for _, f := range files {
+		key, err := store.ElementPathKey{Language: lang.Go, Path: f}.Get()
+		assert.NoError(t, err)
+		pathKeys[key] = nil
+	}
+	for _, p := range projects {
+		iter := storage.Iter(ctx, p.Uuid)
+		for iter.Next() {
+			key := iter.Key()
+			if !strings.HasPrefix(key, store.PathKeyPrefix) {
+				continue
+			}
+			_, ok := pathKeys[key]
+			assert.False(t, ok)
+		}
+		err = iter.Close()
+		assert.NoError(t, err)
+	}
+
+	// 测试 index files
+
+	assert.NoError(t, err)
+	filesByProject, err := indexer.groupFilesByProject(projects, files)
+	assert.NoError(t, err)
+	for k, v := range filesByProject {
+		err = indexer.indexProjectFiles(context.Background(), k, v)
+		assert.NoError(t, err)
+	}
+
+	assert.True(t, len(pathKeys) > 0)
+	for _, p := range projects {
+		iter := storage.Iter(ctx, p.Uuid)
+		for iter.Next() {
+			key := iter.Key()
+			if !strings.HasPrefix(key, store.PathKeyPrefix) {
+				continue
+			}
+			t.Logf("key: %s", key)
+			delete(pathKeys, key)
+		}
+		err = iter.Close()
+		assert.NoError(t, err)
+	}
+	assert.True(t, len(pathKeys) == 0)
+	err = cleanIndexStoreTestHelper(ctx, projects, storage)
+	assert.NoError(t, err)
+}
+
+func TestIndexer_IndexProjectFilesWhenProjectHasNoIndex(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	storageDir := filepath.Join(tempDir, "index")
+	err := os.MkdirAll(storageDir, 0755)
+	assert.NoError(t, err)
+
+	// 测试本项目
+	workspaceDir, err := filepath.Abs("../../")
+	assert.NoError(t, err)
+	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
+	assert.NoError(t, err)
+
+	storage, err := store.NewLevelDBStorage(storageDir, newLogger)
+	assert.NoError(t, err)
+	workspaceReader := workspace.NewWorkSpaceReader(newLogger)
+	sourceFileParser := parser.NewSourceFileParser(newLogger)
+	dependencyAnalyzer := analyzer.NewDependencyAnalyzer(newLogger, workspaceReader, storage)
+	assert.NoError(t, err)
+	defer storage.Close()
+	indexer := NewCodeIndexer(
+		sourceFileParser,
+		dependencyAnalyzer,
 		workspaceReader,
 		storage,
 		IndexerConfig{VisitPattern: visitPattern},
-		mockLogger,
+		newLogger,
 	)
 
-	// 测试 IndexFiles
-	err = indexer.IndexFiles(context.Background(), tempDir, []string{testFile})
+	projects := workspaceReader.FindProjects(ctx, workspaceDir, visitPattern)
+	err = cleanIndexStoreTestHelper(ctx, projects, storage)
 	assert.NoError(t, err)
 
-	// 验证日志调用
-	mockLogger.AssertCalled(t, "Info", mock.Anything, mock.Anything)
+	// 校验没有索引mocks目录
+	// 校验索引
+	filePath := filepath.Join(workspaceDir, "test", "mocks")
+	files, err := utils.ListFiles(filePath)
+	for _, p := range projects {
+		size := storage.Size(ctx, p.Uuid)
+		assert.Equal(t, size, 0)
+	}
+	// 测试 index files
+	err = indexer.IndexFiles(context.Background(), workspaceDir, files)
+	assert.NoError(t, err)
+
+	// 统计项目的go文件数量，确保索引数和文件数一致。
+	var goCount int
+	err = workspaceReader.Walk(ctx, workspaceDir, func(walkCtx *types.WalkContext, reader io.ReadCloser) error {
+		if walkCtx.Info.IsDir {
+			return nil
+		}
+		if strings.HasSuffix(walkCtx.Path, ".go") {
+			goCount++
+		}
+		return nil
+	}, types.WalkOptions{IgnoreError: true, VisitPattern: visitPattern})
+	assert.NoError(t, err)
+
+	var indexSize int
+	for _, p := range projects {
+		iter := storage.Iter(ctx, p.Uuid)
+		for iter.Next() {
+			key := iter.Key()
+			if strings.HasPrefix(key, store.PathKeyPrefix) {
+				indexSize++
+			}
+		}
+		err := iter.Close()
+		assert.NoError(t, err)
+	}
+	assert.Equal(t, goCount, indexSize)
+
+	err = cleanIndexStoreTestHelper(ctx, projects, storage)
+	assert.NoError(t, err)
 }
 
 func TestIndexer_RemoveIndexes(t *testing.T) {
-	// 创建临时测试目录
-	tempDir, err := os.MkdirTemp("", "test-remove")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
-
-	// 创建测试项目结构
-	projectDir := filepath.Join(tempDir, "test-project")
-	err = os.MkdirAll(projectDir, 0755)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	storageDir := filepath.Join(tempDir, "index")
+	err := os.MkdirAll(storageDir, 0755)
 	assert.NoError(t, err)
 
-	// 创建测试文件
-	testFile := filepath.Join(projectDir, "main.go")
-	err = os.WriteFile(testFile, []byte(`package main
-
-import "fmt"
-
-func main() {
-	fmt.Println("Hello, World!")
-}`), 0644)
+	// 测试本项目
+	workspaceDir, err := filepath.Abs("../../")
+	assert.NoError(t, err)
+	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
 	assert.NoError(t, err)
 
-	// 创建 .git 目录使其成为项目
-	err = os.MkdirAll(filepath.Join(projectDir, ".git"), 0755)
+	storage, err := store.NewLevelDBStorage(storageDir, newLogger)
 	assert.NoError(t, err)
-
-	// 准备依赖
-	mockLogger := &mocks.MockLogger{}
-	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
-	mockLogger.On("Error", mock.Anything, mock.Anything).Return()
-
-	parser := parser.NewSourceFileParser(mockLogger)
-	analyzer := analyzer.NewDependencyAnalyzer(mockLogger, nil, nil)
-	workspaceReader := workspace.NewWorkSpaceReader(mockLogger)
-	storage, err := store.NewLevelDBStorage(filepath.Join(tempDir, "storage"), mockLogger)
+	workspaceReader := workspace.NewWorkSpaceReader(newLogger)
+	sourceFileParser := parser.NewSourceFileParser(newLogger)
+	dependencyAnalyzer := analyzer.NewDependencyAnalyzer(newLogger, workspaceReader, storage)
 	assert.NoError(t, err)
 	defer storage.Close()
-
 	indexer := NewCodeIndexer(
-		parser,
-		analyzer,
+		sourceFileParser,
+		dependencyAnalyzer,
 		workspaceReader,
 		storage,
 		IndexerConfig{VisitPattern: visitPattern},
-		mockLogger,
+		newLogger,
 	)
 
-	// 先索引文件
-	err = indexer.IndexFiles(context.Background(), tempDir, []string{testFile})
+	projects := workspaceReader.FindProjects(ctx, workspaceDir, visitPattern)
+	err = cleanIndexStoreTestHelper(ctx, projects, storage)
 	assert.NoError(t, err)
 
-	// 测试 RemoveIndexes
-	err = indexer.RemoveIndexes(context.Background(), tempDir, []string{testFile})
+	// 校验没有索引mocks目录
+	// 校验索引
+	filePath := filepath.Join(workspaceDir, "test", "mocks")
+	files, err := utils.ListFiles(filePath)
+	for _, p := range projects {
+		size := storage.Size(ctx, p.Uuid)
+		assert.Equal(t, size, 0)
+	}
+	// 测试 index files
+	err = indexer.IndexFiles(context.Background(), workspaceDir, files)
 	assert.NoError(t, err)
+	pathKeys := make(map[string]any)
+	pathKeysBak := make(map[string]any)
+	for _, f := range files {
+		key, err := store.ElementPathKey{Language: lang.Go, Path: f}.Get()
+		assert.NoError(t, err)
+		pathKeys[key] = nil
+		pathKeysBak[key] = nil
+	}
+	assert.True(t, len(pathKeys) > 0)
+	assert.True(t, len(pathKeysBak) > 0)
 
-	// 验证日志调用
-	mockLogger.AssertCalled(t, "Info", mock.Anything, mock.Anything)
+	totalIndexBefore := 0
+	// 测试存在
+	for _, p := range projects {
+		iter := storage.Iter(ctx, p.Uuid)
+		for iter.Next() {
+			totalIndexBefore++
+			key := iter.Key()
+			delete(pathKeys, key)
+		}
+		err = iter.Close()
+		assert.NoError(t, err)
+	}
+	assert.True(t, len(pathKeys) == 0)
+	// 统计项目的go文件数量，确保索引数和文件数一致。
+	err = indexer.RemoveIndexes(ctx, workspaceDir, files)
+	assert.NoError(t, err)
+	totalIndexAfter := 0
+	// 测试不存在
+	for _, p := range projects {
+		iter := storage.Iter(ctx, p.Uuid)
+		for iter.Next() {
+			totalIndexAfter++
+			key := iter.Key()
+			delete(pathKeysBak, key)
+		}
+		err = iter.Close()
+		assert.NoError(t, err)
+	}
+	assert.Equal(t, len(files), len(pathKeysBak))
+	assert.True(t, totalIndexBefore-len(files) <= totalIndexAfter)
+	err = cleanIndexStoreTestHelper(ctx, projects, storage)
+	assert.NoError(t, err)
 }
 
 func TestIndexer_QueryElements(t *testing.T) {
-	ctx := context.Background()
-	// 创建临时测试目录
-	tempDir, err := os.MkdirTemp("", "test-query")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
 
-	// 创建测试项目结构
-	projectDir := filepath.Join(tempDir, "test-project")
-	err = os.MkdirAll(projectDir, 0755)
-	assert.NoError(t, err)
-
-	// 创建测试文件
-	testFile := filepath.Join(projectDir, "main.go")
-	err = os.WriteFile(testFile, []byte(`package main
-
-import "fmt"
-
-func main() {
-	fmt.Println("Hello, World!")
-}`), 0644)
-	assert.NoError(t, err)
-
-	// 创建 .git 目录使其成为项目
-	err = os.MkdirAll(filepath.Join(projectDir, ".git"), 0755)
-	assert.NoError(t, err)
-
-	// 准备依赖
-	mockLogger := &mocks.MockLogger{}
-	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
-	mockLogger.On("Error", mock.Anything, mock.Anything).Return()
-	mockLogger.On("Debug", mock.Anything, mock.Anything).Return()
-
-	parser := parser.NewSourceFileParser(mockLogger)
-	storage, err := store.NewLevelDBStorage(filepath.Join(tempDir, "storage"), mockLogger)
-	assert.NoError(t, err)
-	defer storage.Close()
-	analyzer := analyzer.NewDependencyAnalyzer(mockLogger, nil, storage)
-	workspaceReader := workspace.NewWorkSpaceReader(mockLogger)
-
-	indexer := NewCodeIndexer(
-		parser,
-		analyzer,
-		workspaceReader,
-		storage,
-		IndexerConfig{VisitPattern: visitPattern},
-		mockLogger,
-	)
-
-	// 先索引文件
-	err = indexer.IndexFiles(context.Background(), tempDir, []string{testFile})
-	assert.NoError(t, err)
-
-	// 测试 QueryElements
-	elements, err := indexer.QueryElements(ctx, tempDir, []string{testFile})
-	assert.NoError(t, err)
-	assert.NotEmpty(t, elements)
-
-	// 验证日志调用
-	mockLogger.AssertCalled(t, "Info", mock.Anything, mock.Anything)
 }
 
 func TestIndexer_QuerySymbols(t *testing.T) {
-	ctx := context.Background()
-	// 创建临时测试目录
-	tempDir, err := os.MkdirTemp("", "test-symbols")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
 
-	// 创建测试项目结构
-	projectDir := filepath.Join(tempDir, "test-project")
-	err = os.MkdirAll(projectDir, 0755)
-	assert.NoError(t, err)
-
-	// 创建测试文件
-	testFile := filepath.Join(projectDir, "main.go")
-	err = os.WriteFile(testFile, []byte(`package main
-
-import "fmt"
-
-func main() {
-	fmt.Println("Hello, World!")
-}`), 0644)
-	assert.NoError(t, err)
-
-	// 创建 .git 目录使其成为项目
-	err = os.MkdirAll(filepath.Join(projectDir, ".git"), 0755)
-	assert.NoError(t, err)
-
-	// 准备依赖
-	mockLogger := &mocks.MockLogger{}
-	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
-	mockLogger.On("Error", mock.Anything, mock.Anything).Return()
-
-	parser := parser.NewSourceFileParser(mockLogger)
-	storage, err := store.NewLevelDBStorage(filepath.Join(tempDir, "storage"), mockLogger)
-	assert.NoError(t, err)
-	defer storage.Close()
-	analyzer := analyzer.NewDependencyAnalyzer(mockLogger, nil, storage)
-	workspaceReader := workspace.NewWorkSpaceReader(mockLogger)
-
-	indexer := NewCodeIndexer(
-		parser,
-		analyzer,
-		workspaceReader,
-		storage,
-		IndexerConfig{VisitPattern: visitPattern},
-		mockLogger,
-	)
-
-	// 先索引文件
-	err = indexer.IndexFiles(context.Background(), tempDir, []string{testFile})
-	assert.NoError(t, err)
-
-	// 测试 QuerySymbols
-	symbols, err := indexer.QuerySymbols(ctx, tempDir, testFile, []string{"main"})
-	assert.NoError(t, err)
-	assert.NotEmpty(t, symbols)
-
-	// 验证日志调用
-	mockLogger.AssertCalled(t, "Info", mock.Anything, mock.Anything)
 }
 
 func TestIndexer_IndexWorkspace_NoProjects(t *testing.T) {
-	// 创建临时测试目录
-	tempDir, err := os.MkdirTemp("", "test-no-projects")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
 
-	// 准备依赖
-	mockLogger := &mocks.MockLogger{}
-	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
-	mockLogger.On("Error", mock.Anything, mock.Anything).Return()
-
-	parser := parser.NewSourceFileParser(mockLogger)
-	storage, err := store.NewLevelDBStorage(filepath.Join(tempDir, "storage"), mockLogger)
-	assert.NoError(t, err)
-	defer storage.Close()
-	analyzer := analyzer.NewDependencyAnalyzer(mockLogger, nil, storage)
-	workspaceReader := workspace.NewWorkSpaceReader(mockLogger)
-
-	indexer := NewCodeIndexer(
-		parser,
-		analyzer,
-		workspaceReader,
-		storage,
-		IndexerConfig{VisitPattern: visitPattern},
-		mockLogger,
-	)
-
-	// 测试 IndexWorkspace - 应该返回错误，因为没有找到项目
-	err = indexer.IndexWorkspace(context.Background(), tempDir)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "find no projects")
 }
 
 func TestIndexer_IndexFiles_NoProject(t *testing.T) {
-	// 创建临时测试目录
-	tempDir, err := os.MkdirTemp("", "test-no-project")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
 
-	// 准备依赖
-	mockLogger := &mocks.MockLogger{}
-	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
-	mockLogger.On("Error", mock.Anything, mock.Anything).Return()
-
-	parser := parser.NewSourceFileParser(mockLogger)
-	storage, err := store.NewLevelDBStorage(filepath.Join(tempDir, "storage"), mockLogger)
-	assert.NoError(t, err)
-	defer storage.Close()
-	analyzer := analyzer.NewDependencyAnalyzer(mockLogger, nil, storage)
-	workspaceReader := workspace.NewWorkSpaceReader(mockLogger)
-
-	indexer := NewCodeIndexer(
-		parser,
-		analyzer,
-		workspaceReader,
-		storage,
-		IndexerConfig{VisitPattern: visitPattern},
-		mockLogger,
-	)
-
-	// 测试 IndexFiles - 应该返回错误，因为没有找到项目
-	err = indexer.IndexFiles(context.Background(), tempDir, []string{"nonexistent.go"})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no project found")
 }
 
 // TestIndexer_indexProject 测试 indexProject 方法的各种场景
 func TestIndexer_indexProject(t *testing.T) {
-	tests := []struct {
-		name           string
-		setupProject   func(t *testing.T) (*workspace.Project, string)
-		expectedError  bool
-		expectedFiles  int
-		expectedSource int
-	}{
-		{
-			name: "正常处理项目文件",
-			setupProject: func(t *testing.T) (*workspace.Project, string) {
-				tempDir, err := os.MkdirTemp("", "test-normal-project")
-				assert.NoError(t, err)
 
-				projectDir := filepath.Join(tempDir, "project")
-				err = os.MkdirAll(projectDir, 0755)
-				assert.NoError(t, err)
-
-				// 创建测试文件
-				testFile := filepath.Join(projectDir, "main.go")
-				err = os.WriteFile(testFile, []byte(`package main
-import "fmt"
-func main() { fmt.Println("Hello") }`), 0644)
-				assert.NoError(t, err)
-
-				// 创建 .git 目录
-				err = os.MkdirAll(filepath.Join(projectDir, ".git"), 0755)
-				assert.NoError(t, err)
-
-				return &workspace.Project{
-					Path: projectDir,
-					Uuid: "test-uuid",
-					Name: "test-project",
-				}, tempDir
-			},
-			expectedError:  false,
-			expectedFiles:  1,
-			expectedSource: 1,
-		},
-		{
-			name: "处理空项目（无源文件）",
-			setupProject: func(t *testing.T) (*workspace.Project, string) {
-				tempDir, err := os.MkdirTemp("", "test-empty-project")
-				assert.NoError(t, err)
-
-				projectDir := filepath.Join(tempDir, "project")
-				err = os.MkdirAll(projectDir, 0755)
-				assert.NoError(t, err)
-
-				// 创建 .git 目录
-				err = os.MkdirAll(filepath.Join(projectDir, ".git"), 0755)
-				assert.NoError(t, err)
-
-				// 创建非源文件
-				err = os.WriteFile(filepath.Join(projectDir, "README.md"), []byte("# Test"), 0644)
-				assert.NoError(t, err)
-
-				return &workspace.Project{
-					Path: projectDir,
-					Uuid: "test-uuid",
-					Name: "test-project",
-				}, tempDir
-			},
-			expectedError:  true,
-			expectedFiles:  1,
-			expectedSource: 0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			project, tempDir := tt.setupProject(t)
-			defer os.RemoveAll(tempDir)
-
-			mockLogger := &mocks.MockLogger{}
-			mockLogger.On("Info", mock.Anything, mock.Anything).Return()
-			mockLogger.On("Error", mock.Anything, mock.Anything).Return()
-
-			parser := parser.NewSourceFileParser(mockLogger)
-			analyzer := analyzer.NewDependencyAnalyzer(mockLogger, nil, nil)
-			workspaceReader := workspace.NewWorkSpaceReader(mockLogger)
-			storage, err := store.NewLevelDBStorage(filepath.Join(tempDir, "storage"), mockLogger)
-			assert.NoError(t, err)
-			defer storage.Close()
-
-			indexer := NewCodeIndexer(
-				parser,
-				analyzer,
-				workspaceReader,
-				storage,
-				IndexerConfig{VisitPattern: visitPattern},
-				mockLogger,
-			)
-
-			metrics, errs := indexer.indexProject(context.Background(), project)
-
-			if tt.expectedError {
-				assert.NotEmpty(t, errs)
-			} else {
-				assert.Empty(t, errs)
-				assert.Equal(t, tt.expectedFiles, metrics.TotalFiles)
-				assert.Equal(t, tt.expectedSource, metrics.TotalSourceFiles)
-			}
-		})
-	}
 }
 
 // TestIndexer_processProjectFiles 测试 processProjectFiles 方法

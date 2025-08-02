@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"codebase-indexer/pkg/codegraph/types"
 	"context"
 	"fmt"
 )
@@ -38,4 +39,10 @@ func resolve(ctx context.Context, b ElementResolver, element Element, rc *Resolv
 	default:
 		return nil, fmt.Errorf("element_resover not supported element %v", element)
 	}
+}
+
+// IsValidElement 检查必须字段
+func IsValidElement(e Element) bool {
+	return e.GetName() != types.EmptyString && e.GetType() != types.EmptyString &&
+		e.GetPath() != types.EmptyString && len(e.GetRange()) == 4
 }

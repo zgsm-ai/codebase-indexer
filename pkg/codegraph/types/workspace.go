@@ -61,7 +61,7 @@ func (v *VisitPattern) ShouldSkip(path string) bool {
 		return true
 	}
 
-	if len(v.IncludeExts) > 0 && !slices.Contains(v.IncludeExts, fileExt) {
+	if len(v.IncludeExts) > 0 && fileExt != EmptyString && !slices.Contains(v.IncludeExts, fileExt) {
 		return true
 	}
 

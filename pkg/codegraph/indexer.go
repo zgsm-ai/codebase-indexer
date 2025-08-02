@@ -16,7 +16,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 )
@@ -40,6 +39,7 @@ type Indexer struct {
 	storage         store.GraphStorage           // 存储
 	config          IndexerConfig
 	logger          logger.Logger
+	IndexMetrics    types.IndexTaskMetrics
 }
 
 // TODO 多子项目、多语言支持。monorepo, 不光通过语言隔离、还要通过子项目隔离。
@@ -73,7 +73,6 @@ func (i *Indexer) IndexWorkspace(ctx context.Context, workspace string) error {
 
 	var errs []error
 	workspaceStart := time.Now()
-	workspaceTaskMetrics := types.IndexTaskMetrics{}
 
 	// 循环项目，逐个处理
 	for _, p := range projects {
@@ -84,16 +83,16 @@ func (i *Indexer) IndexWorkspace(ctx context.Context, workspace string) error {
 			continue
 		}
 
-		workspaceTaskMetrics.TotalFiles += projectTaskMetrics.TotalFiles
-		workspaceTaskMetrics.TotalSourceFiles += projectTaskMetrics.TotalSourceFiles
-		workspaceTaskMetrics.TotalSucceedFiles += projectTaskMetrics.TotalSucceedFiles
-		workspaceTaskMetrics.TotalFailedFiles += projectTaskMetrics.TotalFailedFiles
+		i.IndexMetrics.TotalFiles += projectTaskMetrics.TotalFiles
+		i.IndexMetrics.TotalSourceFiles += projectTaskMetrics.TotalSourceFiles
+		i.IndexMetrics.TotalSucceedFiles += projectTaskMetrics.TotalSucceedFiles
+		i.IndexMetrics.TotalFailedFiles += projectTaskMetrics.TotalFailedFiles
 	}
 
 	i.logger.Info("index_workspace %s index workspace finish, cost %d ms, visit %d files, "+
 		"%d valid source files, parsed %d files successfully, failed %d files", workspace, time.Since(workspaceStart).Milliseconds(),
-		workspaceTaskMetrics.TotalFiles, workspaceTaskMetrics.TotalSourceFiles,
-		workspaceTaskMetrics.TotalSucceedFiles, workspaceTaskMetrics.TotalFailedFiles)
+		i.IndexMetrics.TotalFiles, i.IndexMetrics.TotalSourceFiles,
+		i.IndexMetrics.TotalSucceedFiles, i.IndexMetrics.TotalFailedFiles)
 
 	return nil
 }
@@ -450,6 +449,7 @@ func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePath
 
 	for puuid, pfiles := range projectFilesMap {
 		if i.storage.Size(ctx, puuid) == 0 {
+			i.logger.Info("index_files project %s has not indexed yet, index project.", puuid)
 			// 如果项目没有索引过，索引整个项目
 			_, err := i.indexProject(ctx, pfiles.p)
 			if err != nil {
@@ -457,6 +457,7 @@ func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePath
 				errs = append(errs, err...)
 			}
 		} else {
+			i.logger.Info("index_files project %s has index, index files.", puuid)
 			// 索引指定文件
 			if err := i.indexProjectFiles(ctx, puuid, pfiles); err != nil {
 				errs = append(errs, err)
@@ -481,7 +482,7 @@ func (i *Indexer) indexProjectFiles(ctx context.Context, puuid string, pfiles pr
 			continue
 		}
 
-		content, err := os.ReadFile(f)
+		content, err := i.workspaceReader.ReadFile(ctx, f, types.ReadOptions{})
 		if err != nil {
 			errs = append(errs, fmt.Errorf("read file %s failed: %w", f, err))
 			continue
@@ -665,7 +666,7 @@ func (i *Indexer) checkElementTables(elementTables []*parser.FileElementTable) {
 		newImports := make([]*resolver.Import, 0, len(ft.Imports))
 		newElements := make([]resolver.Element, 0, len(ft.Elements))
 		for _, imp := range ft.Imports {
-			if i.isValidElement(imp) {
+			if resolver.IsValidElement(imp) {
 				newImports = append(newImports, imp)
 			} else {
 				i.logger.Debug("check_element: invalid language %s file %s import {name:%s type:%s path:%s range:%v}",
@@ -674,7 +675,7 @@ func (i *Indexer) checkElementTables(elementTables []*parser.FileElementTable) {
 		}
 		for _, ele := range ft.Elements {
 			total++
-			if i.isValidElement(ele) {
+			if resolver.IsValidElement(ele) {
 				newElements = append(newElements, ele)
 			} else {
 				filtered++
@@ -688,9 +689,4 @@ func (i *Indexer) checkElementTables(elementTables []*parser.FileElementTable) {
 	}
 	i.logger.Info("check_element: files total %d, elements before total %d, filtered %d.",
 		len(elementTables), total, filtered)
-}
-
-func (i *Indexer) isValidElement(e resolver.Element) bool {
-	return e.GetName() != types.EmptyString && e.GetType() != types.EmptyString &&
-		e.GetPath() != types.EmptyString && len(e.GetRange()) > 0
 }

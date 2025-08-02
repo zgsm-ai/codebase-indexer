@@ -267,6 +267,10 @@ func (w *WorkspaceReader) Walk(ctx context.Context, dir string, walkFn types.Wal
 		}
 
 		if walkOpts.VisitPattern.ShouldSkip(relativePath) {
+			// 跳过目录
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
