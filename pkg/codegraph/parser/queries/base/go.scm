@@ -9,14 +9,14 @@
       name: [(package_identifier)(dot)] * @import.alias
       path: (interpreted_string_literal) @import.path
       )@import
-    ) *
+    ) 
   ) 
 
 (import_declaration
   (import_spec
-    name: [(package_identifier)(dot)] * @import.alias
+    name: [(package_identifier)(dot)] @import.alias
     path: (interpreted_string_literal) @import.path
-    ) * @import
+    )@import
   )
 
 ;; function
@@ -86,7 +86,7 @@
 
 (type_declaration (type_spec name: (type_identifier) @definition.struct.name type: (struct_type) @definition.struct.type)) @definition.struct
 
-(type_declaration (type_spec name: (type_identifier) @definition.type_alias.name type: (type_identifier))) @definition.type_alias
+(type_declaration (type_spec name: (type_identifier) @variable type: (type_identifier) @variable.type))
 
 ;; 常量声明 - 直接捕获标识符节点
 

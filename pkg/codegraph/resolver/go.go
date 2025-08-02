@@ -3,6 +3,7 @@ package resolver
 import (
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
+	"fmt"
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -73,17 +74,6 @@ func (r *GoResolver) resolveFunction(ctx context.Context, element *Function, rc 
 	rootCapture := rc.Match.Captures[0]
 	rootCaptureName := rc.CaptureNames[rootCapture.Index]
 	updateRootElement(element, &rootCapture, rootCaptureName, rc.SourceFile.Content)
-	if rootCaptureName == string(types.ElementTypeFunction) {
-		// 获取函数声明节点
-		funcNode := rootCapture.Node
-
-		// 尝试获取返回类型节点
-		resultNode := funcNode.ChildByFieldName("result")
-		if resultNode != nil {
-			// 使用analyzeReturnTypes函数提取并格式化返回类型
-			element.ReturnType = analyzeReturnTypes(resultNode, rc.SourceFile.Content)
-		}
-	}
 	if rc.Match != nil && rc.Match.Captures != nil && len(rc.Match.Captures) > 0 {
 		for _, capture := range rc.Match.Captures {
 			nodeCaptureName := rc.CaptureNames[capture.Index]
@@ -114,8 +104,8 @@ func (r *GoResolver) resolveFunction(ctx context.Context, element *Function, rc 
 
 					}
 				}
-				// case types.ElementTypeFunctionReturnType:
-				// 	element.ReturnType = analyzeReturnType(&capture.Node, rc.SourceFile.Content)
+			case types.ElementTypeFunctionReturnType:
+				element.ReturnType = analyzeReturnTypes(&capture.Node, rc.SourceFile.Content)
 			}
 		}
 	}
@@ -384,18 +374,6 @@ func (r *GoResolver) resolveMethod(ctx context.Context, element *Method, rc *Res
 	rootCapture := rc.Match.Captures[0]
 	rootCaptureName := rc.CaptureNames[rootCapture.Index]
 	updateRootElement(element, &rootCapture, rootCaptureName, rc.SourceFile.Content)
-	if rootCaptureName == string(types.ElementTypeFunction) {
-		// 获取函数声明节点
-		funcNode := rootCapture.Node
-
-		// 尝试获取返回类型节点
-		resultNode := funcNode.ChildByFieldName("result")
-		if resultNode != nil {
-			// 使用analyzeReturnTypes函数提取并格式化返回类型
-			element.ReturnType = analyzeReturnTypes(resultNode, rc.SourceFile.Content)
-		}
-	}
-	//处理接收器
 	if rootCaptureName == string(types.ElementTypeMethod) {
 		methodNode := rootCapture.Node
 		receiverNode := methodNode.ChildByFieldName("receiver")
@@ -434,8 +412,8 @@ func (r *GoResolver) resolveMethod(ctx context.Context, element *Method, rc *Res
 						}
 					}
 				}
-				// case types.ElementTypeFunctionReturnType:
-				// 	element.ReturnType = analyzeReturnType(&capture.Node, rc.SourceFile.Content)
+			case types.ElementTypeFunctionReturnType:
+				element.ReturnType = analyzeReturnType(&capture.Node, rc.SourceFile.Content)
 			}
 		}
 	}
@@ -596,6 +574,8 @@ func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc 
 		element.Scope = analyzeScope(element.BaseElement.Name)
 	case types.ElementTypeVariable:
 		element.Scope = types.ScopeFunction
+	case types.ElementTypeVariableName:
+		element.BaseElement.Name = rootCapture.Node.Utf8Text(rc.SourceFile.Content)
 	case types.ElementTypeLocalVariable:
 		element.Scope = types.ScopeFunction
 		// 处理多变量声明
@@ -957,9 +937,10 @@ func analyzeReturnTypes(resultNode *sitter.Node, content []byte) []string {
 		} else if typeNode != nil {
 			// 这是一个无名返回值参数
 			paramType := typeNode.Utf8Text(content)
-
+			fmt.Println("paramType", paramType)
 			// 处理可能积累的同类型名称
 			if len(currentNames) > 0 {
+				fmt.Println("currentNames", currentNames)
 				for range currentNames {
 					returnTypes = append(returnTypes, lastType)
 				}
