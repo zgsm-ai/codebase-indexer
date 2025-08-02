@@ -539,6 +539,15 @@ func TestCPPResolver_ResolveClass(t *testing.T) {
 		"FilePermission": {},
 		"Derived1":       {"Outer","Base","Inner"},
 		"Derived2":       {"Base1", "Base2"},
+		"MyInt":          {},
+		"B":              {},
+		"C":              {},
+		"D":              {},
+		"String":         {},
+		"A":              {},
+		"PersonAlias":    {},
+		"GenericArray":   {},
+		"TagNode":        {},
 	}
 
 	// 收集所有解析到的Class元素

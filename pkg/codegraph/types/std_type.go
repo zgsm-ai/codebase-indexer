@@ -1,6 +1,6 @@
 package types
 
-var javaStdTypes = map[string]struct{}{
+var stdTypes = map[string]struct{}{
 	"Map": {}, "List": {}, "Set": {}, "String": {}, "Integer": {}, "Double": {}, "Boolean": {},
 	"Short": {}, "Long": {}, "Float": {}, "Character": {}, "Byte": {}, "Object": {}, "Runnable": {},
 	"ArrayList": {}, "LinkedList": {}, "HashSet": {}, "TreeSet": {}, "HashMap": {}, "TreeMap": {},
@@ -75,7 +75,28 @@ var javaStdTypes = map[string]struct{}{
 	"char16_t": {}, "char32_t": {},
 	"long long": {},
 	"unsigned":  {}, "unsigned int": {}, "unsigned short": {}, "unsigned long": {}, "unsigned long long": {},
-	"long double": {}, "T": {},
+	"long double": {}, "T": {}, 
+	"ptrdiff_t": {},
+	"wint_t": {},
+	"int8_t": {},
+	"uint8_t": {},
+	"int16_t": {},
+	"uint16_t": {},
+	"int32_t": {},
+	"uint32_t": {},
+	"int64_t": {},
+	"uint64_t": {},
+	"intptr_t": {},
+	"uintptr_t": {},
+	"time_t": {},
+	"clock_t": {},
+	"sig_atomic_t": {},
+	"va_list": {},
+	"jmp_buf": {},
+	"fpos_t": {},
+	"FILE": {},
+	"off_t": {},
+	"ssize_t": {},
 }
 
 // FilterCustomTypes 过滤类型名切片，只保留用户自定义类型
@@ -83,7 +104,7 @@ func FilterCustomTypes(typeNames []string) []string {
 	// 标准库类型集合
 	var customTypes []string
 	for _, t := range typeNames {
-		if _, isStd := javaStdTypes[t]; !isStd {
+		if _, isStd := stdTypes[t]; !isStd {
 			customTypes = append(customTypes, t)
 		}
 	}

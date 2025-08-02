@@ -116,6 +116,7 @@ func (j *JavaResolver) resolveClass(ctx context.Context, element *Class, rc *Res
 	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
 	var modifier string
 	var refs = []*Reference{}
+	var imports = []*Import{}
 	for _, cap := range rc.Match.Captures {
 		captureName := rc.CaptureNames[cap.Index]
 		if cap.Node.IsMissing() || cap.Node.IsError() {
@@ -135,6 +136,15 @@ func (j *JavaResolver) resolveClass(ctx context.Context, element *Class, rc *Res
 				// owner 可能是包名，也可能是嵌套类的上层类调用
 				owner := strings.Join(parts[:len(parts)-1], types.Dot)
 				parent := parts[len(parts)-1]
+				imports = append(imports, &Import{
+					BaseElement: &BaseElement{
+						Name: owner,
+						Path: element.Path,
+						Scope: types.ScopePackage,
+						Type: types.ElementTypeImport,
+						Range: element.Range,
+					},
+				})
 				refs = append(refs, NewReference(element, &cap.Node, parent, owner))
 				if elemType == types.ElementTypeClassExtends {
 					element.SuperClasses = append(element.SuperClasses, parent)
@@ -156,6 +166,9 @@ func (j *JavaResolver) resolveClass(ctx context.Context, element *Class, rc *Res
 	for _, r := range refs {
 		elements = append(elements, r)
 	}
+	for _, i := range imports {
+		elements = append(elements, i)
+	}
 	return elements, nil
 }
 
@@ -176,8 +189,9 @@ func (j *JavaResolver) resolveVariable(ctx context.Context, element *Variable, r
 			// 处理 int a=10,b,c=0的情况，a,b,c分别对应一个cap
 			elem := &Variable{
 				BaseElement: &BaseElement{
+					Name: content,
 					Path:  element.BaseElement.Path,
-					Type:  types.ElementTypeField,
+					Type:  types.ElementTypeVariable,
 					Scope: types.ScopeClass,
 					// 共用一套数据
 					Range: element.BaseElement.Range,
@@ -186,15 +200,12 @@ func (j *JavaResolver) resolveVariable(ctx context.Context, element *Variable, r
 			switch kind {
 			case types.ElementTypeLocalVariable:
 				elem.BaseElement.Scope = types.ScopeFunction
-				elem.BaseElement.Type = types.ElementTypeLocalVariable
 			case types.ElementTypeEnumConstant:
 				elem.BaseElement.Scope = types.ScopeClass
-				elem.BaseElement.Type = types.ElementTypeEnumConstant
 				// 不关注枚举常量的类型，或者是可以由resolveCall解决，或者就是字面量
 				elem.VariableType = []string{types.PrimitiveType}
 			default:
 				elem.BaseElement.Scope = types.ScopeClass
-				elem.BaseElement.Type = types.ElementTypeField
 			}
 			elems = append(elems, elem)
 		case types.ElementTypeLocalVariableName, types.ElementTypeFieldName, types.ElementTypeEnumConstantName:
@@ -206,6 +217,7 @@ func (j *JavaResolver) resolveVariable(ctx context.Context, element *Variable, r
 			//1. 标准类型 设置为primitive_type
 			//2. 用户自定义或其他包里面的类型 设置为对应的类型
 			// TODO 理论上来说是找这个类型及其子节点里面所有的type_identifier(排除包名的情况)
+			// TODO 带包名的情况，还要抛出去一个import
 			typs := parseLocalVariableType(&cap.Node, rc.SourceFile.Content)
 			// 筛选出用户自定义的类型
 			typs = types.FilterCustomTypes(typs)
@@ -234,6 +246,7 @@ func (j *JavaResolver) resolveInterface(ctx context.Context, element *Interface,
 	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
 	var modifier string
 	var refs = []*Reference{}
+	var imports = []*Import{}
 	for _, cap := range rc.Match.Captures {
 		captureName := rc.CaptureNames[cap.Index]
 		if cap.Node.IsMissing() || cap.Node.IsError() {
@@ -247,10 +260,23 @@ func (j *JavaResolver) resolveInterface(ctx context.Context, element *Interface,
 			modifier = getElementModifier(content)
 		case types.ElementTypeInterfaceExtends:
 			typs := parseTypeList(&cap.Node, rc.SourceFile.Content)
-			element.SuperInterfaces = append(element.SuperInterfaces, typs...)
+			
 			for _, typ := range typs {
-				// TODO onwer暂不考虑
-				refs = append(refs, NewReference(element, &cap.Node, typ, types.EmptyString))
+				parts := strings.Split(typ, types.Dot)
+				// owner 可能是包名，也可能是嵌套类的上层类调用
+				owner := strings.Join(parts[:len(parts)-1], types.Dot)
+				parent := parts[len(parts)-1]
+				imports = append(imports, &Import{
+					BaseElement: &BaseElement{
+						Name: owner,
+						Path: element.Path,
+						Scope: types.ScopePackage,
+						Type: types.ElementTypeImport,
+						Range: element.Range,
+					},
+				})
+				element.SuperInterfaces = append(element.SuperInterfaces, parent)
+				refs = append(refs, NewReference(element, &cap.Node, parent,owner))
 			}
 		}
 
@@ -260,7 +286,9 @@ func (j *JavaResolver) resolveInterface(ctx context.Context, element *Interface,
 	for _, r := range refs {
 		elements = append(elements, r)
 	}
-	fmt.Println("--------------------------------", element.Name)
+	for _, i := range imports {
+		elements = append(elements, i)
+	}
 	return elements, nil
 }
 
@@ -287,6 +315,7 @@ func (j *JavaResolver) resolveCall(ctx context.Context, element *Call, rc *Resol
 			element.Owner = content
 		}
 	}
+	element.BaseElement.Scope = types.ScopeFunction
 	return []Element{element}, nil
 }
 
@@ -496,17 +525,16 @@ func parseLocalVariableType(node *sitter.Node, content []byte) []string {
 //	List<? extends Person>      -> ["List", "Person"]
 //	List<?>                     -> ["List"]
 
-// parseGenericType 递归提取泛型类型节点中出现的所有类型名（去重，顺序不保证）
+// parseGenericType 递归提取泛型类型节点中出现的所有类型名（不去重，顺序不保证）
 // 例如：Map<String, List<Person>> -> ["Map", "String", "List", "Person"]
 func parseGenericType(node *sitter.Node, content []byte) []string {
-	// 用于去重
-	result := make(map[string]struct{})
 	// List<? extends Number> numbers = new ArrayList<>();
 	// type: generic_type [19, 4] - [19, 26]
 	//       type_identifier [19, 4] - [19, 8]
 	//       type_arguments [19, 8] - [19, 26]
 	//         wildcard [19, 9] - [19, 25]
 	//           type_identifier [19, 19] - [19, 25]
+	var result []string
 	var walk func(n *sitter.Node)
 	walk = func(n *sitter.Node) {
 		for i := uint(0); i < n.ChildCount(); i++ {
@@ -515,13 +543,10 @@ func parseGenericType(node *sitter.Node, content []byte) []string {
 			switch kind {
 			case types.NodeKindTypeIdentifier:
 				typeName := child.Utf8Text(content)
-				result[typeName] = struct{}{}
+				result = append(result, typeName)
 			case types.NodeKindScopedTypeIdentifier:
 				// 只会解析出来一个superType
-				owner, superType := parseScopedTypeIdentifier(child, content)
-				if superType != types.EmptyString {
-					result[owner+"."+superType] = struct{}{}
-				}
+				result = append(result, child.Utf8Text(content))
 			case types.NodeKindGenericType, types.NodeKindTypeArguments, types.NodeKindWildcard:
 				walk(child)
 			}
@@ -529,12 +554,7 @@ func parseGenericType(node *sitter.Node, content []byte) []string {
 	}
 	walk(node)
 
-	// 转为切片返回
-	var typeNames []string
-	for t := range result {
-		typeNames = append(typeNames, t)
-	}
-	return typeNames
+	return result
 }
 
 // findMethodOwner 通过遍历语法树找到方法的拥有者（类或接口），返回拥有者的节点

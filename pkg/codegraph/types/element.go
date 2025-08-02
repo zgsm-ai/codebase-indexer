@@ -58,6 +58,10 @@ const (
 	ElementTypeEnumImplements      ElementType = "definition.enum.implements"
 	ElementTypeEnumModifiers       ElementType = "definition.enum.modifiers"
 	ElementTypeUnion               ElementType = "definition.union"
+	ElementTypeUnionName           ElementType = "definition.union.name"
+	ElementTypeTypedefName         ElementType = "definition.type.alias"
+	ElementTypeTypedefType         ElementType = "definition.type.original_type"
+	ElementTypeTypedef             ElementType = "definition.type"	
 	ElementTypeTrait               ElementType = "definition.trait"
 	ElementTypeEnumConstant        ElementType = "definition.enum.constant"
 	ElementTypeEnumConstantName    ElementType = "definition.enum.constant.name"
@@ -81,6 +85,7 @@ const (
 	ElementTypeMethodModifier      ElementType = "definition.method.modifier"
 	ElementTypeMethodReturnType    ElementType = "definition.method.return_type"
 	ElementTypeMethodName          ElementType = "definition.method.name"
+	ElementTypeMethodOwner         ElementType = "definition.method.owner"
 	ElementTypeMethodParameters    ElementType = "definition.method.parameters"
 	ElementTypeMethodReceiver      ElementType = "definition.method.receiver"
 	ElementTypeConstructor         ElementType = "definition.constructor"
@@ -141,6 +146,10 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeEnumConstantName):    ElementTypeEnumConstantName,
 	string(ElementTypeEnumConstantValue):   ElementTypeEnumConstantValue,
 	string(ElementTypeUnion):               ElementTypeUnion,
+	string(ElementTypeUnionName):           ElementTypeUnionName,
+	string(ElementTypeTypedefName):         ElementTypeTypedefName,
+	string(ElementTypeTypedefType):         ElementTypeTypedefType,
+	string(ElementTypeTypedef):             ElementTypeTypedef,
 	string(ElementTypeTrait):               ElementTypeTrait,
 	string(ElementTypeTypeAlias):           ElementTypeTypeAlias,
 	string(ElementTypeFunction):            ElementTypeFunction,
@@ -157,6 +166,7 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeMethodModifier):      ElementTypeMethodModifier,
 	string(ElementTypeMethodReturnType):    ElementTypeMethodReturnType,
 	string(ElementTypeMethodName):          ElementTypeMethodName,
+	string(ElementTypeMethodOwner):         ElementTypeMethodOwner,
 	string(ElementTypeMethodParameters):    ElementTypeMethodParameters,
 	string(ElementTypeMethodReceiver):      ElementTypeMethodReceiver,
 	string(ElementTypeCallArguments):       ElementTypeCallArguments,
@@ -225,6 +235,7 @@ const (
 	NodeKindDictSplatPattern                   NodeKind = "dictionary_splat_pattern"
 	NodeKindDefaultParameter                   NodeKind = "default_parameter"
 	NodeKindTypedParameter                     NodeKind = "typed_parameter"
+	NodeKindTypedDefaultParameter              NodeKind = "typed_default_parameter"
 	NodeKindFormalParameters                   NodeKind = "formal_parameters"
 	NodeKindUndefined                          NodeKind = "undefined"
 	NodeKindFuncLiteral                        NodeKind = "func_literal"
@@ -283,6 +294,10 @@ const (
 	NodeKindAccessSpecifier      NodeKind = "access_specifier"
 	NodeKindTypeList             NodeKind = "type_list"
 	NodeKindBaseClassClause      NodeKind = "base_class_clause"
+
+	// 用于判断变量是否是局部变量
+	NodeKindFunctionDeclaration NodeKind = "function_declaration"
+	NodeKindMethodDeclaration   NodeKind = "method_declaration"
 )
 
 var NodeKindMappings = map[string]NodeKind{
@@ -306,6 +321,7 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindDictSplatPattern):                   NodeKindDictSplatPattern,
 	string(NodeKindDefaultParameter):                   NodeKindDefaultParameter,
 	string(NodeKindTypedParameter):                     NodeKindTypedParameter,
+	string(NodeKindTypedDefaultParameter):              NodeKindTypedDefaultParameter,
 	string(NodeKindFormalParameters):                   NodeKindFormalParameters,
 	string(NodeKindMethodElem):                         NodeKindMethodElem,
 	string(NodeKindMethodSpec):                         NodeKindMethodSpec,

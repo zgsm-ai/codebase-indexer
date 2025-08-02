@@ -33,6 +33,7 @@ func (c *CppResolver) resolveImport(ctx context.Context, element *Import, rc *Re
 			element.BaseElement.Name = content
 		}
 	}
+	element.BaseElement.Scope = types.ScopeProject
 	return []Element{element}, nil
 }
 
@@ -55,9 +56,19 @@ func (c *CppResolver) resolveFunction(ctx context.Context, element *Function, rc
 			element.BaseElement.Name = strings.TrimSpace(content)
 			element.Declaration.Name = element.BaseElement.Name
 		case types.ElementTypeFunctionReturnType:
-			element.Declaration.ReturnType = getFilteredTypes(content)
+			typs := findAllTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
+			if len(typs) == 0 {
+				typs = []string{types.PrimitiveType}
+			}
+			typs = types.FilterCustomTypes(typs)
+			element.Declaration.ReturnType = typs
 		case types.ElementTypeFunctionParameters:
-			element.Declaration.Parameters = getFilteredParameters(content)
+			// element.Declaration.Parameters = getFilteredParameters(content)
+			parameters := parseCppParameters(&cap.Node, rc.SourceFile.Content)
+			for i := range parameters {
+				parameters[i].Type = types.FilterCustomTypes(parameters[i].Type)
+			}
+			element.Declaration.Parameters = parameters
 		}
 	}
 	element.BaseElement.Scope = types.ScopeProject
@@ -108,9 +119,14 @@ func (c *CppResolver) resolveClass(ctx context.Context, element *Class, rc *Reso
 		}
 		content := cap.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(captureName) {
-		case types.ElementTypeClassName, types.ElementTypeStructName, types.ElementTypeEnumName:
+		case types.ElementTypeClassName, types.ElementTypeStructName, types.ElementTypeEnumName, types.ElementTypeUnionName:
 			// 枚举类型只考虑name
 			element.BaseElement.Name = strings.TrimSpace(content)
+		case types.ElementTypeTypedefName:
+			// typedef只考虑name
+			name := strings.TrimSpace(content)
+			name = CleanParam(name)
+			element.BaseElement.Name = name
 		case types.ElementTypeClassExtends, types.ElementTypeStructExtends:
 			// 不考虑cpp的ns调用，owner暂时无用
 			typs := parseBaseClassClause(&cap.Node, rc.SourceFile.Content)
@@ -142,6 +158,12 @@ func (c *CppResolver) resolveVariable(ctx context.Context, element *Variable, rc
 		switch types.ToElementType(captureName) {
 		case types.ElementTypeVariableName, types.ElementTypeFieldName:
 			element.BaseElement.Name = CleanParam(content)
+			if isLocalVariable(&cap.Node) {
+				element.BaseElement.Scope = types.ScopeFunction
+			} else {
+				// 字段目前不算局部变量
+				element.BaseElement.Scope = types.ScopeClass
+			}
 		case types.ElementTypeVariableType, types.ElementTypeFieldType:
 			element.VariableType = getFilteredTypes(content)
 		case types.ElementTypeEnumConstantName:
@@ -156,7 +178,6 @@ func (c *CppResolver) resolveVariable(ctx context.Context, element *Variable, rc
 			refs = append(refs, NewReference(element, &cap.Node, val, types.EmptyString))
 		}
 	}
-	element.BaseElement.Scope = types.ScopeFunction
 	elems := []Element{element}
 	for _, ref := range refs {
 		elems = append(elems, ref)
@@ -165,8 +186,7 @@ func (c *CppResolver) resolveVariable(ctx context.Context, element *Variable, rc
 }
 
 func (c *CppResolver) resolveInterface(ctx context.Context, element *Interface, rc *ResolveContext) ([]Element, error) {
-	//TODO implement me
-	return nil, fmt.Errorf("not support interface")
+	return nil, fmt.Errorf("cpp not support interface")
 }
 
 func (c *CppResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
@@ -195,7 +215,7 @@ func (c *CppResolver) resolveCall(ctx context.Context, element *Call, rc *Resolv
 			}
 		}
 	}
-	element.BaseElement.Scope = types.ScopeBlock
+	element.BaseElement.Scope = types.ScopeFunction
 	return []Element{element}, nil
 }
 func findAccessSpecifier(node *sitter.Node, content []byte) string {
@@ -224,4 +244,64 @@ func findAccessSpecifier(node *sitter.Node, content []byte) string {
 	}
 	// 3. 这里不给默认修饰符
 	return types.EmptyString
+}
+
+func parseCppParameters(node *sitter.Node, content []byte) []Parameter {
+
+	if node == nil {
+		return nil
+	}
+	var params []Parameter
+	for i := uint(0); i < node.NamedChildCount(); i++ {
+		child := node.NamedChild(i)
+		childKind := child.Kind()
+		switch types.ToNodeKind(childKind) {
+		case types.NodeKindParameterDeclaration:
+			typs := findAllTypeIdentifiers(child, content)
+			if len(typs) == 0 {
+				typs = []string{types.PrimitiveType}
+			}
+			param := Parameter{
+				Name: types.EmptyString,
+				Type: typs,
+			}
+			// 可能为nil，即无名参数，只有类型
+			declaratorNode := child.ChildByFieldName("declarator")
+			if declaratorNode != nil {
+				// 理论上delcs第一个应该是参数名，后面是嵌套的参数，不管
+				decls := findAllIdentifiers(declaratorNode, content)
+				if len(decls) > 0 {
+					param.Name = decls[0]
+				}
+			}
+			params = append(params, param)
+
+		case "variadic_parameter":
+			// ...可变参数的情况
+			params = append(params, Parameter{
+				Name: "...",
+				Type: []string{},
+			})
+		}
+	}
+	return params
+}
+
+func isLocalVariable(node *sitter.Node) bool {
+	current := node
+	for current != nil {
+		kind := current.Kind()
+		switch types.ToNodeKind(kind) {
+		// cpp、java
+		case types.NodeKindFunctionDeclaration, types.NodeKindMethodDeclaration:
+			return true
+		case types.NodeKindClassDeclaration, types.NodeKindClassSpecifier, types.NodeKindStructSpecifier:
+			// 如果在类或结构体内部，但不是局部变量
+			return false
+		default:
+			// 继续向上查找
+			current = current.Parent()
+		}
+	}
+	return false
 }

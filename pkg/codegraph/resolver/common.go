@@ -137,6 +137,7 @@ func NewReference(rootElement Element, curNode *sitter.Node, name string, owner 
 				int32(curNode.EndPosition().Row),
 				int32(curNode.EndPosition().Column),
 			},
+			Scope: types.ScopeFunction,
 		},
 		Owner: owner,
 	}
@@ -158,9 +159,7 @@ func parseTypeList(node *sitter.Node, content []byte) []string {
 		}
 		switch types.ToNodeKind(child.Kind()) {
 		case types.NodeKindScopedTypeIdentifier:
-			// TODO owner以后可能有用
-			_, superType := parseScopedTypeIdentifier(child, content)
-			typs = append(typs, superType)
+			typs = append(typs, child.Utf8Text(content))
 		case types.NodeKindTypeIdentifier:
 			typs = append(typs, child.Utf8Text(content))
 		case types.NodeKindGenericType:
@@ -171,77 +170,9 @@ func parseTypeList(node *sitter.Node, content []byte) []string {
 	return typs
 }
 
-// scoped_type_identifier
-//
-//	scoped_type_identifier
-//	  scoped_type_identifier
-//	    type_identifier (A)
-//	    type_identifier (B)
-//	  type_identifier (C)
-//	type_identifier (D)
-//
-// 获取第二层的identifier，即返回D
-func parseScopedTypeIdentifier(node *sitter.Node, content []byte) (owner string, superType string) {
-	if node == nil {
-		return "", ""
-	}
-	kind := types.ToNodeKind(node.Kind())
-	if kind != types.NodeKindScopedTypeIdentifier {
-		return "", ""
-	}
-	// 找到最后一个 type_identifier 子节点
 
-	for i := int(node.ChildCount()) - 1; i >= 0; i-- {
-		child := node.Child(uint(i))
-		if superType == types.EmptyString && types.ToNodeKind(child.Kind()) == types.NodeKindTypeIdentifier {
-			superType = child.Utf8Text(content)
-		} else if owner == types.EmptyString && types.ToNodeKind(child.Kind()) == types.NodeKindScopedTypeIdentifier {
-			owner = child.Utf8Text(content)
-		}
-	}
-	return owner, superType
-}
 
-// 递归查找节点下所有的type_identifier
-func findAllTypeIdentifiers(node *sitter.Node, content []byte) []string {
-	if node == nil {
-		return nil
-	}
-	// 如果当前节点就是type_identifier，直接返回
-	if types.ToNodeKind(node.Kind()) == types.NodeKindTypeIdentifier {
-		return []string{node.Utf8Text(content)}
-	}
 
-	// 使用栈进行迭代遍历，避免递归
-	stack := []*sitter.Node{node}
-	identifiers := make([]string, 0, 4) // 预分配容量，大多数情况下基础类不会太多
-
-	for len(stack) > 0 {
-		// 弹出栈顶元素
-		current := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-
-		if current == nil {
-			continue
-		}
-
-		// 如果是type_identifier，添加到结果中
-		if types.ToNodeKind(current.Kind()) == types.NodeKindTypeIdentifier {
-			identifiers = append(identifiers, current.Utf8Text(content))
-			continue
-		}
-
-		// 将子节点压入栈中（倒序压入以保持遍历顺序）
-		for i := int(current.ChildCount()) - 1; i >= 0; i-- {
-			child := current.Child(uint(i))
-			if child != nil {
-				stack = append(stack, child)
-			}
-		}
-	}
-
-	return identifiers
-}
 
 // 处理cpp语法中的base_class_clause类型，返回类型列表
 func parseBaseClassClause(node *sitter.Node, content []byte) []string {
@@ -293,3 +224,63 @@ func removeDuplicates(slice []string) []string {
 	}
 	return result
 }
+
+// 递归查找当前节点及其下面所有的identifier
+func findAllIdentifiers(node *sitter.Node, content []byte) []string {
+	if node == nil {
+		return nil
+	}
+	var identifiers []string
+	var walk func(n *sitter.Node)
+	walk = func(n *sitter.Node) {
+		if types.ToNodeKind(n.Kind()) == types.NodeKindIdentifier {
+			identifiers = append(identifiers, n.Utf8Text(content))
+			return 
+		}
+		for i := uint(0); i < n.ChildCount(); i++ {
+			child := n.Child(i)
+			if child.IsMissing() || child.IsError() {
+				continue
+			}
+			switch types.ToNodeKind(child.Kind()) {
+			case types.NodeKindIdentifier:
+				identifiers = append(identifiers, child.Utf8Text(content))
+			default:
+				// 递归查找类型中的标识符
+				walk(child)
+			}
+		}
+	}
+	walk(node)
+	return identifiers
+}
+
+func findAllTypeIdentifiers(node *sitter.Node, content []byte) []string {
+	if node == nil {
+		return nil
+	}
+	var identifiers []string
+	var walk func(n *sitter.Node)
+	walk = func(n *sitter.Node) {
+		if types.ToNodeKind(n.Kind()) == types.NodeKindTypeIdentifier {
+			identifiers = append(identifiers, n.Utf8Text(content))
+			return 
+		}
+		for i := uint(0); i < n.ChildCount(); i++ {
+			child := n.Child(i)
+			if child.IsMissing() || child.IsError() {
+				continue
+			}
+			switch types.ToNodeKind(child.Kind()) {
+			case types.NodeKindTypeIdentifier:
+				identifiers = append(identifiers, child.Utf8Text(content))
+			default:
+				// 递归查找类型中的标识符
+				walk(child)
+			}
+		}
+	}
+	walk(node)
+	return identifiers
+}
+

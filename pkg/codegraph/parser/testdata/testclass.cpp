@@ -303,3 +303,22 @@ enum FilePermission {
 
 class Derived1 : public Outer<Base<Inner<int>>> {};
 class Derived2 : virtual public Base1, public Base2 {};
+
+typedef int MyInt,B,C,D;
+typedef char* String, A;
+typedef struct Person PersonAlias;
+
+typedef struct {
+    void** items;
+    size_t size;
+    size_t capacity;
+    size_t item_size;
+} GenericArray;
+
+typedef struct TagNode {
+    char* tag;
+    struct TagNode* parent;
+    struct TagNode* first_child;
+    struct TagNode* next_sibling;
+    void* data;
+} TagNode;
