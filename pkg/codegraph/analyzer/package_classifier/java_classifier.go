@@ -41,9 +41,11 @@ func (j *JavaClassifier) Classify(packageName string, project *workspace.Project
 	}
 
 	// 检查是否为项目内包
-	if project != nil && project.JavaPackagePrefix != "" {
-		if strings.HasPrefix(packageName, project.JavaPackagePrefix) {
-			return ProjectPackage
+	if project != nil {
+		for _, prefix := range project.JavaPackagePrefix {
+			if prefix != "" && strings.HasPrefix(packageName, prefix) {
+				return ProjectPackage
+			}
 		}
 	}
 

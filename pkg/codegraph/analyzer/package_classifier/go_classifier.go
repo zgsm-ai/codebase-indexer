@@ -45,12 +45,14 @@ func (g *GoClassifier) Classify(packageName string, project *workspace.Project) 
 	}
 
 	// 检查项目模块信息
-	goModule := project.GoModules
-	if goModule != types.EmptyString {
-		// 如果包名以项目模块名开头，则为项目包
-		// 例如：项目模块为 "github.com/example/myapp"，则 "github.com/example/myapp/utils" 是项目包
-		if strings.HasPrefix(packageName, goModule+types.Slash) {
-			return ProjectPackage
+	goModules := project.GoModules
+	for _, goModule := range goModules {
+		if goModule != types.EmptyString {
+			// 如果包名以项目模块名开头，则为项目包
+			// 例如：项目模块为 "github.com/example/myapp"，则 "github.com/example/myapp/utils" 是项目包
+			if strings.HasPrefix(packageName, goModule+types.Slash) {
+				return ProjectPackage
+			}
 		}
 	}
 

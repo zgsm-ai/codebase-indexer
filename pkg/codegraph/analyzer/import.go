@@ -50,9 +50,13 @@ func (da *DependencyAnalyzer) processImportByLanguage(imp *resolver.Import, lang
 		return nil
 	}
 	// go ，去掉module
-	if language == lang.Go && project.GoModules != types.EmptyString {
-		imp.Source = strings.TrimPrefix(imp.Source, project.GoModules+types.Slash)
-		imp.Name = strings.TrimPrefix(imp.Name, project.GoModules+types.Slash)
+	if language == lang.Go && len(project.GoModules) > 0 {
+		for _, goModule := range project.GoModules {
+			if goModule != types.EmptyString {
+				imp.Source = strings.TrimPrefix(imp.Source, goModule+types.Slash)
+				imp.Name = strings.TrimPrefix(imp.Name, goModule+types.Slash)
+			}
+		}
 	}
 
 	// 处理相对路径
