@@ -15,6 +15,7 @@ var (
 	CacheDir     = "./.zgsm/cache"
 	UploadTmpDir = "./.zgsm/tmp"
 	DbDir        = "./.zgsm/cache/db"
+	IndexDir     = "./.zgsm/index"
 )
 
 // GetRootDir gets cross-platform root directory

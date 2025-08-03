@@ -2,10 +2,15 @@
 package main
 
 import (
+	"codebase-indexer/pkg/codegraph"
+	"codebase-indexer/pkg/codegraph/analyzer"
+	"codebase-indexer/pkg/codegraph/parser"
+	"codebase-indexer/pkg/codegraph/store"
+	"codebase-indexer/pkg/codegraph/types"
+	"codebase-indexer/pkg/codegraph/workspace"
 	"context"
 	"flag"
 	"fmt"
-
 	// "net"
 	"net/http"
 	"os"
@@ -65,90 +70,107 @@ func main() {
 	initConfig(*appName)
 
 	// Initialize logging system
-	logger, err := logger.NewLogger(utils.LogsDir, *logLevel)
+	appLogger, err := logger.NewLogger(utils.LogsDir, *logLevel)
 	if err != nil {
 		fmt.Printf("failed to initialize logging system: %v\n", err)
 		return
 	}
-	logger.Info("OS: %s, Arch: %s, App: %s, Version: %s, Starting...", osName, archName, *appName, version)
+	appLogger.Info("OS: %s, Arch: %s, App: %s, Version: %s, Starting...", osName, archName, *appName, version)
 
 	// Initialize infrastructure layer
-	storageManager, err := repository.NewStorageManager(utils.CacheDir, logger)
+	storageManager, err := repository.NewStorageManager(utils.CacheDir, appLogger)
 	if err != nil {
-		logger.Fatal("failed to initialize storage manager: %v", err)
+		appLogger.Fatal("failed to initialize codegraphStore manager: %v", err)
 		return
 	}
 
 	// Initialize database manager
 	dbConfig := config.DefaultDatabaseConfig()
-	dbManager := database.NewSQLiteManager(dbConfig, logger)
+	dbManager := database.NewSQLiteManager(dbConfig, appLogger)
 	if err := dbManager.Initialize(); err != nil {
-		logger.Fatal("failed to initialize database manager: %v", err)
+		appLogger.Fatal("failed to initialize database manager: %v", err)
 		return
 	}
 
 	// Initialize repositories
-	workspaceRepo := repository.NewWorkspaceRepository(dbManager, logger)
-	eventRepo := repository.NewEventRepository(dbManager, logger)
-	embeddingStateRepo := repository.NewEmbeddingStateRepository(dbManager, logger)
+	workspaceRepo := repository.NewWorkspaceRepository(dbManager, appLogger)
+	eventRepo := repository.NewEventRepository(dbManager, appLogger)
+	embeddingStateRepo := repository.NewEmbeddingStateRepository(dbManager, appLogger)
+	codegraphStateRepo := repository.NewCodegraphStateRepository(dbManager, appLogger)
 	var syncServiceConfig *config.SyncConfig
 	if *clientId != "" && *serverEndpoint != "" && *token != "" {
 		syncServiceConfig = &config.SyncConfig{ClientId: *clientId, ServerURL: *serverEndpoint, Token: *token}
 	}
-	scanRepo := repository.NewFileScanner(logger)
-	syncRepo := repository.NewHTTPSync(syncServiceConfig, logger)
+	scanRepo := repository.NewFileScanner(appLogger)
+	syncRepo := repository.NewHTTPSync(syncServiceConfig, appLogger)
 
 	// Initialize service layer
-	fileScanService := service.NewFileScanService(workspaceRepo, eventRepo, scanRepo, storageManager, logger)
-	eventProcessService := service.NewEventProcessService(eventRepo, embeddingStateRepo, logger)
-	embeddingStatusService := service.NewEmbeddingStatusService(embeddingStateRepo, workspaceRepo, logger)
-	codebaseService := service.NewCodebaseService(logger)
-	schedulerService := service.NewScheduler(syncRepo, scanRepo, storageManager, logger)
-	extensionService := service.NewExtensionService(storageManager, syncRepo, scanRepo, codebaseService, logger)
+	fileScanService := service.NewFileScanService(workspaceRepo, eventRepo, scanRepo, storageManager, appLogger)
+	embeddingProcessService := service.NewEventProcessService(eventRepo, embeddingStateRepo, appLogger)
+	embeddingStatusService := service.NewEmbeddingStatusService(embeddingStateRepo, workspaceRepo, appLogger)
+	codebaseService := service.NewCodebaseService(appLogger)
+	schedulerService := service.NewScheduler(syncRepo, scanRepo, storageManager, appLogger)
+	extensionService := service.NewExtensionService(storageManager, syncRepo, scanRepo, codebaseService, appLogger)
+
+	// 创建存储
+	codegraphStore, err := store.NewLevelDBStorage(utils.IndexDir, appLogger)
+
+	// 创建工作区读取器
+	workspaceReader := workspace.NewWorkSpaceReader(appLogger)
+
+	// 创建源文件解析器
+	sourceFileParser := parser.NewSourceFileParser(appLogger)
+
+	// 创建依赖分析器
+	dependencyAnalyzer := analyzer.NewDependencyAnalyzer(appLogger, workspaceReader, codegraphStore)
+
+	indexer := codegraph.NewCodeIndexer(sourceFileParser, dependencyAnalyzer, workspaceReader, codegraphStore,
+		codegraph.IndexerConfig{VisitPattern: types.VisitPattern{}}, appLogger) //todo 文件忽略列表
+	codegraphProcessor := service.NewCodegraphProcessor(indexer, eventRepo, codegraphStateRepo, appLogger)
 
 	// Initialize job layer
-	fileScanJob := job.NewFileScanJob(fileScanService, logger, 5*time.Minute)
-	eventProcessorJob := job.NewEventProcessorJob(eventProcessService, logger)
-	statusCheckerJob := job.NewStatusCheckerJob(embeddingStatusService, logger, 3*time.Second)
+	fileScanJob := job.NewFileScanJob(fileScanService, appLogger, 5*time.Minute)
+	eventProcessorJob := job.NewEventProcessorJob(appLogger, embeddingProcessService, codegraphProcessor)
+	statusCheckerJob := job.NewStatusCheckerJob(embeddingStatusService, appLogger, 3*time.Second)
 
 	// Initialize handler layer
-	// grpcHandler := handler.NewGRPCHandler(syncRepo, scanRepo, storageManager, schedulerService, logger)
-	extensionHandler := handler.NewExtensionHandler(extensionService, logger)
-	backendHandler := handler.NewBackendHandler(codebaseService, logger)
+	// grpcHandler := handler.NewGRPCHandler(syncRepo, scanRepo, storageManager, schedulerService, appLogger)
+	extensionHandler := handler.NewExtensionHandler(extensionService, appLogger)
+	backendHandler := handler.NewBackendHandler(codebaseService, appLogger)
 
 	// Initialize gRPC server
 	// lis, err := net.Listen("tcp", *grpcServer)
 	// if err != nil {
-	// 	logger.Fatal("failed to listen: %v", err)
+	// 	appLogger.Fatal("failed to listen: %v", err)
 	// 	return
 	// }
 	// s := grpc.NewServer()
 	// api.RegisterSyncServiceServer(s, grpcHandler)
 
 	// Initialize HTTP server
-	httpServerInstance := server.NewServer(extensionHandler, backendHandler, logger)
+	httpServerInstance := server.NewServer(extensionHandler, backendHandler, appLogger)
 	if *enableSwagger {
 		httpServerInstance.EnableSwagger()
-		logger.Info("swagger documentation enabled")
+		appLogger.Info("swagger documentation enabled")
 	}
 
 	// Start daemon process
-	// daemon := daemon.NewDaemon(syncScheduler, s, lis, httpSync, fileScanner, storageManager, logger)
-	daemon := daemon.NewDaemon(schedulerService, syncRepo, scanRepo, storageManager, logger, fileScanJob, eventProcessorJob, statusCheckerJob)
+	// daemon := daemon.NewDaemon(syncScheduler, s, lis, httpSync, fileScanner, storageManager, appLogger)
+	daemon := daemon.NewDaemon(schedulerService, syncRepo, scanRepo, storageManager, appLogger, fileScanJob, eventProcessorJob, statusCheckerJob)
 	go daemon.Start()
 
 	// Start HTTP server
 	go func() {
 		if err := httpServerInstance.Start(*httpServer); err != nil && err != http.ErrServerClosed {
-			logger.Error("HTTP server error: %v", err)
+			appLogger.Error("HTTP server error: %v", err)
 		}
 	}()
 
-	logger.Info("application started successfully")
-	// logger.Info("gRPC server listening on %s", *grpcServer)
-	logger.Info("HTTP server listening on %s", *httpServer)
+	appLogger.Info("application started successfully")
+	// appLogger.Info("gRPC server listening on %s", *grpcServer)
+	appLogger.Info("HTTP server listening on %s", *httpServer)
 	if *enableSwagger {
-		logger.Info("swagger documentation available at http://localhost%s/docs", *httpServer)
+		appLogger.Info("swagger documentation available at http://localhost%s/docs", *httpServer)
 	}
 
 	// Handle system signals for graceful shutdown
@@ -156,17 +178,17 @@ func main() {
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 
-	logger.Info("received shutdown signal, shutting down gracefully...")
+	appLogger.Info("received shutdown signal, shutting down gracefully...")
 	daemon.Stop()
 
 	// 优雅关闭HTTP服务器
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := httpServerInstance.Shutdown(ctx); err != nil {
-		logger.Error("HTTP server shutdown error: %v", err)
+		appLogger.Error("HTTP server shutdown error: %v", err)
 	}
 
-	logger.Info("client has been successfully closed")
+	appLogger.Info("client has been successfully closed")
 }
 
 // initDir initializes directories

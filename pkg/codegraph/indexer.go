@@ -39,7 +39,6 @@ type Indexer struct {
 	storage         store.GraphStorage           // 存储
 	config          IndexerConfig
 	logger          logger.Logger
-	IndexMetrics    types.IndexTaskMetrics
 }
 
 // TODO 多子项目、多语言支持。monorepo, 不光通过语言隔离、还要通过子项目隔离。
@@ -76,6 +75,7 @@ func (i *Indexer) IndexWorkspace(ctx context.Context, workspace string) error {
 	}
 
 	var errs []error
+	taskMetrics := &types.IndexTaskMetrics{}
 	workspaceStart := time.Now()
 
 	// 循环项目，逐个处理
@@ -87,17 +87,16 @@ func (i *Indexer) IndexWorkspace(ctx context.Context, workspace string) error {
 			continue
 		}
 
-		i.IndexMetrics.TotalFiles += projectTaskMetrics.TotalFiles
-		i.IndexMetrics.TotalSourceFiles += projectTaskMetrics.TotalSourceFiles
-		i.IndexMetrics.TotalSucceedFiles += projectTaskMetrics.TotalSucceedFiles
-		i.IndexMetrics.TotalFailedFiles += projectTaskMetrics.TotalFailedFiles
+		taskMetrics.TotalFiles += projectTaskMetrics.TotalFiles
+		taskMetrics.TotalSourceFiles += projectTaskMetrics.TotalSourceFiles
+		taskMetrics.TotalSucceedFiles += projectTaskMetrics.TotalSucceedFiles
+		taskMetrics.TotalFailedFiles += projectTaskMetrics.TotalFailedFiles
 	}
 
 	i.logger.Info("index_workspace %s index workspace finish, cost %d ms, visit %d files, "+
 		"%d valid source files, parsed %d files successfully, failed %d files", workspace, time.Since(workspaceStart).Milliseconds(),
-		i.IndexMetrics.TotalFiles, i.IndexMetrics.TotalSourceFiles,
-		i.IndexMetrics.TotalSucceedFiles, i.IndexMetrics.TotalFailedFiles)
-
+		taskMetrics.TotalFiles, taskMetrics.TotalSourceFiles,
+		taskMetrics.TotalSucceedFiles, taskMetrics.TotalFailedFiles)
 	return nil
 }
 
@@ -108,7 +107,7 @@ func (i *Indexer) indexProject(ctx context.Context, p *workspace.Project) (types
 	projectStart := time.Now()
 	i.logger.Info("index_project start to index project：%s", p.Path)
 
-	fileElementTables, projectTaskMetrics, err := i.processProjectFiles(ctx, p)
+	fileElementTables, projectTaskMetrics, err := i.ParseProjectFiles(ctx, p)
 	if err != nil {
 		return types.IndexTaskMetrics{}, append(errs, err)
 	}
@@ -153,8 +152,8 @@ func (i *Indexer) indexProject(ctx context.Context, p *workspace.Project) (types
 	return projectTaskMetrics, nil
 }
 
-// processProjectFiles 处理项目中的所有文件
-func (i *Indexer) processProjectFiles(ctx context.Context, p *workspace.Project) ([]*parser.FileElementTable, types.IndexTaskMetrics, error) {
+// ParseProjectFiles 解析项目中的所有文件
+func (i *Indexer) ParseProjectFiles(ctx context.Context, p *workspace.Project) ([]*parser.FileElementTable, types.IndexTaskMetrics, error) {
 	fileElementTables := make([]*parser.FileElementTable, 0)
 	projectTaskMetrics := types.IndexTaskMetrics{}
 

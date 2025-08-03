@@ -124,7 +124,7 @@ func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, vi
 	}
 	// resolve go module
 	for _, p := range projects {
-		goModule, err := w.resolveGoModule(ctx, p.Path)
+		goModule, err := w.ResolveGoModule(ctx, p.Path)
 		if err != nil {
 			w.logger.Error("find_projects resolve go module err:%v", err)
 		} else {
@@ -310,8 +310,8 @@ func (w *WorkspaceReader) Walk(ctx context.Context, dir string, walkFn types.Wal
 	})
 }
 
-// TODO 子目录下的go.mod, go的import以module名开头，特殊处理
-func (da *WorkspaceReader) resolveGoModule(ctx context.Context, projectPath string) (string, error) {
+// ResolveGoModule TODO 子目录下的go.mod, go的import以module名开头，特殊处理
+func (da *WorkspaceReader) ResolveGoModule(ctx context.Context, projectPath string) (string, error) {
 	goMod, err := da.ReadFile(ctx, filepath.Join(projectPath, "go.mod"), types.ReadOptions{})
 	if err != nil {
 		return types.EmptyString, fmt.Errorf("resolve go project module failed: %v", err)

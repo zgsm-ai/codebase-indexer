@@ -19,13 +19,21 @@ type Project struct {
 	Uuid     string
 }
 
+func NewProject(name, path string) *Project {
+	return &Project{
+		Name: name,
+		Path: path,
+		Uuid: generateUuid(name, path),
+	}
+}
+
 // generateUuid 生成缩短的项目UUID，保持唯一性同时减少长度
 func generateUuid(name, path string) string {
 	if name == types.EmptyString {
-		name = "unknown"
+		name = "empty"
 	}
 	if path == types.EmptyString {
-		path = "unknown"
+		path = "empty"
 	}
 
 	// 计算路径的SHA-256哈希
