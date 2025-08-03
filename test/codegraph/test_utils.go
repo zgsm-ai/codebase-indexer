@@ -110,9 +110,6 @@ func cleanTestIndexStore(ctx context.Context, projects []*workspace.Project, sto
 
 func NewTestProject(path string, logger logger.Logger) *workspace.Project {
 	project := workspace.NewProject(filepath.Base(path), path)
-	workspaceReader := workspace.NewWorkSpaceReader(logger)
-	goModule, _ := workspaceReader.ResolveGoModule(context.Background(), path)
-	project.GoModule = goModule
 	return project
 }
 

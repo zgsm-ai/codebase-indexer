@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	packageclassifier "codebase-indexer/pkg/codegraph/analyzer/package_classifier"
 	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/parser"
 	"codebase-indexer/pkg/codegraph/proto"
@@ -18,25 +19,29 @@ import (
 )
 
 type DependencyAnalyzer struct {
-	workspaceReader *workspace.WorkspaceReader
-	logger          logger.Logger
-	store           store.GraphStorage
+	packageClassifier *packageclassifier.PackageClassifier
+	workspaceReader   *workspace.WorkspaceReader
+	logger            logger.Logger
+	store             store.GraphStorage
 }
 
 func NewDependencyAnalyzer(logger logger.Logger,
+	packageClassifier *packageclassifier.PackageClassifier,
 	reader *workspace.WorkspaceReader,
 	store store.GraphStorage) *DependencyAnalyzer {
 
 	return &DependencyAnalyzer{
-		logger:          logger,
-		workspaceReader: reader,
-		store:           store,
+		logger:            logger,
+		packageClassifier: packageClassifier,
+		workspaceReader:   reader,
+		store:             store,
 	}
 }
 
 func (da *DependencyAnalyzer) Analyze(ctx context.Context,
 	projectInfo *workspace.Project, fileElementTables []*parser.FileElementTable) error {
 	projectUuid := projectInfo.Uuid
+
 	// 1. 处理 import
 	if err := da.preprocessImport(ctx, projectInfo, fileElementTables); err != nil {
 		da.logger.Error("analyze import error: %v", err)

@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	packageclassifier "codebase-indexer/pkg/codegraph/analyzer/package_classifier"
 	"codebase-indexer/pkg/codegraph/parser"
 	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/codegraph/workspace"
@@ -21,11 +22,12 @@ import (
 // 6、将 . 统一转为 /，方便后续处理。
 func (da *DependencyAnalyzer) preprocessImport(ctx context.Context,
 	projectInfo *workspace.Project, fileElementTables []*parser.FileElementTable) error {
+
 	for _, p := range fileElementTables {
 		imports := make([]*resolver.Import, 0, len(p.Imports))
 		for _, imp := range p.Imports {
 			// TODO 过滤掉标准库、第三方库等非项目的库
-			if i := da.processImportByLanguage(imp, p.Path, p.Language, projectInfo); i != nil {
+			if i := da.processImportByLanguage(imp, p.Language, projectInfo); i != nil {
 				imports = append(imports, i)
 			}
 		}
@@ -35,29 +37,28 @@ func (da *DependencyAnalyzer) preprocessImport(ctx context.Context,
 }
 
 // processImportByLanguage 根据语言类型统一处理导入
-func (da *DependencyAnalyzer) processImportByLanguage(imp *resolver.Import, currentFilePath string,
-	language lang.Language, project *workspace.Project) *resolver.Import {
+func (da *DependencyAnalyzer) processImportByLanguage(imp *resolver.Import, language lang.Language,
+	project *workspace.Project) *resolver.Import {
 	// go项目，只处理 module前缀的，过滤非module前缀的
-	if language == lang.Go {
-		goModule := project.GoModule
-		if goModule == types.EmptyString {
-			da.logger.Debug("process_import go module not recognized in project %s", project.Path)
-		} else {
-			// 如果不以package 开头，则跳过
-			if !strings.HasPrefix(imp.Source, goModule) && !strings.HasPrefix(imp.Name, goModule) {
-				return nil
-			}
-			imp.Source = strings.TrimPrefix(imp.Source, goModule+types.Slash)
-			imp.Name = strings.TrimPrefix(imp.Name, goModule+types.Slash)
-		}
+	packageType, err := da.packageClassifier.ClassifyPackage(language, imp.Name, project)
+	if err != nil {
+		da.logger.Debug("classify %s package %s error: %v", imp.Path, imp.Name, err)
 	}
 
-	// TODO 排除其它语言的系统或第三方的包，比如 java.* 开头的包
+	// 过滤掉系统包、第三方包
+	if packageType == packageclassifier.SystemPackage || packageType == packageclassifier.ThirdPartyPackage {
+		return nil
+	}
+	// go ，去掉module
+	if language == lang.Go && project.GoModules != types.EmptyString {
+		imp.Source = strings.TrimPrefix(imp.Source, project.GoModules+types.Slash)
+		imp.Name = strings.TrimPrefix(imp.Name, project.GoModules+types.Slash)
+	}
 
 	// 处理相对路径
 	if strings.HasPrefix(imp.Source, types.Dot) {
-		imp.Source = da.resolveRelativePath(imp.Source, currentFilePath, language)
-		imp.Name = da.resolveRelativePath(imp.Name, currentFilePath, language)
+		imp.Source = da.resolveRelativePath(imp.Source, imp.Path)
+		imp.Name = da.resolveRelativePath(imp.Name, imp.Path)
 	}
 
 	// . 转 /
@@ -68,7 +69,7 @@ func (da *DependencyAnalyzer) processImportByLanguage(imp *resolver.Import, curr
 }
 
 // resolveRelativePath 统一解析相对路径
-func (da *DependencyAnalyzer) resolveRelativePath(importPath, currentFilePath string, language lang.Language) string {
+func (da *DependencyAnalyzer) resolveRelativePath(importPath, currentFilePath string) string {
 	currentDir := filepath.Dir(currentFilePath)
 
 	// 计算上跳层级

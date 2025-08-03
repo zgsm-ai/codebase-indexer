@@ -13,17 +13,31 @@ import (
 
 // Project 项目基础配置信息
 type Project struct {
-	Name     string
-	Path     string
-	GoModule string
-	Uuid     string
+	Name string
+	Path string
+	Uuid string
+
+	GoModules []string
+	// JavaPackagePrefix Java 项目包前缀（如 com.example.myapp）
+	JavaPackagePrefix []string
+	// PythonPackages Python 项目包列表（如 myapp, myapp.utils）
+	PythonPackages []string
+	// CppIncludes C/C++ 项目头文件路径（相对路径）
+	CppIncludes []string
+	// JsPackages JavaScript/TypeScript 项目包列表（如 myapp, @myapp/utils）
+	JsPackages []string
 }
 
 func NewProject(name, path string) *Project {
 	return &Project{
-		Name: name,
-		Path: path,
-		Uuid: generateUuid(name, path),
+		Name:              name,
+		Path:              path,
+		Uuid:              generateUuid(name, path),
+		GoModules:         []string{},
+		JavaPackagePrefix: []string{}, // 默认为空字符串
+		PythonPackages:    []string{}, // 默认为空切片
+		CppIncludes:       []string{}, // 默认为空切片
+		JsPackages:        []string{}, // 默认为空切片
 	}
 }
 

@@ -4,6 +4,7 @@ package main
 import (
 	"codebase-indexer/pkg/codegraph"
 	"codebase-indexer/pkg/codegraph/analyzer"
+	packageclassifier "codebase-indexer/pkg/codegraph/analyzer/package_classifier"
 	"codebase-indexer/pkg/codegraph/parser"
 	"codebase-indexer/pkg/codegraph/store"
 	"codebase-indexer/pkg/codegraph/types"
@@ -13,6 +14,7 @@ import (
 	"fmt"
 	// "net"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -59,6 +61,8 @@ func main() {
 	serverEndpoint := flag.String("server", "", "server endpoint")
 	token := flag.String("token", "", "authentication token")
 	enableSwagger := flag.Bool("swagger", false, "enable swagger documentation")
+	enablePprof := flag.Bool("pprof", false, "enable pprof profiling")
+	pprofAddr := flag.String("pprof-addr", "localhost:6060", "pprof server address")
 	flag.Parse()
 
 	// Initialize directories
@@ -68,6 +72,12 @@ func main() {
 	}
 	// Initialize configuration
 	initConfig(*appName)
+
+	// Update pprof configuration from command line arguments
+	clientConfig := config.GetClientConfig()
+	clientConfig.Pprof.Enabled = *enablePprof
+	clientConfig.Pprof.Address = *pprofAddr
+	config.SetClientConfig(clientConfig)
 
 	// Initialize logging system
 	appLogger, err := logger.NewLogger(utils.LogsDir, *logLevel)
@@ -121,8 +131,10 @@ func main() {
 	// 创建源文件解析器
 	sourceFileParser := parser.NewSourceFileParser(appLogger)
 
+	packageClassifier := packageclassifier.NewPackageClassifier()
+
 	// 创建依赖分析器
-	dependencyAnalyzer := analyzer.NewDependencyAnalyzer(appLogger, workspaceReader, codegraphStore)
+	dependencyAnalyzer := analyzer.NewDependencyAnalyzer(appLogger, packageClassifier, workspaceReader, codegraphStore)
 
 	indexer := codegraph.NewCodeIndexer(sourceFileParser, dependencyAnalyzer, workspaceReader, codegraphStore,
 		codegraph.IndexerConfig{VisitPattern: types.VisitPattern{}}, appLogger) //todo 文件忽略列表
@@ -158,6 +170,30 @@ func main() {
 	// daemon := daemon.NewDaemon(syncScheduler, s, lis, httpSync, fileScanner, storageManager, appLogger)
 	daemon := daemon.NewDaemon(schedulerService, syncRepo, scanRepo, storageManager, appLogger, fileScanJob, eventProcessorJob, statusCheckerJob)
 	go daemon.Start()
+
+	// Start pprof server if enabled
+	pprofConfig := config.GetClientConfig().Pprof
+	if pprofConfig.Enabled {
+		go func() {
+			pprofMux := http.NewServeMux()
+			pprofMux.HandleFunc("/debug/pprof/", pprof.Index)
+			pprofMux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+			pprofMux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+			pprofMux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+			pprofMux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+			pprofMux.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
+			pprofMux.Handle("/debug/pprof/heap", pprof.Handler("heap"))
+			pprofMux.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
+			pprofMux.Handle("/debug/pprof/block", pprof.Handler("block"))
+
+			appLogger.Info("pprof server starting on %s", pprofConfig.Address)
+			if err := http.ListenAndServe(pprofConfig.Address, pprofMux); err != nil && err != http.ErrServerClosed {
+				appLogger.Error("pprof server error: %v", err)
+			}
+		}()
+		appLogger.Info("pprof server listening on %s", pprofConfig.Address)
+		appLogger.Info("pprof profiles available at http://%s/debug/pprof/", pprofConfig.Address)
+	}
 
 	// Start HTTP server
 	go func() {

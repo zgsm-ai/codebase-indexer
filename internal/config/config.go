@@ -16,10 +16,17 @@ type ConfigSync struct {
 	FolderIgnorePatterns []string `json:"folderIgnorePatterns"`
 }
 
+// Pprof configuration
+type ConfigPprof struct {
+	Enabled  bool   `json:"enabled"`
+	Address  string `json:"address"`
+}
+
 // Client configuration file structure
 type ClientConfig struct {
 	Server ConfigServer `json:"server"`
 	Sync   ConfigSync   `json:"sync"`
+	Pprof  ConfigPprof  `json:"pprof"`
 }
 
 var DefaultConfigServer = ConfigServer{
@@ -78,10 +85,17 @@ var DefaultConfigSync = ConfigSync{
 	FolderIgnorePatterns: DefaultFolderIgnorePatterns, // Default folder ignore patterns
 }
 
+// Default pprof configuration
+var DefaultConfigPprof = ConfigPprof{
+	Enabled: false,                // Default pprof disabled
+	Address: "localhost:6060",     // Default pprof address
+}
+
 // Default client configuration
 var DefaultClientConfig = ClientConfig{
 	Server: DefaultConfigServer,
 	Sync:   DefaultConfigSync,
+	Pprof:  DefaultConfigPprof,
 }
 
 // Global client configuration
