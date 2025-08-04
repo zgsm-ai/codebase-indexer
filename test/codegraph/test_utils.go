@@ -3,6 +3,7 @@ package codegraph
 import (
 	"codebase-indexer/pkg/codegraph"
 	"codebase-indexer/pkg/codegraph/analyzer"
+	packageclassifier "codebase-indexer/pkg/codegraph/analyzer/package_classifier"
 	"codebase-indexer/pkg/codegraph/parser"
 	"codebase-indexer/pkg/codegraph/store"
 	"codebase-indexer/pkg/codegraph/types"
@@ -60,8 +61,10 @@ func setupTestEnvironment() (*testEnvironment, error) {
 	// 创建源文件解析器
 	sourceFileParser := parser.NewSourceFileParser(newLogger)
 
+	packageClassifier := packageclassifier.NewPackageClassifier()
+
 	// 创建依赖分析器
-	dependencyAnalyzer := analyzer.NewDependencyAnalyzer(newLogger, workspaceReader, storage)
+	dependencyAnalyzer := analyzer.NewDependencyAnalyzer(newLogger, packageClassifier, workspaceReader, storage)
 
 	return &testEnvironment{
 		ctx:                ctx,
