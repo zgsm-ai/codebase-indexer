@@ -882,7 +882,6 @@ func (js *JavaScriptResolver) resolveCall(ctx context.Context, element *Call, rc
 	if isRequireCallCapture(rc) {
 		return js.handleRequireCall(rc)
 	}
-
 	elements := []Element{element}
 	rootCapture := rc.Match.Captures[0]
 	updateRootElement(element, &rootCapture, rc.CaptureNames[rootCapture.Index], rc.SourceFile.Content)
@@ -890,10 +889,8 @@ func (js *JavaScriptResolver) resolveCall(ctx context.Context, element *Call, rc
 		nodeCaptureName := rc.CaptureNames[capture.Index]
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeFunctionCall, types.ElementTypeMethodCall:
-			// 处理整个函数调用表达式
 			funcNode := capture.Node.ChildByFieldName("function")
 			if funcNode != nil {
-				// 检查是否为匿名函数立即调用模式（IIFE）
 				switch types.ToNodeKind(funcNode.Kind()) {
 				case types.NodeKindFuncLiteral:
 					return nil, nil
@@ -903,25 +900,21 @@ func (js *JavaScriptResolver) resolveCall(ctx context.Context, element *Call, rc
 					extractMemberExpressionPath(funcNode, element, rc.SourceFile.Content)
 				}
 			}
-
 		case types.ElementTypeFunctionArguments, types.ElementTypeCallArguments:
 			processArguments(element, capture.Node, rc.SourceFile.Content)
-		case types.ElementTypeCallName:
-			if types.ToNodeKind(capture.Node.Kind()) == types.NodeKindMemberExpression {
-				extractCallNameAndOwner(&capture.Node, element, rc.SourceFile.Content)
-			} else {
-				// 如果不是成员表达式，直接获取函数名
-				element.BaseElement.Name = capture.Node.Utf8Text(rc.SourceFile.Content)
-			}
+		// case types.ElementTypeCallName:
+		// 	if types.ToNodeKind(capture.Node.Kind()) == types.NodeKindMemberExpression || types.ToNodeKind(capture.Node.Kind()) == types.NodeKindParenthesizedExpression {
+		// 		extractCallNameAndOwner(&capture.Node, element, rc.SourceFile.Content)
+		// 	} else {
+		// 		element.BaseElement.Name = strings.Trim(CleanParam(capture.Node.Utf8Text(rc.SourceFile.Content)), "()")
+		// 	}
 		case types.ElementTypeStructCall:
 			refPathMap := extractReferencePath(&capture.Node, rc.SourceFile.Content)
 			element.BaseElement.Name = refPathMap["property"]
 			element.Owner = refPathMap["object"]
 		}
 	}
-
-	// 设置默认Scope
-	if element.Scope == "" {
+	if element.Scope == types.EmptyString {
 		element.Scope = types.ScopeFunction
 	}
 
@@ -1008,33 +1001,6 @@ func processArguments(element *Call, argsNode sitter.Node, content []byte) {
 
 		// 添加参数
 		element.Parameters = append(element.Parameters, param)
-	}
-}
-
-// extractCallNameAndOwner 从成员表达式中提取函数名和所有者
-func extractCallNameAndOwner(node *sitter.Node, call *Call, content []byte) {
-	if node == nil {
-		return
-	}
-
-	nodeText := string(node.Utf8Text(content))
-
-	// 处理诸如 "o.next" 或 "a.b.c" 这样的表达式
-	if strings.Contains(nodeText, ".") {
-		parts := strings.Split(nodeText, ".")
-		if len(parts) > 0 {
-			// 最后一部分是函数名
-			call.BaseElement.Name = parts[len(parts)-1]
-
-			// 前面的部分组成所有者
-			if len(parts) > 1 {
-				call.Owner = strings.Join(parts[:len(parts)-1], ".")
-				call.Type = types.ElementTypeMethodCall
-			}
-		}
-	} else {
-		// 如果没有点，整个文本就是函数名
-		call.BaseElement.Name = nodeText
 	}
 }
 

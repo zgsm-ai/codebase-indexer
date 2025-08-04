@@ -248,7 +248,6 @@ func (ts *TypeScriptResolver) resolveVariable(ctx context.Context, element *Vari
 			} else {
 				element.VariableType = []string{typeContent}
 				ref := NewReference(element, &capture.Node, typeContent, "")
-
 				// 处理带点号的类型名称（如 typescript.go）
 				if strings.Contains(typeContent, ".") {
 					parts := strings.Split(typeContent, ".")
@@ -257,15 +256,18 @@ func (ts *TypeScriptResolver) resolveVariable(ctx context.Context, element *Vari
 						ref.Owner = parts[0]
 					}
 				}
-
-				// 只添加一次引用
 				elements = append(elements, ref)
 			}
+		//枚举字段
+		case types.ElementTypeEnumConstantName:
+			element.BaseElement.Name = CleanParam(content)
+			element.VariableType = []string{types.PrimitiveType}
 		}
 	}
 	elements = append(elements, element)
 	return elements, nil
 }
+
 func (ts *TypeScriptResolver) resolveInterface(ctx context.Context, element *Interface, rc *ResolveContext) ([]Element, error) {
 	elements := []Element{element}
 	rootCapture := rc.Match.Captures[0]
@@ -342,20 +344,13 @@ func (ts *TypeScriptResolver) resolveCall(ctx context.Context, element *Call, rc
 			}
 		case types.ElementTypeFunctionArguments, types.ElementTypeCallArguments:
 			processArguments(element, capture.Node, rc.SourceFile.Content)
-		case types.ElementTypeCallName:
-			if types.ToNodeKind(capture.Node.Kind()) == types.NodeKindMemberExpression {
-				extractCallNameAndOwner(&capture.Node, element, rc.SourceFile.Content)
-			} else {
-				element.BaseElement.Name = capture.Node.Utf8Text(rc.SourceFile.Content)
-			}
 		case types.ElementTypeStructCall:
 			refPathMap := extractReferencePath(&capture.Node, rc.SourceFile.Content)
 			element.BaseElement.Name = refPathMap["property"]
 			element.Owner = refPathMap["object"]
 		}
 	}
-	// 设置默认Scope
-	if element.Scope == "" {
+	if element.Scope == types.EmptyString {
 		element.Scope = types.ScopeFunction
 	}
 	return elements, nil
@@ -807,29 +802,6 @@ func parseTypeAnnotation(typeNode *sitter.Node, content []byte) []string {
 func isNodeDelimiter(node *sitter.Node) bool {
 	kind := node.Kind()
 	return kind == "," || kind == "(" || kind == ")" || kind == "{" || kind == "}"
-}
-
-// findNodeByType 在节点树中查找特定类型的节点
-func findNodeByType(node *sitter.Node, nodeType string) *sitter.Node {
-	if node == nil {
-		return nil
-	}
-
-	if node.Kind() == nodeType {
-		return node
-	}
-
-	// 递归检查所有子节点
-	for i := uint(0); i < node.ChildCount(); i++ {
-		child := node.Child(i)
-		if child != nil {
-			if result := findNodeByType(child, nodeType); result != nil {
-				return result
-			}
-		}
-	}
-
-	return nil
 }
 
 // parseReturnTypeNode 解析函数返回类型节点

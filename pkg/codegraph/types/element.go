@@ -9,6 +9,7 @@ const (
 	Colon             = ":"
 	Identifier        = "identifier"
 	Dot               = "."
+	Star              = "*"
 	CurrentDir        = "./"
 	ParentDir         = "../"
 	EmailAt           = "@"
@@ -61,7 +62,7 @@ const (
 	ElementTypeUnionName           ElementType = "definition.union.name"
 	ElementTypeTypedefName         ElementType = "definition.type.alias"
 	ElementTypeTypedefType         ElementType = "definition.type.original_type"
-	ElementTypeTypedef             ElementType = "definition.type"	
+	ElementTypeTypedef             ElementType = "definition.type"
 	ElementTypeTrait               ElementType = "definition.trait"
 	ElementTypeEnumConstant        ElementType = "definition.enum.constant"
 	ElementTypeEnumConstantName    ElementType = "definition.enum.constant.name"
@@ -80,6 +81,7 @@ const (
 	ElementTypeFunctionOwner       ElementType = "call.function.owner"
 	ElementTypeFunctionArguments   ElementType = "call.function.arguments"
 	ElementTypeStructCall          ElementType = "call.struct"
+	ElementTypeStructCallType      ElementType = "call.struct.type"
 	ElementTypeFunctionDeclaration ElementType = "declaration.function"
 	ElementTypeMethod              ElementType = "definition.method"
 	ElementTypeMethodModifier      ElementType = "definition.method.modifier"
@@ -194,6 +196,7 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeComment):             ElementTypeComment,
 	string(ElementTypeAnnotation):          ElementTypeAnnotation,
 	string(ElementTypeStructCall):          ElementTypeStructCall,
+	string(ElementTypeStructCallType):      ElementTypeStructCallType,
 }
 
 type Scope string
@@ -270,6 +273,7 @@ const (
 	NodeKindQualifiedType                      NodeKind = "qualified_type"
 	NodeKindPairPattern                        NodeKind = "pair_pattern"
 	NodeKindRestPattern                        NodeKind = "rest_pattern"
+	NodeKindParenthesizedExpression            NodeKind = "parenthesized_expression"
 	// 用于接收函数的返回类型和字段的类型
 	NodeKindIntegralType         NodeKind = "integral_type"
 	NodeKindFloatingPointType    NodeKind = "floating_point_type"
@@ -357,6 +361,7 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindTypeElem):                           NodeKindTypeElem,
 	string(NodeKindPairPattern):                        NodeKindPairPattern,
 	string(NodeKindRestPattern):                        NodeKindRestPattern,
+	string(NodeKindParenthesizedExpression):            NodeKindParenthesizedExpression,
 	// 用于接收函数的返回类型和字段的类型
 	string(NodeKindIntegralType):         NodeKindIntegralType,
 	string(NodeKindFloatingPointType):    NodeKindFloatingPointType,

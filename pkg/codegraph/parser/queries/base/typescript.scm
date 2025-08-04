@@ -59,9 +59,11 @@
   type: (type_annotation)? @variable.type
 ) @variable
 
-;; Enum declarations
-(enum_declaration
-  name: (identifier) @variable.name) @variable
+;; Enum Assignment
+(enum_assignment
+  name: (property_identifier) @definition.enum.constant.name
+  value: (_)? @definition.enum.constant.value
+  ) @definition.enum.constant
 
 ;;解构变量
 (variable_declarator
@@ -144,6 +146,11 @@
   (implements_clause)? @definition.class.implements
   ) @definition.class
 
+;; Enum declarations
+(enum_declaration
+  name: (identifier) @definition.enum.name
+  body: (_)
+  ) @definition.enum
 ;;-----------------------------方法调用--------------------------
 ;; method call
 (call_expression

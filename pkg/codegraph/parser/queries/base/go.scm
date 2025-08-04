@@ -26,6 +26,8 @@
   result:(parameter_list)? @definition.function.return_type
   ) @definition.function
 
+;;-----------------------------变量定义--------------------------
+
 ;; 全局变量声明 - 直接捕获标识符节点
 (source_file
   (var_declaration
@@ -68,13 +70,34 @@
             operand: (identifier) @local_variable))
 )
 
+;;全局常量
+(source_file
+  (const_declaration
+    (const_spec
+      name: (identifier) @global_variable
+      type: (_)? @global_variable.type
+    )
+  )
+)
+
+;;局部常量
+(block
+  (const_declaration
+    (const_spec
+      name: (identifier) @constant
+      type: (_)? @constant.type
+    )
+  )
+)
+
+;;-----------------------------函数定义--------------------------
 
 ;; method
 (method_declaration
   receiver: (parameter_list
               (parameter_declaration
                 name: (identifier)*
-                type: (type_identifier) @definition.method.owner
+                type: [(type_identifier) @definition.method.owner (pointer_type (type_identifier) @definition.method.owner)]
                 )
               )
   name: (field_identifier) @definition.method.name
@@ -90,44 +113,44 @@
 
 ;; 常量声明 - 直接捕获标识符节点
 
-;;全局常量
-(source_file
-  (const_declaration
-    (const_spec
-      name: (identifier) @global_variable
-    )
-  )
-)
-
-;;局部常量
-(block
-  (const_declaration
-    (const_spec
-      name: (identifier) @constant
-    )
-  )
-)
-
 
 ;; function/method_call
 (call_expression
-  function:(selector_expression)@call.function.field
+  function:[(selector_expression)(identifier)(parenthesized_expression)]@call.function.field
   arguments: (argument_list) @call.function.arguments
   ) @call.function
 
 
 
+;;------------------------------------右值--------------------------
 ;;右边非基础类型赋值走call
 (expression_list
-  (composite_literal
+  [(composite_literal
     type: [(type_identifier) (qualified_type)] @call.struct
   )
-)
 
-(expression_list
   (unary_expression
   operand:(composite_literal
     type: [(type_identifier) (selector_expression)] @call.struct
   )
  )
+
+ (identifier) @call.struct
+
+ (type_conversion_expression
+  type:(generic_type
+    type: (type_identifier) @call.struct
+    type_arguments: (type_arguments) @call.struct.type
+  )
+ )
+ 
+  (type_assertion_expression
+    operand:(identifier) @call.struct
+    type:(type_identifier) @call.struct.type
+  )
+ ]
 )
+
+
+
+
