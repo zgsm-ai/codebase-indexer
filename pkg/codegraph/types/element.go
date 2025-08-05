@@ -274,6 +274,13 @@ const (
 	NodeKindPairPattern                        NodeKind = "pair_pattern"
 	NodeKindRestPattern                        NodeKind = "rest_pattern"
 	NodeKindParenthesizedExpression            NodeKind = "parenthesized_expression"
+	NodeKindExportStatement                    NodeKind = "export_statement"
+	NodeKindPropertySignature                  NodeKind = "property_signature"
+	NodeKindFunctionType                       NodeKind = "function_type"
+	NodeKindSliceType                          NodeKind = "slice_type"
+	NodeKindPointType                          NodeKind = "pointer_type"
+	NodeKindStructType                         NodeKind = "struct_type"
+	NodeKindChannelType                        NodeKind = "channel_type"
 	// 用于接收函数的返回类型和字段的类型
 	NodeKindIntegralType         NodeKind = "integral_type"
 	NodeKindFloatingPointType    NodeKind = "floating_point_type"
@@ -362,6 +369,13 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindPairPattern):                        NodeKindPairPattern,
 	string(NodeKindRestPattern):                        NodeKindRestPattern,
 	string(NodeKindParenthesizedExpression):            NodeKindParenthesizedExpression,
+	string(NodeKindExportStatement):                    NodeKindExportStatement,
+	string(NodeKindPropertySignature):                  NodeKindPropertySignature,
+	string(NodeKindFunctionType):                       NodeKindFunctionType,
+	string(NodeKindSliceType):                          NodeKindSliceType,
+	string(NodeKindPointType):                          NodeKindPointType,
+	string(NodeKindStructType):                         NodeKindStructType,
+	string(NodeKindChannelType):                        NodeKindChannelType,
 	// 用于接收函数的返回类型和字段的类型
 	string(NodeKindIntegralType):         NodeKindIntegralType,
 	string(NodeKindFloatingPointType):    NodeKindFloatingPointType,

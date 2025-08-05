@@ -75,8 +75,11 @@ func (js *JavaScriptResolver) resolveFunction(ctx context.Context, element *Func
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeFunction:
 			element.Type = types.ElementTypeFunction
-			element.Scope = types.ScopeFile
-			// 检查是否包含修饰符
+			if isExportStatement(&capture.Node) {
+				element.Scope = types.ScopePackage
+			} else {
+				element.Scope = types.ScopeFile
+			}
 			element.Declaration.Modifier = extractModifiers(content)
 		case types.ElementTypeFunctionName:
 			element.BaseElement.Name = content
@@ -86,84 +89,6 @@ func (js *JavaScriptResolver) resolveFunction(ctx context.Context, element *Func
 		}
 	}
 	return elements, nil
-}
-
-// parseJavaScriptParameters 解析JavaScript函数参数
-func parseJavaScriptParameters(element *Function, paramsNode sitter.Node, content []byte) {
-	element.Parameters = make([]Parameter, 0)
-	for i := uint(0); i < paramsNode.ChildCount(); i++ {
-		child := paramsNode.Child(i)
-		if child != nil && child.Kind() == types.Identifier {
-			paramNode := child
-			paramName := paramNode.Utf8Text(content)
-			element.Parameters = append(element.Parameters, Parameter{
-				Name: paramName,
-				Type: nil,
-			})
-		}
-	}
-}
-
-// extractModifiers 从函数或方法声明中提取修饰符
-// elementType: 元素类型，如"function"或"method"
-func extractModifiers(content string) string {
-	// JavaScript中函数和方法的可能修饰符
-	modifiers := []string{"async", "static", "get", "set", "*"}
-	result := ""
-
-	// 按空格分割函数声明
-	for _, mod := range modifiers {
-		if containsModifier(content, mod) {
-			if result != "" {
-				result += " "
-			}
-			result += mod
-		}
-	}
-
-	return result
-}
-
-// containsModifier 判断字符串是否包含指定的修饰符
-func containsModifier(content string, modifier string) bool {
-	// 生成器函数特殊处理
-	if modifier == "*" {
-		// 只在函数声明的开始部分查找生成器修饰符
-		// 检查 "function*" 或对象方法中的 "* methodName"
-		if strings.Contains(content, "function*") {
-			return true
-		}
-
-		// 对于对象方法: * methodName() { ... }
-		// 确保 * 出现在行首或大括号后，且后面跟着标识符
-		lines := strings.Split(content, "\n")
-		for _, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "* ") {
-				// 确保 * 后面跟着的是标识符而不是运算符
-				rest := strings.TrimSpace(trimmed[2:])
-				if len(rest) > 0 && (rest[0] >= 'a' && rest[0] <= 'z' || rest[0] >= 'A' && rest[0] <= 'Z' || rest[0] == '_' || rest[0] == '$') {
-					return true
-				}
-			}
-		}
-		return false
-	}
-
-	// 其他修饰符需要确保是单独的单词，且不在等号右边
-	// 分割成等号左右两部分，只在左边查找修饰符
-	parts := strings.SplitN(content, "=", 2)
-	searchArea := parts[0] // 只在等号左边查找修饰符
-
-	words := strings.Fields(searchArea)
-	for _, word := range words {
-		// 清理可能的标点符号
-		cleanWord := strings.Trim(word, "(){}[],;:")
-		if cleanWord == modifier {
-			return true
-		}
-	}
-	return false
 }
 
 func (js *JavaScriptResolver) resolveMethod(ctx context.Context, element *Method, rc *ResolveContext) ([]Element, error) {
@@ -233,8 +158,11 @@ func (js *JavaScriptResolver) resolveClass(ctx context.Context, element *Class, 
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeClass:
 			element.Type = types.ElementTypeClass
-			element.Scope = types.ScopeFile
-			// 解析类体中的所有成员
+			if isExportStatement(&capture.Node) {
+				element.Scope = types.ScopePackage
+			} else {
+				element.Scope = types.ScopeFile
+			}
 		case types.ElementTypeClassName:
 			element.BaseElement.Name = content
 		case types.ElementTypeClassExtends:
@@ -255,6 +183,189 @@ func (js *JavaScriptResolver) resolveClass(ctx context.Context, element *Class, 
 	}
 
 	return elements, nil
+}
+
+func (js *JavaScriptResolver) resolveVariable(ctx context.Context, element *Variable, rc *ResolveContext) ([]Element, error) {
+	/*
+		JavaScript中变量都没有类型，Variable元素的VariableType为空
+	*/
+	elements := []Element{}
+	// 变量名
+	var variableName string
+	rootCapure := rc.Match.Captures[0]
+	rootCaptureName := rc.CaptureNames[rootCapure.Index]
+	updateRootElement(element, &rootCapure, rootCaptureName, rc.SourceFile.Content)
+	// 首先获取变量名
+	for _, capture := range rc.Match.Captures {
+		if capture.Node.IsMissing() || capture.Node.IsError() {
+			continue
+		}
+		nodeCaptureName := rc.CaptureNames[capture.Index]
+		content := capture.Node.Utf8Text(rc.SourceFile.Content)
+
+		if types.ToElementType(nodeCaptureName) == types.ElementTypeVariableName {
+			variableName = string(content)
+			break
+		}
+	}
+	// 检查是否为解构赋值
+	if isDestructuringPattern(&rootCapure.Node) {
+		// 添加handleDestructuringWithPath函数，传递元素路径
+		return js.handleDestructuringWithPath(&rootCapure.Node, rc.SourceFile.Content, element)
+	}
+	if rc.Match != nil && len(rc.Match.Captures) > 0 {
+		if rightNode := findRightNode(&rootCapure.Node); rightNode != nil {
+			if isRequireImport(rightNode, rc.SourceFile.Content) {
+				return []Element{}, nil
+			}
+			if rightNode.Kind() == string(types.NodeKindArrowFunction) {
+				return []Element{}, nil
+			}
+		}
+	}
+	for _, capture := range rc.Match.Captures {
+		nodeCaptureName := rc.CaptureNames[capture.Index]
+		captureType := types.ToElementType(nodeCaptureName)
+		if capture.Node.Kind() == string(types.NodeKindVariableDeclarator) {
+			valueNode := capture.Node.ChildByFieldName("value")
+
+			if isImportExpression(valueNode, rc.SourceFile.Content) {
+				return []Element{}, nil
+			}
+		}
+		// 如果不是特殊类型，作为普通变量处理
+		switch captureType {
+		case types.ElementTypeVariable:
+			element.Type = types.ElementTypeVariable
+			// 根据父节点判断变量作用域
+			element.Scope = determineVariableScope(&capture.Node)
+		case types.ElementTypeVariableName:
+			element.BaseElement.Name = variableName
+		}
+	}
+	elements = append(elements, element)
+	return elements, nil
+}
+
+func (js *JavaScriptResolver) resolveInterface(ctx context.Context, element *Interface, rc *ResolveContext) ([]Element, error) {
+	//TODO implement me
+	panic("not support")
+}
+
+func (js *JavaScriptResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
+	// 处理为import而不是call
+	if isRequireCallCapture(rc) {
+		return js.handleRequireCall(rc)
+	}
+	elements := []Element{element}
+	rootCapture := rc.Match.Captures[0]
+	updateRootElement(element, &rootCapture, rc.CaptureNames[rootCapture.Index], rc.SourceFile.Content)
+	for _, capture := range rc.Match.Captures {
+		nodeCaptureName := rc.CaptureNames[capture.Index]
+		switch types.ToElementType(nodeCaptureName) {
+		case types.ElementTypeFunctionCall, types.ElementTypeMethodCall:
+			funcNode := capture.Node.ChildByFieldName("function")
+			if funcNode != nil {
+				switch types.ToNodeKind(funcNode.Kind()) {
+				case types.NodeKindFuncLiteral:
+					return nil, nil
+				case types.NodeKindIdentifier:
+					element.BaseElement.Name = funcNode.Utf8Text(rc.SourceFile.Content)
+				case types.NodeKindSelectorExpression, types.NodeKindMemberExpression:
+					extractMemberExpressionPath(funcNode, element, rc.SourceFile.Content)
+				}
+			}
+		case types.ElementTypeFunctionArguments, types.ElementTypeCallArguments:
+			processArguments(element, capture.Node)
+		case types.ElementTypeStructCall:
+			refPathMap := extractReferencePath(&capture.Node, rc.SourceFile.Content)
+			element.BaseElement.Name = refPathMap["property"]
+			element.Owner = refPathMap["object"]
+		}
+	}
+	if element.Scope == types.EmptyString {
+		element.Scope = types.ScopeFunction
+	}
+
+	return elements, nil
+}
+
+// parseJavaScriptParameters 解析JavaScript函数参数
+func parseJavaScriptParameters(element *Function, paramsNode sitter.Node, content []byte) {
+	element.Parameters = make([]Parameter, 0)
+	for i := uint(0); i < paramsNode.ChildCount(); i++ {
+		child := paramsNode.Child(i)
+		if child != nil && child.Kind() == types.Identifier {
+			paramNode := child
+			paramName := paramNode.Utf8Text(content)
+			element.Parameters = append(element.Parameters, Parameter{
+				Name: paramName,
+				Type: nil,
+			})
+		}
+	}
+}
+
+// extractModifiers 从函数或方法声明中提取修饰符
+// elementType: 元素类型，如"function"或"method"
+func extractModifiers(content string) string {
+	// JavaScript中函数和方法的可能修饰符
+	modifiers := []string{"async", "static", "get", "set", "*"}
+	result := ""
+
+	// 按空格分割函数声明
+	for _, mod := range modifiers {
+		if containsModifier(content, mod) {
+			if result != types.EmptyString {
+				result += " "
+			}
+			result += mod
+		}
+	}
+
+	return result
+}
+
+// containsModifier 判断字符串是否包含指定的修饰符
+func containsModifier(content string, modifier string) bool {
+	// 生成器函数特殊处理
+	if modifier == types.Star {
+		// 只在函数声明的开始部分查找生成器修饰符
+		// 检查 "function*" 或对象方法中的 "* methodName"
+		if strings.Contains(content, "function*") {
+			return true
+		}
+
+		// 对于对象方法: * methodName() { ... }
+		// 确保 * 出现在行首或大括号后，且后面跟着标识符
+		lines := strings.Split(content, "\n")
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "* ") {
+				// 确保 * 后面跟着的是标识符而不是运算符
+				rest := strings.TrimSpace(trimmed[2:])
+				if len(rest) > 0 && (rest[0] >= 'a' && rest[0] <= 'z' || rest[0] >= 'A' && rest[0] <= 'Z' || rest[0] == '_' || rest[0] == '$') {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	// 其他修饰符需要确保是单独的单词，且不在等号右边
+	// 分割成等号左右两部分，只在左边查找修饰符
+	parts := strings.SplitN(content, "=", 2)
+	searchArea := parts[0] // 只在等号左边查找修饰符
+
+	words := strings.Fields(searchArea)
+	for _, word := range words {
+		// 清理可能的标点符号
+		cleanWord := strings.Trim(word, "(){}[],;:")
+		if cleanWord == modifier {
+			return true
+		}
+	}
+	return false
 }
 
 // parseJavaScriptClassBody 解析JavaScript类体，提取字段和方法
@@ -508,68 +619,6 @@ func isJavaScriptPrimitiveType(typeName string) bool {
 	return false
 }
 
-func (js *JavaScriptResolver) resolveVariable(ctx context.Context, element *Variable, rc *ResolveContext) ([]Element, error) {
-	/*
-		JavaScript中变量都没有类型，Variable元素的VariableType为空
-	*/
-	elements := []Element{}
-	// 变量名
-	var variableName string
-	rootCapure := rc.Match.Captures[0]
-	rootCaptureName := rc.CaptureNames[rootCapure.Index]
-	updateRootElement(element, &rootCapure, rootCaptureName, rc.SourceFile.Content)
-	// 首先获取变量名
-	for _, capture := range rc.Match.Captures {
-		if capture.Node.IsMissing() || capture.Node.IsError() {
-			continue
-		}
-		nodeCaptureName := rc.CaptureNames[capture.Index]
-		content := capture.Node.Utf8Text(rc.SourceFile.Content)
-
-		if types.ToElementType(nodeCaptureName) == types.ElementTypeVariableName {
-			variableName = string(content)
-			break
-		}
-	}
-	// 检查是否为解构赋值
-	if isDestructuringPattern(&rootCapure.Node) {
-		// 添加handleDestructuringWithPath函数，传递元素路径
-		return js.handleDestructuringWithPath(&rootCapure.Node, rc.SourceFile.Content, element)
-	}
-	if rc.Match != nil && len(rc.Match.Captures) > 0 {
-		if rightNode := findRightNode(&rootCapure.Node); rightNode != nil {
-			if isRequireImport(rightNode, rc.SourceFile.Content) {
-				return []Element{}, nil
-			}
-			if rightNode.Kind() == string(types.NodeKindArrowFunction) {
-				return []Element{}, nil
-			}
-		}
-	}
-	for _, capture := range rc.Match.Captures {
-		nodeCaptureName := rc.CaptureNames[capture.Index]
-		captureType := types.ToElementType(nodeCaptureName)
-		if capture.Node.Kind() == string(types.NodeKindVariableDeclarator) {
-			valueNode := capture.Node.ChildByFieldName("value")
-
-			if isImportExpression(valueNode, rc.SourceFile.Content) {
-				return []Element{}, nil
-			}
-		}
-		// 如果不是特殊类型，作为普通变量处理
-		switch captureType {
-		case types.ElementTypeVariable:
-			element.Type = types.ElementTypeVariable
-			// 根据父节点判断变量作用域
-			element.Scope = determineVariableScope(&capture.Node)
-		case types.ElementTypeVariableName:
-			element.BaseElement.Name = variableName
-		}
-	}
-	elements = append(elements, element)
-	return elements, nil
-}
-
 // isDestructuringPattern 检查是否为解构赋值模式
 func isDestructuringPattern(node *sitter.Node) bool {
 	// 检查是否是变量声明节点
@@ -623,7 +672,7 @@ func (js *JavaScriptResolver) handleDestructuringWithPath(node *sitter.Node, con
 				}
 			}
 			if varName != "" {
-				varElement := createVariableElement(string(varName), identifierNode, scope, element)
+				varElement := createVariableElement(string(varName), scope, element)
 				elements = append(elements, varElement)
 			}
 		}
@@ -633,7 +682,7 @@ func (js *JavaScriptResolver) handleDestructuringWithPath(node *sitter.Node, con
 }
 
 // createVariableElement 创建变量元素
-func createVariableElement(name string, node *sitter.Node, scope types.Scope, element *Variable) *Variable {
+func createVariableElement(name string, scope types.Scope, element *Variable) *Variable {
 	variable := &Variable{
 		BaseElement: &BaseElement{
 			Name:  name,
@@ -869,56 +918,17 @@ func extractReferencePath(node *sitter.Node, content []byte) map[string]string {
 			result["object"] = string(objectNode.Utf8Text(content))
 		}
 	}
-	return result
-}
 
-func (js *JavaScriptResolver) resolveInterface(ctx context.Context, element *Interface, rc *ResolveContext) ([]Element, error) {
-	//TODO implement me
-	panic("not support")
-}
-
-func (js *JavaScriptResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
-	// 处理为import而不是call
-	if isRequireCallCapture(rc) {
-		return js.handleRequireCall(rc)
-	}
-	elements := []Element{element}
-	rootCapture := rc.Match.Captures[0]
-	updateRootElement(element, &rootCapture, rc.CaptureNames[rootCapture.Index], rc.SourceFile.Content)
-	for _, capture := range rc.Match.Captures {
-		nodeCaptureName := rc.CaptureNames[capture.Index]
-		switch types.ToElementType(nodeCaptureName) {
-		case types.ElementTypeFunctionCall, types.ElementTypeMethodCall:
-			funcNode := capture.Node.ChildByFieldName("function")
-			if funcNode != nil {
-				switch types.ToNodeKind(funcNode.Kind()) {
-				case types.NodeKindFuncLiteral:
-					return nil, nil
-				case types.NodeKindIdentifier:
-					element.BaseElement.Name = funcNode.Utf8Text(rc.SourceFile.Content)
-				case types.NodeKindSelectorExpression, types.NodeKindMemberExpression:
-					extractMemberExpressionPath(funcNode, element, rc.SourceFile.Content)
-				}
+	if node.Kind() == string(types.NodeKindSliceType) || node.Kind() == string(types.NodeKindPointType) {
+		for i := uint(0); i < node.ChildCount(); i++ {
+			childNode := node.Child(i)
+			if childNode != nil {
+				result["property"] = string(childNode.Utf8Text(content))
 			}
-		case types.ElementTypeFunctionArguments, types.ElementTypeCallArguments:
-			processArguments(element, capture.Node, rc.SourceFile.Content)
-		// case types.ElementTypeCallName:
-		// 	if types.ToNodeKind(capture.Node.Kind()) == types.NodeKindMemberExpression || types.ToNodeKind(capture.Node.Kind()) == types.NodeKindParenthesizedExpression {
-		// 		extractCallNameAndOwner(&capture.Node, element, rc.SourceFile.Content)
-		// 	} else {
-		// 		element.BaseElement.Name = strings.Trim(CleanParam(capture.Node.Utf8Text(rc.SourceFile.Content)), "()")
-		// 	}
-		case types.ElementTypeStructCall:
-			refPathMap := extractReferencePath(&capture.Node, rc.SourceFile.Content)
-			element.BaseElement.Name = refPathMap["property"]
-			element.Owner = refPathMap["object"]
 		}
 	}
-	if element.Scope == types.EmptyString {
-		element.Scope = types.ScopeFunction
-	}
 
-	return elements, nil
+	return result
 }
 
 // extractMemberExpressionPath 递归提取成员表达式的完整路径
@@ -975,7 +985,7 @@ func extractMemberExpressionPath(node *sitter.Node, call *Call, content []byte) 
 }
 
 // processArguments 处理JavaScript函数调用的参数
-func processArguments(element *Call, argsNode sitter.Node, content []byte) {
+func processArguments(element *Call, argsNode sitter.Node) {
 	// 初始化参数列表
 	if element.Parameters == nil {
 		element.Parameters = []*Parameter{}
@@ -1184,4 +1194,12 @@ func isArrowFunctionImport(node *sitter.Node, content []byte) bool {
 		return false
 	}
 	return string(funcNode.Utf8Text(content)) == "import"
+}
+
+// isExportStatement 检查节点是否为export语句
+func isExportStatement(node *sitter.Node) bool {
+	if node == nil {
+		return false
+	}
+	return node.Kind() == string(types.NodeKindExportStatement)
 }

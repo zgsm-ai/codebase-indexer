@@ -81,6 +81,12 @@
   type_parameters: (type_parameters)? @variable.type
 ) @variable
 
+;; Enum declarations
+(enum_declaration
+  name: (identifier) @definition.enum.constant.name
+  body: (_)
+  ) @definition.enum.constant
+
 ;;-----------------------------函数定义--------------------------
 
 ;; Function declarations
@@ -146,11 +152,6 @@
   (implements_clause)? @definition.class.implements
   ) @definition.class
 
-;; Enum declarations
-(enum_declaration
-  name: (identifier) @definition.enum.name
-  body: (_)
-  ) @definition.enum
 ;;-----------------------------方法调用--------------------------
 ;; method call
 (call_expression

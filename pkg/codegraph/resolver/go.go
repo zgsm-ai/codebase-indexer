@@ -209,7 +209,7 @@ func (r *GoResolver) processStructFields(structTypeNode *sitter.Node, element *C
 						// 合并包名和类型名
 						pkgName := pkgNode.Utf8Text(rc.SourceFile.Content)
 						typeName := nameNode.Utf8Text(rc.SourceFile.Content)
-						fieldType = pkgName + "." + typeName
+						fieldType = pkgName + types.Dot + typeName
 					} else {
 						fieldType = typeNode.Utf8Text(rc.SourceFile.Content)
 					}
@@ -221,25 +221,15 @@ func (r *GoResolver) processStructFields(structTypeNode *sitter.Node, element *C
 
 				if nameNode != nil {
 					fieldName = nameNode.Utf8Text(rc.SourceFile.Content)
-				} else {
-					element.SuperClasses = append(element.SuperClasses, fieldType)
 					if !isPrimitiveType(fieldType) {
 						// 创建引用元素
-						ref := NewReference(element, typeNode, fieldType, "")
-						newReferences = append(newReferences, ref)
-						if strings.Contains(fieldType, ".") {
-							parts := strings.Split(fieldType, ".")
-							if len(parts) == 2 {
-								ref.BaseElement.Name = parts[1]
-								ref.Owner = parts[0]
-							} else {
-								ref.BaseElement.Name = fieldType
-							}
-						} else {
-							ref.BaseElement.Name = fieldType
-						}
+						refPathMap := extractReferencePath(typeNode, rc.SourceFile.Content)
+						refPathMap["property"] = CleanParam(refPathMap["property"])
+						ref := NewReference(element, typeNode, refPathMap["property"], refPathMap["object"])
 						newReferences = append(newReferences, ref)
 					}
+				} else {
+					element.SuperClasses = append(element.SuperClasses, fieldType)
 					continue
 				}
 				// 判断可见性（公有/私有）
@@ -266,7 +256,6 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 	rootCapture := rc.Match.Captures[0]
 	rootCaptureName := rc.CaptureNames[rootCapture.Index]
 	updateRootElement(element, &rootCapture, rootCaptureName, rc.SourceFile.Content)
-	var references []*Reference
 	if rc.Match != nil && rc.Match.Captures != nil && len(rc.Match.Captures) > 0 {
 		for _, capture := range rc.Match.Captures {
 			nodeCaptureName := rc.CaptureNames[capture.Index]
@@ -281,12 +270,11 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 				if err != nil {
 					return nil, err
 				}
-				references = append(references, newlyFoundReferences...)
+				for _, ref := range newlyFoundReferences {
+					elements = append(elements, ref)
+				}
 			}
 		}
-	}
-	for _, ref := range references {
-		elements = append(elements, ref)
 	}
 	return elements, nil
 }
@@ -319,7 +307,6 @@ func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc 
 	for _, capture := range rc.Match.Captures {
 		nodeCaptureName := rc.CaptureNames[capture.Index]
 		content := capture.Node.Utf8Text(rc.SourceFile.Content)
-		// 根据节点类型处理不同信息
 		// 需要同时处理const，variable，local_variable
 		if strings.HasSuffix(nodeCaptureName, ".type") {
 			// 检查是否为基本数据类型
@@ -933,7 +920,7 @@ func isPrimitiveType(typeName string) bool {
 		"bool", "int", "int8", "int16", "int32", "int64",
 		"uint", "uint8", "uint16", "uint32", "uint64", "uintptr",
 		"float32", "float64", "complex64", "complex128",
-		"byte", "rune", "string", "any", "interface{}",
+		"byte", "rune", "string", "any", "interface{}", "struct", "func", "chan",
 	}
 
 	for _, t := range primitiveTypes {

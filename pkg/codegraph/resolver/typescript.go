@@ -72,7 +72,11 @@ func (ts *TypeScriptResolver) resolveFunction(ctx context.Context, element *Func
 		content := capture.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeFunction:
-			element.Scope = types.ScopeFile
+			if isExportStatement(&capture.Node) {
+				element.Scope = types.ScopePackage
+			} else {
+				element.Scope = types.ScopeFile
+			}
 			element.Declaration.Modifier = extractModifiers(content)
 		case types.ElementTypeFunctionName:
 			element.BaseElement.Name = content
@@ -138,7 +142,11 @@ func (ts *TypeScriptResolver) resolveClass(ctx context.Context, element *Class, 
 		content := capture.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeClass:
-			element.Scope = types.ScopeFile
+			if isExportStatement(&capture.Node) {
+				element.Scope = types.ScopePackage
+			} else {
+				element.Scope = types.ScopeFile
+			}
 		case types.ElementTypeClassName:
 			element.BaseElement.Name = content
 		case types.ElementTypeClassExtends:
@@ -284,7 +292,11 @@ func (ts *TypeScriptResolver) resolveInterface(ctx context.Context, element *Int
 		content := capture.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeInterface:
-			element.Type = types.ElementTypeInterface
+			if isExportStatement(&capture.Node) {
+				element.Scope = types.ScopePackage
+			} else {
+				element.Scope = types.ScopeFile
+			}
 		case types.ElementTypeInterfaceName:
 			element.BaseElement.Name = content
 		case types.ElementTypeInterfaceExtends:
@@ -307,11 +319,11 @@ func (ts *TypeScriptResolver) resolveInterface(ctx context.Context, element *Int
 	cls, references := parseTypeScriptClassBody(&rootCapture.Node, rc.SourceFile.Content, element.BaseElement.Name, element.Path)
 	for _, method := range cls.Methods {
 		element.Methods = append(element.Methods, &method.Declaration)
+		elements = append(elements, method)
 	}
 	for _, ref := range references {
 		elements = append(elements, ref)
 	}
-	element.Scope = types.ScopeFile
 	return elements, nil
 }
 
@@ -343,7 +355,7 @@ func (ts *TypeScriptResolver) resolveCall(ctx context.Context, element *Call, rc
 				}
 			}
 		case types.ElementTypeFunctionArguments, types.ElementTypeCallArguments:
-			processArguments(element, capture.Node, rc.SourceFile.Content)
+			processArguments(element, capture.Node)
 		case types.ElementTypeStructCall:
 			refPathMap := extractReferencePath(&capture.Node, rc.SourceFile.Content)
 			element.BaseElement.Name = refPathMap["property"]
@@ -517,17 +529,39 @@ func parseTypeScriptClassBody(node *sitter.Node, content []byte, className strin
 		case types.NodeKindMethodDefinition, types.NodeKindMethodSignature:
 			method := parseTypeScriptMethodNode(memberNode, content, class.BaseElement.Name)
 			method.Owner = className
+			method.Path = path
+			method.Range = []int32{
+				int32(memberNode.StartPosition().Row),
+				int32(memberNode.StartPosition().Column),
+				int32(memberNode.EndPosition().Row),
+				int32(memberNode.EndPosition().Column),
+			}
 			if method != nil {
 				class.Methods = append(class.Methods, method)
 			}
+		//解析类属性使用
 		case types.NodeKindPublicFieldDefinition:
 			field, ref := parseTypeScriptFieldNode(memberNode, content)
+			ref.Path = path
 			if field != nil {
 				class.Fields = append(class.Fields, field)
-				// 如果存在引用元素，添加到引用列表中
+				if ref != nil {
+					references = append(references, ref)
+				}
+			}
+		//解析接口方法属性使用
+		case types.NodeKindPropertySignature:
+			field, ref, method := parseTypeScriptPropertySignatureNode(memberNode, content)
+			if field != nil {
+				class.Fields = append(class.Fields, field)
 				if ref != nil {
 					ref.Path = path
 					references = append(references, ref)
+				}
+				if method != nil {
+					method.Path = path
+					method.Owner = className
+					class.Methods = append(class.Methods, method)
 				}
 			}
 		}
@@ -574,16 +608,12 @@ func parseTypeScriptMethodNode(node *sitter.Node, content []byte, className stri
 				Name: string(patternNode.Utf8Text(content)),
 				Type: []string{},
 			}
-			if patternType != nil {
-				typeContent := strings.TrimPrefix(string(patternType.Utf8Text(content)), ":")
-				typeContent = strings.TrimSpace(typeContent)
-				if isTypeScriptPrimitiveType(typeContent) {
-					parameter.Type = []string{types.PrimitiveType}
-				} else {
-					parameter.Type = []string{typeContent}
-				}
+			typeContent := strings.TrimPrefix(string(patternType.Utf8Text(content)), ":")
+			typeContent = strings.TrimSpace(typeContent)
+			if isTypeScriptPrimitiveType(typeContent) {
+				parameter.Type = []string{types.PrimitiveType}
 			} else {
-				parameter.Type = []string{}
+				parameter.Type = []string{typeContent}
 			}
 			method.Parameters = append(method.Parameters, parameter)
 		}
@@ -599,13 +629,6 @@ func parseTypeScriptMethodNode(node *sitter.Node, content []byte, className stri
 		}
 	}
 	method.Type = types.ElementTypeMethod
-	// 检查修饰符
-	// if strings.Contains(node.Utf8Text(content), "static") {
-	// 	method.Declaration.Modifier = "static " + method.Declaration.Modifier
-	// }
-	// if strings.Contains(node.Utf8Text(content), "async") {
-	// 	method.Declaration.Modifier = "async " + method.Declaration.Modifier
-	// }
 	return method
 }
 func parseTypeScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Reference) {
@@ -629,15 +652,12 @@ func parseTypeScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Refer
 			}
 		case types.NodeKindTypeAnnotation:
 			typeText := child.Utf8Text(content)
-			// 去掉类型声明中的冒号前缀
 			typeText = strings.TrimPrefix(typeText, ":")
 			typeText = strings.TrimSpace(typeText)
-			// 处理带有@前缀的类型
 			typeText = strings.TrimPrefix(typeText, "@")
 			field.Type = typeText
 
 			if !isTypeScriptPrimitiveType(typeText) {
-				//ref = NewReference(field, child, typeText, "")
 				ref = &Reference{
 					BaseElement: &BaseElement{
 						Name: typeText,
@@ -653,7 +673,7 @@ func parseTypeScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Refer
 				}
 				if strings.Contains(typeText, ".") {
 					parts := strings.SplitN(typeText, ".", 2)
-					ref.BaseElement.Name = parts[1] // 确保设置正确的名称
+					ref.BaseElement.Name = parts[1]
 					ref.Owner = parts[0]
 				}
 			}
@@ -661,12 +681,75 @@ func parseTypeScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Refer
 	}
 	return field, ref
 }
+func parseTypeScriptPropertySignatureNode(node *sitter.Node, content []byte) (*Field, *Reference, *Method) {
+	field := &Field{}
+	var ref *Reference
+	var method *Method
+	field.Name = node.ChildByFieldName("name").Utf8Text(content)
+	field.Type = node.ChildByFieldName("type").Utf8Text(content)
+	nodeType := node.ChildByFieldName("type")
+	if nodeType.Kind() == string(types.NodeKindTypeAnnotation) {
+		for i := uint(0); i < nodeType.ChildCount(); i++ {
+			child := nodeType.Child(i)
+			switch types.ToNodeKind(child.Kind()) {
+			case types.NodeKindTypeIdentifier:
+				typeText := parseTypeAnnotation(child, content)[0]
+				field.Type = typeText
+				if typeText != types.PrimitiveType {
+					ref = &Reference{
+						BaseElement: &BaseElement{
+							Name: typeText,
+							Type: types.ElementTypeReference,
+							Range: []int32{
+								int32(child.StartPosition().Row),
+								int32(child.StartPosition().Column),
+								int32(child.EndPosition().Row),
+								int32(child.EndPosition().Column),
+							},
+							Scope: types.ScopeBlock,
+						},
+					}
+					if strings.Contains(typeText, types.Dot) {
+						parts := strings.SplitN(typeText, types.Dot, 2)
+						ref.BaseElement.Name = parts[1]
+						ref.Owner = parts[0]
+					}
+				}
+			case types.NodeKindFunctionType:
+				method = &Method{
+					BaseElement: &BaseElement{
+						Name:  field.Name,
+						Type:  types.ElementTypeMethod,
+						Scope: types.ScopeBlock,
+						Range: []int32{
+							int32(child.StartPosition().Row),
+							int32(child.StartPosition().Column),
+							int32(child.EndPosition().Row),
+							int32(child.EndPosition().Column),
+						},
+					},
+					Declaration: Declaration{
+						Name: field.Name,
+					},
+				}
+				paramsNode := child.ChildByFieldName("parameters")
+				if paramsNode != nil {
+					method.Parameters = parseTypeScriptParamNodes(*paramsNode, content)
+				}
+				returnTypeNode := child.ChildByFieldName("return_type")
+				if returnTypeNode != nil {
+					method.ReturnType = parseTypeAnnotation(returnTypeNode, content)
+				}
+			}
+		}
+	}
+	return field, ref, method
+}
 
 // parseTypeScriptParamNodes 解析TypeScript参数节点，返回参数数组
 func parseTypeScriptParamNodes(paramsNode sitter.Node, content []byte) []Parameter {
 	params := make([]Parameter, 0)
 
-	// 遍历所有子节点
 	for i := uint(0); i < paramsNode.ChildCount(); i++ {
 		paramNode := paramsNode.Child(i)
 		if paramNode == nil || isNodeDelimiter(paramNode) {
@@ -676,12 +759,12 @@ func parseTypeScriptParamNodes(paramsNode sitter.Node, content []byte) []Paramet
 		switch types.ToNodeKind(paramNode.Kind()) {
 		case types.NodeKindOptionalParameter:
 			param := parseOptionalParameterNode(paramNode, content)
-			if param.Name != "" {
+			if param.Name != types.EmptyString {
 				params = append(params, param)
 			}
 		case types.NodeKindRequiredParameter:
 			param := parseRequiredParameterNode(paramNode, content)
-			if param.Name != "" {
+			if param.Name != types.EmptyString {
 				params = append(params, param)
 			}
 		case types.NodeKindTypeIdentifier:
@@ -751,8 +834,6 @@ func parseRequiredParameterNode(paramNode *sitter.Node, content []byte) Paramete
 			if restIdNode != nil {
 				paramName = restIdNode.Utf8Text(content)
 			}
-		} else {
-			// 普通标识符参数
 			paramName = patternNode.Utf8Text(content)
 		}
 	}
@@ -783,10 +864,8 @@ func parseTypeScriptMethodParameters(element *Method, paramsNode sitter.Node, co
 func parseTypeAnnotation(typeNode *sitter.Node, content []byte) []string {
 	// 获取类型文本
 	typeText := string(typeNode.Utf8Text(content))
-	// 去掉类型声明中的冒号前缀
 	typeText = strings.TrimPrefix(typeText, ":")
 	typeText = strings.TrimSpace(typeText)
-	// 处理带@前缀的类型
 	typeText = strings.TrimPrefix(typeText, "@")
 
 	// 直接判断类型文本是否为基本类型
