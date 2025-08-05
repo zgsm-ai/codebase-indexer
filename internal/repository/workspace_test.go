@@ -59,7 +59,7 @@ func TestWorkspaceRepository(t *testing.T) {
 		workspace := &model.Workspace{
 			WorkspaceName:    "test-workspace",
 			WorkspacePath:    "/path/to/workspace",
-			Active:           true,
+			Active:           "true",
 			FileNum:          10,
 			EmbeddingFileNum: 5,
 			EmbeddingTs:      time.Now().Unix(),
@@ -79,7 +79,7 @@ func TestWorkspaceRepository(t *testing.T) {
 		workspace := &model.Workspace{
 			WorkspaceName:    "test-workspace-get",
 			WorkspacePath:    "/path/to/workspace-get",
-			Active:           true,
+			Active:           "true",
 			FileNum:          10,
 			EmbeddingFileNum: 5,
 			EmbeddingTs:      time.Now().Unix(),
@@ -111,7 +111,7 @@ func TestWorkspaceRepository(t *testing.T) {
 		workspace := &model.Workspace{
 			WorkspaceName:    "test-workspace-get-id",
 			WorkspacePath:    "/path/to/workspace-get-id",
-			Active:           true,
+			Active:           "true",
 			FileNum:          10,
 			EmbeddingFileNum: 5,
 			EmbeddingTs:      time.Now().Unix(),
@@ -143,7 +143,7 @@ func TestWorkspaceRepository(t *testing.T) {
 		workspace := &model.Workspace{
 			WorkspaceName:    "test-workspace-update",
 			WorkspacePath:    "/path/to/workspace-update",
-			Active:           true,
+			Active:           "true",
 			FileNum:          10,
 			EmbeddingFileNum: 5,
 			EmbeddingTs:      time.Now().Unix(),
@@ -158,7 +158,7 @@ func TestWorkspaceRepository(t *testing.T) {
 
 		// 更新工作区
 		workspace.WorkspaceName = "updated-workspace"
-		workspace.Active = false
+		workspace.Active = "false"
 		workspace.FileNum = 20
 		workspace.EmbeddingFileNum = 10
 		workspace.EmbeddingTs = time.Now().Unix()
@@ -172,7 +172,7 @@ func TestWorkspaceRepository(t *testing.T) {
 		retrieved, err := workspaceRepo.GetWorkspaceByPath(workspace.WorkspacePath)
 		require.NoError(t, err)
 		assert.Equal(t, "updated-workspace", retrieved.WorkspaceName)
-		assert.Equal(t, false, retrieved.Active)
+		assert.Equal(t, "false", retrieved.Active)
 		assert.Equal(t, 20, retrieved.FileNum)
 		assert.Equal(t, 10, retrieved.EmbeddingFileNum)
 		assert.Equal(t, 5, retrieved.CodegraphFileNum)
@@ -183,7 +183,7 @@ func TestWorkspaceRepository(t *testing.T) {
 		workspace := &model.Workspace{
 			WorkspaceName:    "test-workspace-delete",
 			WorkspacePath:    "/path/to/workspace-delete",
-			Active:           true,
+			Active:           "true",
 			FileNum:          10,
 			EmbeddingFileNum: 5,
 			EmbeddingTs:      time.Now().Unix(),
@@ -212,7 +212,7 @@ func TestWorkspaceRepository(t *testing.T) {
 			workspace := &model.Workspace{
 				WorkspaceName:    "test-workspace-list-" + string(rune('0'+i)),
 				WorkspacePath:    "/path/to/workspace-list-" + string(rune('0'+i)),
-				Active:           true,
+				Active:           "true",
 				FileNum:          10,
 				EmbeddingFileNum: 5,
 				EmbeddingTs:      time.Now().Unix(),
@@ -237,7 +237,7 @@ func TestWorkspaceRepository(t *testing.T) {
 		activeWorkspace := &model.Workspace{
 			WorkspaceName:    "test-workspace-active",
 			WorkspacePath:    "/path/to/workspace-active",
-			Active:           true,
+			Active:           "true",
 			FileNum:          10,
 			EmbeddingFileNum: 5,
 			EmbeddingTs:      time.Now().Unix(),
@@ -250,7 +250,7 @@ func TestWorkspaceRepository(t *testing.T) {
 		inactiveWorkspace := &model.Workspace{
 			WorkspaceName:    "test-workspace-inactive",
 			WorkspacePath:    "/path/to/workspace-inactive",
-			Active:           false,
+			Active:           "true",
 			FileNum:          10,
 			EmbeddingFileNum: 5,
 			EmbeddingTs:      time.Now().Unix(),
@@ -282,7 +282,7 @@ func TestWorkspaceRepository(t *testing.T) {
 		workspace := &model.Workspace{
 			WorkspaceName:    "test-workspace-embedding",
 			WorkspacePath:    "/path/to/workspace-embedding",
-			Active:           true,
+			Active:           "true",
 			FileNum:          10,
 			EmbeddingFileNum: 5,
 			EmbeddingTs:      time.Now().Unix(),
@@ -313,7 +313,7 @@ func TestWorkspaceRepository(t *testing.T) {
 		workspace := &model.Workspace{
 			WorkspaceName:    "test-workspace-codegraph",
 			WorkspacePath:    "/path/to/workspace-codegraph",
-			Active:           true,
+			Active:           "true",
 			FileNum:          10,
 			EmbeddingFileNum: 5,
 			EmbeddingTs:      time.Now().Unix(),
@@ -369,7 +369,7 @@ func TestWorkspaceRepositoryErrorCases(t *testing.T) {
 		workspace := &model.Workspace{
 			WorkspaceName:    "nonexistent-workspace",
 			WorkspacePath:    "/nonexistent/path",
-			Active:           true,
+			Active:           "true",
 			FileNum:          10,
 			EmbeddingFileNum: 5,
 			EmbeddingTs:      time.Now().Unix(),

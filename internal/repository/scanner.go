@@ -11,6 +11,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -225,13 +226,13 @@ func (s *FileScanner) ScanCodebase(codebasePath string) (map[string]string, erro
 		}
 
 		// Calculate file hash
-		hash, err := s.CalculateFileHash(path)
+		hash, err := utils.CalculateFileTimestamp(path)
 		if err != nil {
 			s.logger.Warn("error calculating hash for file %s: %v", path, err)
 			return nil
 		}
 
-		hashTree[relPath] = hash
+		hashTree[relPath] = strconv.FormatInt(hash, 10)
 		filesScanned++
 
 		if filesScanned%100 == 0 {
@@ -347,13 +348,13 @@ func (s *FileScanner) ScanDirectory(codebasePath, dirPath string) (map[string]st
 		}
 
 		// Calculate file hash
-		hash, err := s.CalculateFileHash(path)
+		hash, err := utils.CalculateFileTimestamp(path)
 		if err != nil {
 			s.logger.Warn("error calculating hash for file %s: %v", path, err)
 			return nil
 		}
 
-		hashTree[relPath] = hash
+		hashTree[relPath] = strconv.FormatInt(hash, 10)
 		filesScanned++
 
 		if filesScanned%100 == 0 {
@@ -395,7 +396,7 @@ func (s *FileScanner) ScanFile(codebasePath, filePath string) (string, error) {
 	if info.Size() >= maxFileSize {
 		return "", fmt.Errorf("file larger than %dKB(size: %.2f KB)", maxFileSizeKB, float64(info.Size())/1024)
 	}
-	hash, err := s.CalculateFileHash(filePath)
+	hash, err := utils.CalculateFileTimestamp(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to scan file: %v", err)
 	}
@@ -403,7 +404,7 @@ func (s *FileScanner) ScanFile(codebasePath, filePath string) (string, error) {
 	s.logger.Info("file scan completed, time taken: %v",
 		time.Since(startTime))
 
-	return hash, nil
+	return strconv.FormatInt(hash, 10), nil
 }
 
 // Calculate file differences

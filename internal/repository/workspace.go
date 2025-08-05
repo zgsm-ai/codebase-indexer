@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"codebase-indexer/internal/database"
@@ -167,24 +168,89 @@ func (r *workspaceRepository) GetWorkspaceByID(id int64) (*model.Workspace, erro
 
 // UpdateWorkspace 更新工作区
 func (r *workspaceRepository) UpdateWorkspace(workspace *model.Workspace) error {
-	query := `
-		UPDATE workspaces 
-		SET workspace_name = ?, active = ?, file_num = ?, 
-			embedding_file_num = ?, embedding_ts = ?, 
-			codegraph_file_num = ?, codegraph_ts = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE workspace_path = ?
-	`
+	// 构建SET子句，只包含非默认值的字段
+	var setClauses []string
+	var args []interface{}
 
-	result, err := r.db.GetDB().Exec(query,
-		workspace.WorkspaceName,
-		workspace.Active,
-		workspace.FileNum,
-		workspace.EmbeddingFileNum,
-		workspace.EmbeddingTs,
-		workspace.CodegraphFileNum,
-		workspace.CodegraphTs,
-		workspace.WorkspacePath,
-	)
+	// 检查workspace_name是否为非默认值
+	if workspace.WorkspaceName != "" {
+		setClauses = append(setClauses, "workspace_name = ?")
+		args = append(args, workspace.WorkspaceName)
+	}
+
+	// 检查active是否为非默认值（bool的默认值是false）
+	if workspace.Active != "true" && workspace.Active != "false" {
+		setClauses = append(setClauses, "active = ?")
+		args = append(args, workspace.Active)
+	}
+
+	// 检查file_num是否为非默认值
+	if workspace.FileNum != 0 {
+		setClauses = append(setClauses, "file_num = ?")
+		args = append(args, workspace.FileNum)
+	}
+
+	// 检查embedding_file_num是否为非默认值
+	if workspace.EmbeddingFileNum != 0 {
+		setClauses = append(setClauses, "embedding_file_num = ?")
+		args = append(args, workspace.EmbeddingFileNum)
+	}
+
+	// 检查embedding_ts是否为非默认值
+	if workspace.EmbeddingTs != 0 {
+		setClauses = append(setClauses, "embedding_ts = ?")
+		args = append(args, workspace.EmbeddingTs)
+	}
+
+	// 检查embedding_message是否为非默认值
+	if workspace.EmbeddingMessage != "" {
+		setClauses = append(setClauses, "embedding_message = ?")
+		args = append(args, workspace.EmbeddingMessage)
+	}
+
+	// 检查embedding_failed_file_paths是否为非默认值
+	if workspace.EmbeddingFailedFilePaths != "" {
+		setClauses = append(setClauses, "embedding_failed_file_paths = ?")
+		args = append(args, workspace.EmbeddingFailedFilePaths)
+	}
+
+	// 检查codegraph_file_num是否为非默认值
+	if workspace.CodegraphFileNum != 0 {
+		setClauses = append(setClauses, "codegraph_file_num = ?")
+		args = append(args, workspace.CodegraphFileNum)
+	}
+
+	// 检查codegraph_ts是否为非默认值
+	if workspace.CodegraphTs != 0 {
+		setClauses = append(setClauses, "codegraph_ts = ?")
+		args = append(args, workspace.CodegraphTs)
+	}
+
+	// 检查codegraph_message是否为非默认值
+	if workspace.CodegraphMessage != "" {
+		setClauses = append(setClauses, "codegraph_message = ?")
+		args = append(args, workspace.CodegraphMessage)
+	}
+
+	// 检查codegraph_failed_file_paths是否为非默认值
+	if workspace.CodegraphFailedFilePaths != "" {
+		setClauses = append(setClauses, "codegraph_failed_file_paths = ?")
+		args = append(args, workspace.CodegraphFailedFilePaths)
+	}
+
+	// 如果没有需要更新的字段，直接返回
+	if len(setClauses) == 0 {
+		return nil
+	}
+
+	// 添加updated_at字段
+	setClauses = append(setClauses, "updated_at = CURRENT_TIMESTAMP")
+
+	// 构建完整查询
+	query := fmt.Sprintf("UPDATE workspaces SET %s WHERE workspace_path = ?", strings.Join(setClauses, ", "))
+	args = append(args, workspace.WorkspacePath)
+
+	result, err := r.db.GetDB().Exec(query, args...)
 	if err != nil {
 		r.logger.Error("Failed to update workspace: %v", err)
 		return fmt.Errorf("failed to update workspace: %w", err)

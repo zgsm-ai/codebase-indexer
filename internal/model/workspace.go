@@ -7,7 +7,7 @@ type Workspace struct {
 	ID                       int64     `json:"id" db:"id"`
 	WorkspaceName            string    `json:"workspaceName" db:"workspace_name"`
 	WorkspacePath            string    `json:"workspacePath" db:"workspace_path"`
-	Active                   bool      `json:"active" db:"active"`
+	Active                   string    `json:"active" db:"active"`
 	FileNum                  int       `json:"fileNum" db:"file_num"`
 	EmbeddingFileNum         int       `json:"embeddingFileNum" db:"embedding_file_num"`
 	EmbeddingTs              int64     `json:"embeddingTs" db:"embedding_ts"`

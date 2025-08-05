@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"codebase-indexer/internal/database"
@@ -22,10 +23,12 @@ type EventRepository interface {
 	GetEventsByType(eventType string, limit int, isDesc bool) ([]*model.Event, error)
 	// GetEventsByWorkspaceAndType 根据工作区路径和事件类型获取事件
 	GetEventsByWorkspaceAndType(workspacePath, eventType string, limit int, isDesc bool) ([]*model.Event, error)
-	// GetEventsByTypeAndStatus 根据事件类型和状态获取事件
-	GetEventsByTypeAndStatus(eventType string, limit int, isDesc bool, statuses []int) ([]*model.Event, error)
-	// GetEventsByTypeAndStatusAndWorkspaces 根据事件类型、状态和工作空间路径获取事件
-	GetEventsByTypeAndStatusAndWorkspaces(eventType string, workspacePaths []string, limit int, isDesc bool, statuses []int) ([]*model.Event, error)
+	// GetEventsByWorkspaceAndEmbeddingStatus 根据工作区路径和嵌入状态获取事件
+	GetEventsByWorkspaceAndEmbeddingStatus(workspacePath string, limit int, isDesc bool, statuses []int) ([]*model.Event, error)
+	// GetEventsByTypeAndEmbeddingStatus 根据事件类型和状态获取事件
+	GetEventsByTypeAndEmbeddingStatus(eventType string, limit int, isDesc bool, statuses []int) ([]*model.Event, error)
+	// GetEventsByTypeAndEmbeddingStatusAndWorkspaces 根据事件类型、状态和工作空间路径获取事件
+	GetEventsByTypeAndEmbeddingStatusAndWorkspaces(eventType string, workspacePaths []string, limit int, isDesc bool, statuses []int) ([]*model.Event, error)
 	// UpdateEvent 更新事件
 	UpdateEvent(event *model.Event) error
 	// DeleteEvent 删除事件
@@ -280,8 +283,80 @@ func (r *eventRepository) GetEventsByWorkspaceAndType(workspacePath, eventType s
 	return events, nil
 }
 
-// GetEventsByTypeAndStatus 根据事件类型和状态获取事件
-func (r *eventRepository) GetEventsByTypeAndStatus(eventType string, limit int, isDesc bool, statuses []int) ([]*model.Event, error) {
+// GetEventsByWorkspaceAndEmbeddingStatus 根据工作区路径和嵌入状态获取事件
+func (r *eventRepository) GetEventsByWorkspaceAndEmbeddingStatus(workspacePath string, limit int, isDesc bool, statuses []int) ([]*model.Event, error) {
+	query := `
+		SELECT id, workspace_path, event_type, source_file_path, target_file_path,
+			codegraph_status, embedding_status, created_at, updated_at
+		FROM events
+		WHERE workspace_path = ?
+	`
+
+	args := []interface{}{workspacePath}
+
+	// 如果提供了状态列表，添加状态过滤条件
+	if len(statuses) > 0 {
+		placeholders := ""
+		for i := range statuses {
+			if i > 0 {
+				placeholders += ","
+			}
+			placeholders += "?"
+		}
+		query += fmt.Sprintf(" AND embedding_status IN (%s)", placeholders)
+		for _, status := range statuses {
+			args = append(args, status)
+		}
+	}
+
+	query += " ORDER BY created_at %s LIMIT ?"
+
+	if isDesc {
+		query = fmt.Sprintf(query, "DESC")
+	} else {
+		query = fmt.Sprintf(query, "ASC")
+	}
+	args = append(args, limit)
+
+	rows, err := r.db.GetDB().Query(query, args...)
+	if err != nil {
+		r.logger.Error("Failed to get events by workspace and embedding status: %v", err)
+		return nil, fmt.Errorf("failed to get events by workspace and embedding status: %w", err)
+	}
+	defer rows.Close()
+
+	var events []*model.Event
+	for rows.Next() {
+		var event model.Event
+		var createdAt, updatedAt time.Time
+
+		err := rows.Scan(
+			&event.ID,
+			&event.WorkspacePath,
+			&event.EventType,
+			&event.SourceFilePath,
+			&event.TargetFilePath,
+			&event.CodegraphStatus,
+			&event.EmbeddingStatus,
+			&createdAt,
+			&updatedAt,
+		)
+
+		if err != nil {
+			r.logger.Error("Failed to scan event row: %v", err)
+			return nil, fmt.Errorf("failed to scan event row: %w", err)
+		}
+
+		event.CreatedAt = createdAt
+		event.UpdatedAt = updatedAt
+		events = append(events, &event)
+	}
+
+	return events, nil
+}
+
+// GetEventsByTypeAndEmbeddingStatus 根据事件类型和状态获取事件
+func (r *eventRepository) GetEventsByTypeAndEmbeddingStatus(eventType string, limit int, isDesc bool, statuses []int) ([]*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path,
 			codegraph_status, embedding_status, created_at, updated_at
@@ -352,8 +427,8 @@ func (r *eventRepository) GetEventsByTypeAndStatus(eventType string, limit int, 
 	return events, nil
 }
 
-// GetEventsByTypeAndStatusAndWorkspaces 根据事件类型、状态和工作空间路径获取事件
-func (r *eventRepository) GetEventsByTypeAndStatusAndWorkspaces(eventType string, workspacePaths []string, limit int, isDesc bool, statuses []int) ([]*model.Event, error) {
+// GetEventsByTypeAndEmbeddingStatusAndWorkspaces 根据事件类型、状态和工作空间路径获取事件
+func (r *eventRepository) GetEventsByTypeAndEmbeddingStatusAndWorkspaces(eventType string, workspacePaths []string, limit int, isDesc bool, statuses []int) ([]*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path,
 			codegraph_status, embedding_status, created_at, updated_at
@@ -441,22 +516,59 @@ func (r *eventRepository) GetEventsByTypeAndStatusAndWorkspaces(eventType string
 
 // UpdateEvent 更新事件
 func (r *eventRepository) UpdateEvent(event *model.Event) error {
-	query := `
-		UPDATE events 
-		SET workspace_path = ?, event_type = ?, source_file_path = ?, 
-			target_file_path = ?, embedding_status = ?, codegraph_status = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?
-	`
+	// 构建SET子句，只包含非默认值的字段
+	var setClauses []string
+	var args []interface{}
 
-	result, err := r.db.GetDB().Exec(query,
-		event.WorkspacePath,
-		event.EventType,
-		event.SourceFilePath,
-		event.TargetFilePath,
-		event.EmbeddingStatus,
-		event.CodegraphStatus,
-		event.ID,
-	)
+	// 检查workspace_path是否为非默认值
+	if event.WorkspacePath != "" {
+		setClauses = append(setClauses, "workspace_path = ?")
+		args = append(args, event.WorkspacePath)
+	}
+
+	// 检查event_type是否为非默认值
+	if event.EventType != "" {
+		setClauses = append(setClauses, "event_type = ?")
+		args = append(args, event.EventType)
+	}
+
+	// 检查source_file_path是否为非默认值
+	if event.SourceFilePath != "" {
+		setClauses = append(setClauses, "source_file_path = ?")
+		args = append(args, event.SourceFilePath)
+	}
+
+	// 检查target_file_path是否为非默认值
+	if event.TargetFilePath != "" {
+		setClauses = append(setClauses, "target_file_path = ?")
+		args = append(args, event.TargetFilePath)
+	}
+
+	// 检查embedding_status是否为非默认值
+	if event.EmbeddingStatus != 0 {
+		setClauses = append(setClauses, "embedding_status = ?")
+		args = append(args, event.EmbeddingStatus)
+	}
+
+	// 检查codegraph_status是否为非默认值
+	if event.CodegraphStatus != 0 {
+		setClauses = append(setClauses, "codegraph_status = ?")
+		args = append(args, event.CodegraphStatus)
+	}
+
+	// 如果没有需要更新的字段，直接返回
+	if len(setClauses) == 0 {
+		return nil
+	}
+
+	// 添加updated_at字段
+	setClauses = append(setClauses, "updated_at = CURRENT_TIMESTAMP")
+
+	// 构建完整查询
+	query := fmt.Sprintf("UPDATE events SET %s WHERE id = ?", strings.Join(setClauses, ", "))
+	args = append(args, event.ID)
+
+	result, err := r.db.GetDB().Exec(query, args...)
 	if err != nil {
 		r.logger.Error("Failed to update event: %v", err)
 		return fmt.Errorf("failed to update event: %w", err)

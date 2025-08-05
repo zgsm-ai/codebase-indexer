@@ -94,6 +94,11 @@ func main() {
 		appLogger.Fatal("failed to initialize codegraphStore manager: %v", err)
 		return
 	}
+	codebaseEmbeddingRepo, err := repository.NewEmbeddingFileRepo(utils.CodebaseDir, appLogger)
+	if err != nil {
+		appLogger.Fatal("Failed to create codebase embedding repository: %v", err)
+		return
+	}
 
 	// Initialize database manager
 	dbConfig := config.DefaultDatabaseConfig()
@@ -106,8 +111,6 @@ func main() {
 	// Initialize repositories
 	workspaceRepo := repository.NewWorkspaceRepository(dbManager, appLogger)
 	eventRepo := repository.NewEventRepository(dbManager, appLogger)
-	embeddingStateRepo := repository.NewEmbeddingStateRepository(dbManager, appLogger)
-	codegraphStateRepo := repository.NewCodegraphStateRepository(dbManager, appLogger)
 	var syncServiceConfig *config.SyncConfig
 	if *clientId != "" && *serverEndpoint != "" && *token != "" {
 		syncServiceConfig = &config.SyncConfig{ClientId: *clientId, ServerURL: *serverEndpoint, Token: *token}
@@ -118,11 +121,11 @@ func main() {
 	// Initialize service layer
 	codebaseService := service.NewCodebaseService(appLogger)
 	schedulerService := service.NewScheduler(syncRepo, scanRepo, storageManager, appLogger)
-	extensionService := service.NewExtensionService(storageManager, syncRepo, scanRepo, codebaseService, appLogger)
+	extensionService := service.NewExtensionService(storageManager, syncRepo, scanRepo, workspaceRepo, eventRepo, codebaseService, appLogger)
 	fileScanService := service.NewFileScanService(workspaceRepo, eventRepo, scanRepo, storageManager, appLogger)
 	uploadService := service.NewUploadService(schedulerService, syncRepo, appLogger, syncServiceConfig)
-	embeddingProcessService := service.NewEmbeddingProcessService(workspaceRepo, eventRepo, embeddingStateRepo, uploadService, appLogger)
-	embeddingStatusService := service.NewEmbeddingStatusService(embeddingStateRepo, workspaceRepo, appLogger)
+	embeddingProcessService := service.NewEmbeddingProcessService(workspaceRepo, eventRepo, codebaseEmbeddingRepo, uploadService, appLogger)
+	embeddingStatusService := service.NewEmbeddingStatusService(codebaseEmbeddingRepo, workspaceRepo, eventRepo, appLogger)
 
 	// 创建存储
 	codegraphStore, err := store.NewLevelDBStorage(utils.IndexDir, appLogger)
@@ -140,7 +143,7 @@ func main() {
 
 	indexer := codegraph.NewCodeIndexer(sourceFileParser, dependencyAnalyzer, workspaceReader, codegraphStore,
 		codegraph.IndexerConfig{VisitPattern: types.VisitPattern{}}, appLogger) //todo 文件忽略列表
-	codegraphProcessor := service.NewCodegraphProcessor(indexer, workspaceRepo, eventRepo, codegraphStateRepo, appLogger)
+	codegraphProcessor := service.NewCodegraphProcessor(indexer, workspaceRepo, eventRepo, appLogger)
 
 	// Initialize job layer
 	fileScanJob := job.NewFileScanJob(fileScanService, appLogger, 5*time.Minute)
@@ -265,6 +268,13 @@ func initDir(appName string) error {
 		return fmt.Errorf("failed to get cache db directory: %v", err)
 	}
 	fmt.Printf("cache db directory: %s\n", cacheDbPath)
+
+	// Initialize cache codebase directory
+	cacheCodebasePath, err := utils.GetCacheCodebaseDir(cachePath)
+	if err != nil {
+		return fmt.Errorf("failed to get cache codebase directory: %v", err)
+	}
+	fmt.Printf("cache codebase directory: %s\n", cacheCodebasePath)
 
 	return nil
 }

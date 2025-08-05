@@ -26,3 +26,11 @@ type CodebaseConfig struct {
 	LastSync     time.Time         `json:"lastSync"`
 	RegisterTime time.Time         `json:"registerTime"`
 }
+
+type CodebaseEmbeddingConfig struct {
+	ClientID     string            `json:"clientId"`
+	CodebaseName string            `json:"codebaseName"`
+	CodebasePath string            `json:"codebasePath"`
+	CodebaseId   string            `json:"codebaseId"`
+	HashTree     map[string]string `json:"hashTree"`
+}

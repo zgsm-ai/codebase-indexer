@@ -230,7 +230,7 @@ type CheckIgnoreFileResponse struct {
 type WorkspaceEvent struct {
 	// 事件类型
 	// example: add_file
-	// enum: open_workspace,close_workspace,add_file,modify_file,delete_file,rename_file,move_file,rename_dir,move_dir,delete_dir
+	// enum: open_workspace,close_workspace,add_file,modify_file,delete_file,rename_file
 	EventType string `json:"eventType" binding:"required"`
 
 	// 事件发生时间
@@ -327,6 +327,8 @@ type IndexStatus struct {
 	// enum: pending,running,success,failed
 	Status string `json:"status"`
 
+	Process float32 `json:"process"`
+
 	// 总文件数
 	// example: 100
 	TotalFiles int `json:"totalFiles"`
@@ -342,6 +344,12 @@ type IndexStatus struct {
 	// 总块数（仅embedding索引）
 	// example: 1000
 	TotalChunks int `json:"totalChunks,omitempty"`
+
+	FailedReason string `json:"failedReason"`
+
+	FailedFiles []string `json:"failedFiles,omitempty"`
+
+	ProcessTs int64 `json:"processTs"`
 }
 
 // ProjectIndexStatus represents the index status for a project
@@ -393,6 +401,7 @@ type IndexStatusQuery struct {
 // IndexSwitchQuery represents the query parameters for index switch
 // @Description 索引功能开关查询参数
 type IndexSwitchQuery struct {
+	Workspace string `form:"workspace" binding:"required"`
 	// 开关状态
 	// required: true
 	// example: on

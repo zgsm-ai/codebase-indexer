@@ -55,7 +55,10 @@ func (j *StatusCheckerJob) Start() {
 				j.logger.Info("status checker job stopped")
 				return
 			case <-ticker.C:
-				j.checkBuildingStates()
+				err := j.checkBuildingStates()
+				if err != nil {
+					j.logger.Error("failed to check building states: %v", err)
+				}
 			}
 		}
 	}()
@@ -70,9 +73,27 @@ func (j *StatusCheckerJob) Stop() {
 }
 
 // checkBuildingStates 检查所有building状态
-func (j *StatusCheckerJob) checkBuildingStates() {
-	err := j.checker.CheckAllBuildingStates()
+func (j *StatusCheckerJob) checkBuildingStates() error {
+	// 获取活跃工作区
+	workspaces, err := j.checker.CheckActiveWorkspaces()
 	if err != nil {
-		j.logger.Error("failed to check building states: %v", err)
+		return err
 	}
+
+	if len(workspaces) == 0 {
+		j.logger.Debug("no active workspaces found")
+		return nil
+	}
+
+	workspacePaths := make([]string, len(workspaces))
+	for i, workspace := range workspaces {
+		workspacePaths[i] = workspace.WorkspacePath
+	}
+
+	err = j.checker.CheckAllBuildingStates(workspacePaths)
+	if err != nil {
+		return err
+	}
+
+	return j.checker.CheckAllUploadingStatues(workspacePaths)
 }

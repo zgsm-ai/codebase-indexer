@@ -98,8 +98,6 @@ func (m *SQLiteManager) createTables() error {
 	tables := []string{
 		m.createWorkspacesTable(),
 		m.createEventsTable(),
-		m.createEmbeddingStatesTable(),
-		m.createCodegraphStatesTable(),
 	}
 
 	for _, tableSQL := range tables {
@@ -119,7 +117,7 @@ func (m *SQLiteManager) createWorkspacesTable() string {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         workspace_name VARCHAR(255) NOT NULL,
         workspace_path VARCHAR(500) UNIQUE NOT NULL,
-        active BOOLEAN NOT NULL DEFAULT 1,
+        active VARCHAR(10) NOT NULL DEFAULT 'true',
         file_num INTEGER NOT NULL DEFAULT 0,
         embedding_file_num INTEGER NOT NULL DEFAULT 0,
         embedding_ts INTEGER NOT NULL DEFAULT 0,
@@ -132,7 +130,6 @@ func (m *SQLiteManager) createWorkspacesTable() string {
     );
     
     CREATE INDEX IF NOT EXISTS idx_workspaces_path ON workspaces(workspace_path);
-    CREATE INDEX IF NOT EXISTS idx_workspaces_active ON workspaces(active);
     CREATE INDEX IF NOT EXISTS idx_workspaces_embedding_ts ON workspaces(embedding_ts);
     CREATE INDEX IF NOT EXISTS idx_workspaces_codegraph_ts ON workspaces(codegraph_ts);
     CREATE INDEX IF NOT EXISTS idx_workspaces_created_at ON workspaces(created_at);
@@ -162,48 +159,5 @@ func (m *SQLiteManager) createEventsTable() string {
     CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
 	CREATE INDEX IF NOT EXISTS idx_events_updated_at ON events(updated_at);
     CREATE INDEX IF NOT EXISTS idx_events_workspace_type ON events(workspace_path, event_type);
-    `
-}
-
-// createEmbeddingStatesTable 创建语义构建状态表
-func (m *SQLiteManager) createEmbeddingStatesTable() string {
-	return `
-    CREATE TABLE IF NOT EXISTS embedding_states (
-        sync_id VARCHAR(100) NOT NULL,
-        workspace_path VARCHAR(500) NOT NULL,
-        file_path VARCHAR(500) NOT NULL,
-        status TINYINT NOT NULL DEFAULT 0,
-        message TEXT,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-    
-	CREATE INDEX IF NOT EXISTS idx_embedding_sync_id ON embedding_states(sync_id);
-    CREATE INDEX IF NOT EXISTS idx_embedding_workspace_path ON embedding_states(workspace_path);
-    CREATE INDEX IF NOT EXISTS idx_embedding_file_path ON embedding_states(file_path);
-    CREATE INDEX IF NOT EXISTS idx_embedding_status ON embedding_states(status);
-    CREATE INDEX IF NOT EXISTS idx_embedding_created_at ON embedding_states(created_at);
-	CREATE INDEX IF NOT EXISTS idx_embedding_updated_at ON embedding_states(updated_at);
-    CREATE INDEX IF NOT EXISTS idx_embedding_workspace_file ON embedding_states(workspace_path, file_path);
-    `
-}
-
-// createCodegraphStatesTable 创建代码构建状态表
-func (m *SQLiteManager) createCodegraphStatesTable() string {
-	return `
-    CREATE TABLE IF NOT EXISTS codegraph_states (
-        workspace_path VARCHAR(500) NOT NULL,
-        file_path VARCHAR(500) NOT NULL,
-        status TINYINT NOT NULL DEFAULT 0,
-        message TEXT,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-    
-    CREATE INDEX IF NOT EXISTS idx_codegraph_workspace_path ON codegraph_states(workspace_path);
-    CREATE INDEX IF NOT EXISTS idx_codegraph_file_path ON codegraph_states(file_path);
-    CREATE INDEX IF NOT EXISTS idx_codegraph_status ON codegraph_states(status);
-    CREATE INDEX IF NOT EXISTS idx_codegraph_created_at ON codegraph_states(created_at);
-	CREATE INDEX IF NOT EXISTS idx_codegraph_updated_at ON codegraph_states(updated_at);
     `
 }

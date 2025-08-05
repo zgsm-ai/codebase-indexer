@@ -4,6 +4,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -351,12 +352,24 @@ func (h *ExtensionHandler) PublishEvents(c *gin.Context) {
 
 	h.logger.Info("workspace events publish request: Workspace=%s, Events=%d", req.Workspace, len(req.Data))
 
-	// TODO: 调用service层处理业务逻辑 - 暂时返回成功
+	// 调用service层处理业务逻辑
+	count, err := h.extensionService.PublishEvents(c.Request.Context(), req.Workspace, req.Data)
+	if err != nil {
+		h.logger.Error("failed to publish events: %v", err)
+		c.JSON(http.StatusInternalServerError, dto.PublishEventsResponse{
+			Code:    http.StatusInternalServerError,
+			Success: false,
+			Message: "failed to publish events",
+			Data:    0,
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, dto.PublishEventsResponse{
 		Code:    0,
 		Success: true,
 		Message: "ok",
-		Data:    len(req.Data),
+		Data:    count,
 	})
 }
 
@@ -386,7 +399,19 @@ func (h *ExtensionHandler) TriggerIndex(c *gin.Context) {
 
 	h.logger.Info("index build trigger request: Workspace=%s, Path=%s, Type=%s", req.Workspace, req.Path, req.Type)
 
-	// TODO: 调用service层处理业务逻辑 - 暂时返回成功
+	// 调用service层处理业务逻辑
+	err := h.extensionService.TriggerIndex(c.Request.Context(), req.Workspace)
+	if err != nil {
+		h.logger.Error("failed to trigger index: %v", err)
+		c.JSON(http.StatusInternalServerError, dto.TriggerIndexResponse{
+			Code:    http.StatusInternalServerError,
+			Success: false,
+			Message: fmt.Sprintf("failed to trigger index: %v", err),
+			Data:    0,
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, dto.TriggerIndexResponse{
 		Code:    0,
 		Success: true,
@@ -430,16 +455,25 @@ func (h *ExtensionHandler) GetIndexStatus(c *gin.Context) {
 			Name: "zgsm",
 			Embedding: dto.IndexStatus{
 				Status:       "running",
+				Process:      80.0,
 				TotalFiles:   100,
-				TotalSucceed: 10,
-				TotalFailed:  10,
+				TotalSucceed: 80,
+				TotalFailed:  0,
 				TotalChunks:  1000,
+				FailedReason: "",
+				FailedFiles:  []string{},
+				ProcessTs:    time.Now().Unix(),
 			},
 			Codegraph: dto.IndexStatus{
 				Status:       "success",
+				Process:      90.0,
 				TotalFiles:   100,
-				TotalSucceed: 10,
-				TotalFailed:  10,
+				TotalSucceed: 90,
+				TotalFailed:  0,
+				TotalChunks:  1000,
+				FailedReason: "",
+				FailedFiles:  []string{},
+				ProcessTs:    time.Now().Unix(),
 			},
 		},
 	}
@@ -473,13 +507,23 @@ func (h *ExtensionHandler) SwitchIndex(c *gin.Context) {
 
 	h.logger.Info("index switch request: Switch=%s", query.Switch)
 
-	// TODO: 调用service层处理业务逻辑 - 暂时返回成功
-	isEnabled := query.Switch == "on"
+	err := h.extensionService.SwitchIndex(c, query.Workspace, query.Switch)
+	if err != nil {
+		h.logger.Error("failed to switch index: %v", err)
+		c.JSON(http.StatusInternalServerError, dto.IndexSwitchResponse{
+			Code:    http.StatusInternalServerError,
+			Success: false,
+			Message: "failed to switch index",
+			Data:    false,
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, dto.IndexSwitchResponse{
 		Code:    0,
 		Success: true,
 		Message: "ok",
-		Data:    isEnabled,
+		Data:    true,
 	})
 }
 

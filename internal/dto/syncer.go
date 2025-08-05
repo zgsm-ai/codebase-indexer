@@ -66,12 +66,14 @@ type FileStatusResp struct {
 }
 
 type FileStatusRespData struct {
-	Process      string                       `json:"process"`
-	TotalProcess int                          `json:"totalProcess"`
-	FileList     []FileStatusRespFileListItem `json:"fileList"`
+	Process       string                       `json:"process"`
+	TotalProcess  int                          `json:"totalProcess"`
+	FileSuceesNum int                          `json:"fileSuceesNum"`
+	FileList      []FileStatusRespFileListItem `json:"fileList"`
 }
 
 type FileStatusRespFileListItem struct {
-	Path   string `json:"path"`
-	Status string `json:"status"`
+	Path    string `json:"path"`
+	Operate string `json:"operate"`
+	Status  string `json:"status"`
 }

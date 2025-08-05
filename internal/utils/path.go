@@ -15,6 +15,7 @@ var (
 	CacheDir     = "./.zgsm/cache"
 	UploadTmpDir = "./.zgsm/tmp"
 	DbDir        = "./.zgsm/cache/db"
+	CodebaseDir  = "./.zgsm/cache/codebase"
 	IndexDir     = "./.zgsm/index"
 )
 
@@ -145,6 +146,22 @@ func GetCacheDbDir(cachePath string) (string, error) {
 	DbDir = dbPath
 
 	return dbPath, nil
+}
+
+func GetCacheCodebaseDir(cachePath string) (string, error) {
+	if _, err := os.Stat(cachePath); os.IsNotExist(err) {
+		return "", fmt.Errorf("cache path %s does not exist", cachePath)
+	}
+
+	codebasePath := filepath.Join(cachePath, "codebase")
+	// Ensure config directory exists
+	if err := os.MkdirAll(codebasePath, 0755); err != nil {
+		return "", err
+	}
+
+	CodebaseDir = codebasePath
+
+	return codebasePath, nil
 }
 
 // CleanUploadTmpDir cleans temporary upload directory

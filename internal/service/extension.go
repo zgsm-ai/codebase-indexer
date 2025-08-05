@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"codebase-indexer/internal/config"
+	"codebase-indexer/internal/dto"
+	"codebase-indexer/internal/model"
 	"codebase-indexer/internal/repository"
 	"codebase-indexer/pkg/logger"
 )
@@ -28,6 +30,15 @@ type ExtensionService interface {
 
 	// CheckIgnoreFiles 检查文件是否应该被忽略
 	CheckIgnoreFiles(ctx context.Context, clientID, workspacePath, workspaceName string, filePaths []string) (*CheckIgnoreResult, error)
+
+	// SwitchIndex 切换索引状态
+	SwitchIndex(ctx context.Context, workspacePath, switchStatus string) error
+
+	// PublishEvents 发布工作区事件
+	PublishEvents(ctx context.Context, workspacePath string, events []dto.WorkspaceEvent) (int, error)
+
+	// TriggerIndex 触发索引构建
+	TriggerIndex(ctx context.Context, workspacePath string) error
 }
 
 // CheckIgnoreResult 检查结果
@@ -42,6 +53,8 @@ func NewExtensionService(
 	storage repository.StorageInterface,
 	httpSync repository.SyncInterface,
 	fileScanner repository.ScannerInterface,
+	workspaceRepo repository.WorkspaceRepository,
+	eventRepo repository.EventRepository,
 	codebaseService CodebaseService,
 	logger logger.Logger,
 ) ExtensionService {
@@ -49,6 +62,8 @@ func NewExtensionService(
 		storage:         storage,
 		httpSync:        httpSync,
 		fileScanner:     fileScanner,
+		workspaceRepo:   workspaceRepo,
+		eventRepo:       eventRepo,
 		codebaseService: codebaseService,
 		logger:          logger,
 	}
@@ -58,6 +73,8 @@ type extensionService struct {
 	storage         repository.StorageInterface
 	httpSync        repository.SyncInterface
 	fileScanner     repository.ScannerInterface
+	workspaceRepo   repository.WorkspaceRepository
+	eventRepo       repository.EventRepository
 	codebaseService CodebaseService
 	logger          logger.Logger
 }
@@ -307,4 +324,180 @@ func (s *extensionService) CheckIgnoreFiles(ctx context.Context, clientID, works
 		Reason:       "no ignored files found",
 		IgnoredFiles: []string{},
 	}, nil
+}
+
+func (s *extensionService) SwitchIndex(ctx context.Context, workspacePath, switchStatus string) error {
+	// 检查开关状态
+	if switchStatus != "on" && switchStatus != "off" {
+		return fmt.Errorf("invalid switch status: %s", switchStatus)
+	}
+	// 检查工作空间是否存在
+	workspace, err := s.workspaceRepo.GetWorkspaceByPath(workspacePath)
+	if err != nil {
+		return fmt.Errorf("failed to get workspace: %w", err)
+	}
+
+	// 更新工作空间的索引开关状态
+	active := "false"
+	if switchStatus == "on" {
+		active = "true"
+	}
+
+	if workspace.Active == active {
+		return fmt.Errorf("workspace index is already %s", switchStatus)
+	}
+
+	// 更新工作空间状态
+	updateWorkspace := &model.Workspace{
+		ID:            workspace.ID,
+		WorkspacePath: workspace.WorkspacePath,
+		Active:        active,
+	}
+	if err := s.workspaceRepo.UpdateWorkspace(updateWorkspace); err != nil {
+		return fmt.Errorf("failed to update workspace: %w", err)
+	}
+
+	s.logger.Info("index switch for workspace %s set to %s", workspacePath, switchStatus)
+	return nil
+}
+
+// PublishEvents 发布工作区事件
+func (s *extensionService) PublishEvents(ctx context.Context, workspacePath string, events []dto.WorkspaceEvent) (int, error) {
+	s.logger.Info("publishing %d events for workspace: %s", len(events), workspacePath)
+
+	successCount := 0
+
+	// 处理每个事件
+	for _, event := range events {
+		// 解析事件时间
+		eventTime, err := time.Parse("2006-01-02 15:04:05", event.EventTime)
+		if err != nil {
+			s.logger.Warn("failed to parse event time %s: %v", event.EventTime, err)
+			eventTime = time.Now() // 使用当前时间作为默认值
+		}
+
+		// 创建事件模型
+		eventModel := &model.Event{
+			WorkspacePath:   workspacePath,
+			EventType:       event.EventType,
+			SourceFilePath:  event.SourcePath,
+			TargetFilePath:  event.TargetPath,
+			SyncId:          "",                        // 暂时为空，后续可以生成
+			EmbeddingStatus: model.EmbeddingStatusInit, // 初始状态
+			CodegraphStatus: model.CodegraphStatusInit, // 初始状态
+			CreatedAt:       eventTime,
+			UpdatedAt:       eventTime,
+		}
+
+		// 保存事件到数据库
+		if err := s.eventRepo.CreateEvent(eventModel); err != nil {
+			s.logger.Error("failed to create event: %v", err)
+			continue
+		}
+
+		successCount++
+		s.logger.Debug("created event: type=%s, source=%s, target=%s",
+			event.EventType, event.SourcePath, event.TargetPath)
+	}
+
+	s.logger.Info("successfully published %d/%d events for workspace: %s",
+		successCount, len(events), workspacePath)
+
+	// 如果是打开工作区事件，确保工作区存在且激活
+	for _, event := range events {
+		if event.EventType == model.EventTypeOpenWorkspace {
+			// 检查工作区是否已存在
+			_, err := s.workspaceRepo.GetWorkspaceByPath(workspacePath)
+			if err != nil {
+				// 工作区不存在，创建新的工作区
+				workspaceName := filepath.Base(workspacePath)
+				newWorkspace := &model.Workspace{
+					WorkspaceName:    workspaceName,
+					WorkspacePath:    workspacePath,
+					Active:           "true", // 激活工作区
+					FileNum:          0,
+					EmbeddingFileNum: 0,
+					EmbeddingTs:      0,
+					CodegraphFileNum: 0,
+					CodegraphTs:      0,
+				}
+
+				if err := s.workspaceRepo.CreateWorkspace(newWorkspace); err != nil {
+					s.logger.Error("failed to create workspace: %v", err)
+				} else {
+					s.logger.Info("created new workspace: %s", workspacePath)
+				}
+			}
+			break // 只需要处理一个打开工作区事件
+		}
+	}
+
+	return successCount, nil
+}
+
+// TriggerIndex 触发索引构建
+func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath string) error {
+	s.logger.Info("triggering index build for workspace: %s", workspacePath)
+
+	// 检查工作区是否已存在
+	workspace, err := s.workspaceRepo.GetWorkspaceByPath(workspacePath)
+	if err != nil {
+		// 工作区不存在，创建新的工作区
+		s.logger.Info("workspace not found, creating new workspace: %s", workspacePath)
+		workspaceName := filepath.Base(workspacePath)
+		newWorkspace := &model.Workspace{
+			WorkspaceName:    workspaceName,
+			WorkspacePath:    workspacePath,
+			Active:           "true", // 激活工作区
+			FileNum:          0,
+			EmbeddingFileNum: 0,
+			EmbeddingTs:      0,
+			CodegraphFileNum: 0,
+			CodegraphTs:      0,
+		}
+
+		if err := s.workspaceRepo.CreateWorkspace(newWorkspace); err != nil {
+			s.logger.Error("failed to create workspace: %v", err)
+			return fmt.Errorf("failed to create workspace: %w", err)
+		}
+
+		s.logger.Info("created new workspace: %s", workspacePath)
+	} else {
+		// 工作区已存在，更新 active 状态
+		if workspace.Active != "true" {
+			updateWorkspace := &model.Workspace{
+				ID:            workspace.ID,
+				WorkspacePath: workspace.WorkspacePath,
+				Active:        "true",
+			}
+			if err := s.workspaceRepo.UpdateWorkspace(updateWorkspace); err != nil {
+				s.logger.Error("failed to update workspace active status: %v", err)
+				return fmt.Errorf("failed to update workspace: %w", err)
+			}
+			s.logger.Info("updated workspace active status to true: %s", workspacePath)
+		}
+	}
+
+	// 创建打开工作区事件
+	eventTime := time.Now()
+	eventModel := &model.Event{
+		WorkspacePath:   workspacePath,
+		EventType:       model.EventTypeOpenWorkspace,
+		SourceFilePath:  "",
+		TargetFilePath:  "",
+		SyncId:          "",                        // 暂时为空，后续可以生成
+		EmbeddingStatus: model.EmbeddingStatusInit, // 初始状态
+		CodegraphStatus: model.CodegraphStatusInit, // 初始状态
+		CreatedAt:       eventTime,
+		UpdatedAt:       eventTime,
+	}
+
+	// 保存事件到数据库
+	if err := s.eventRepo.CreateEvent(eventModel); err != nil {
+		s.logger.Error("failed to create open workspace event: %v", err)
+		return fmt.Errorf("failed to create event: %w", err)
+	}
+
+	s.logger.Info("successfully triggered index build for workspace: %s", workspacePath)
+	return nil
 }

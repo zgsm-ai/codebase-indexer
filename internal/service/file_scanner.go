@@ -52,7 +52,7 @@ func (ws *fileScanService) ScanActiveWorkspaces() ([]*model.Workspace, error) {
 
 	var activeWorkspaces []*model.Workspace
 	for _, workspace := range workspaces {
-		if workspace.Active {
+		if workspace.Active == "true" {
 			activeWorkspaces = append(activeWorkspaces, workspace)
 		}
 	}
