@@ -542,10 +542,10 @@ func parseTypeScriptClassBody(node *sitter.Node, content []byte, className strin
 		//解析类属性使用
 		case types.NodeKindPublicFieldDefinition:
 			field, ref := parseTypeScriptFieldNode(memberNode, content)
-			ref.Path = path
 			if field != nil {
 				class.Fields = append(class.Fields, field)
 				if ref != nil {
+					ref.Path = path
 					references = append(references, ref)
 				}
 			}
