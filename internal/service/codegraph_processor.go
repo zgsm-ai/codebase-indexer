@@ -10,10 +10,19 @@ import (
 	"codebase-indexer/pkg/logger"
 )
 
-var _ EventProcessService = (*CodegraphProcessor)(nil)
+// var _ EventProcessService = (*CodegraphProcessor)(nil)
+
+type CodegraphProcessService interface {
+	ProcessActiveWorkspaces() ([]*model.Workspace, error)
+	ProcessAddFileEvent(event *model.Event) error
+	ProcessModifyFileEvent(event *model.Event) error
+	ProcessDeleteFileEvent(event *model.Event) error
+	ProcessEvents() error
+}
 
 type CodegraphProcessor struct {
 	indexer                  *codegraph.Indexer
+	workspaceRepo            repository.WorkspaceRepository
 	eventRepo                repository.EventRepository
 	codegraphStateRepository repository.CodegraphStateRepository
 	logger                   logger.Logger
@@ -21,16 +30,35 @@ type CodegraphProcessor struct {
 
 func NewCodegraphProcessor(
 	indexer *codegraph.Indexer,
+	workspaceRepo repository.WorkspaceRepository,
 	eventRepo repository.EventRepository,
 	codegraphStateRepository repository.CodegraphStateRepository,
 	logger logger.Logger,
-) EventProcessService {
+) CodegraphProcessService {
 	return &CodegraphProcessor{
 		indexer:                  indexer,
+		workspaceRepo:            workspaceRepo,
 		eventRepo:                eventRepo,
 		codegraphStateRepository: codegraphStateRepository,
 		logger:                   logger,
 	}
+}
+
+// ProcessActiveWorkspaces 扫描活跃工作区
+func (ep *CodegraphProcessor) ProcessActiveWorkspaces() ([]*model.Workspace, error) {
+	workspaces, err := ep.workspaceRepo.GetActiveWorkspaces()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active workspaces: %w", err)
+	}
+
+	var activeWorkspaces []*model.Workspace
+	for _, workspace := range workspaces {
+		if workspace.Active {
+			activeWorkspaces = append(activeWorkspaces, workspace)
+		}
+	}
+
+	return activeWorkspaces, nil
 }
 
 // ProcessAddFileEvent 处理添加文件事件

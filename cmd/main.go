@@ -2,16 +2,10 @@
 package main
 
 import (
-	"codebase-indexer/pkg/codegraph"
-	"codebase-indexer/pkg/codegraph/analyzer"
-	packageclassifier "codebase-indexer/pkg/codegraph/analyzer/package_classifier"
-	"codebase-indexer/pkg/codegraph/parser"
-	"codebase-indexer/pkg/codegraph/store"
-	"codebase-indexer/pkg/codegraph/types"
-	"codebase-indexer/pkg/codegraph/workspace"
 	"context"
 	"flag"
 	"fmt"
+
 	// "net"
 	"net/http"
 	"net/http/pprof"
@@ -30,6 +24,13 @@ import (
 	"codebase-indexer/internal/server"
 	"codebase-indexer/internal/service"
 	"codebase-indexer/internal/utils"
+	"codebase-indexer/pkg/codegraph"
+	"codebase-indexer/pkg/codegraph/analyzer"
+	packageclassifier "codebase-indexer/pkg/codegraph/analyzer/package_classifier"
+	"codebase-indexer/pkg/codegraph/parser"
+	"codebase-indexer/pkg/codegraph/store"
+	"codebase-indexer/pkg/codegraph/types"
+	"codebase-indexer/pkg/codegraph/workspace"
 	"codebase-indexer/pkg/logger"
 	// "google.golang.org/grpc"
 )
@@ -115,12 +116,13 @@ func main() {
 	syncRepo := repository.NewHTTPSync(syncServiceConfig, appLogger)
 
 	// Initialize service layer
-	fileScanService := service.NewFileScanService(workspaceRepo, eventRepo, scanRepo, storageManager, appLogger)
-	embeddingProcessService := service.NewEventProcessService(eventRepo, embeddingStateRepo, appLogger)
-	embeddingStatusService := service.NewEmbeddingStatusService(embeddingStateRepo, workspaceRepo, appLogger)
 	codebaseService := service.NewCodebaseService(appLogger)
 	schedulerService := service.NewScheduler(syncRepo, scanRepo, storageManager, appLogger)
 	extensionService := service.NewExtensionService(storageManager, syncRepo, scanRepo, codebaseService, appLogger)
+	fileScanService := service.NewFileScanService(workspaceRepo, eventRepo, scanRepo, storageManager, appLogger)
+	uploadService := service.NewUploadService(schedulerService, syncRepo, appLogger, syncServiceConfig)
+	embeddingProcessService := service.NewEmbeddingProcessService(workspaceRepo, eventRepo, embeddingStateRepo, uploadService, appLogger)
+	embeddingStatusService := service.NewEmbeddingStatusService(embeddingStateRepo, workspaceRepo, appLogger)
 
 	// 创建存储
 	codegraphStore, err := store.NewLevelDBStorage(utils.IndexDir, appLogger)
@@ -138,7 +140,7 @@ func main() {
 
 	indexer := codegraph.NewCodeIndexer(sourceFileParser, dependencyAnalyzer, workspaceReader, codegraphStore,
 		codegraph.IndexerConfig{VisitPattern: types.VisitPattern{}}, appLogger) //todo 文件忽略列表
-	codegraphProcessor := service.NewCodegraphProcessor(indexer, eventRepo, codegraphStateRepo, appLogger)
+	codegraphProcessor := service.NewCodegraphProcessor(indexer, workspaceRepo, eventRepo, codegraphStateRepo, appLogger)
 
 	// Initialize job layer
 	fileScanJob := job.NewFileScanJob(fileScanService, appLogger, 5*time.Minute)

@@ -123,6 +123,8 @@ func (m *SQLiteManager) createWorkspacesTable() string {
         file_num INTEGER NOT NULL DEFAULT 0,
         embedding_file_num INTEGER NOT NULL DEFAULT 0,
         embedding_ts INTEGER NOT NULL DEFAULT 0,
+		embedding_message VARCHAR(255) NOT NULL DEFAULT '',
+		embedding_failed_file_paths TEXT NOT NULL DEFAULT '',
         codegraph_file_num INTEGER NOT NULL DEFAULT 0,
         codegraph_ts INTEGER NOT NULL DEFAULT 0,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -145,8 +147,9 @@ func (m *SQLiteManager) createEventsTable() string {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         workspace_path VARCHAR(500) NOT NULL,
         event_type VARCHAR(100) NOT NULL,
-        source_file_path VARCHAR(500),
-        target_file_path VARCHAR(500),
+        source_file_path VARCHAR(500) NOT NULL DEFAULT '',
+        target_file_path VARCHAR(500) NOT NULL DEFAULT '',
+		sync_id VARCHAR(100) NOT NULL DEFAULT '',
 		embedding_status TINYINT NOT NULL DEFAULT 0,
 		codegraph_status TINYINT NOT NULL DEFAULT 0,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -155,6 +158,7 @@ func (m *SQLiteManager) createEventsTable() string {
     
     CREATE INDEX IF NOT EXISTS idx_events_workspace_path ON events(workspace_path);
     CREATE INDEX IF NOT EXISTS idx_events_event_type ON events(event_type);
+	CREATE INDEX IF NOT EXISTS idx_events_sync_id ON events(sync_id);
     CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
 	CREATE INDEX IF NOT EXISTS idx_events_updated_at ON events(updated_at);
     CREATE INDEX IF NOT EXISTS idx_events_workspace_type ON events(workspace_path, event_type);

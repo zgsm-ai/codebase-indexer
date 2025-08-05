@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -372,5 +373,103 @@ func TestEventRepositoryErrorCases(t *testing.T) {
 		events, err := eventRepo.GetRecentEvents("/nonexistent/path", 10)
 		require.NoError(t, err)
 		assert.Equal(t, 0, len(events))
+	})
+}
+
+func TestEventRepository_GetEventsByWorkspaceForDeduplication(t *testing.T) {
+	dbManager, cleanup := setupTestEventDB(t)
+	defer cleanup()
+
+	// 创建测试日志记录器
+	logger := &mocks.MockLogger{}
+
+	// 创建事件Repository
+	eventRepo := NewEventRepository(dbManager, logger)
+
+	t.Run("NormalCase", func(t *testing.T) {
+		// 创建多个事件，包含相同路径的不同事件（测试是否只返回最新的）
+		workspacePath := "/path/to/workspace-dedup"
+
+		// 创建第一批事件
+		firstEvent := &model.Event{
+			WorkspacePath:  workspacePath,
+			EventType:      "file_created",
+			SourceFilePath: "/path/to/file1",
+			TargetFilePath: "/path/to/file1",
+			CreatedAt:      time.Now().Add(-2 * time.Hour),
+			UpdatedAt:      time.Now().Add(-2 * time.Hour),
+		}
+		err := eventRepo.CreateEvent(firstEvent)
+		require.NoError(t, err)
+
+		// 创建第二批事件，包含与第一批相同路径的事件
+		secondEvent := &model.Event{
+			WorkspacePath:  workspacePath,
+			EventType:      "file_modified",
+			SourceFilePath: "/path/to/file1", // 相同路径
+			TargetFilePath: "/path/to/file1",
+			CreatedAt:      time.Now().Add(-1 * time.Hour),
+			UpdatedAt:      time.Now().Add(-1 * time.Hour),
+		}
+		err = eventRepo.CreateEvent(secondEvent)
+		require.NoError(t, err)
+
+		// 创建第三批事件，包含新路径的事件
+		thirdEvent := &model.Event{
+			WorkspacePath:  workspacePath,
+			EventType:      "file_created",
+			SourceFilePath: "/path/to/file2", // 新路径
+			TargetFilePath: "/path/to/file2",
+			CreatedAt:      time.Now(),
+			UpdatedAt:      time.Now(),
+		}
+		err = eventRepo.CreateEvent(thirdEvent)
+		require.NoError(t, err)
+
+		// 调用去重方法
+		events, err := eventRepo.GetEventsByWorkspaceForDeduplication(workspacePath)
+		require.NoError(t, err)
+
+		// 验证返回的事件数
+		// 应该返回所有事件，而不是去重后的，因为去重是在内存中进行的
+		assert.Equal(t, 3, len(events))
+
+		// 验证所有事件都属于指定工作区
+		for _, event := range events {
+			assert.Equal(t, workspacePath, event.WorkspacePath)
+		}
+	})
+
+	t.Run("EmptyWorkspace", func(t *testing.T) {
+		// 获取不存在工作区的事件
+		events, err := eventRepo.GetEventsByWorkspaceForDeduplication("/nonexistent/workspace")
+		require.NoError(t, err)
+		assert.Equal(t, 0, len(events))
+	})
+
+	t.Run("LargeDataset", func(t *testing.T) {
+		// 测试大数据集情况，创建超过批次大小的事件
+		workspacePath := "/path/to/workspace-large"
+
+		// 创建1200个事件（超过批次大小1000）
+		for i := 0; i < 1200; i++ {
+			event := &model.Event{
+				WorkspacePath:  workspacePath,
+				EventType:      "file_created",
+				SourceFilePath: fmt.Sprintf("/path/to/file%d", i),
+				TargetFilePath: fmt.Sprintf("/path/to/file%d", i),
+				CreatedAt:      time.Now(),
+				UpdatedAt:      time.Now(),
+			}
+			err := eventRepo.CreateEvent(event)
+			require.NoError(t, err)
+		}
+
+		// 调用去重方法
+		events, err := eventRepo.GetEventsByWorkspaceForDeduplication(workspacePath)
+		require.NoError(t, err)
+
+		// 验证返回的事件数
+		assert.Equal(t, 1200, len(events))
 	})
 }

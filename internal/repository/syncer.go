@@ -206,6 +206,7 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq dto.UploadReq) error {
 			"clientId":     uploadReq.ClientId,
 			"codebasePath": uploadReq.CodebasePath,
 			"codebaseName": uploadReq.CodebaseName,
+			"uploadToken":  uploadReq.UploadToken,
 		},
 	}
 
@@ -218,6 +219,9 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq dto.UploadReq) error {
 		URL:         url,
 		Timeout:     timeout,
 		ContentType: "multipart/form-data",
+		Headers: map[string]string{
+			"X-Request-ID": uploadReq.RequestId,
+		},
 	}
 
 	// 使用自定义执行方法处理multipart请求

@@ -328,7 +328,7 @@ func (s *Scheduler) PerformSyncForCodebaseWithFilePaths(config *config.CodebaseC
 // ProcessFileChanges Process file changes and encapsulate upload logic
 func (s *Scheduler) ProcessFileChanges(config *config.CodebaseConfig, changes []*utils.FileStatus) error {
 	// Create zip with all changed files (new and modified)
-	zipPath, err := s.createChangesZip(config, changes)
+	zipPath, err := s.CreateChangesZip(config, changes)
 	if err != nil {
 		return fmt.Errorf("failed to create changes zip: %v", err)
 	}
@@ -339,7 +339,7 @@ func (s *Scheduler) ProcessFileChanges(config *config.CodebaseConfig, changes []
 		CodebasePath: config.CodebasePath,
 		CodebaseName: config.CodebaseName,
 	}
-	err = s.uploadChangesZip(zipPath, uploadReq)
+	err = s.UploadChangesZip(zipPath, uploadReq)
 	if err != nil {
 		return fmt.Errorf("failed to upload changes zip: %v", err)
 	}
@@ -355,8 +355,8 @@ type SyncMetadata struct {
 	Timestamp    int64             `json:"timestamp"`
 }
 
-// createChangesZip Create zip file containing file changes and metadata
-func (s *Scheduler) createChangesZip(config *config.CodebaseConfig, changes []*utils.FileStatus) (string, error) {
+// CreateChangesZip Create zip file containing file changes and metadata
+func (s *Scheduler) CreateChangesZip(config *config.CodebaseConfig, changes []*utils.FileStatus) (string, error) {
 	zipDir := filepath.Join(utils.UploadTmpDir, "zip")
 	if err := os.MkdirAll(zipDir, 0755); err != nil {
 		return "", err
@@ -427,7 +427,7 @@ func (s *Scheduler) createChangesZip(config *config.CodebaseConfig, changes []*u
 	return zipPath, nil
 }
 
-func (s *Scheduler) uploadChangesZip(zipPath string, uploadReq dto.UploadReq) error {
+func (s *Scheduler) UploadChangesZip(zipPath string, uploadReq dto.UploadReq) error {
 	maxRetries := s.schedulerConfig.MaxRetries
 	retryDelay := time.Duration(s.schedulerConfig.RetryIntervalSeconds) * time.Second
 
@@ -517,4 +517,72 @@ func (s *Scheduler) SyncForCodebases(ctx context.Context, codebaseConfig []*conf
 
 	s.logger.Info("sync for codebases completed, total time: %v", time.Since(startTime))
 	return nil
+}
+
+// CreateSingleFileZip 创建单文件ZIP文件
+func (s *Scheduler) CreateSingleFileZip(config *config.CodebaseConfig, fileStatus *utils.FileStatus) (string, error) {
+	zipDir := filepath.Join(utils.UploadTmpDir, "zip")
+	if err := os.MkdirAll(zipDir, 0755); err != nil {
+		return "", err
+	}
+
+	zipPath := filepath.Join(zipDir, config.CodebaseId+"-"+time.Now().Format("20060102150405")+".zip")
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		return "", err
+	}
+
+	// 确保清理临时ZIP文件
+	cleanup := func() {
+		if _, statErr := os.Stat(zipPath); statErr == nil {
+			_ = os.Remove(zipPath)
+			s.logger.Info("temp zip file deleted successfully: %s", zipPath)
+		}
+	}
+	defer cleanup()
+	defer zipFile.Close()
+
+	zipWriter := zip.NewWriter(zipFile)
+	defer zipWriter.Close()
+
+	// 创建SyncMetadata
+	metadata := &SyncMetadata{
+		ClientId:     config.ClientID,
+		CodebaseName: config.CodebaseName,
+		CodebasePath: config.CodebasePath,
+		FileList:     make(map[string]string),
+		Timestamp:    time.Now().Unix(),
+	}
+
+	filePath := fileStatus.Path
+	if runtime.GOOS == "windows" {
+		filePath = filepath.ToSlash(filePath)
+	}
+	metadata.FileList[filePath] = fileStatus.Status
+
+	// 只添加修改的文件到ZIP
+	if fileStatus.Status == utils.FILE_STATUS_MODIFIED {
+		if err := utils.AddFileToZip(zipWriter, fileStatus.Path, config.CodebasePath); err != nil {
+			s.logger.Warn("failed to add file to zip: %s, error: %v", fileStatus.Path, err)
+		}
+	}
+
+	// 添加元数据文件到ZIP
+	metadataJson, err := json.Marshal(metadata)
+	if err != nil {
+		return "", err
+	}
+
+	metadataFilePath := ".shenma_sync/" + time.Now().Format("20060102150405")
+	metadataWriter, err := zipWriter.Create(metadataFilePath)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = metadataWriter.Write(metadataJson)
+	if err != nil {
+		return "", err
+	}
+
+	return zipPath, nil
 }

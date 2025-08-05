@@ -27,6 +27,8 @@ type UploadReq struct {
 	ClientId     string `json:"clientId"`
 	CodebasePath string `json:"codebasePath"`
 	CodebaseName string `json:"codebaseName"`
+	RequestId    string `json:"requestId"`
+	UploadToken  string `json:"uploadToken"`
 }
 
 // UploadTokenReq 获取上传令牌请求

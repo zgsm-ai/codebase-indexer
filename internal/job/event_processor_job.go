@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,30 +12,57 @@ import (
 
 // EventProcessorJob 事件处理任务
 type EventProcessorJob struct {
-	processors []service.EventProcessService
-	logger     logger.Logger
-	ctx        context.Context
-	cancel     context.CancelFunc
-	wg         sync.WaitGroup
+	embedding service.EmbeddingProcessService
+	codegraph service.CodegraphProcessService
+	logger    logger.Logger
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
 }
 
 // NewEventProcessorJob 创建事件处理任务
 func NewEventProcessorJob(
 	logger logger.Logger,
-	processors ...service.EventProcessService,
+	embedding service.EmbeddingProcessService,
+	codegraph service.CodegraphProcessService,
 ) *EventProcessorJob {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &EventProcessorJob{
-		processors: processors,
-		logger:     logger,
-		ctx:        ctx,
-		cancel:     cancel,
+		embedding: embedding,
+		codegraph: codegraph,
+		logger:    logger,
+		ctx:       ctx,
+		cancel:    cancel,
 	}
 }
 
 // Start 启动事件处理任务
 func (j *EventProcessorJob) Start() {
-	j.logger.Info("starting event processors job")
+	j.logger.Info("starting event embedding job")
+
+	j.wg.Add(1)
+	go func() {
+		defer j.wg.Done()
+
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-j.ctx.Done():
+				j.logger.Info("event embedding job stopped")
+				return
+			case <-ticker.C:
+				// 处理事件
+				err := j.embeddingProcessWorkspaces()
+				if err != nil {
+					j.logger.Error("failed to process workspaces events: %v", err)
+				}
+				// 短暂休眠避免CPU占用过高
+				time.Sleep(1 * time.Second)
+			}
+		}
+	}()
 
 	j.wg.Add(1)
 	go func() {
@@ -43,24 +71,15 @@ func (j *EventProcessorJob) Start() {
 		for {
 			select {
 			case <-j.ctx.Done():
-				j.logger.Info("event processors job stopped")
+				j.logger.Info("event codegraph job stopped")
 				return
 			default:
-				var wg sync.WaitGroup
-				for _, task := range j.processors {
-					go func(task service.EventProcessService) {
-						wg.Add(1)
-						defer wg.Done()
-						// 处理事件
-						err := task.ProcessEvents()
-						if err != nil {
-							j.logger.Error("failed to process events: %v", err)
-						}
-					}(task)
+				err := j.codegraphProcessWorkSpaces()
+				if err != nil {
+					j.logger.Error("failed to process codegraph events: %v", err)
 				}
-				wg.Wait()
 				// 短暂休眠避免CPU占用过高
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(1 * time.Second)
 			}
 		}
 	}()
@@ -68,8 +87,44 @@ func (j *EventProcessorJob) Start() {
 
 // Stop 停止事件处理任务
 func (j *EventProcessorJob) Stop() {
-	j.logger.Info("stopping event processors job...")
+	j.logger.Info("stopping event embedding job...")
 	j.cancel()
 	j.wg.Wait()
-	j.logger.Info("event processors job stopped")
+	j.logger.Info("event embedding job stopped")
+}
+
+func (j *EventProcessorJob) embeddingProcessWorkspaces() error {
+	// 获取活跃工作区
+	workspaces, err := j.embedding.ProcessActiveWorkspaces()
+	if err != nil {
+		return err
+	}
+
+	if len(workspaces) == 0 {
+		j.logger.Debug("no active workspaces found")
+		return nil
+	}
+
+	workspackePaths := make([]string, len(workspaces))
+	for i, workspace := range workspaces {
+		workspackePaths[i] = workspace.WorkspacePath
+	}
+
+	j.logger.Info("processing workspaces events: %s", strings.Join(workspackePaths, ", "))
+	return j.embedding.ProcessEmbeddingEvents(workspackePaths)
+}
+
+func (j *EventProcessorJob) codegraphProcessWorkSpaces() error {
+	// 获取活跃工作区
+	workspaces, err := j.embedding.ProcessActiveWorkspaces()
+	if err != nil {
+		return err
+	}
+
+	if len(workspaces) == 0 {
+		j.logger.Debug("no active workspaces found")
+		return nil
+	}
+
+	return j.codegraph.ProcessEvents()
 }

@@ -238,7 +238,7 @@ func TestCreateChangesZip(t *testing.T) {
 			},
 		}
 
-		path, err := s.createChangesZip(config, changes)
+		path, err := s.CreateChangesZip(config, changes)
 
 		assert.NoError(t, err)
 		assert.NotEmpty(t, path)
@@ -283,7 +283,7 @@ func TestUploadChangesZip(t *testing.T) {
 		mockHttpSync.On("UploadFile", mock.Anything, mock.Anything).
 			Return(nil)
 
-		err = s.uploadChangesZip(tempFile, uploadReq)
+		err = s.UploadChangesZip(tempFile, uploadReq)
 
 		assert.NoError(t, err)
 		mockLogger.AssertCalled(t, "Info", "zip file uploaded successfully", mock.Anything)

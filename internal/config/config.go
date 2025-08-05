@@ -8,18 +8,20 @@ type ConfigServer struct {
 }
 
 type ConfigSync struct {
-	IntervalMinutes      int      `json:"intervalMinutes"`
-	MaxFileSizeKB        int      `json:"maxFileSizeKB"`
-	MaxRetries           int      `json:"maxRetries"`
-	RetryDelaySeconds    int      `json:"retryDelaySeconds"`
-	FileIgnorePatterns   []string `json:"fileIgnorePatterns"`
-	FolderIgnorePatterns []string `json:"folderIgnorePatterns"`
+	IntervalMinutes         int      `json:"intervalMinutes"`
+	MaxFileSizeKB           int      `json:"maxFileSizeKB"`
+	MaxRetries              int      `json:"maxRetries"`
+	RetryDelaySeconds       int      `json:"retryDelaySeconds"`
+	FileIgnorePatterns      []string `json:"fileIgnorePatterns"`
+	FolderIgnorePatterns    []string `json:"folderIgnorePatterns"`
+	EmbeddingSuccessPercent float32  `json:"embeddingSuccessPercent"`
+	CodegraphSuccessPercent float32  `json:"codegraphSuccessPercent"`
 }
 
 // Pprof configuration
 type ConfigPprof struct {
-	Enabled  bool   `json:"enabled"`
-	Address  string `json:"address"`
+	Enabled bool   `json:"enabled"`
+	Address string `json:"address"`
 }
 
 // Client configuration file structure
@@ -77,18 +79,20 @@ var DefaultFolderIgnorePatterns = []string{
 }
 
 var DefaultConfigSync = ConfigSync{
-	IntervalMinutes:      5,                           // Default sync interval in minutes
-	MaxFileSizeKB:        50,                          // Default maximum file size in KB
-	MaxRetries:           3,                           // Default maximum retry count
-	RetryDelaySeconds:    3,                           // Default retry delay in seconds
-	FileIgnorePatterns:   DefaultFileIgnorePatterns,   // Default file ignore patterns
-	FolderIgnorePatterns: DefaultFolderIgnorePatterns, // Default folder ignore patterns
+	IntervalMinutes:         5,                           // Default sync interval in minutes
+	MaxFileSizeKB:           50,                          // Default maximum file size in KB
+	MaxRetries:              3,                           // Default maximum retry count
+	RetryDelaySeconds:       3,                           // Default retry delay in seconds
+	FileIgnorePatterns:      DefaultFileIgnorePatterns,   // Default file ignore patterns
+	FolderIgnorePatterns:    DefaultFolderIgnorePatterns, // Default folder ignore patterns
+	EmbeddingSuccessPercent: 80.0,                        // Default embedding success percent
+	CodegraphSuccessPercent: 90.0,                        // Default codegraph success percent
 }
 
 // Default pprof configuration
 var DefaultConfigPprof = ConfigPprof{
-	Enabled: false,                // Default pprof disabled
-	Address: "localhost:6060",     // Default pprof address
+	Enabled: false,            // Default pprof disabled
+	Address: "localhost:6060", // Default pprof address
 }
 
 // Default client configuration
