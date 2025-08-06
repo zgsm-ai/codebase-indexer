@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"crypto/md5"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"codebase-indexer/internal/config"
@@ -39,6 +41,9 @@ type ExtensionService interface {
 
 	// TriggerIndex 触发索引构建
 	TriggerIndex(ctx context.Context, workspacePath string) error
+
+	// GetIndexStatus 获取索引状态
+	GetIndexStatus(ctx context.Context, clientID, workspacePath string) (*dto.IndexStatusResponse, error)
 }
 
 // CheckIgnoreResult 检查结果
@@ -55,28 +60,31 @@ func NewExtensionService(
 	fileScanner repository.ScannerInterface,
 	workspaceRepo repository.WorkspaceRepository,
 	eventRepo repository.EventRepository,
+	codebaseEmbeddingRepo repository.EmbeddingFileRepository,
 	codebaseService CodebaseService,
 	logger logger.Logger,
 ) ExtensionService {
 	return &extensionService{
-		storage:         storage,
-		httpSync:        httpSync,
-		fileScanner:     fileScanner,
-		workspaceRepo:   workspaceRepo,
-		eventRepo:       eventRepo,
-		codebaseService: codebaseService,
-		logger:          logger,
+		storage:               storage,
+		httpSync:              httpSync,
+		fileScanner:           fileScanner,
+		workspaceRepo:         workspaceRepo,
+		eventRepo:             eventRepo,
+		codebaseEmbeddingRepo: codebaseEmbeddingRepo,
+		codebaseService:       codebaseService,
+		logger:                logger,
 	}
 }
 
 type extensionService struct {
-	storage         repository.StorageInterface
-	httpSync        repository.SyncInterface
-	fileScanner     repository.ScannerInterface
-	workspaceRepo   repository.WorkspaceRepository
-	eventRepo       repository.EventRepository
-	codebaseService CodebaseService
-	logger          logger.Logger
+	storage               repository.StorageInterface
+	httpSync              repository.SyncInterface
+	fileScanner           repository.ScannerInterface
+	workspaceRepo         repository.WorkspaceRepository
+	eventRepo             repository.EventRepository
+	codebaseEmbeddingRepo repository.EmbeddingFileRepository
+	codebaseService       CodebaseService
+	logger                logger.Logger
 }
 
 // RegisterCodebase 注册代码库
@@ -344,12 +352,12 @@ func (s *extensionService) SwitchIndex(ctx context.Context, workspacePath, switc
 	}
 
 	if workspace.Active == active {
-		return fmt.Errorf("workspace index is already %s", switchStatus)
+		s.logger.Info("workspace %s is already %s", workspacePath, switchStatus)
+		return nil
 	}
 
 	// 更新工作空间状态
 	updateWorkspace := &model.Workspace{
-		ID:            workspace.ID,
 		WorkspacePath: workspace.WorkspacePath,
 		Active:        active,
 	}
@@ -368,12 +376,31 @@ func (s *extensionService) PublishEvents(ctx context.Context, workspacePath stri
 	successCount := 0
 
 	// 处理每个事件
+	nowTime := time.Now()
 	for _, event := range events {
-		// 解析事件时间
-		eventTime, err := time.Parse("2006-01-02 15:04:05", event.EventTime)
+		// 查询是否存在相同workspace和sourcePath的event记录
+		existingEvent, err := s.eventRepo.GetLatestEventByWorkspaceAndSourcePath(workspacePath, event.SourcePath)
 		if err != nil {
-			s.logger.Warn("failed to parse event time %s: %v", event.EventTime, err)
-			eventTime = time.Now() // 使用当前时间作为默认值
+			s.logger.Error("failed to get existing events: %v", err)
+		} else {
+			// 检查是否存在相同workspace和sourcePath的记录，且embeddingStatus和codegraphStatus都为init
+			if existingEvent != nil &&
+				existingEvent.EmbeddingStatus == model.EmbeddingStatusInit &&
+				existingEvent.CodegraphStatus == model.CodegraphStatusInit {
+
+				// 修改eventType为请求参数中的eventType
+				updateEvent := &model.Event{ID: existingEvent.ID, EventType: event.EventType}
+
+				// 更新事件记录
+				if err := s.eventRepo.UpdateEvent(updateEvent); err != nil {
+					s.logger.Error("failed to update event: %v", err)
+				} else {
+					s.logger.Debug("updated event: type=%s, source=%s, target=%s",
+						event.EventType, event.SourcePath, event.TargetPath)
+					successCount++
+					continue // 跳过创建新事件
+				}
+			}
 		}
 
 		// 创建事件模型
@@ -385,8 +412,8 @@ func (s *extensionService) PublishEvents(ctx context.Context, workspacePath stri
 			SyncId:          "",                        // 暂时为空，后续可以生成
 			EmbeddingStatus: model.EmbeddingStatusInit, // 初始状态
 			CodegraphStatus: model.CodegraphStatusInit, // 初始状态
-			CreatedAt:       eventTime,
-			UpdatedAt:       eventTime,
+			CreatedAt:       nowTime,
+			UpdatedAt:       nowTime,
 		}
 
 		// 保存事件到数据库
@@ -428,11 +455,77 @@ func (s *extensionService) PublishEvents(ctx context.Context, workspacePath stri
 					s.logger.Info("created new workspace: %s", workspacePath)
 				}
 			}
+			err = s.createCodebaseConfig(workspacePath)
+			if err != nil {
+				s.logger.Error("failed to create codebase config: %v", err)
+			}
+			err = s.createCodebaseEmbeddingConfig(workspacePath)
+			if err != nil {
+				s.logger.Error("failed to create codebase embedding config: %v", err)
+			}
 			break // 只需要处理一个打开工作区事件
 		}
 	}
 
 	return successCount, nil
+}
+
+func (s *extensionService) createCodebaseConfig(workspacePath string) error {
+	workspaceName := filepath.Base(workspacePath)
+	codebaseID := s.codebaseService.GenerateCodebaseID(workspaceName, workspacePath)
+
+	codebaseConfig, err := s.storage.GetCodebaseConfig(codebaseID)
+	if err != nil {
+		// 如果配置不存在，创建新的配置
+		codebaseConfig = &config.CodebaseConfig{
+			ClientID:     "clientID", // TODO: 获取客户端ID
+			CodebaseId:   codebaseID,
+			CodebaseName: workspaceName,
+			CodebasePath: workspacePath,
+			HashTree:     make(map[string]string),
+			LastSync:     time.Time{},
+			RegisterTime: time.Now(),
+		}
+	} else {
+		codebaseConfig.RegisterTime = time.Now()
+	}
+
+	// 保存到存储
+	if err := s.storage.SaveCodebaseConfig(codebaseConfig); err != nil {
+		s.logger.Error("failed to save codebase config for %s: %v", workspacePath, err)
+		return fmt.Errorf("failed to save codebase config: %w", err)
+	}
+
+	s.logger.Info("created codebase config for %s (%s)", workspaceName, codebaseID)
+	return nil
+}
+
+func (s *extensionService) createCodebaseEmbeddingConfig(workspacePath string) error {
+	workspaceName := filepath.Base(workspacePath)
+	codebaseID := fmt.Sprintf("%s_%x_embedding", workspaceName, md5.Sum([]byte(workspacePath)))
+
+	_, err := s.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseID)
+	if err == nil {
+		s.logger.Info("codebase embedding config for %s (%s) already exists", workspaceName, codebaseID)
+		return nil
+	}
+
+	codebaseEmbeddingConfig := &config.CodebaseEmbeddingConfig{
+		ClientID:     "clientID", // TODO: 获取客户端ID
+		CodebaseId:   codebaseID,
+		CodebaseName: workspaceName,
+		CodebasePath: workspacePath,
+		HashTree:     make(map[string]string),
+	}
+
+	// 保存到存储
+	if err := s.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig); err != nil {
+		s.logger.Error("failed to save codebase embedding config for %s: %v", workspacePath, err)
+		return fmt.Errorf("failed to save codebase embedding config: %w", err)
+	}
+
+	s.logger.Info("created codebase embedding config for %s (%s)", workspaceName, codebaseID)
+	return nil
 }
 
 // TriggerIndex 触发索引构建
@@ -500,4 +593,200 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath strin
 
 	s.logger.Info("successfully triggered index build for workspace: %s", workspacePath)
 	return nil
+}
+
+// GetIndexStatus 获取索引状态
+func (s *extensionService) GetIndexStatus(ctx context.Context, clientID, workspacePath string) (*dto.IndexStatusResponse, error) {
+	s.logger.Info("getting index status for client %s, workspace: %s", clientID, workspacePath)
+
+	// 获取工作区信息
+	workspace, err := s.workspaceRepo.GetWorkspaceByPath(workspacePath)
+	if err != nil {
+		s.logger.Error("failed to get workspace %s: %v", workspacePath, err)
+		return nil, fmt.Errorf("failed to get workspace: %w", err)
+	}
+
+	data := dto.IndexStatusData{}
+
+	// 判断工作区是否激活
+	if workspace.Active != "true" {
+		// 如果工作区未激活，状态为 pending
+		data.Embedding = dto.IndexStatus{
+			Status:       "pending",
+			Process:      0,
+			TotalFiles:   workspace.FileNum,
+			TotalSucceed: 0,
+			TotalFailed:  0,
+			ProcessTs:    0,
+		}
+		data.Codegraph = dto.IndexStatus{
+			Status:       "pending",
+			Process:      0,
+			TotalFiles:   workspace.FileNum,
+			TotalSucceed: 0,
+			TotalFailed:  0,
+			ProcessTs:    0,
+		}
+	} else {
+		// 获取工作区的所有事件
+		events, err := s.eventRepo.GetEventsByWorkspaceForDeduplication(workspace.WorkspacePath)
+		if err != nil {
+			s.logger.Warn("failed to get events for workspace %s: %v", workspace.WorkspacePath, err)
+		}
+		// 如果工作区已激活，根据事件记录计算状态
+		data.Embedding = s.calculateEmbeddingStatus(workspace, events)
+		data.Codegraph = s.calculateCodegraphStatus(workspace, events)
+	}
+
+	// 构建响应
+	response := &dto.IndexStatusResponse{
+		Code:    0,
+		Message: "ok",
+		Data:    data,
+	}
+
+	s.logger.Info("successfully retrieved index status for workspace: %s", workspacePath)
+	return response, nil
+}
+
+// calculateEmbeddingStatus 计算 embedding 状态
+func (s *extensionService) calculateEmbeddingStatus(workspace *model.Workspace, events []*model.Event) dto.IndexStatus {
+
+	status := dto.IndexStatus{
+		TotalFiles:   workspace.FileNum,
+		TotalSucceed: workspace.EmbeddingFileNum,
+		ProcessTs:    workspace.EmbeddingTs,
+	}
+
+	// 计算进度
+	if workspace.FileNum > 0 {
+		status.Process = float32(workspace.EmbeddingFileNum) / float32(workspace.FileNum) * 100
+		if status.Process > 100 { // 进度不能超过100%
+			status.Process = 100
+		}
+	} else {
+		status.Process = 0
+	}
+
+	// 计算失败文件数
+	failedFilePaths := strings.Split(workspace.EmbeddingFailedFilePaths, ",")
+	totalFailed := 0
+	if len(failedFilePaths) > 0 {
+		totalFailed = len(failedFilePaths)
+	}
+
+	// 统计各状态的 embedding 事件数
+	initCount := 0
+	uploadingCount := 0
+	buildingCount := 0
+	uploadFailedCount := 0
+	buildFailedCount := 0
+	successCount := 0
+
+	for _, event := range events {
+		switch event.EmbeddingStatus {
+		case model.EmbeddingStatusInit:
+			initCount++
+		case model.EmbeddingStatusUploading:
+			uploadingCount++
+		case model.EmbeddingStatusBuilding:
+			buildingCount++
+		case model.EmbeddingStatusUploadFailed:
+			uploadFailedCount++
+		case model.EmbeddingStatusBuildFailed:
+			buildFailedCount++
+		case model.EmbeddingStatusSuccess:
+			successCount++
+		}
+	}
+
+	// 判断状态
+	// 存在初始或进行中状态事件时，状态为 running
+	if initCount > 0 || uploadingCount > 0 || buildingCount > 0 {
+		status.Status = dto.ProcessStatusRunning
+	} else if uploadFailedCount > 0 || buildFailedCount > 0 {
+		// 存在失败状态时，判断比较 process 和配置中的百分比阈值
+		embeddingSuccessPercent := config.GetClientConfig().Sync.EmbeddingSuccessPercent
+		if status.Process < embeddingSuccessPercent {
+			status.Status = dto.ProcessStatusFailed
+			status.TotalFailed = totalFailed
+			status.FailedFiles = failedFilePaths
+			status.FailedReason = workspace.EmbeddingMessage
+		} else {
+			status.Status = dto.ProcessStatusSuccess
+		}
+	} else {
+		// 其他情况返回 success
+		status.Status = dto.ProcessStatusSuccess
+	}
+
+	return status
+}
+
+// calculateCodegraphStatus 计算 codegraph 状态
+func (s *extensionService) calculateCodegraphStatus(workspace *model.Workspace, events []*model.Event) dto.IndexStatus {
+
+	status := dto.IndexStatus{
+		TotalFiles:   workspace.FileNum,
+		TotalSucceed: workspace.CodegraphFileNum,
+		ProcessTs:    workspace.CodegraphTs,
+	}
+
+	// 计算进度
+	if workspace.FileNum > 0 {
+		status.Process = float32(workspace.CodegraphFileNum) / float32(workspace.FileNum) * 100
+		if status.Process > 100 { // 进度不能超过100%
+			status.Process = 100
+		}
+	} else {
+		status.Process = 0
+	}
+
+	// 计算失败文件数
+	failedFilePaths := strings.Split(workspace.EmbeddingFailedFilePaths, ",")
+	totalFailed := 0
+	if len(failedFilePaths) > 0 {
+		totalFailed = len(failedFilePaths)
+	}
+
+	// 统计各状态的 codegraph 事件数
+	initCount := 0
+	buildingCount := 0
+	failedCount := 0
+	successCount := 0
+
+	for _, event := range events {
+		switch event.CodegraphStatus {
+		case model.CodegraphStatusInit:
+			initCount++
+		case model.CodegraphStatusBuilding:
+			buildingCount++
+		case model.CodegraphStatusFailed:
+			failedCount++
+		case model.CodegraphStatusSuccess:
+			successCount++
+		}
+	}
+
+	// 判断状态
+	// 存在初始或进行中状态事件时，状态为 running
+	if initCount > 0 || buildingCount > 0 {
+		status.Status = dto.ProcessStatusRunning
+	} else if failedCount > 0 {
+		// 存在失败状态时，判断比较 process 和配置中的百分比阈值
+		codegraphSuccessPercent := config.GetClientConfig().Sync.CodegraphSuccessPercent
+		if status.Process < codegraphSuccessPercent {
+			status.Status = dto.ProcessStatusFailed
+			status.TotalFailed = totalFailed
+			status.FailedFiles = failedFilePaths
+			status.FailedReason = workspace.EmbeddingMessage
+		} else {
+			status.Status = dto.ProcessStatusSuccess
+		}
+	} else {
+		// 其他情况返回 success
+		status.Status = dto.ProcessStatusSuccess
+	}
+
+	return status
 }

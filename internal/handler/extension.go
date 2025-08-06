@@ -4,7 +4,6 @@ package handler
 import (
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -445,37 +444,15 @@ func (h *ExtensionHandler) GetIndexStatus(c *gin.Context) {
 
 	h.logger.Info("index status query request: ClientId=%s, Workspace=%s", query.ClientId, query.Workspace)
 
-	// TODO: 调用service层处理业务逻辑 - 暂时返回模拟数据
-	response := dto.IndexStatusResponse{
-		Code:    0,
-		Message: "ok",
-	}
-	response.Data.Projects = []dto.ProjectIndexStatus{
-		{
-			Name: "zgsm",
-			Embedding: dto.IndexStatus{
-				Status:       "running",
-				Process:      80.0,
-				TotalFiles:   100,
-				TotalSucceed: 80,
-				TotalFailed:  0,
-				TotalChunks:  1000,
-				FailedReason: "",
-				FailedFiles:  []string{},
-				ProcessTs:    time.Now().Unix(),
-			},
-			Codegraph: dto.IndexStatus{
-				Status:       "success",
-				Process:      90.0,
-				TotalFiles:   100,
-				TotalSucceed: 90,
-				TotalFailed:  0,
-				TotalChunks:  1000,
-				FailedReason: "",
-				FailedFiles:  []string{},
-				ProcessTs:    time.Now().Unix(),
-			},
-		},
+	// 调用service层处理业务逻辑
+	response, err := h.extensionService.GetIndexStatus(c.Request.Context(), query.ClientId, query.Workspace)
+	if err != nil {
+		h.logger.Error("failed to get index status: %v", err)
+		c.JSON(http.StatusInternalServerError, dto.IndexStatusResponse{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to get index status",
+		})
+		return
 	}
 
 	c.JSON(http.StatusOK, response)

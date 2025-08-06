@@ -7,3 +7,11 @@ const (
 	EmbeddingComplete      = "complete"
 	EmbeddingFailed        = "failed"
 )
+
+// 索引构建状态常量
+const (
+	ProcessStatusPending = "pending"
+	ProcessStatusRunning = "running"
+	ProcessStatusSuccess = "success"
+	ProcessStatusFailed  = "failed"
+)

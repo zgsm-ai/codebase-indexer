@@ -89,12 +89,12 @@ func main() {
 	appLogger.Info("OS: %s, Arch: %s, App: %s, Version: %s, Starting...", osName, archName, *appName, version)
 
 	// Initialize infrastructure layer
-	storageManager, err := repository.NewStorageManager(utils.CacheDir, appLogger)
+	storageManager, err := repository.NewStorageManager(utils.WorkspaceDir, appLogger)
 	if err != nil {
-		appLogger.Fatal("failed to initialize codegraphStore manager: %v", err)
+		appLogger.Fatal("failed to initialize workspace manager: %v", err)
 		return
 	}
-	codebaseEmbeddingRepo, err := repository.NewEmbeddingFileRepo(utils.CodebaseDir, appLogger)
+	codebaseEmbeddingRepo, err := repository.NewEmbeddingFileRepo(utils.WorkspaceEmbeddingDir, appLogger)
 	if err != nil {
 		appLogger.Fatal("Failed to create codebase embedding repository: %v", err)
 		return
@@ -121,7 +121,7 @@ func main() {
 	// Initialize service layer
 	codebaseService := service.NewCodebaseService(appLogger)
 	schedulerService := service.NewScheduler(syncRepo, scanRepo, storageManager, appLogger)
-	extensionService := service.NewExtensionService(storageManager, syncRepo, scanRepo, workspaceRepo, eventRepo, codebaseService, appLogger)
+	extensionService := service.NewExtensionService(storageManager, syncRepo, scanRepo, workspaceRepo, eventRepo, codebaseEmbeddingRepo, codebaseService, appLogger)
 	fileScanService := service.NewFileScanService(workspaceRepo, eventRepo, scanRepo, storageManager, appLogger)
 	uploadService := service.NewUploadService(schedulerService, syncRepo, appLogger, syncServiceConfig)
 	embeddingProcessService := service.NewEmbeddingProcessService(workspaceRepo, eventRepo, codebaseEmbeddingRepo, uploadService, appLogger)
@@ -269,12 +269,19 @@ func initDir(appName string) error {
 	}
 	fmt.Printf("cache db directory: %s\n", cacheDbPath)
 
-	// Initialize cache codebase directory
-	cacheCodebasePath, err := utils.GetCacheCodebaseDir(cachePath)
+	// Initialize cache workspace directory
+	cacheWorkspacePath, err := utils.GetCacheWorkspaceDir(cachePath)
 	if err != nil {
-		return fmt.Errorf("failed to get cache codebase directory: %v", err)
+		return fmt.Errorf("failed to get cache workspace directory: %v", err)
 	}
-	fmt.Printf("cache codebase directory: %s\n", cacheCodebasePath)
+	fmt.Printf("cache workspace directory: %s\n", cacheWorkspacePath)
+
+	// Initialize cache workspace directory
+	cacheWorkspaceEmbeddingPath, err := utils.GetCacheWorkspaceEmbeddingDir(cachePath)
+	if err != nil {
+		return fmt.Errorf("failed to get cache workspace embedding directory: %v", err)
+	}
+	fmt.Printf("cache workspace embedding directory: %s\n", cacheWorkspaceEmbeddingPath)
 
 	return nil
 }

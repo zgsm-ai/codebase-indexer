@@ -296,17 +296,35 @@ func (s *Scheduler) PerformSyncForCodebaseWithFilePaths(config *config.CodebaseC
 
 	// Compare hash trees to find changes
 	changes := s.fileScanner.CalculateFileChangesWithoutDelete(localHashTree, serverHashTree)
-	if len(changes) == 0 {
+	totalChanges := len(changes)
+	if totalChanges == 0 {
 		s.logger.Info("no file changes detected, sync completed")
 		return nil
 	}
 
 	s.logger.Info("detected %d file changes", len(changes))
 
-	// Process all file changes
-	if err := s.ProcessFileChanges(config, changes); err != nil {
-		s.logger.Error("file changes processing failed: %v", err)
-		return fmt.Errorf("file changes processing failed: %v", err)
+	// Process file changes in batches of 20
+	const batchSize = 20
+	var lastErr error
+
+	for i := 0; i < totalChanges; i += batchSize {
+		end := i + batchSize
+		if end > totalChanges {
+			end = totalChanges
+		}
+
+		batch := changes[i:end]
+		s.logger.Info("processing batch %d/%d, changes %d-%d", (i/batchSize)+1, (totalChanges+batchSize-1)/batchSize, i+1, end)
+
+		if err := s.ProcessFileChanges(config, batch); err != nil {
+			s.logger.Error("file changes processing failed for batch %d-%d: %v", i+1, end, err)
+			lastErr = fmt.Errorf("file changes processing failed for batch %d-%d: %v", i+1, end, err)
+		}
+	}
+
+	if lastErr != nil {
+		return fmt.Errorf("file changes processing failed for codebase %s: %v", config.CodebaseId, lastErr)
 	}
 
 	// Update local hash tree and save configuration

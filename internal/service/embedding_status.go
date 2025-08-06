@@ -282,6 +282,20 @@ func (sc *embeddingStatusService) handleBuildCompletion(workspacePath string, ev
 		codebaseConfig.HashTree = make(map[string]string)
 	}
 	codebaseConfig.HashTree[filePath] = ""
+	// 保存 codebase embedding 配置
+	err = sc.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseConfig)
+	if err != nil {
+		sc.logger.Error("failed to save codebase embedding config for workspace %s: %v", workspacePath, err)
+		return fmt.Errorf("failed to save codebase embedding config: %w", err)
+	}
+
+	embeddingFileNum := len(codebaseConfig.HashTree)
+	updateWorkspace := model.Workspace{WorkspacePath: workspacePath, FileNum: embeddingFileNum}
+	err = sc.workspaceRepo.UpdateWorkspace(&updateWorkspace)
+	if err != nil {
+		sc.logger.Error("failed to update workspace: %v", err)
+		return fmt.Errorf("failed to update workspace: %w", err)
+	}
 
 	return nil
 }
