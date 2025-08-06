@@ -32,173 +32,213 @@ const (
 type ElementType string
 
 const (
-	ElementTypeNamespace           ElementType = "namespace"
-	ElementTypePackage             ElementType = "package"
-	ElementTypePackageName         ElementType = "package.name"
-	ElementTypeUndefined           ElementType = "undefined"
-	ElementTypeImport              ElementType = "import"
-	ElementTypeImportName          ElementType = "import.name"
-	ElementTypeImportAlias         ElementType = "import.alias"
-	ElementTypeImportPath          ElementType = "import.path"
-	ElementTypeImportSource        ElementType = "import.source"
-	ElementTypeClass               ElementType = "definition.class"
-	ElementTypeClassName           ElementType = "definition.class.name"
-	ElementTypeClassExtends        ElementType = "definition.class.extends"
-	ElementTypeClassExtendsName    ElementType = "definition.class.extends.name"
-	ElementTypeClassImplements     ElementType = "definition.class.implements"
-	ElementTypeClassModifiers      ElementType = "definition.class.modifiers"
-	ElementTypeInterface           ElementType = "definition.interface"
-	ElementTypeInterfaceName       ElementType = "definition.interface.name"
-	ElementTypeInterfaceType       ElementType = "definition.interface.type"
-	ElementTypeInterfaceExtends    ElementType = "definition.interface.extends"
-	ElementTypeInterfaceModifiers  ElementType = "definition.interface.modifiers"
-	ElementTypeStruct              ElementType = "definition.struct"
-	ElementTypeStructName          ElementType = "definition.struct.name"
-	ElementTypeStructExtends       ElementType = "definition.struct.extends"
-	ElementTypeStructType          ElementType = "definition.struct.type"
-	ElementTypeEnum                ElementType = "definition.enum"
-	ElementTypeEnumName            ElementType = "definition.enum.name"
-	ElementTypeEnumImplements      ElementType = "definition.enum.implements"
-	ElementTypeEnumModifiers       ElementType = "definition.enum.modifiers"
-	ElementTypeUnion               ElementType = "definition.union"
-	ElementTypeUnionName           ElementType = "definition.union.name"
-	ElementTypeTypedefName         ElementType = "definition.type.alias"
-	ElementTypeTypedefType         ElementType = "definition.type.original_type"
-	ElementTypeTypedef             ElementType = "definition.type"
-	ElementTypeTrait               ElementType = "definition.trait"
-	ElementTypeEnumConstant        ElementType = "definition.enum.constant"
-	ElementTypeEnumConstantName    ElementType = "definition.enum.constant.name"
-	ElementTypeEnumConstantValue   ElementType = "definition.enum.constant.value"
-	ElementTypeTypeAlias           ElementType = "definition.type_alias"
-	ElementTypeFunction            ElementType = "definition.function"
-	ElementTypeFunctionName        ElementType = "definition.function.name"
-	ElementTypeFunctionReturnType  ElementType = "definition.function.return_type"
-	ElementTypeFunctionParameters  ElementType = "definition.function.parameters"
-	ElementTypeMethodCall          ElementType = "call.method"
-	ElementTypeCallArguments       ElementType = "call.method.arguments"
-	ElementTypeCallOwner           ElementType = "call.method.owner"
-	ElementTypeCallName            ElementType = "call.method.name"
-	ElementTypeFunctionCall        ElementType = "call.function"
-	ElementTypeFunctionCallName    ElementType = "call.function.name"
-	ElementTypeFunctionOwner       ElementType = "call.function.owner"
-	ElementTypeFunctionArguments   ElementType = "call.function.arguments"
-	ElementTypeStructCall          ElementType = "call.struct"
-	ElementTypeStructCallType      ElementType = "call.struct.type"
-	ElementTypeFunctionDeclaration ElementType = "declaration.function"
-	ElementTypeMethod              ElementType = "definition.method"
-	ElementTypeMethodModifier      ElementType = "definition.method.modifier"
-	ElementTypeMethodReturnType    ElementType = "definition.method.return_type"
-	ElementTypeMethodName          ElementType = "definition.method.name"
-	ElementTypeMethodOwner         ElementType = "definition.method.owner"
-	ElementTypeMethodParameters    ElementType = "definition.method.parameters"
-	ElementTypeMethodReceiver      ElementType = "definition.method.receiver"
-	ElementTypeConstructor         ElementType = "definition.constructor"
-	ElementTypeDestructor          ElementType = "definition.destructor"
-	ElementTypeGlobalVariable      ElementType = "global_variable"
-	ElementTypeLocalVariable       ElementType = "local_variable"
-	ElementTypeLocalVariableName   ElementType = "local_variable.name"
-	ElementTypeLocalVariableType   ElementType = "local_variable.type"
-	ElementTypeLocalVariableValue  ElementType = "local_variable.value"
-	ElementTypeVariable            ElementType = "variable"
-	ElementTypeVariableName        ElementType = "variable.name"
-	ElementTypeVariableValue       ElementType = "variable.value"
-	ElementTypeVariableType        ElementType = "variable.type"
-	ElementTypeConstant            ElementType = "constant"
-	ElementTypeMacro               ElementType = "macro"
-	ElementTypeField               ElementType = "definition.field"
-	ElementTypeFieldName           ElementType = "definition.field.name"
-	ElementTypeFieldType           ElementType = "definition.field.type"
-	ElementTypeFieldValue          ElementType = "definition.field.value"
-	ElementTypeFieldModifier       ElementType = "definition.field.modifier"
-	ElementTypeParameter           ElementType = "definition.parameter"
-	ElementTypeComment             ElementType = "comment"
-	ElementTypeAnnotation          ElementType = "annotation"
-	ElementTypeReference           ElementType = "reference"
+	ElementTypeNamespace          ElementType = "namespace"
+	ElementTypeNamespaceName      ElementType = "namespace.name"
+	ElementTypePackage            ElementType = "package"
+	ElementTypePackageName        ElementType = "package.name"
+	ElementTypeUndefined          ElementType = "undefined"
+	ElementTypeImport             ElementType = "import"
+	ElementTypeImportName         ElementType = "import.name"
+	ElementTypeImportAlias        ElementType = "import.alias"
+	ElementTypeImportPath         ElementType = "import.path"
+	ElementTypeImportSource       ElementType = "import.source"
+	ElementTypeClass              ElementType = "definition.class"
+	ElementTypeClassName          ElementType = "definition.class.name"
+	ElementTypeClassExtends       ElementType = "definition.class.extends"
+	ElementTypeClassExtendsName   ElementType = "definition.class.extends.name"
+	ElementTypeClassImplements    ElementType = "definition.class.implements"
+	ElementTypeClassModifiers     ElementType = "definition.class.modifiers"
+	ElementTypeInterface          ElementType = "definition.interface"
+	ElementTypeInterfaceName      ElementType = "definition.interface.name"
+	ElementTypeInterfaceType      ElementType = "definition.interface.type"
+	ElementTypeInterfaceExtends   ElementType = "definition.interface.extends"
+	ElementTypeInterfaceModifiers ElementType = "definition.interface.modifiers"
+	ElementTypeStruct             ElementType = "definition.struct"
+	ElementTypeStructName         ElementType = "definition.struct.name"
+	ElementTypeStructExtends      ElementType = "definition.struct.extends"
+	ElementTypeStructType         ElementType = "definition.struct.type"
+	// 枚举类
+	ElementTypeEnum           ElementType = "definition.enum"
+	ElementTypeEnumName       ElementType = "definition.enum.name"
+	ElementTypeEnumImplements ElementType = "definition.enum.implements"
+	ElementTypeEnumModifiers  ElementType = "definition.enum.modifiers"
+	ElementTypeUnion          ElementType = "definition.union"
+	ElementTypeUnionName      ElementType = "definition.union.name"
+	ElementTypeTypedef        ElementType = "definition.typedef"
+	ElementTypeTypedefName    ElementType = "definition.typedef.name"
+	ElementTypeTypedefAlias   ElementType = "definition.typedef.alias"
+	ElementTypeTrait          ElementType = "definition.trait"
+	// 枚举的字段
+	ElementTypeEnumConstant             ElementType = "definition.enum.constant"
+	ElementTypeEnumConstantName         ElementType = "definition.enum.constant.name"
+	ElementTypeEnumConstantValue        ElementType = "definition.enum.constant.value"
+	ElementTypeTypeAlias                ElementType = "definition.type_alias"
+	ElementTypeTypeAliasName            ElementType = "definition.type_alias.name"
+	ElementTypeTypeAliasAlias           ElementType = "definition.type_alias.alias"
+	ElementTypeFunction                 ElementType = "definition.function"
+	ElementTypeFunctionName             ElementType = "definition.function.name"
+	ElementTypeFunctionReturnType       ElementType = "definition.function.return_type"
+	ElementTypeFunctionParameters       ElementType = "definition.function.parameters"
+	ElementTypeCastExpression           ElementType = "call.cast"
+	ElementTypeCastExpressionType       ElementType = "call.cast.type"
+	ElementTypeInstanceofExpression     ElementType = "call.instanceof"
+	ElementTypeInstanceofExpressionType ElementType = "call.instanceof.type"
+	ElementTypeNewExpression            ElementType = "call.new"
+	ElementTypeNewExpressionType        ElementType = "call.new.type"
+	ElementTypeNewExpressionOwner       ElementType = "call.new.owner"
+	ElementTypeNewExpressionArgs        ElementType = "call.new.args"
+	ElementTypeArrayCreation            ElementType = "call.new_array"
+	ElementTypeArrayCreationType        ElementType = "call.new_array.type"
+	ElementTypeClassLiteral             ElementType = "call.class_literal"
+	ElementTypeClassLiteralType         ElementType = "call.class_literal.type"
+	ElementTypeTemplateCall             ElementType = "call.template"
+	ElementTypeTemplateCallName         ElementType = "call.template.name"
+	ElementTypeTemplateCallArgs         ElementType = "call.template.args"
+	ElementTypeMethodCall               ElementType = "call.method"
+	ElementTypeCallArguments            ElementType = "call.method.arguments"
+	ElementTypeCallOwner                ElementType = "call.method.owner"
+	ElementTypeCallName                 ElementType = "call.method.name"
+	ElementTypeCompoundLiteral          ElementType = "call.compound"
+	ElementTypeCompoundLiteralType      ElementType = "call.compound.type"
+	ElementTypeFunctionCall             ElementType = "call.function"
+	ElementTypeFunctionCallName         ElementType = "call.function.name"
+	ElementTypeFunctionOwner            ElementType = "call.function.owner"
+	ElementTypeFunctionArguments        ElementType = "call.function.arguments"
+	ElementTypeStructCall               ElementType = "call.struct"
+	ElementTypeFunctionDeclaration      ElementType = "declaration.function"
+	ElementTypeMethod                   ElementType = "definition.method"
+	ElementTypeMethodModifier           ElementType = "definition.method.modifier"
+	ElementTypeMethodReturnType         ElementType = "definition.method.return_type"
+	ElementTypeMethodName               ElementType = "definition.method.name"
+	ElementTypeMethodOwner              ElementType = "definition.method.owner"
+	ElementTypeMethodParameters         ElementType = "definition.method.parameters"
+	ElementTypeMethodReceiver           ElementType = "definition.method.receiver"
+	ElementTypeConstructor              ElementType = "definition.constructor"
+	ElementTypeDestructor               ElementType = "definition.destructor"
+	ElementTypeGlobalVariable           ElementType = "global_variable"
+	ElementTypeLocalVariable            ElementType = "local_variable"
+	ElementTypeLocalVariableName        ElementType = "local_variable.name"
+	ElementTypeLocalVariableType        ElementType = "local_variable.type"
+	ElementTypeLocalVariableValue       ElementType = "local_variable.value"
+	ElementTypeVariable                 ElementType = "variable"
+	ElementTypeVariableName             ElementType = "variable.name"
+	ElementTypeVariableValue            ElementType = "variable.value"
+	ElementTypeVariableType             ElementType = "variable.type"
+	ElementTypeConstant                 ElementType = "constant"
+	ElementTypeMacro                    ElementType = "macro"
+	ElementTypeField                    ElementType = "definition.field"
+	ElementTypeFieldName                ElementType = "definition.field.name"
+	ElementTypeFieldType                ElementType = "definition.field.type"
+	ElementTypeFieldValue               ElementType = "definition.field.value"
+	ElementTypeFieldModifier            ElementType = "definition.field.modifier"
+	ElementTypeParameter                ElementType = "definition.parameter"
+	ElementTypeComment                  ElementType = "comment"
+	ElementTypeAnnotation               ElementType = "annotation"
+	ElementTypeReference                ElementType = "reference"
 )
 
 // TypeMappings 类型映射表 - captureName -> ElementType（使用ElementType字符串值作为键）
 var TypeMappings = map[string]ElementType{
-	string(ElementTypeNamespace):           ElementTypeNamespace,
-	string(ElementTypePackage):             ElementTypePackage,
-	string(ElementTypePackageName):         ElementTypePackageName,
-	string(ElementTypeUndefined):           ElementTypeUndefined,
-	string(ElementTypeImport):              ElementTypeImport,
-	string(ElementTypeImportName):          ElementTypeImportName,
-	string(ElementTypeImportAlias):         ElementTypeImportAlias,
-	string(ElementTypeImportPath):          ElementTypeImportPath,
-	string(ElementTypeImportSource):        ElementTypeImportSource,
-	string(ElementTypeClass):               ElementTypeClass,
-	string(ElementTypeClassName):           ElementTypeClassName,
-	string(ElementTypeInterfaceType):       ElementTypeInterfaceType,
-	string(ElementTypeClassExtends):        ElementTypeClassExtends,
-	string(ElementTypeClassExtendsName):    ElementTypeClassExtendsName,
-	string(ElementTypeClassImplements):     ElementTypeClassImplements,
-	string(ElementTypeClassModifiers):      ElementTypeClassModifiers,
-	string(ElementTypeInterface):           ElementTypeInterface,
-	string(ElementTypeInterfaceName):       ElementTypeInterfaceName,
-	string(ElementTypeInterfaceExtends):    ElementTypeInterfaceExtends,
-	string(ElementTypeInterfaceModifiers):  ElementTypeInterfaceModifiers,
-	string(ElementTypeStruct):              ElementTypeStruct,
-	string(ElementTypeStructName):          ElementTypeStructName,
-	string(ElementTypeStructType):          ElementTypeStructType,
-	string(ElementTypeStructExtends):       ElementTypeStructExtends,
-	string(ElementTypeEnum):                ElementTypeEnum,
-	string(ElementTypeEnumName):            ElementTypeEnumName,
-	string(ElementTypeEnumImplements):      ElementTypeEnumImplements,
-	string(ElementTypeEnumModifiers):       ElementTypeEnumModifiers,
-	string(ElementTypeEnumConstant):        ElementTypeEnumConstant,
-	string(ElementTypeEnumConstantName):    ElementTypeEnumConstantName,
-	string(ElementTypeEnumConstantValue):   ElementTypeEnumConstantValue,
-	string(ElementTypeUnion):               ElementTypeUnion,
-	string(ElementTypeUnionName):           ElementTypeUnionName,
-	string(ElementTypeTypedefName):         ElementTypeTypedefName,
-	string(ElementTypeTypedefType):         ElementTypeTypedefType,
-	string(ElementTypeTypedef):             ElementTypeTypedef,
-	string(ElementTypeTrait):               ElementTypeTrait,
-	string(ElementTypeTypeAlias):           ElementTypeTypeAlias,
-	string(ElementTypeFunction):            ElementTypeFunction,
-	string(ElementTypeFunctionName):        ElementTypeFunctionName,
-	string(ElementTypeFunctionParameters):  ElementTypeFunctionParameters,
-	string(ElementTypeFunctionReturnType):  ElementTypeFunctionReturnType,
-	string(ElementTypeFunctionCall):        ElementTypeFunctionCall,
-	string(ElementTypeFunctionCallName):    ElementTypeFunctionCallName,
-	string(ElementTypeFunctionOwner):       ElementTypeFunctionOwner,
-	string(ElementTypeFunctionArguments):   ElementTypeFunctionArguments,
-	string(ElementTypeFunctionDeclaration): ElementTypeFunctionDeclaration,
-	string(ElementTypeMethod):              ElementTypeMethod,
-	string(ElementTypeMethodCall):          ElementTypeMethodCall,
-	string(ElementTypeMethodModifier):      ElementTypeMethodModifier,
-	string(ElementTypeMethodReturnType):    ElementTypeMethodReturnType,
-	string(ElementTypeMethodName):          ElementTypeMethodName,
-	string(ElementTypeMethodOwner):         ElementTypeMethodOwner,
-	string(ElementTypeMethodParameters):    ElementTypeMethodParameters,
-	string(ElementTypeMethodReceiver):      ElementTypeMethodReceiver,
-	string(ElementTypeCallArguments):       ElementTypeCallArguments,
-	string(ElementTypeCallOwner):           ElementTypeCallOwner,
-	string(ElementTypeCallName):            ElementTypeCallName,
-	string(ElementTypeConstructor):         ElementTypeConstructor,
-	string(ElementTypeDestructor):          ElementTypeDestructor,
-	string(ElementTypeGlobalVariable):      ElementTypeGlobalVariable,
-	string(ElementTypeLocalVariable):       ElementTypeLocalVariable,
-	string(ElementTypeLocalVariableName):   ElementTypeLocalVariableName,
-	string(ElementTypeLocalVariableType):   ElementTypeLocalVariableType,
-	string(ElementTypeLocalVariableValue):  ElementTypeLocalVariableValue,
-	string(ElementTypeVariable):            ElementTypeVariable,
-	string(ElementTypeVariableName):        ElementTypeVariableName,
-	string(ElementTypeVariableValue):       ElementTypeVariableValue,
-	string(ElementTypeVariableType):        ElementTypeVariableType,
-	string(ElementTypeConstant):            ElementTypeConstant,
-	string(ElementTypeMacro):               ElementTypeMacro,
-	string(ElementTypeField):               ElementTypeField,
-	string(ElementTypeFieldName):           ElementTypeFieldName,
-	string(ElementTypeFieldType):           ElementTypeFieldType,
-	string(ElementTypeFieldValue):          ElementTypeFieldValue,
-	string(ElementTypeFieldModifier):       ElementTypeFieldModifier,
-	string(ElementTypeParameter):           ElementTypeParameter,
-	string(ElementTypeComment):             ElementTypeComment,
-	string(ElementTypeAnnotation):          ElementTypeAnnotation,
-	string(ElementTypeStructCall):          ElementTypeStructCall,
-	string(ElementTypeStructCallType):      ElementTypeStructCallType,
+	string(ElementTypeNamespace):                ElementTypeNamespace,
+	string(ElementTypeNamespaceName):            ElementTypeNamespaceName,
+	string(ElementTypePackage):                  ElementTypePackage,
+	string(ElementTypePackageName):              ElementTypePackageName,
+	string(ElementTypeUndefined):                ElementTypeUndefined,
+	string(ElementTypeImport):                   ElementTypeImport,
+	string(ElementTypeImportName):               ElementTypeImportName,
+	string(ElementTypeImportAlias):              ElementTypeImportAlias,
+	string(ElementTypeImportPath):               ElementTypeImportPath,
+	string(ElementTypeImportSource):             ElementTypeImportSource,
+	string(ElementTypeClass):                    ElementTypeClass,
+	string(ElementTypeClassName):                ElementTypeClassName,
+	string(ElementTypeInterfaceType):            ElementTypeInterfaceType,
+	string(ElementTypeClassExtends):             ElementTypeClassExtends,
+	string(ElementTypeClassExtendsName):         ElementTypeClassExtendsName,
+	string(ElementTypeClassImplements):          ElementTypeClassImplements,
+	string(ElementTypeClassModifiers):           ElementTypeClassModifiers,
+	string(ElementTypeInterface):                ElementTypeInterface,
+	string(ElementTypeInterfaceName):            ElementTypeInterfaceName,
+	string(ElementTypeInterfaceExtends):         ElementTypeInterfaceExtends,
+	string(ElementTypeInterfaceModifiers):       ElementTypeInterfaceModifiers,
+	string(ElementTypeStruct):                   ElementTypeStruct,
+	string(ElementTypeStructName):               ElementTypeStructName,
+	string(ElementTypeStructType):               ElementTypeStructType,
+	string(ElementTypeStructExtends):            ElementTypeStructExtends,
+	string(ElementTypeEnum):                     ElementTypeEnum,
+	string(ElementTypeEnumName):                 ElementTypeEnumName,
+	string(ElementTypeEnumImplements):           ElementTypeEnumImplements,
+	string(ElementTypeEnumModifiers):            ElementTypeEnumModifiers,
+	string(ElementTypeEnumConstant):             ElementTypeEnumConstant,
+	string(ElementTypeEnumConstantName):         ElementTypeEnumConstantName,
+	string(ElementTypeEnumConstantValue):        ElementTypeEnumConstantValue,
+	string(ElementTypeUnion):                    ElementTypeUnion,
+	string(ElementTypeUnionName):                ElementTypeUnionName,
+	string(ElementTypeTypedefName):              ElementTypeTypedefName,
+	string(ElementTypeTypedefAlias):             ElementTypeTypedefAlias,
+	string(ElementTypeTypedef):                  ElementTypeTypedef,
+	string(ElementTypeTrait):                    ElementTypeTrait,
+	string(ElementTypeTypeAlias):                ElementTypeTypeAlias,
+	string(ElementTypeTypeAliasName):            ElementTypeTypeAliasName,
+	string(ElementTypeTypeAliasAlias):           ElementTypeTypeAliasAlias,
+	string(ElementTypeFunction):                 ElementTypeFunction,
+	string(ElementTypeFunctionName):             ElementTypeFunctionName,
+	string(ElementTypeFunctionParameters):       ElementTypeFunctionParameters,
+	string(ElementTypeFunctionReturnType):       ElementTypeFunctionReturnType,
+	string(ElementTypeFunctionCall):             ElementTypeFunctionCall,
+	string(ElementTypeFunctionCallName):         ElementTypeFunctionCallName,
+	string(ElementTypeFunctionOwner):            ElementTypeFunctionOwner,
+	string(ElementTypeFunctionArguments):        ElementTypeFunctionArguments,
+	string(ElementTypeFunctionDeclaration):      ElementTypeFunctionDeclaration,
+	string(ElementTypeMethod):                   ElementTypeMethod,
+	string(ElementTypeMethodCall):               ElementTypeMethodCall,
+	string(ElementTypeMethodModifier):           ElementTypeMethodModifier,
+	string(ElementTypeMethodReturnType):         ElementTypeMethodReturnType,
+	string(ElementTypeMethodName):               ElementTypeMethodName,
+	string(ElementTypeMethodOwner):              ElementTypeMethodOwner,
+	string(ElementTypeMethodParameters):         ElementTypeMethodParameters,
+	string(ElementTypeMethodReceiver):           ElementTypeMethodReceiver,
+	string(ElementTypeCallArguments):            ElementTypeCallArguments,
+	string(ElementTypeCallOwner):                ElementTypeCallOwner,
+	string(ElementTypeCallName):                 ElementTypeCallName,
+	string(ElementTypeConstructor):              ElementTypeConstructor,
+	string(ElementTypeDestructor):               ElementTypeDestructor,
+	string(ElementTypeGlobalVariable):           ElementTypeGlobalVariable,
+	string(ElementTypeLocalVariable):            ElementTypeLocalVariable,
+	string(ElementTypeLocalVariableName):        ElementTypeLocalVariableName,
+	string(ElementTypeLocalVariableType):        ElementTypeLocalVariableType,
+	string(ElementTypeLocalVariableValue):       ElementTypeLocalVariableValue,
+	string(ElementTypeVariable):                 ElementTypeVariable,
+	string(ElementTypeVariableName):             ElementTypeVariableName,
+	string(ElementTypeVariableValue):            ElementTypeVariableValue,
+	string(ElementTypeVariableType):             ElementTypeVariableType,
+	string(ElementTypeConstant):                 ElementTypeConstant,
+	string(ElementTypeMacro):                    ElementTypeMacro,
+	string(ElementTypeField):                    ElementTypeField,
+	string(ElementTypeFieldName):                ElementTypeFieldName,
+	string(ElementTypeFieldType):                ElementTypeFieldType,
+	string(ElementTypeFieldValue):               ElementTypeFieldValue,
+	string(ElementTypeFieldModifier):            ElementTypeFieldModifier,
+	string(ElementTypeParameter):                ElementTypeParameter,
+	string(ElementTypeComment):                  ElementTypeComment,
+	string(ElementTypeAnnotation):               ElementTypeAnnotation,
+	string(ElementTypeStructCall):               ElementTypeStructCall,
+	string(ElementTypeNewExpression):            ElementTypeNewExpression,
+	string(ElementTypeNewExpressionType):        ElementTypeNewExpressionType,
+	string(ElementTypeNewExpressionOwner):       ElementTypeNewExpressionOwner,
+	string(ElementTypeNewExpressionArgs):        ElementTypeNewExpressionArgs,
+	string(ElementTypeTemplateCall):             ElementTypeTemplateCall,
+	string(ElementTypeTemplateCallName):         ElementTypeTemplateCallName,
+	string(ElementTypeTemplateCallArgs):         ElementTypeTemplateCallArgs,
+	string(ElementTypeCompoundLiteral):          ElementTypeCompoundLiteral,
+	string(ElementTypeCompoundLiteralType):      ElementTypeCompoundLiteralType,
+	string(ElementTypeClassLiteral):             ElementTypeClassLiteral,
+	string(ElementTypeClassLiteralType):         ElementTypeClassLiteralType,
+	string(ElementTypeCastExpression):           ElementTypeCastExpression,
+	string(ElementTypeCastExpressionType):       ElementTypeCastExpressionType,
+	string(ElementTypeInstanceofExpression):     ElementTypeInstanceofExpression,
+	string(ElementTypeInstanceofExpressionType): ElementTypeInstanceofExpressionType,
+	string(ElementTypeArrayCreation):            ElementTypeArrayCreation,
+	string(ElementTypeArrayCreationType):        ElementTypeArrayCreationType,
 }
 
 type Scope string

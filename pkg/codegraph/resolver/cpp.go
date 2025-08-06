@@ -119,11 +119,12 @@ func (c *CppResolver) resolveClass(ctx context.Context, element *Class, rc *Reso
 		}
 		content := cap.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(captureName) {
-		case types.ElementTypeClassName, types.ElementTypeStructName, types.ElementTypeEnumName, types.ElementTypeUnionName:
+		case types.ElementTypeClassName, types.ElementTypeStructName, types.ElementTypeEnumName,
+			types.ElementTypeUnionName, types.ElementTypeNamespaceName:
 			// 枚举类型只考虑name
 			element.BaseElement.Name = strings.TrimSpace(content)
-		case types.ElementTypeTypedefName:
-			// typedef只考虑name
+		case types.ElementTypeTypedefAlias, types.ElementTypeTypeAliasAlias:
+			// typedef只考虑alias
 			name := strings.TrimSpace(content)
 			name = CleanParam(name)
 			element.BaseElement.Name = name
@@ -146,7 +147,7 @@ func (c *CppResolver) resolveClass(ctx context.Context, element *Class, rc *Reso
 
 func (c *CppResolver) resolveVariable(ctx context.Context, element *Variable, rc *ResolveContext) ([]Element, error) {
 	// 字段和变量统一处理
-	var refs = []*Reference{}
+	// var refs = []*Reference{}
 	rootCap := rc.Match.Captures[0]
 	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
 	for _, cap := range rc.Match.Captures {
@@ -170,18 +171,16 @@ func (c *CppResolver) resolveVariable(ctx context.Context, element *Variable, rc
 			// 枚举的类型不考虑，都是基础类型（有匿名枚举）
 			element.BaseElement.Name = CleanParam(content)
 			element.VariableType = []string{types.PrimitiveType}
-		case types.ElementTypeVariableValue, types.ElementTypeFieldValue:
+			element.BaseElement.Scope = types.ScopeClass
+			// case types.ElementTypeVariableValue, types.ElementTypeFieldValue:
 			// 有可能是字面量，也有可能是类和结构体的创建，和方法调用
 			// 只能处理一个 new 的创建
 			// 字面量不处理，方法调用由resolveCall处理，只处理类的创建
-			val := parseLocalVariableValue(&cap.Node, rc.SourceFile.Content)
-			refs = append(refs, NewReference(element, &cap.Node, val, types.EmptyString))
+			// val := parseLocalVariableValue(&cap.Node, rc.SourceFile.Content)
+			// refs = append(refs, NewReference(element, &cap.Node, val, types.EmptyString))
 		}
 	}
 	elems := []Element{element}
-	for _, ref := range refs {
-		elems = append(elems, ref)
-	}
 	return elems, nil
 }
 
@@ -192,6 +191,7 @@ func (c *CppResolver) resolveInterface(ctx context.Context, element *Interface, 
 func (c *CppResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
 	rootCap := rc.Match.Captures[0]
 	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
+	var refs []*Reference
 	for _, cap := range rc.Match.Captures {
 		captureName := rc.CaptureNames[cap.Index]
 		if cap.Node.IsMissing() || cap.Node.IsError() {
@@ -199,14 +199,36 @@ func (c *CppResolver) resolveCall(ctx context.Context, element *Call, rc *Resolv
 		}
 		content := cap.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(captureName) {
-		case types.ElementTypeFunctionCallName, types.ElementTypeCallName:
+		case types.ElementTypeFunctionCallName, types.ElementTypeCallName, types.ElementTypeTemplateCallName,
+			types.ElementTypeNewExpressionType:
 			element.BaseElement.Name = strings.TrimSpace(content)
-		case types.ElementTypeFunctionOwner, types.ElementTypeCallOwner:
+		case types.ElementTypeFunctionOwner, types.ElementTypeCallOwner, types.ElementTypeNewExpressionOwner:
 			element.Owner = strings.TrimSpace(content)
-		case types.ElementTypeFunctionArguments, types.ElementTypeCallArguments:
+		case types.ElementTypeTemplateCallArgs:
+			typs := findAllTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
+			if len(typs) != 0 {
+				for _, typ := range typs {
+					// TODO 可以考虑解析出来命名空间
+					refs = append(refs, NewReference(element, &cap.Node, typ, types.EmptyString))
+				}
+			}
+		case types.ElementTypeCompoundLiteralType:
+			names := findAllTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
+			// (struct MyStruct)
+			if len(names) != 0 {
+				// 找到第一个类型，作为name
+				element.BaseElement.Name = names[0]
+			} else {
+				element.BaseElement.Name = content
+			}
+		case types.ElementTypeFunctionArguments, types.ElementTypeCallArguments, types.ElementTypeNewExpressionArgs:
 			// 暂时只保留name，参数类型先不考虑
 			for i := uint(0); i < cap.Node.NamedChildCount(); i++ {
 				arg := cap.Node.NamedChild(i)
+				if arg.Kind() == "comment" {
+					// 过滤comment
+					continue
+				}
 				argContent := arg.Utf8Text(rc.SourceFile.Content)
 				element.Parameters = append(element.Parameters, &Parameter{
 					Name: argContent,
@@ -216,7 +238,12 @@ func (c *CppResolver) resolveCall(ctx context.Context, element *Call, rc *Resolv
 		}
 	}
 	element.BaseElement.Scope = types.ScopeFunction
-	return []Element{element}, nil
+	elems := []Element{element}
+	for _, ref := range refs {
+		elems = append(elems, ref)
+	}
+
+	return elems, nil
 }
 func findAccessSpecifier(node *sitter.Node, content []byte) string {
 	// 1. 向上找到 field_declaration_list

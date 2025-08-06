@@ -1,42 +1,14 @@
 (preproc_include
-  path: (system_lib_string)* @import.name
-  path: (string_literal)* @import.name
-  ) @import
+  path: (system_lib_string) @import.name
+) @import
 
-;; Macro definitions
-(preproc_def
-  name: (identifier) @constant.name
-  ) @constant
-
-;; Constant declarations
-(declaration
-  (type_qualifier) @qualifier
-  declarator: (init_declarator
-                declarator: (identifier) @constant.name)
-  (#eq? @qualifier "const")) @constant
+(preproc_include
+  path: (string_literal) @import.name
+) @import
 
 
-;; extern Variable declarations
-(translation_unit
-  (declaration
-    (storage_class_specifier) @type
-    (identifier) @global_extern_variable.name
-    (#eq? @type "extern")
-    ) @global_extern_variable
-  )
 
-
-;; Variable declarations
-(translation_unit
-  (declaration
-    (_) * @type
-    declarator: (init_declarator
-                  declarator: (identifier) @global_variable.name)
-    (#not-eq? @type "const")
-    (#not-eq? @type "extern")
-    ) @global_variable
-  )
-
+;; ---------------------------------- Class Declaration ----------------------------------
 ;; Struct declarations
 (struct_specifier
   name: (type_identifier) @definition.struct.name
@@ -56,15 +28,15 @@
   body: (field_declaration_list)@body
 ) @definition.union
 
-;; Function declarations
-(declaration
-  declarator: (function_declarator
-                declarator: (identifier) @declaration.function.name
-                parameters: (parameter_list) @declaration.function.parameters
-                )
-  ) @declaration.function
+(type_definition
+  type: (_) @definition.typedef.name
+  declarator: (_) @definition.typedef.alias
+)@definition.typedef
 
-;; Function definitions 不带指针
+
+
+;; -------------------------------- Function Declarations --------------------------------
+;; Function declarations
 (function_definition
   type: (_) @definition.function.return_type
   declarator: [
@@ -94,15 +66,81 @@
 
 
 
-;; TODO 去找它的 identifier
-;; variable & function  declaration
+;; ------------------------ Variable/Field Declaration --------------------------------
 (declaration
-  type: (_) @type
-  ) @declaration
+  type: (_) @variable.type
+  declarator:
+    ;; ==== 有初始化值 ====
+    (init_declarator
+      declarator: [
+        (identifier) @variable.name
+        (pointer_declarator
+          declarator: (identifier) @variable.name)
+        (array_declarator
+          declarator: (identifier) @variable.name)
+        (array_declarator
+          declarator: (array_declarator
+            declarator: (identifier) @variable.name))
+        (pointer_declarator
+          declarator: (array_declarator
+            declarator: (identifier) @variable.name))
+      ]
+      value: (_) @variable.value)
+) @variable
 
-;; function_call  TODO ，这里不好确定它的parent，原因是存在嵌套、赋值等。可能得通过代码去递归。
+;; 无初始化值的变量声明
+(declaration
+  type: type: (_) @variable.type
+  declarator: [
+    (identifier) @variable.name
+    (pointer_declarator
+      declarator: (identifier) @variable.name)
+    (array_declarator
+      declarator: (identifier) @variable.name)
+    (array_declarator
+      declarator: (array_declarator
+        declarator: (identifier) @variable.name))
+    (pointer_declarator
+      declarator: (array_declarator
+        declarator: (identifier) @variable.name))
+  ]
+) @variable
+
+
+;; ------------------------ Field Declaration --------------------------------
+(field_declaration
+  type: (_) @definition.field.type
+  declarator: [
+    (field_identifier) @definition.field.name
+    (pointer_declarator
+      declarator: (field_identifier) @definition.field.name)
+    (array_declarator
+      declarator: (field_identifier) @definition.field.name)
+    (array_declarator
+      declarator: (array_declarator
+        declarator: (identifier) @definition.field.name))
+    (pointer_declarator
+      declarator: (array_declarator
+        declarator: (identifier) @definition.field.name))
+  ]
+) @definition.field
+
+;; ------------------------ Enum Constant --------------------------------
+(enumerator
+  name: (identifier) @definition.enum.constant.name
+  value: (_)? @definition.enum.constant.value
+) @definition.enum.constant
+
+
+
+;; ------------------------------ Call Expression ------------------------------
 (call_expression
-  function: (identifier) @call.funciton.name
-  arguments: (argument_list) @call.funciton.arguments
-  ) @call.funciton
+  function: (identifier) @call.function.name
+  arguments: (argument_list) @call.function.arguments
+  )@call.function
 
+;; struct MyStruct a = (struct MyStruct){.x = 1, .y = 2};
+(compound_literal_expression
+  type: (type_descriptor
+    type: (_) @call.compound.type)
+) @call.compound

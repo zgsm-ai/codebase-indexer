@@ -20,8 +20,8 @@ func findIdentifierNode(node *sitter.Node) *sitter.Node {
 	}
 
 	// 遍历所有子节点
-	for i := uint(0); i < node.ChildCount(); i++ {
-		child := node.Child(i)
+	for i := uint(0); i < node.NamedChildCount(); i++ {
+		child := node.NamedChild(i)
 		if child == nil {
 			continue
 		}
@@ -72,26 +72,21 @@ func updateRootElement(
 // -> (int a, int b, std::string name)
 func CleanParam(param string) string {
 
-	// 0. 清理注释
+	// 1. 清理注释
 	reComment := regexp.MustCompile(`/\*.*?\*/`)
 	param = reComment.ReplaceAllString(param, "")
 
-	// 1. 去除属性标记 [[...]]
+	// 2. 去除属性标记 [[...]]
 	reAttr := regexp.MustCompile(`\[\[.*?\]\]`)
 	param = reAttr.ReplaceAllString(param, "")
 
-	// 2. 去除关键字修饰符
+	// 3. 去除关键字修饰符
 	reKeywords := regexp.MustCompile(`\b(const|volatile|mutable|__?restrict)\b`)
 	param = reKeywords.ReplaceAllString(param, "")
 
-	// 3. 去除指针和引用符号
+	// 4. 去除指针和引用符号
 	rePtrRef := regexp.MustCompile(`[*&]+`)
 	param = rePtrRef.ReplaceAllString(param, "")
-
-	// 4. 清理多余空白
-	param = strings.TrimSpace(param)
-	reSpaces := regexp.MustCompile(`\s+`)
-	param = reSpaces.ReplaceAllString(param, " ")
 
 	// 5. 清理 @注解
 	reAt := regexp.MustCompile(`@\w+\s+`)
@@ -105,7 +100,7 @@ func CleanParam(param string) string {
 	reQuestion := regexp.MustCompile(`\?`)
 	param = reQuestion.ReplaceAllString(param, "")
 
-	// 去除这种情况 struct TempPoint {
+	// 8. 去除这种情况 struct TempPoint {
 	// int tx, ty;
 	// } temp_pt = {10, 20};
 	// 直接提取结构体名字
@@ -115,6 +110,16 @@ func CleanParam(param string) string {
 	if len(matches) > 0 {
 		param = matches[0][1]
 	}
+
+	// 9. 过滤类型里的 struct、enum、union 关键字
+	reTypePrefix := regexp.MustCompile(`\b(struct|enum|union)\b\s*`)
+	param = reTypePrefix.ReplaceAllString(param, "")
+
+	// 10. 清理多余空白
+	param = strings.TrimSpace(param)
+	reSpaces := regexp.MustCompile(`\s+`)
+	param = reSpaces.ReplaceAllString(param, " ")
+
 	return param
 }
 func updateElementRange(element Element, capture *sitter.QueryCapture) {
@@ -152,8 +157,8 @@ func parseTypeList(node *sitter.Node, content []byte) []string {
 		return []string{node.Utf8Text(content)}
 	}
 	typs := []string{}
-	for i := uint(0); i < node.ChildCount(); i++ {
-		child := node.Child(i)
+	for i := uint(0); i < node.NamedChildCount(); i++ {
+		child := node.NamedChild(i)
 		if child == nil || child.Kind() == types.Comma {
 			continue
 		}
@@ -170,10 +175,6 @@ func parseTypeList(node *sitter.Node, content []byte) []string {
 	return typs
 }
 
-
-
-
-
 // 处理cpp语法中的base_class_clause类型，返回类型列表
 func parseBaseClassClause(node *sitter.Node, content []byte) []string {
 	if node == nil {
@@ -188,8 +189,8 @@ func parseBaseClassClause(node *sitter.Node, content []byte) []string {
 	typs := []string{}
 
 	// 从后往前遍历所有子节点
-	for i := int(node.ChildCount()) - 1; i >= 0; i-- {
-		child := node.Child(uint(i))
+	for i := int(node.NamedChildCount()) - 1; i >= 0; i-- {
+		child := node.NamedChild(uint(i))
 		if child == nil || child.Kind() == types.Comma || child.Kind() == types.Colon {
 			continue
 		}
@@ -235,10 +236,10 @@ func findAllIdentifiers(node *sitter.Node, content []byte) []string {
 	walk = func(n *sitter.Node) {
 		if types.ToNodeKind(n.Kind()) == types.NodeKindIdentifier {
 			identifiers = append(identifiers, n.Utf8Text(content))
-			return 
+			return
 		}
-		for i := uint(0); i < n.ChildCount(); i++ {
-			child := n.Child(i)
+		for i := uint(0); i < n.NamedChildCount(); i++ {
+			child := n.NamedChild(i)
 			if child.IsMissing() || child.IsError() {
 				continue
 			}
@@ -264,10 +265,10 @@ func findAllTypeIdentifiers(node *sitter.Node, content []byte) []string {
 	walk = func(n *sitter.Node) {
 		if types.ToNodeKind(n.Kind()) == types.NodeKindTypeIdentifier {
 			identifiers = append(identifiers, n.Utf8Text(content))
-			return 
+			return
 		}
-		for i := uint(0); i < n.ChildCount(); i++ {
-			child := n.Child(i)
+		for i := uint(0); i < n.NamedChildCount(); i++ {
+			child := n.NamedChild(i)
 			if child.IsMissing() || child.IsError() {
 				continue
 			}
@@ -283,4 +284,3 @@ func findAllTypeIdentifiers(node *sitter.Node, content []byte) []string {
 	walk(node)
 	return identifiers
 }
-

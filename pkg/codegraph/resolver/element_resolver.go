@@ -37,6 +37,7 @@ func resolve(ctx context.Context, b ElementResolver, element Element, rc *Resolv
 	case *Call:
 		return b.resolveCall(ctx, element, rc)
 	default:
+		fmt.Println("element_resover not supported element", element.GetType(), "Range:", element.GetRange())
 		return nil, fmt.Errorf("element_resover not supported element %v", element)
 	}
 }

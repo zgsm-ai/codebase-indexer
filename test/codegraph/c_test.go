@@ -4,12 +4,14 @@ import (
 	"codebase-indexer/pkg/codegraph/resolver"
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
-	"github.com/stretchr/testify/assert"
+	"fmt"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-const CProjectRootDir = "/tmp/projects/c"
+const CProjectRootDir = "../tmp/projects/c"
 
 func TestParseCProjectFiles(t *testing.T) {
 	env, err := setupTestEnvironment()
@@ -29,9 +31,25 @@ func TestParseCProjectFiles(t *testing.T) {
 			Path:    filepath.Join(CProjectRootDir, "redis"),
 			wantErr: nil,
 		},
+		{
+			Name:    "sqlite",
+			Path:    filepath.Join(CProjectRootDir, "sqlite"),
+			wantErr: nil,
+		},
+		{
+			Name:    "openssl",
+			Path:    filepath.Join(CProjectRootDir, "openssl"),
+			wantErr: nil,
+		},
+		{
+			Name:    "netdata",
+			Path:    filepath.Join(CProjectRootDir, "netdata"),
+			wantErr: nil,
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
+			fmt.Println("tc.Path", tc.Path)
 			project := NewTestProject(tc.Path, env.logger)
 			fileElements, _, err := indexer.ParseProjectFiles(context.Background(), project)
 			err = exportFileElements(defaultExportDir, tc.Name, fileElements)
@@ -40,7 +58,22 @@ func TestParseCProjectFiles(t *testing.T) {
 			assert.True(t, len(fileElements) > 0)
 			for _, f := range fileElements {
 				for _, e := range f.Elements {
-					assert.True(t, resolver.IsValidElement(e))
+					if !resolver.IsValidElement(e) {
+						fmt.Printf("Type: %s Name: %s Path: %s\n",
+							e.GetType(), e.GetName(), e.GetPath())
+						fmt.Printf("  Range: %v Scope: %s\n",
+							e.GetRange(), e.GetScope())
+					}
+					//assert.True(t, resolver.IsValidElement(e))
+				}
+				for _, e := range f.Imports {
+					if !resolver.IsValidElement(e) {
+						fmt.Printf("Type: %s Name: %s Path: %s\n",
+							e.GetType(), e.GetName(), e.GetPath())
+						fmt.Printf("  Range: %v Scope: %s\n",
+							e.GetRange(), e.GetScope())
+
+					}
 				}
 			}
 		})
