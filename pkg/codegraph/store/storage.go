@@ -8,21 +8,23 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"google.golang.org/protobuf/proto"
 )
 
-// TODO 使用项目名+路径hash作为项目索引的目录
+// 使用项目名_路径hash(projectUuid)作为项目索引的目录
 
 type GraphStorage interface {
 	BatchSave(ctx context.Context, projectUuid string, values Entries) error
-	Save(ctx context.Context, projectUuid string, entry *Entry) error
+	Put(ctx context.Context, projectUuid string, entry *Entry) error
 	Get(ctx context.Context, projectUuid string, key Key) ([]byte, error)
 	Delete(ctx context.Context, projectUuid string, key Key) error
 	DeleteAll(ctx context.Context, projectUuid string) error
 	Iter(ctx context.Context, projectUuid string) Iterator
-	Size(ctx context.Context, projectUuid string) int
+	Size(ctx context.Context, projectUuid string, keyPrefix string) int
 	Close() error
+	ExistsProject(projectUuid string) (bool, error)
 }
 
 // Iterator 定义了遍历存储中元素的接口
@@ -44,9 +46,9 @@ type Iterator interface {
 }
 
 const (
-	PathKeyPrefix = "path"
-	SymKeyPrefix  = "sym"
-	dataDir       = "data"
+	PathKeySystemPrefix = "@path"
+	SymKeySystemPrefix  = "@sym"
+	dataDir             = "data"
 )
 
 type Key interface {
@@ -65,7 +67,7 @@ func (p ElementPathKey) Get() (string, error) {
 	if p.Path == types.EmptyString {
 		return types.EmptyString, fmt.Errorf("ElementPathKey field Path must not be empty")
 	}
-	return fmt.Sprintf("%s:%s:%s", PathKeyPrefix, p.Language, utils.ToUnixPath(p.Path)), nil
+	return fmt.Sprintf("%s:%s:%s", PathKeySystemPrefix, p.Language, utils.ToUnixPath(p.Path)), nil
 }
 
 type SymbolNameKey struct {
@@ -80,7 +82,57 @@ func (s SymbolNameKey) Get() (string, error) {
 	if s.Name == types.EmptyString {
 		return types.EmptyString, fmt.Errorf("ElementPathKey field Name must not be empty")
 	}
-	return fmt.Sprintf("%s:%s:%s", SymKeyPrefix, s.Language, s.Name), nil
+	return fmt.Sprintf("%s:%s:%s", SymKeySystemPrefix, s.Language, s.Name), nil
+}
+
+func IsSymbolNameKey(key string) bool {
+	return strings.HasPrefix(key, SymKeySystemPrefix)
+}
+
+func IsElementPathKey(key string) bool {
+	return strings.HasPrefix(key, PathKeySystemPrefix)
+}
+
+func ToSymbolNameKey(key string) (SymbolNameKey, error) {
+	keySplit := strings.Split(key, types.Colon)
+	if len(key) != 3 {
+		return SymbolNameKey{}, fmt.Errorf("invalid symbol_name key: %s", key)
+	}
+	if keySplit[0] != SymKeySystemPrefix {
+		return SymbolNameKey{}, fmt.Errorf("invalid symbol_name key: %s", key)
+	}
+	language, err := lang.ToLanguage(keySplit[1])
+	if err != nil {
+		return SymbolNameKey{}, lang.ErrUnSupportedLanguage
+	}
+	if keySplit[2] == types.EmptyString {
+		return SymbolNameKey{}, fmt.Errorf("invalid symbol_name key: %s", key)
+	}
+	return SymbolNameKey{
+		Language: language,
+		Name:     keySplit[2],
+	}, nil
+}
+
+func ToElementPathKey(key string) (ElementPathKey, error) {
+	keySplit := strings.Split(key, types.Colon)
+	if len(key) != 3 {
+		return ElementPathKey{}, fmt.Errorf("invalid element_path key: %s", key)
+	}
+	if keySplit[0] != SymKeySystemPrefix {
+		return ElementPathKey{}, fmt.Errorf("invalid element_path key: %s", key)
+	}
+	language, err := lang.ToLanguage(keySplit[1])
+	if err != nil {
+		return ElementPathKey{}, lang.ErrUnSupportedLanguage
+	}
+	if keySplit[2] == types.EmptyString {
+		return ElementPathKey{}, fmt.Errorf("invalid element_path key: %s", key)
+	}
+	return ElementPathKey{
+		Language: language,
+		Path:     keySplit[2],
+	}, nil
 }
 
 type Entries interface {

@@ -23,12 +23,13 @@ type EventRepository interface {
 	GetEventsByType(eventType string, limit int, isDesc bool) ([]*model.Event, error)
 	// GetEventsByWorkspaceAndType 根据工作区路径和事件类型获取事件
 	GetEventsByWorkspaceAndType(workspacePath, eventType string, limit int, isDesc bool) ([]*model.Event, error)
+	// GetEventsByTypeAndStatus 根据事件类型和状态获取事件
 	// GetEventsByWorkspaceAndEmbeddingStatus 根据工作区路径和嵌入状态获取事件
 	GetEventsByWorkspaceAndEmbeddingStatus(workspacePath string, limit int, isDesc bool, statuses []int) ([]*model.Event, error)
 	// GetEventsByTypeAndEmbeddingStatus 根据事件类型和状态获取事件
 	GetEventsByTypeAndEmbeddingStatus(eventType string, limit int, isDesc bool, statuses []int) ([]*model.Event, error)
-	// GetEventsByTypeAndEmbeddingStatusAndWorkspaces 根据事件类型、状态和工作空间路径获取事件
-	GetEventsByTypeAndEmbeddingStatusAndWorkspaces(eventType string, workspacePaths []string, limit int, isDesc bool, statuses []int) ([]*model.Event, error)
+	// GetEventsByTypeAndStatusAndWorkspaces 根据事件类型、状态和工作空间路径获取事件
+	GetEventsByTypeAndStatusAndWorkspaces(eventType string, workspacePaths []string, limit int, isDesc bool, embeddingStatuses []int, codegraphStatuses []int) ([]*model.Event, error)
 	// UpdateEvent 更新事件
 	UpdateEvent(event *model.Event) error
 	// DeleteEvent 删除事件
@@ -427,8 +428,9 @@ func (r *eventRepository) GetEventsByTypeAndEmbeddingStatus(eventType string, li
 	return events, nil
 }
 
-// GetEventsByTypeAndEmbeddingStatusAndWorkspaces 根据事件类型、状态和工作空间路径获取事件
-func (r *eventRepository) GetEventsByTypeAndEmbeddingStatusAndWorkspaces(eventType string, workspacePaths []string, limit int, isDesc bool, statuses []int) ([]*model.Event, error) {
+// GetEventsByTypeAndStatusAndWorkspaces 根据事件类型、状态和工作空间路径获取事件
+func (r *eventRepository) GetEventsByTypeAndStatusAndWorkspaces(eventType string, workspacePaths []string, limit int,
+	isDesc bool, embeddingStatuses []int, codegraphStatuses []int) ([]*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path,
 			codegraph_status, embedding_status, created_at, updated_at
@@ -454,16 +456,30 @@ func (r *eventRepository) GetEventsByTypeAndEmbeddingStatusAndWorkspaces(eventTy
 	}
 
 	// 如果提供了状态列表，添加状态过滤条件
-	if len(statuses) > 0 {
+	if len(embeddingStatuses) > 0 {
 		placeholders := ""
-		for i := range statuses {
+		for i := range embeddingStatuses {
 			if i > 0 {
 				placeholders += ","
 			}
 			placeholders += "?"
 		}
 		query += fmt.Sprintf(" AND embedding_status IN (%s)", placeholders)
-		for _, status := range statuses {
+		for _, status := range embeddingStatuses {
+			args = append(args, status)
+		}
+	}
+
+	if len(codegraphStatuses) > 0 {
+		placeholders := ""
+		for i := range codegraphStatuses {
+			if i > 0 {
+				placeholders += ","
+			}
+			placeholders += "?"
+		}
+		query += fmt.Sprintf(" AND codegraph_status IN (%s)", placeholders)
+		for _, status := range codegraphStatuses {
 			args = append(args, status)
 		}
 	}

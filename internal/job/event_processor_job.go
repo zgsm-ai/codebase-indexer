@@ -116,7 +116,7 @@ func (j *EventProcessorJob) embeddingProcessWorkspaces() error {
 
 func (j *EventProcessorJob) codegraphProcessWorkSpaces() error {
 	// 获取活跃工作区
-	workspaces, err := j.embedding.ProcessActiveWorkspaces()
+	workspaces, err := j.codegraph.ProcessActiveWorkspaces(j.ctx)
 	if err != nil {
 		return err
 	}
@@ -125,6 +125,10 @@ func (j *EventProcessorJob) codegraphProcessWorkSpaces() error {
 		j.logger.Debug("no active workspaces found")
 		return nil
 	}
+	workspacesPaths := make([]string, len(workspaces))
+	for i, workspace := range workspaces {
+		workspacesPaths[i] = workspace.WorkspacePath
+	}
 
-	return j.codegraph.ProcessEvents()
+	return j.codegraph.ProcessEvents(j.ctx, workspacesPaths)
 }

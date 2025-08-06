@@ -110,7 +110,7 @@ func TestLevelDBStorage_Save(t *testing.T) {
 
 	// 预填充数据
 	testData := &codegraphpb.TestMessage{Value: "test-value"}
-	err := storage.Save(ctx, projectID, &Entry{Key: TestKey{"test-value"}, Value: testData})
+	err := storage.Put(ctx, projectID, &Entry{Key: TestKey{"test-value"}, Value: testData})
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -148,7 +148,7 @@ func TestLevelDBStorage_Save(t *testing.T) {
 				<-testCtx.Done() // 确保上下文已取消
 			}
 
-			err := storage.Save(testCtx, projectID, &Entry{Key: TestKey{tt.name}, Value: tt.value})
+			err := storage.Put(testCtx, projectID, &Entry{Key: TestKey{tt.name}, Value: tt.value})
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -232,7 +232,7 @@ func TestLevelDBStorage_Get(t *testing.T) {
 	// 预填充数据
 	testData := &codegraphpb.TestMessage{Value: "test-value"}
 	key := TestKey{"test-value"}
-	err := storage.Save(ctx, projectID, &Entry{Key: key, Value: testData})
+	err := storage.Put(ctx, projectID, &Entry{Key: key, Value: testData})
 	require.NoError(t, err)
 	assert.NoError(t, err)
 	tests := []struct {
@@ -301,7 +301,7 @@ func TestLevelDBStorage_Delete(t *testing.T) {
 
 	// 预填充数据
 	testData := &codegraphpb.TestMessage{Value: "test-value"}
-	err := storage.Save(ctx, projectID, &Entry{Key: TestKey{"test-value"}, Value: testData})
+	err := storage.Put(ctx, projectID, &Entry{Key: TestKey{"test-value"}, Value: testData})
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -410,7 +410,7 @@ func TestLevelDBStorage_Size(t *testing.T) {
 				storage.BatchSave(ctx, testProjectID, values)
 			}
 
-			size := storage.Size(ctx, testProjectID)
+			size := storage.Size(ctx, testProjectID, "")
 			assert.Equal(t, tt.wantSize, size)
 		})
 	}
@@ -424,7 +424,7 @@ func TestLevelDBStorage_Close(t *testing.T) {
 	projectID := "test-project"
 
 	// 预填充数据以确保有数据库连接
-	err := storage.Save(ctx, projectID, &Entry{Key: TestKey{"test-value"}, Value: &codegraphpb.TestMessage{Value: "test"}})
+	err := storage.Put(ctx, projectID, &Entry{Key: TestKey{"test-value"}, Value: &codegraphpb.TestMessage{Value: "test"}})
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -450,7 +450,7 @@ func TestLevelDBStorage_Close(t *testing.T) {
 
 			// 验证关闭后操作失败
 			if tt.name == "正常关闭" {
-				err := storage.Save(context.Background(), projectID, &Entry{Key: TestKey{"test-value"}, Value: &codegraphpb.TestMessage{Value: "test"}})
+				err := storage.Put(context.Background(), projectID, &Entry{Key: TestKey{"test-value"}, Value: &codegraphpb.TestMessage{Value: "test"}})
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "storage is closed")
 			}
@@ -476,7 +476,7 @@ func TestLevelDBStorage_Iter(t *testing.T) {
 	}
 
 	for _, data := range testData {
-		storage.Save(ctx, projectID, &Entry{Key: TestKey{"test-value"}, Value: &codegraphpb.TestMessage{Value: data.value}})
+		storage.Put(ctx, projectID, &Entry{Key: TestKey{"test-value"}, Value: &codegraphpb.TestMessage{Value: data.value}})
 	}
 
 	tests := []struct {
@@ -570,7 +570,7 @@ func TestLevelDBStorage_ConcurrentReadWrite(t *testing.T) {
 
 			for i := 0; i < opsPerWorker; i++ {
 				value := &codegraphpb.TestMessage{Value: fmt.Sprintf("writer-%d-value-%d", writerID, i)}
-				err := storage.Save(ctx, projectID, &Entry{Key: TestKey{value.Value}, Value: value})
+				err := storage.Put(ctx, projectID, &Entry{Key: TestKey{value.Value}, Value: value})
 				assert.NoError(t, err)
 			}
 		}(w)
@@ -595,7 +595,7 @@ func TestLevelDBStorage_ConcurrentReadWrite(t *testing.T) {
 	wg.Wait()
 
 	// 验证最终数据完整性
-	finalSize := storage.Size(ctx, projectID)
+	finalSize := storage.Size(ctx, projectID, "")
 	assert.GreaterOrEqual(t, finalSize, 0)
 
 	// 验证至少有一个写入成功
@@ -640,7 +640,7 @@ func TestLevelDBStorage_ConcurrentBatchWrite(t *testing.T) {
 	wg.Wait()
 
 	// 验证总数据量
-	size := storage.Size(ctx, projectID)
+	size := storage.Size(ctx, projectID, "")
 	assert.Equal(t, goroutines*batchSize, size)
 }
 
@@ -663,7 +663,7 @@ func TestLevelDBStorage_BigBatchWrite(t *testing.T) {
 	assert.NoError(t, err)
 
 	// 验证总数据量
-	size := storage.Size(ctx, projectID)
+	size := storage.Size(ctx, projectID, "")
 	assert.Equal(t, batchSize, size)
 }
 
@@ -699,7 +699,7 @@ func TestLevelDBStorage_MultipleProjectsIsolation(t *testing.T) {
 		projectName := fmt.Sprintf("project-%d", p)
 		projectPath := fmt.Sprintf("/tmp/test-project-%d", p)
 		projectID := GenerateTestProjectUUID(projectName, projectPath)
-		size := storage.Size(ctx, projectID)
+		size := storage.Size(ctx, projectID, "")
 		assert.Equal(t, p+1, size)
 	}
 }
@@ -719,7 +719,7 @@ func TestLevelDBStorage_CorruptedFileHandling(t *testing.T) {
 	projectID := GenerateTestProjectUUID(projectName, projectPath)
 	key := TestKey{"test-value"}
 	// 写入一些数据
-	err = storage.Save(ctx, projectID, &Entry{Key: key, Value: &codegraphpb.TestMessage{Value: "test-data"}})
+	err = storage.Put(ctx, projectID, &Entry{Key: key, Value: &codegraphpb.TestMessage{Value: "test-data"}})
 	assert.NoError(t, err)
 	_, err = storage.Get(ctx, projectID, key)
 	assert.NoError(t, err)
@@ -787,7 +787,7 @@ func TestLevelDBStorage_ReadOnlyFileSystem(t *testing.T) {
 	projectName := "test"
 	projectPath := "/tmp/test"
 	projectID := GenerateTestProjectUUID(projectName, projectPath)
-	err = storage.Save(ctx, projectID, &Entry{Key: TestKey{"test-value"}, Value: &codegraphpb.TestMessage{Value: "data"}})
+	err = storage.Put(ctx, projectID, &Entry{Key: TestKey{"test-value"}, Value: &codegraphpb.TestMessage{Value: "data"}})
 	assert.NoError(t, err)
 	storage.Close()
 
@@ -823,14 +823,14 @@ func TestLevelDBStorage_LargeDataHandling(t *testing.T) {
 	err := storage.BatchSave(ctx, projectID, values)
 	assert.NoError(t, err)
 
-	size := storage.Size(ctx, projectID)
+	size := storage.Size(ctx, projectID, "")
 	assert.Equal(t, dataCount, size)
 
 	// 测试超大单条数据
 	largeValue := &codegraphpb.TestMessage{Value: string(make([]byte, 1024*1024))} // 1MB
 	largeValueProjectID := projectID + "-large"
 	key := TestKey{"test-value"}
-	err = storage.Save(ctx, largeValueProjectID, &Entry{Key: key, Value: largeValue})
+	err = storage.Put(ctx, largeValueProjectID, &Entry{Key: key, Value: largeValue})
 	assert.NoError(t, err)
 	bytes, err := proto.Marshal(largeValue)
 	assert.NoError(t, err)
@@ -864,7 +864,7 @@ func TestLevelDBStorage_SpecialProjectNames(t *testing.T) {
 
 		value := &codegraphpb.TestMessage{Value: "test-value"}
 		key := TestKey{"test-value"}
-		err := storage.Save(ctx, projectID, &Entry{Key: key, Value: value})
+		err := storage.Put(ctx, projectID, &Entry{Key: key, Value: value})
 		assert.NoError(t, err)
 
 		bytes, err := proto.Marshal(value)
@@ -883,7 +883,7 @@ func TestLevelDBStorage_CloseDuringOperations(t *testing.T) {
 	projectID := "close-during-ops"
 
 	// 预填充数据
-	err := storage.Save(ctx, projectID, &Entry{Key: TestKey{"test-value"}, Value: &codegraphpb.TestMessage{Value: "test"}})
+	err := storage.Put(ctx, projectID, &Entry{Key: TestKey{"test-value"}, Value: &codegraphpb.TestMessage{Value: "test"}})
 	assert.NoError(t, err)
 
 	// 并发关闭和操作
@@ -899,7 +899,7 @@ func TestLevelDBStorage_CloseDuringOperations(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 100; i++ {
-			err := storage.Save(ctx, projectID, &Entry{Key: TestKey{"test-value"}, Value: &codegraphpb.TestMessage{Value: fmt.Sprintf("concurrent-%d", i)}})
+			err := storage.Put(ctx, projectID, &Entry{Key: TestKey{"test-value"}, Value: &codegraphpb.TestMessage{Value: fmt.Sprintf("concurrent-%d", i)}})
 			if err != nil {
 				// 期望在关闭后操作失败
 				assert.Contains(t, err.Error(), "storage is closed")

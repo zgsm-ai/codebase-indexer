@@ -87,7 +87,8 @@ type FileElementTable struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
 	Language      string                 `protobuf:"bytes,2,opt,name=language,proto3" json:"language,omitempty"`
-	Elements      []*BaseElement         `protobuf:"bytes,3,rep,name=elements,proto3" json:"elements,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Elements      []*BaseElement         `protobuf:"bytes,4,rep,name=elements,proto3" json:"elements,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -136,6 +137,13 @@ func (x *FileElementTable) GetLanguage() string {
 	return ""
 }
 
+func (x *FileElementTable) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
 func (x *FileElementTable) GetElements() []*BaseElement {
 	if x != nil {
 		return x.Elements
@@ -147,11 +155,10 @@ func (x *FileElementTable) GetElements() []*BaseElement {
 type BaseElement struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
-	IsDefinition  bool                   `protobuf:"varint,3,opt,name=is_definition,json=isDefinition,proto3" json:"is_definition,omitempty"`
-	ElementType   ElementType            `protobuf:"varint,4,opt,name=element_type,json=elementType,proto3,enum=codegraphpb.ElementType" json:"element_type,omitempty"`
-	Range         []int32                `protobuf:"varint,5,rep,packed,name=range,proto3" json:"range,omitempty"`
-	Relations     []*Relation            `protobuf:"bytes,6,rep,name=relations,proto3" json:"relations,omitempty"`
+	IsDefinition  bool                   `protobuf:"varint,2,opt,name=is_definition,json=isDefinition,proto3" json:"is_definition,omitempty"`
+	ElementType   ElementType            `protobuf:"varint,3,opt,name=element_type,json=elementType,proto3,enum=codegraphpb.ElementType" json:"element_type,omitempty"`
+	Range         []int32                `protobuf:"varint,4,rep,packed,name=range,proto3" json:"range,omitempty"`
+	Relations     []*Relation            `protobuf:"bytes,5,rep,name=relations,proto3" json:"relations,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -189,13 +196,6 @@ func (*BaseElement) Descriptor() ([]byte, []int) {
 func (x *BaseElement) GetName() string {
 	if x != nil {
 		return x.Name
-	}
-	return ""
-}
-
-func (x *BaseElement) GetPath() string {
-	if x != nil {
-		return x.Path
 	}
 	return ""
 }
@@ -301,18 +301,18 @@ var File_pkg_codegraph_proto_file_element_proto protoreflect.FileDescriptor
 
 const file_pkg_codegraph_proto_file_element_proto_rawDesc = "" +
 	"\n" +
-	"&pkg/codegraph/proto/file_element.proto\x12\vcodegraphpb\x1a\x1fpkg/codegraph/proto/types.proto\"x\n" +
+	"&pkg/codegraph/proto/file_element.proto\x12\vcodegraphpb\x1a\x1fpkg/codegraph/proto/types.proto\"\x96\x01\n" +
 	"\x10FileElementTable\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1a\n" +
-	"\blanguage\x18\x02 \x01(\tR\blanguage\x124\n" +
-	"\belements\x18\x03 \x03(\v2\x18.codegraphpb.BaseElementR\belements\"\xe2\x01\n" +
+	"\blanguage\x18\x02 \x01(\tR\blanguage\x12\x1c\n" +
+	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp\x124\n" +
+	"\belements\x18\x04 \x03(\v2\x18.codegraphpb.BaseElementR\belements\"\xce\x01\n" +
 	"\vBaseElement\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
-	"\x04path\x18\x02 \x01(\tR\x04path\x12#\n" +
-	"\ris_definition\x18\x03 \x01(\bR\fisDefinition\x12;\n" +
-	"\felement_type\x18\x04 \x01(\x0e2\x18.codegraphpb.ElementTypeR\velementType\x12\x14\n" +
-	"\x05range\x18\x05 \x03(\x05R\x05range\x123\n" +
-	"\trelations\x18\x06 \x03(\v2\x15.codegraphpb.RelationR\trelations\"\xa6\x01\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12#\n" +
+	"\ris_definition\x18\x02 \x01(\bR\fisDefinition\x12;\n" +
+	"\felement_type\x18\x03 \x01(\x0e2\x18.codegraphpb.ElementTypeR\velementType\x12\x14\n" +
+	"\x05range\x18\x04 \x03(\x05R\x05range\x123\n" +
+	"\trelations\x18\x05 \x03(\v2\x15.codegraphpb.RelationR\trelations\"\xa6\x01\n" +
 	"\bRelation\x12!\n" +
 	"\felement_name\x18\x01 \x01(\tR\velementName\x12!\n" +
 	"\felement_path\x18\x02 \x01(\tR\velementPath\x12\x14\n" +

@@ -1,6 +1,8 @@
 // internal/dto/backend.go - 后端API请求和响应数据结构定义
 package dto
 
+import "codebase-indexer/pkg/codegraph/types"
+
 // SearchRelationRequest 关系检索请求
 type SearchRelationRequest struct {
 	ClientId       string `form:"clientId" binding:"required"`
@@ -11,7 +13,7 @@ type SearchRelationRequest struct {
 	EndLine        int    `form:"endLine" binding:"required"`
 	EndColumn      int    `form:"endColumn" binding:"required"`
 	SymbolName     string `form:"symbolName,omitempty"`
-	IncludeContent bool   `form:"includeContent,omitempty"`
+	IncludeContent int    `form:"includeContent,omitempty"`
 	MaxLayer       int    `form:"maxLayer,omitempty"`
 }
 
@@ -32,16 +34,8 @@ type Position struct {
 	EndColumn   int `json:"endColumn"`
 }
 
-// SearchRelationResponse 关系检索响应
-type SearchRelationResponse struct {
-	Code    int          `json:"code"`
-	Success bool         `json:"success"`
-	Message string       `json:"message"`
-	Data    RelationData `json:"data"`
-}
-
 type RelationData struct {
-	List []RelationNode `json:"list"`
+	List []*types.GraphNode `json:"list"`
 }
 
 // SearchDefinitionRequest 获取定义请求
@@ -63,16 +57,8 @@ type DefinitionInfo struct {
 	Position Position `json:"position"`
 }
 
-// SearchDefinitionResponse 获取定义响应
-type SearchDefinitionResponse struct {
-	Code    int            `json:"code"`
-	Success bool           `json:"success"`
-	Message string         `json:"message"`
-	Data    DefinitionData `json:"data"`
-}
-
 type DefinitionData struct {
-	List []DefinitionInfo `json:"list"`
+	List []*DefinitionInfo `json:"list"`
 }
 
 // GetFileContentRequest 获取文件内容请求
@@ -82,14 +68,6 @@ type GetFileContentRequest struct {
 	FilePath     string `form:"filePath" binding:"required"`
 	StartLine    int    `form:"startLine,omitempty"`
 	EndLine      int    `form:"endLine,omitempty"`
-}
-
-// GetFileContentResponse 获取文件内容响应
-type GetFileContentResponse struct {
-	Code    int    `json:"code"`
-	Success bool   `json:"success"`
-	Message string `json:"message"`
-	Data    []byte `json:"data"`
 }
 
 // GetCodebaseDirectoryRequest 获取代码库目录树请求
@@ -110,21 +88,13 @@ type DirectoryNode struct {
 	Children []DirectoryNode `json:"children,omitempty"`
 }
 
-// GetCodebaseDirectoryResponse 获取代码库目录树响应
-type GetCodebaseDirectoryResponse struct {
-	Code    int           `json:"code"`
-	Success bool          `json:"success"`
-	Message string        `json:"message"`
-	Data    DirectoryData `json:"data"`
-}
-
 type DirectoryData struct {
-	CodebaseId    string          `json:"codebaseId"`
-	Name          string          `json:"name"`
-	RootPath      string          `json:"rootPath"`
-	TotalFiles    int             `json:"totalFiles"`
-	TotalSize     int64           `json:"totalSize"`
-	DirectoryTree []DirectoryNode `json:"directoryTree"`
+	CodebaseId    string            `json:"codebaseId"`
+	Name          string            `json:"name"`
+	RootPath      string            `json:"rootPath"`
+	TotalFiles    int               `json:"totalFiles"`
+	TotalSize     int64             `json:"totalSize"`
+	DirectoryTree []*types.TreeNode `json:"directoryTree"`
 }
 
 // GetFileStructureRequest 获取文件结构请求
@@ -143,22 +113,21 @@ type FileStructureInfo struct {
 	Content  string   `json:"content,omitempty"`
 }
 
-// GetFileStructureResponse 获取文件结构响应
-type GetFileStructureResponse struct {
-	Code    int               `json:"code"`
-	Success bool              `json:"success"`
-	Message string            `json:"message"`
-	Data    FileStructureData `json:"data"`
-}
-
 type FileStructureData struct {
-	List []FileStructureInfo `json:"list"`
+	List []*FileStructureInfo `json:"list"`
 }
 
 // GetIndexSummaryRequest 获取索引情况请求
 type GetIndexSummaryRequest struct {
 	ClientId     string `form:"clientId" binding:"required"`
 	CodebasePath string `form:"codebasePath" binding:"required"`
+}
+
+// DeleteIndexRequest 删除索引请求
+type DeleteIndexRequest struct {
+	ClientId     string `form:"clientId" binding:"required"`
+	CodebasePath string `form:"codebasePath" binding:"required"`
+	IndexType    string `form:"indexType" binding:"required"`
 }
 
 // IndexSummary 索引摘要
@@ -172,10 +141,31 @@ type CodegraphInfo struct {
 	TotalFiles int    `json:"totalFiles"`
 }
 
-// GetIndexSummaryResponse 获取索引情况响应
-type GetIndexSummaryResponse struct {
-	Code    int          `json:"code"`
-	Success bool         `json:"success"`
-	Message string       `json:"message"`
-	Data    IndexSummary `json:"data"`
+// ToPosition 辅助函数：将 ranges 转换为 Position
+func ToPosition(ranges []int32) Position {
+	if len(ranges) != 3 && len(ranges) != 4 {
+		return Position{}
+	}
+	if len(ranges) == 3 {
+		return Position{
+			StartLine:   int(ranges[0]) + 1,
+			StartColumn: int(ranges[1]) + 1,
+			EndLine:     int(ranges[0]) + 1,
+			EndColumn:   int(ranges[2]) + 1,
+		}
+	} else {
+		return Position{
+			StartLine:   int(ranges[0]) + 1,
+			StartColumn: int(ranges[1]) + 1,
+			EndLine:     int(ranges[2]) + 1,
+			EndColumn:   int(ranges[3]) + 1,
+		}
+	}
+
 }
+
+const (
+	Embedding = "embedding"
+	Codegraph = "codegraph"
+	All       = "all"
+)

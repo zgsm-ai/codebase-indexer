@@ -157,3 +157,26 @@ func TestListFiles(t *testing.T) {
 		})
 	}
 }
+
+func TestEnsureTrailingSeparator(t *testing.T) {
+	sep := string(filepath.Separator)
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"空路径", "", ""},
+		{"无分隔符-单级", "dir", "dir" + sep},
+		{"有分隔符-单级", "dir" + sep, "dir" + sep},
+		{"无分隔符-多级", "a" + sep + "b", "a" + sep + "b" + sep},
+		{"有分隔符-多级", "a" + sep + "b" + sep, "a" + sep + "b" + sep},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := EnsureTrailingSeparator(tt.input); got != tt.expected {
+				t.Errorf("输入: %q\n期望: %q\n实际: %q", tt.input, tt.expected, got)
+			}
+		})
+	}
+}

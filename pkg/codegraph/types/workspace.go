@@ -5,10 +5,27 @@ import (
 	"io"
 	"io/fs"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
 )
+
+// TreeOption 定义Tree方法的可选参数
+type TreeOption func(*TreeOptions)
+
+// TreeOptions 包含Tree方法的可选参数
+type TreeOptions struct {
+	MaxDepth       int            // 最大递归深度
+	ExcludePattern *regexp.Regexp // 排除文件的正则表达式
+	IncludePattern *regexp.Regexp // 包含文件的正则表达式
+}
+
+// TreeNode 表示目录树中的一个节点，可以是目录或文件
+type TreeNode struct {
+	FileInfo
+	Children []*TreeNode `json:"children,omitempty"` // 子节点（仅目录有）
+}
 
 type FileInfo struct {
 	Name    string    `json:"language"`          // 节点名称

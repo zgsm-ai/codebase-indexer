@@ -5,6 +5,7 @@ import (
 	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
 	"codebase-indexer/pkg/codegraph/resolver"
 	"codebase-indexer/pkg/codegraph/types"
+	"time"
 )
 
 // ElementTypeToProto 将 types.ElementType 转换为 codegraphpb.ElementType
@@ -165,14 +166,14 @@ func FileElementTablesToProto(fileElementTables []*parser.FileElementTable) []*c
 	protoElementTables := make([]*codegraphpb.FileElementTable, len(fileElementTables))
 	for j, ft := range fileElementTables {
 		pft := &codegraphpb.FileElementTable{
-			Path:     ft.Path,
-			Language: string(ft.Language),
-			Elements: make([]*codegraphpb.BaseElement, len(ft.Elements)),
+			Path:      ft.Path,
+			Language:  string(ft.Language),
+			Timestamp: time.Now().Unix(),
+			Elements:  make([]*codegraphpb.BaseElement, len(ft.Elements)),
 		}
 		for k, e := range ft.Elements {
 			pbe := &codegraphpb.BaseElement{
 				Name:        e.GetName(),
-				Path:        e.GetPath(),
 				ElementType: ElementTypeToProto(e.GetType()),
 				Range:       e.GetRange(),
 			}

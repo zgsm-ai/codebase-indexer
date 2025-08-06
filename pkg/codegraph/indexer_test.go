@@ -114,7 +114,7 @@ func createTestIndexer(env *testEnvironment, visitPattern types.VisitPattern) *I
 // countGoFiles 统计工作区中的 Go 文件数量
 func countGoFiles(ctx context.Context, workspaceReader *workspace.WorkspaceReader, workspaceDir string, visitPattern types.VisitPattern) (int, error) {
 	var goCount int
-	err := workspaceReader.Walk(ctx, workspaceDir, func(walkCtx *types.WalkContext, reader io.ReadCloser) error {
+	err := workspaceReader.WalkFile(ctx, workspaceDir, func(walkCtx *types.WalkContext, reader io.ReadCloser) error {
 		if walkCtx.Info.IsDir {
 			return nil
 		}
@@ -133,7 +133,7 @@ func countIndexedFiles(ctx context.Context, storage store.GraphStorage, projects
 		iter := storage.Iter(ctx, p.Uuid)
 		for iter.Next() {
 			key := iter.Key()
-			if strings.HasPrefix(key, store.PathKeyPrefix) {
+			if store.IsElementPathKey(key) {
 				indexSize++
 			}
 		}
@@ -160,7 +160,7 @@ func validateStorageState(t *testing.T, ctx context.Context, workspaceReader *wo
 
 	// 记录存储大小
 	for _, p := range projects {
-		t.Logf("=> storage size: %d", storage.Size(ctx, p.Uuid))
+		t.Logf("=> storage size: %d", storage.Size(ctx, p.Uuid, store.PathKeySystemPrefix))
 	}
 }
 
@@ -169,7 +169,7 @@ func cleanIndexStoreTest(ctx context.Context, projects []*workspace.Project, sto
 		if err := storage.DeleteAll(ctx, p.Uuid); err != nil {
 			return err
 		}
-		if storage.Size(ctx, p.Uuid) > 0 {
+		if storage.Size(ctx, p.Uuid, types.EmptyString) > 0 {
 			return fmt.Errorf("clean workspace index failed, size not equal 0")
 		}
 	}
@@ -201,7 +201,7 @@ func validateFilesNotIndexed(t *testing.T, ctx context.Context, storage store.Gr
 		iter := storage.Iter(ctx, p.Uuid)
 		for iter.Next() {
 			key := iter.Key()
-			if !strings.HasPrefix(key, store.PathKeyPrefix) {
+			if !store.IsElementPathKey(key) {
 				continue
 			}
 			_, ok := pathKeys[key]
@@ -213,12 +213,13 @@ func validateFilesNotIndexed(t *testing.T, ctx context.Context, storage store.Gr
 }
 
 // validateFilesIndexed 验证指定文件已经被索引
-func validateFilesIndexed(t *testing.T, ctx context.Context, storage store.GraphStorage, projects []*workspace.Project, pathKeys map[string]any) {
+func validateFilesIndexed(t *testing.T, ctx context.Context, storage store.GraphStorage,
+	projects []*workspace.Project, pathKeys map[string]any) {
 	for _, p := range projects {
 		iter := storage.Iter(ctx, p.Uuid)
 		for iter.Next() {
 			key := iter.Key()
-			if !strings.HasPrefix(key, store.PathKeyPrefix) {
+			if !store.IsElementPathKey(key) {
 				continue
 			}
 			t.Logf("key: %s", key)
@@ -233,7 +234,7 @@ func validateFilesIndexed(t *testing.T, ctx context.Context, storage store.Graph
 // validateStorageEmpty 验证存储为空
 func validateStorageEmpty(t *testing.T, ctx context.Context, storage store.GraphStorage, projects []*workspace.Project) {
 	for _, p := range projects {
-		size := storage.Size(ctx, p.Uuid)
+		size := storage.Size(ctx, p.Uuid, types.EmptyString)
 		assert.Equal(t, 0, size, "Storage should be empty for project: %s", p.Uuid)
 	}
 }

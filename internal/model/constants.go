@@ -27,3 +27,5 @@ const (
 	EventTypeRenameFile    = "rename_file"    // 移动文件事件
 	EventTypeOpenWorkspace = "open_workspace" // 打开工作区事件
 )
+
+const True = "true"

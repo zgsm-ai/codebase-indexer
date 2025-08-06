@@ -143,7 +143,7 @@ func main() {
 
 	indexer := codegraph.NewCodeIndexer(sourceFileParser, dependencyAnalyzer, workspaceReader, codegraphStore,
 		codegraph.IndexerConfig{VisitPattern: types.VisitPattern{}}, appLogger) //todo 文件忽略列表
-	codegraphProcessor := service.NewCodegraphProcessor(indexer, workspaceRepo, eventRepo, appLogger)
+	codegraphProcessor := service.NewCodegraphProcessor(workspaceReader, indexer, workspaceRepo, eventRepo, appLogger)
 
 	// Initialize job layer
 	fileScanJob := job.NewFileScanJob(fileScanService, appLogger, 5*time.Minute)
@@ -171,12 +171,47 @@ func main() {
 		appLogger.Info("swagger documentation enabled")
 	}
 
-	// Start daemon process
-	// daemon := daemon.NewDaemon(syncScheduler, s, lis, httpSync, fileScanner, storageManager, appLogger)
-	daemon := daemon.NewDaemon(schedulerService, syncRepo, scanRepo, storageManager, appLogger, fileScanJob, eventProcessorJob, statusCheckerJob)
-	go daemon.Start()
+	// Start daemonProcess process
+	// daemonProcess := daemonProcess.NewDaemon(syncScheduler, s, lis, httpSync, fileScanner, storageManager, appLogger)
+	daemonProcess := daemon.NewDaemon(schedulerService, syncRepo, scanRepo, storageManager, appLogger, fileScanJob, eventProcessorJob, statusCheckerJob)
+	go daemonProcess.Start()
 
 	// Start pprof server if enabled
+	setupPprof(appLogger)
+
+	// Start HTTP server
+	go func() {
+		if err := httpServerInstance.Start(*httpServer); err != nil && err != http.ErrServerClosed {
+			appLogger.Error("HTTP server error: %v", err)
+		}
+	}()
+
+	appLogger.Info("application started successfully")
+	// appLogger.Info("gRPC server listening on %s", *grpcServer)
+	appLogger.Info("HTTP server listening on %s", *httpServer)
+	if *enableSwagger {
+		appLogger.Info("swagger documentation available at http://localhost%s/docs", *httpServer)
+	}
+
+	// Handle system signals for graceful shutdown
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	<-signals
+
+	appLogger.Info("received shutdown signal, shutting down gracefully...")
+	daemonProcess.Stop()
+
+	// 优雅关闭HTTP服务器
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := httpServerInstance.Shutdown(ctx); err != nil {
+		appLogger.Error("HTTP server shutdown error: %v", err)
+	}
+
+	appLogger.Info("client has been successfully closed")
+}
+
+func setupPprof(appLogger logger.Logger) {
 	pprofConfig := config.GetClientConfig().Pprof
 	if pprofConfig.Enabled {
 		go func() {
@@ -199,37 +234,6 @@ func main() {
 		appLogger.Info("pprof server listening on %s", pprofConfig.Address)
 		appLogger.Info("pprof profiles available at http://%s/debug/pprof/", pprofConfig.Address)
 	}
-
-	// Start HTTP server
-	go func() {
-		if err := httpServerInstance.Start(*httpServer); err != nil && err != http.ErrServerClosed {
-			appLogger.Error("HTTP server error: %v", err)
-		}
-	}()
-
-	appLogger.Info("application started successfully")
-	// appLogger.Info("gRPC server listening on %s", *grpcServer)
-	appLogger.Info("HTTP server listening on %s", *httpServer)
-	if *enableSwagger {
-		appLogger.Info("swagger documentation available at http://localhost%s/docs", *httpServer)
-	}
-
-	// Handle system signals for graceful shutdown
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	<-signals
-
-	appLogger.Info("received shutdown signal, shutting down gracefully...")
-	daemon.Stop()
-
-	// 优雅关闭HTTP服务器
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := httpServerInstance.Shutdown(ctx); err != nil {
-		appLogger.Error("HTTP server shutdown error: %v", err)
-	}
-
-	appLogger.Info("client has been successfully closed")
 }
 
 // initDir initializes directories

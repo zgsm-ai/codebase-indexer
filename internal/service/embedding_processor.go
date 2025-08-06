@@ -262,7 +262,7 @@ func (ep *embeddingProcessService) ProcessEmbeddingEvents(workspacePaths []strin
 	}
 
 	// 获取待处理的添加文件事件
-	events, err := ep.eventRepo.GetEventsByTypeAndEmbeddingStatusAndWorkspaces(model.EventTypeAddFile, workspacePaths, 10, false, targetStatuses)
+	events, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(model.EventTypeAddFile, workspacePaths, 10, false, targetStatuses, nil)
 	if err != nil {
 		ep.logger.Error("failed to get add file events: %v", err)
 		return fmt.Errorf("failed to get add file events: %w", err)
@@ -283,7 +283,7 @@ func (ep *embeddingProcessService) ProcessEmbeddingEvents(workspacePaths []strin
 	}
 
 	// 获取修改文件事件
-	modifyEvents, err := ep.eventRepo.GetEventsByTypeAndEmbeddingStatusAndWorkspaces(model.EventTypeModifyFile, workspacePaths, 10, false, targetStatuses)
+	modifyEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(model.EventTypeModifyFile, workspacePaths, 10, false, targetStatuses, nil)
 	if err != nil {
 		ep.logger.Error("failed to get modify file events: %v", err)
 		return fmt.Errorf("failed to get modify file events: %w", err)
@@ -304,7 +304,7 @@ func (ep *embeddingProcessService) ProcessEmbeddingEvents(workspacePaths []strin
 	}
 
 	// 获取重命名文件事件
-	renameEvents, err := ep.eventRepo.GetEventsByTypeAndEmbeddingStatusAndWorkspaces(model.EventTypeRenameFile, workspacePaths, 10, false, targetStatuses)
+	renameEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(model.EventTypeRenameFile, workspacePaths, 10, false, targetStatuses, nil)
 	if err != nil {
 		ep.logger.Error("failed to get rename file events: %v", err)
 		return fmt.Errorf("failed to get rename file events: %w", err)
@@ -325,7 +325,7 @@ func (ep *embeddingProcessService) ProcessEmbeddingEvents(workspacePaths []strin
 	}
 
 	// 获取删除文件事件
-	deleteEvents, err := ep.eventRepo.GetEventsByTypeAndEmbeddingStatusAndWorkspaces(model.EventTypeDeleteFile, workspacePaths, 10, false, targetStatuses)
+	deleteEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(model.EventTypeDeleteFile, workspacePaths, 10, false, targetStatuses, nil)
 	if err != nil {
 		ep.logger.Error("failed to get delete file events: %v", err)
 		return fmt.Errorf("failed to get delete file events: %w", err)

@@ -16,10 +16,11 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 type DependencyAnalyzer struct {
-	packageClassifier *packageclassifier.PackageClassifier
+	PackageClassifier *packageclassifier.PackageClassifier
 	workspaceReader   *workspace.WorkspaceReader
 	logger            logger.Logger
 	store             store.GraphStorage
@@ -32,7 +33,7 @@ func NewDependencyAnalyzer(logger logger.Logger,
 
 	return &DependencyAnalyzer{
 		logger:            logger,
-		packageClassifier: packageClassifier,
+		PackageClassifier: packageClassifier,
 		workspaceReader:   reader,
 		store:             store,
 	}
@@ -41,15 +42,21 @@ func NewDependencyAnalyzer(logger logger.Logger,
 func (da *DependencyAnalyzer) Analyze(ctx context.Context,
 	projectInfo *workspace.Project, fileElementTables []*parser.FileElementTable) error {
 	projectUuid := projectInfo.Uuid
+	start := time.Now()
+	da.logger.Info("dependency_analyzer start to analyze dependency for project %s", projectUuid)
 
-	// 1. 处理 import
-	if err := da.preprocessImport(ctx, projectInfo, fileElementTables); err != nil {
-		da.logger.Error("analyze import error: %v", err)
-	}
-
-	// 2. 迭代符号表，去解析依赖关系。 需要区分跨文件依赖、当前文件引用。
+	// 迭代符号表，去解析依赖关系。 需要区分跨文件依赖、当前文件引用。
 	// 优先根据名字做匹配，匹配到多个，再根据作用域、导入、包、别名等信息进行二次过滤。
 	for _, fileTable := range fileElementTables {
+
+		// 处理 import
+		imps, err := da.PreprocessImports(ctx, fileTable.Language, projectInfo, fileTable.Imports)
+		if err != nil {
+			da.logger.Error("analyze import error: %v", err)
+		} else {
+			fileTable.Imports = imps
+		}
+
 		currentPath := fileTable.Path
 		imports := fileTable.Imports
 		for _, elem := range fileTable.Elements {
@@ -138,6 +145,9 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context,
 		}
 	}
 
+	da.logger.Info("dependency_analyzer analyze %d elements dependency for project %s end, cost %d ms.",
+		len(fileElementTables), projectUuid, time.Since(start).Milliseconds())
+
 	return nil
 }
 
@@ -147,7 +157,8 @@ func (da *DependencyAnalyzer) SaveSymbolDefinitions(ctx context.Context, project
 	if da.store == nil {
 		return fmt.Errorf("dependency analyzer store is nil")
 	}
-
+	start := time.Now()
+	da.logger.Info("dependency_analyzer start to save symbol definitions for project %s", projectUuid)
 	// 2. 构建项目定义符号表  符号名 -> 元素列表，先根据符号名匹配，匹配符号名后，再根据导入路径、包名进行过滤。
 	definitionSymbolsMap := make(map[string]*codegraphpb.SymbolDefinition)
 	for _, fileTable := range fileElementTables {
@@ -185,7 +196,8 @@ func (da *DependencyAnalyzer) SaveSymbolDefinitions(ctx context.Context, project
 	if err := da.store.BatchSave(ctx, projectUuid, workspace.SymbolDefinitions(definitionSymbols)); err != nil {
 		return fmt.Errorf("dependency_analyze batch save symbol definitions error: %w", err)
 	}
-	da.logger.Info("dependency_analyze project %s saved %d symbols", projectUuid, len(definitionSymbols))
+	da.logger.Info("dependency_analyze project %s saved %d symbols, cost %d ms", projectUuid,
+		len(definitionSymbols), time.Since(start).Milliseconds())
 	return nil
 }
 

@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"codebase-indexer/pkg/codegraph/types"
 	"context"
 	"os"
 	"path"
@@ -97,4 +98,26 @@ func ListFiles(dir string) ([]string, error) {
 		}
 	}
 	return files, nil
+}
+
+// EnsureTrailingSeparator 确保路径尾部带有系统对应的路径分隔符
+// 若已有分隔符则不重复添加
+func EnsureTrailingSeparator(path string) string {
+	if path == types.EmptyString {
+		return types.EmptyString
+	}
+	// 获取当前系统的路径分隔符（如'/'或'\\'）
+	sep := string(filepath.Separator)
+	// 判断路径最后一个字符是否为分隔符
+	if strings.HasSuffix(path, sep) {
+		return path
+	}
+	// 追加分隔符
+	return path + sep
+}
+
+// TrimLastSeparator 移除路径尾部最后一个系统分隔符
+// 问题：无法处理连续分隔符（如 "dir//" 会保留 "dir/"），根路径处理可能不符合预期
+func TrimLastSeparator(path string) string {
+	return strings.TrimSuffix(path, string(filepath.Separator))
 }

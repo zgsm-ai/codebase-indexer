@@ -124,7 +124,7 @@ func (mr *MockGraphStorageMockRecorder) Iter(ctx, projectUuid interface{}) *gomo
 // Save mocks base method.
 func (m *MockGraphStorage) Save(ctx context.Context, projectUuid string, entry *store.Entry) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Save", ctx, projectUuid, entry)
+	ret := m.ctrl.Call(m, "Put", ctx, projectUuid, entry)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
@@ -132,7 +132,7 @@ func (m *MockGraphStorage) Save(ctx context.Context, projectUuid string, entry *
 // Save indicates an expected call of Save.
 func (mr *MockGraphStorageMockRecorder) Save(ctx, projectUuid, entry interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockGraphStorage)(nil).Save), ctx, projectUuid, entry)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockGraphStorage)(nil).Save), ctx, projectUuid, entry)
 }
 
 // Size mocks base method.

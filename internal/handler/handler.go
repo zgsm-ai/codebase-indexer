@@ -466,7 +466,7 @@ func (h *GRPCHandler) isGitRepository(path string) bool {
 // 1. If basePath is a git repo, return it
 // 2. If not, check first-level subdirs and return any git repos
 // 3. If no git repos found in basePath or subdirs, return basePath
-// Returns slice of CodebaseConfig (only CodebasePath and CodebaseName filled)
+// Returns slice of CodebaseConfig (only Workspace and CodebaseName filled)
 func (h *GRPCHandler) findCodebasePaths(basePath string, baseName string) ([]config.CodebaseConfig, error) {
 	var configs []config.CodebaseConfig
 

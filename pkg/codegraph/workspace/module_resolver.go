@@ -12,6 +12,9 @@ import (
 	"strings"
 )
 
+//TODO 多个子模块的处理，比如go.work
+// TODO 优化逻辑，和findProjects的文件遍历操作合并在一起。
+
 // ModuleResolver 模块解析器，用于解析各种语言的包信息
 type ModuleResolver struct {
 	logger logger.Logger
@@ -593,7 +596,7 @@ func (mr *ModuleResolver) resolveGoModules(ctx context.Context, projectPath stri
 		if err != nil {
 			return nil, fmt.Errorf("读取go.mod文件失败: %v", err)
 		}
-		
+
 		modulePath := modfile.ModulePath(data)
 		if modulePath != "" {
 			modules = append(modules, modulePath)

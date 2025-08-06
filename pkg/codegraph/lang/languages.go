@@ -2,6 +2,7 @@ package lang
 
 import (
 	"codebase-indexer/pkg/codegraph/types"
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -183,6 +184,12 @@ func GetSitterParserByFilePath(path string) (*TreeSitterParser, error) {
 	return langConf, nil
 }
 
+func IsUnSupportedFileError(err error) bool {
+	return errors.Is(err, ErrFileExtNotFound) ||
+		errors.Is(err, ErrLanguageParserNotFound) ||
+		errors.Is(err, ErrUnSupportedLanguage)
+}
+
 func GetSitterParserByLanguage(language Language) (*TreeSitterParser, error) {
 	if language == types.EmptyString {
 		return nil, fmt.Errorf("get tree_sitter parser by language: language is empty")
@@ -193,4 +200,16 @@ func GetSitterParserByLanguage(language Language) (*TreeSitterParser, error) {
 		}
 	}
 	return nil, ErrLanguageParserNotFound
+}
+
+func ToLanguage(language string) (Language, error) {
+	if language == types.EmptyString {
+		return types.EmptyString, fmt.Errorf("language is empty")
+	}
+	for _, parser := range treeSitterParsers {
+		if string(parser.Language) == language {
+			return parser.Language, nil
+		}
+	}
+	return types.EmptyString, ErrUnSupportedLanguage
 }

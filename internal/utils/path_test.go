@@ -8,7 +8,7 @@ import (
 )
 
 func TestGetRootDir(t *testing.T) {
-	// Save original environment
+	// Put original environment
 	originalEnv := map[string]string{
 		"USERPROFILE":     os.Getenv("USERPROFILE"),
 		"APPDATA":         os.Getenv("APPDATA"),

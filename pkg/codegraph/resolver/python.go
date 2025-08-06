@@ -75,7 +75,7 @@ func (py *PythonResolver) resolveMethod(ctx context.Context, element *Method, rc
 	//TODO implement me
 	rootCap := rc.Match.Captures[0]
 	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
-	for _, cap := range rc.Match.Captures {	
+	for _, cap := range rc.Match.Captures {
 		captureName := rc.CaptureNames[cap.Index]
 		if cap.Node.IsMissing() || cap.Node.IsError() {
 			continue
@@ -127,7 +127,7 @@ func (py *PythonResolver) resolveVariable(ctx context.Context, element *Variable
 		captureName := rc.CaptureNames[cap.Index]
 		if cap.Node.IsMissing() || cap.Node.IsError() {
 			continue
-		}	
+		}
 		content := cap.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(captureName) {
 		case types.ElementTypeVariableName:
@@ -137,7 +137,7 @@ func (py *PythonResolver) resolveVariable(ctx context.Context, element *Variable
 			for _, typ := range element.VariableType {
 				refs = append(refs, NewReference(element, &cap.Node, typ, types.EmptyString))
 			}
-		// TODO 考虑枚举字段、类的字段，用scm来做
+			// TODO 考虑枚举字段、类的字段，用scm来做
 		}
 	}
 	// fmt.Println("variable",element.BaseElement.Name)
@@ -167,18 +167,18 @@ func (py *PythonResolver) resolveCall(ctx context.Context, element *Call, rc *Re
 		// content := cap.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(captureName) {
 		case types.ElementTypeFunctionCallName:
-			nameOrTypes:= collectPyTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
+			nameOrTypes := collectPyTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
 			if len(nameOrTypes) > 1 {
 				// Dict[str, int] 考虑将类型抛出去
 				for _, typ := range nameOrTypes {
 					// TODO 过滤官方标准类型
-					refs = append(refs, NewReference(element, &cap.Node, typ,types.EmptyString))
+					refs = append(refs, NewReference(element, &cap.Node, typ, types.EmptyString))
 				}
 			}
 			element.BaseElement.Name = nameOrTypes[0]
-			fmt.Println("call.function.name",element.BaseElement.Name)
+			//fmt.Println("call.function.name",element.BaseElement.Name)
 		case types.ElementTypeFunctionArguments:
-			args:=getArgs(&cap.Node, rc.SourceFile.Content)
+			args := getArgs(&cap.Node, rc.SourceFile.Content)
 			for _, arg := range args {
 				element.Parameters = append(element.Parameters, &Parameter{
 					Name: arg,
@@ -186,7 +186,7 @@ func (py *PythonResolver) resolveCall(ctx context.Context, element *Call, rc *Re
 			}
 		}
 	}
-	element.BaseElement.Scope = types.ScopeFunction		
+	element.BaseElement.Scope = types.ScopeFunction
 	elements := []Element{element}
 	for _, r := range refs {
 		elements = append(elements, r)
@@ -207,6 +207,7 @@ func getArgs(node *sitter.Node, content []byte) []string {
 	}
 	return args
 }
+
 // 解析python函数参数，可能包含name和type，也可能只包含其中一个，也可能是可变参数
 func parsePyFuncParams(node *sitter.Node, content []byte) []Parameter {
 	if node == nil {
@@ -269,8 +270,6 @@ func parsePyFuncParams(node *sitter.Node, content []byte) []Parameter {
 	return params
 }
 
-
-
 // collectPyTypeIdentifiers: 解析传参为类型的情况，也可处理单个复合参数解析为多个基础参数的情况
 func collectPyTypeIdentifiers(node *sitter.Node, content []byte) []string {
 	if node == nil {
@@ -326,4 +325,3 @@ func collectPyTypeIdentifiers(node *sitter.Node, content []byte) []string {
 	walk(node)
 	return results
 }
-

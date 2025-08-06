@@ -104,7 +104,7 @@ func cleanTestIndexStore(ctx context.Context, projects []*workspace.Project, sto
 		if err := storage.DeleteAll(ctx, p.Uuid); err != nil {
 			return err
 		}
-		if storage.Size(ctx, p.Uuid) > 0 {
+		if storage.Size(ctx, p.Uuid, store.PathKeySystemPrefix) > 0 {
 			return fmt.Errorf("clean workspace index failed, size not equal 0")
 		}
 	}

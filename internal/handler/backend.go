@@ -2,6 +2,7 @@
 package handler
 
 import (
+	"codebase-indexer/pkg/response"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -51,24 +52,18 @@ func (h *BackendHandler) SearchRelation(c *gin.Context) {
 	var req dto.SearchRelationRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
 		h.logger.Error("invalid request format: %v", err)
-		c.JSON(http.StatusBadRequest, dto.SearchRelationResponse{
-			Code:    http.StatusBadRequest,
-			Success: false,
-			Message: "invalid request format",
-			Data:    dto.RelationData{List: []dto.RelationNode{}},
-		})
+		response.Error(c, http.StatusBadRequest, err)
 		return
 	}
 
-	h.logger.Info("relation search request: ClientId=%s, CodebasePath=%s, FilePath=%s", req.ClientId, req.CodebasePath, req.FilePath)
+	h.logger.Info("relation search request: ClientId=%s, Workspace=%s, FilePath=%s", req.ClientId, req.CodebasePath, req.FilePath)
 
-	// TODO: 实现实际的关系检索逻辑
-	c.JSON(http.StatusOK, dto.SearchRelationResponse{
-		Code:    http.StatusOK,
-		Success: true,
-		Message: "ok",
-		Data:    dto.RelationData{List: []dto.RelationNode{}},
-	})
+	relations, err := h.codebaseService.QueryRelation(c, &req)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, err)
+		return
+	}
+	response.OkJson(c, relations)
 }
 
 // SearchDefinition 获取代码文件范围的内容定义
@@ -91,24 +86,19 @@ func (h *BackendHandler) SearchDefinition(c *gin.Context) {
 	var req dto.SearchDefinitionRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
 		h.logger.Error("invalid request format: %v", err)
-		c.JSON(http.StatusBadRequest, dto.SearchDefinitionResponse{
-			Code:    http.StatusBadRequest,
-			Success: false,
-			Message: "invalid request format",
-			Data:    dto.DefinitionData{List: []dto.DefinitionInfo{}},
-		})
+		response.Error(c, http.StatusBadRequest, err)
 		return
 	}
 
-	h.logger.Info("definition search request: ClientId=%s, CodebasePath=%s, FilePath=%s", req.ClientId, req.CodebasePath, req.FilePath)
+	h.logger.Info("definition search request: ClientId=%s, Workspace=%s, FilePath=%s", req.ClientId, req.CodebasePath, req.FilePath)
 
-	// TODO: 实现实际的获取定义逻辑
-	c.JSON(http.StatusOK, dto.SearchDefinitionResponse{
-		Code:    http.StatusOK,
-		Success: true,
-		Message: "ok",
-		Data:    dto.DefinitionData{List: []dto.DefinitionInfo{}}, // 这里先返回空定义列表作为模板
-	})
+	definitions, err := h.codebaseService.QueryDefinition(c, &req)
+	if err != nil {
+		h.logger.Error("search definition err:%v", err)
+		response.Error(c, http.StatusBadRequest, err)
+		return
+	}
+	response.OkJson(c, definitions)
 }
 
 // GetFileContent 获取源文件内容接口
@@ -131,20 +121,18 @@ func (h *BackendHandler) GetFileContent(c *gin.Context) {
 	var req dto.GetFileContentRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
 		h.logger.Error("invalid request format: %v", err)
-		c.JSON(http.StatusBadRequest, dto.GetFileContentResponse{
-			Code:    http.StatusBadRequest,
-			Success: false,
-			Message: "invalid request format",
-			Data:    []byte{},
-		})
+		response.Error(c, http.StatusBadRequest, err)
 		return
 	}
 
-	h.logger.Info("get file content request: ClientId=%s, CodebasePath=%s, FilePath=%s", req.ClientId, req.CodebasePath, req.FilePath)
-
-	// TODO: 实现实际的获取文件内容逻辑
-	// 这里返回一个空的二进制流作为占位符
-	c.Data(http.StatusOK, "application/octet-stream", []byte{})
+	h.logger.Info("get file content request: ClientId=%s, Workspace=%s, FilePath=%s", req.ClientId, req.CodebasePath, req.FilePath)
+	content, err := h.codebaseService.GetFileContent(c, &req)
+	if err != nil {
+		h.logger.Error("get file content err:%v", err)
+		response.Error(c, http.StatusBadRequest, err)
+		return
+	}
+	response.Bytes(c, content)
 }
 
 // GetCodebaseDirectory 获取代码库目录树
@@ -166,12 +154,7 @@ func (h *BackendHandler) GetCodebaseDirectory(c *gin.Context) {
 	var req dto.GetCodebaseDirectoryRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
 		h.logger.Error("invalid request format: %v", err)
-		c.JSON(http.StatusBadRequest, dto.GetCodebaseDirectoryResponse{
-			Code:    http.StatusBadRequest,
-			Success: false,
-			Message: "invalid request format",
-			Data:    dto.DirectoryData{},
-		})
+		response.Error(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -180,15 +163,15 @@ func (h *BackendHandler) GetCodebaseDirectory(c *gin.Context) {
 		req.Depth = 1
 	}
 
-	h.logger.Info("get codebase directory request: ClientId=%s, CodebasePath=%s, Depth=%d", req.ClientId, req.CodebasePath, req.Depth)
+	h.logger.Info("get codebase directory request: ClientId=%s, Workspace=%s, Depth=%d", req.ClientId, req.CodebasePath, req.Depth)
 
-	// TODO: 实现实际的获取目录树逻辑
-	c.JSON(http.StatusOK, dto.GetCodebaseDirectoryResponse{
-		Code:    http.StatusOK,
-		Success: true,
-		Message: "ok",
-		Data:    dto.DirectoryData{},
-	})
+	tree, err := h.codebaseService.GetCodebaseDirectoryTree(c, &req)
+	if err != nil {
+		h.logger.Error("get codebase directory err:%v", err)
+		response.Error(c, http.StatusBadRequest, err)
+		return
+	}
+	response.OkJson(c, tree)
 }
 
 // GetFileStructure 获取单个代码文件结构
@@ -209,24 +192,19 @@ func (h *BackendHandler) GetFileStructure(c *gin.Context) {
 	var req dto.GetFileStructureRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
 		h.logger.Error("invalid request format: %v", err)
-		c.JSON(http.StatusBadRequest, dto.GetFileStructureResponse{
-			Code:    http.StatusBadRequest,
-			Success: false,
-			Message: "invalid request format",
-			Data:    dto.FileStructureData{List: []dto.FileStructureInfo{}},
-		})
+		response.Error(c, http.StatusBadRequest, err)
 		return
 	}
 
-	h.logger.Info("get file structure request: ClientId=%s, CodebasePath=%s, FilePath=%s", req.ClientId, req.CodebasePath, req.FilePath)
+	h.logger.Info("get file structure request: ClientId=%s, Workspace=%s, FilePath=%s", req.ClientId, req.CodebasePath, req.FilePath)
 
-	// TODO: 实现实际的获取文件结构逻辑
-	c.JSON(http.StatusOK, dto.GetFileStructureResponse{
-		Code:    http.StatusOK,
-		Success: true,
-		Message: "ok",
-		Data:    dto.FileStructureData{List: []dto.FileStructureInfo{}},
-	})
+	definitions, err := h.codebaseService.ParseFileDefinitions(c, &req)
+	if err != nil {
+		h.logger.Info("get file structure err:%v", err)
+		response.Error(c, http.StatusBadRequest, err)
+		return
+	}
+	response.OkJson(c, definitions)
 }
 
 // GetIndexSummary 获取代码库的索引情况
@@ -245,24 +223,18 @@ func (h *BackendHandler) GetIndexSummary(c *gin.Context) {
 	var req dto.GetIndexSummaryRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
 		h.logger.Error("invalid request format: %v", err)
-		c.JSON(http.StatusBadRequest, dto.GetIndexSummaryResponse{
-			Code:    http.StatusBadRequest,
-			Success: false,
-			Message: "invalid request format",
-			Data:    dto.IndexSummary{},
-		})
+		response.Error(c, http.StatusBadRequest, err)
 		return
 	}
 
-	h.logger.Info("get index summary request: ClientId=%s, CodebasePath=%s", req.ClientId, req.CodebasePath)
-
-	// TODO: 实现实际的获取索引情况逻辑
-	c.JSON(http.StatusOK, dto.GetIndexSummaryResponse{
-		Code:    http.StatusOK,
-		Success: true,
-		Message: "ok",
-		Data:    dto.IndexSummary{},
-	})
+	h.logger.Info("get index summary request: ClientId=%s, Workspace=%s", req.ClientId, req.CodebasePath)
+	summarize, err := h.codebaseService.Summarize(c, &req)
+	if err != nil {
+		h.logger.Error("get index summary: %v", err)
+		response.Error(c, http.StatusBadRequest, err)
+		return
+	}
+	response.OkJson(c, summarize)
 }
 
 // SetupRoutes 设置后端API路由

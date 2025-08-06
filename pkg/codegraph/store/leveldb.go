@@ -1,12 +1,14 @@
 package store
 
 import (
+	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/codegraph/utils"
 	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/syndtr/goleveldb/leveldb/iterator"
@@ -30,12 +32,12 @@ type LevelDBStorage struct {
 
 // NewLevelDBStorage creates new LevelDB storage instance
 func NewLevelDBStorage(baseDir string, logger logger.Logger) (*LevelDBStorage, error) {
-	logger.Info("new_leveldb_storage: checking base directory baseDir %s", baseDir)
+	logger.Info("leveldb: checking base directory baseDir %s", baseDir)
 	if err := os.MkdirAll(baseDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create base directory: %w", err)
 	}
 
-	logger.Info("new_leveldb_storage: checking directory permissions")
+	logger.Info("leveldb: checking directory permissions")
 	if err := checkDirWritable(baseDir); err != nil {
 		return nil, fmt.Errorf("directory not writable: %w", err)
 	}
@@ -45,7 +47,7 @@ func NewLevelDBStorage(baseDir string, logger logger.Logger) (*LevelDBStorage, e
 		logger:  logger,
 	}
 
-	logger.Info("new_leveldb_storage: initialized successfully baseDir %s", baseDir)
+	logger.Info("leveldb: initialized successfully baseDir %s", baseDir)
 	return storage, nil
 }
 
@@ -81,6 +83,10 @@ func (s *LevelDBStorage) getDB(projectUuid string) (*leveldb.DB, error) {
 	return db, nil
 }
 
+func (s *LevelDBStorage) generateDbPath(projectUuid string) string {
+	return filepath.Join(s.baseDir, projectUuid, dataDir)
+}
+
 // createDB creates new LevelDB instance
 func (s *LevelDBStorage) createDB(projectUuid string) (*leveldb.DB, error) {
 	s.logger.Info("create_db: creating project directory project %s", projectUuid)
@@ -89,7 +95,7 @@ func (s *LevelDBStorage) createDB(projectUuid string) (*leveldb.DB, error) {
 		return nil, fmt.Errorf("failed to create project directory %s: %w", projectDir, err)
 	}
 
-	dbPath := filepath.Join(projectDir, dataDir)
+	dbPath := s.generateDbPath(projectUuid)
 	s.logger.Info("create_db: opening database project %s path %s", projectUuid, dbPath)
 
 	db, err := openLevelDB(dbPath)
@@ -178,7 +184,7 @@ func (s *LevelDBStorage) BatchSave(ctx context.Context, projectUuid string, valu
 }
 
 // Save saves single value
-func (s *LevelDBStorage) Save(ctx context.Context, projectUuid string, entry *Entry) error {
+func (s *LevelDBStorage) Put(ctx context.Context, projectUuid string, entry *Entry) error {
 	if err := utils.CheckContext(ctx); err != nil {
 		return fmt.Errorf("context cancelled: %w", err)
 	}
@@ -268,7 +274,8 @@ func (s *LevelDBStorage) DeleteAll(ctx context.Context, projectUuid string) erro
 		_ = db.Delete([]byte(iter.Key()), nil)
 	}
 	err = iter.Close()
-	s.logger.Info("level_db: delete all for project %s end, after size: %d", projectUuid, s.Size(ctx, projectUuid))
+	s.logger.Info("level_db: delete all for project %s end, after size: %d", projectUuid,
+		s.Size(ctx, projectUuid, types.EmptyString))
 	return err
 }
 
@@ -289,7 +296,7 @@ func (s *LevelDBStorage) Iter(ctx context.Context, projectUuid string) Iterator 
 }
 
 // Size returns project data size
-func (s *LevelDBStorage) Size(ctx context.Context, projectUuid string) int {
+func (s *LevelDBStorage) Size(ctx context.Context, projectUuid string, keyPrefix string) int {
 	if err := utils.CheckContext(ctx); err != nil {
 		s.logger.Debug("size: context cancelled. project %s", projectUuid)
 		return 0
@@ -307,7 +314,9 @@ func (s *LevelDBStorage) Size(ctx context.Context, projectUuid string) int {
 	defer iter.Release()
 
 	for iter.Next() {
-		count++
+		if keyPrefix == types.EmptyString || strings.HasPrefix(string(iter.Key()), keyPrefix) {
+			count++
+		}
 	}
 
 	if err := iter.Error(); err != nil {
@@ -352,6 +361,20 @@ func (s *LevelDBStorage) Close() error {
 
 	s.logger.Info("leveldb_close: storage closed successfully")
 	return nil
+}
+
+func (s *LevelDBStorage) ExistsProject(projectUuid string) (bool, error) {
+	dbPath := s.generateDbPath(projectUuid)
+	// 调用os.Stat获取路径信息
+	_, err := os.Stat(dbPath)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	// 其他错误（如权限问题等）
+	return false, fmt.Errorf("check project index path err: %w", err)
 }
 
 // leveldbIterator implements Iterator interface

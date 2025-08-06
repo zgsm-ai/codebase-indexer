@@ -10,17 +10,17 @@ option go_package = "pkg/codegraph/proto/codegraphpb;codegraphpb";
 message FileElementTable {
   string path = 1;
   string language = 2;
-  repeated BaseElement elements = 3;
+  int64 timestamp = 3;
+  repeated BaseElement elements = 4;
 }
 
 // BaseElement 基础元素定义，对应 resolver.BaseElement
 message BaseElement {
   string name = 1;
-  string path = 2;
-  bool is_definition = 3;
-  ElementType element_type = 4;
-  repeated int32 range = 5;
-  repeated Relation relations = 6;
+  bool is_definition = 2;
+  ElementType element_type = 3;
+  repeated int32 range = 4;
+  repeated Relation relations = 5;
 }
 
 // Relation 关系定义

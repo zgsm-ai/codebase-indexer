@@ -8,7 +8,7 @@ import (
 var ErrFileExtNotFound = errors.New("file extension not found")
 var ErrLanguageParserNotFound = errors.New("tree_sitter language parser not found")
 var ErrQueryNotFound = errors.New("query not found")
-var UnSupportedLanguage = errors.New("unsupported language")
+var ErrUnSupportedLanguage = errors.New("unsupported Language")
 
 // Custom errors
 var (
@@ -27,8 +27,4 @@ func IsRealQueryErr(err error) bool {
 		return true
 	}
 	return false
-}
-
-func IsNotSupportedFileError(err error) bool {
-	return errors.Is(err, ErrFileExtNotFound) || errors.Is(err, ErrLanguageParserNotFound)
 }
