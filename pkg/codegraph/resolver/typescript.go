@@ -257,8 +257,8 @@ func (ts *TypeScriptResolver) resolveVariable(ctx context.Context, element *Vari
 				element.VariableType = []string{typeContent}
 				ref := NewReference(element, &capture.Node, typeContent, "")
 				// 处理带点号的类型名称（如 typescript.go）
-				if strings.Contains(typeContent, ".") {
-					parts := strings.Split(typeContent, ".")
+				if strings.Contains(typeContent, types.Dot) {
+					parts := strings.Split(typeContent, types.Dot)
 					if len(parts) == 2 {
 						ref.BaseElement.Name = parts[1]
 						ref.Owner = parts[0]
@@ -269,6 +269,7 @@ func (ts *TypeScriptResolver) resolveVariable(ctx context.Context, element *Vari
 		//枚举字段
 		case types.ElementTypeEnumConstantName:
 			element.BaseElement.Name = CleanParam(content)
+			element.Scope = determineVariableScope(&capture.Node)
 			element.VariableType = []string{types.PrimitiveType}
 		}
 	}
@@ -685,12 +686,33 @@ func parseTypeScriptPropertySignatureNode(node *sitter.Node, content []byte) (*F
 	field := &Field{}
 	var ref *Reference
 	var method *Method
-	field.Name = node.ChildByFieldName("name").Utf8Text(content)
-	field.Type = node.ChildByFieldName("type").Utf8Text(content)
-	nodeType := node.ChildByFieldName("type")
-	if nodeType.Kind() == string(types.NodeKindTypeAnnotation) {
-		for i := uint(0); i < nodeType.ChildCount(); i++ {
-			child := nodeType.Child(i)
+
+	nameNode := node.ChildByFieldName("name")
+	if nameNode != nil {
+		field.Name = nameNode.Utf8Text(content)
+	}
+
+	typeNode := node.ChildByFieldName("type")
+	if typeNode == nil {
+		// No type, just return what we have.
+		return field, ref, method
+	}
+
+	// It has a type, let's get the text for field.Type
+	typeContent := strings.TrimPrefix(string(typeNode.Utf8Text(content)), ":")
+	typeContent = strings.TrimSpace(typeContent)
+	if isTypeScriptPrimitiveType(typeContent) {
+		field.Type = types.PrimitiveType
+	} else {
+		field.Type = typeContent
+	}
+
+	if typeNode.Kind() == string(types.NodeKindTypeAnnotation) {
+		for i := uint(0); i < typeNode.ChildCount(); i++ {
+			child := typeNode.Child(i)
+			if child == nil {
+				continue
+			}
 			switch types.ToNodeKind(child.Kind()) {
 			case types.NodeKindTypeIdentifier:
 				typeText := parseTypeAnnotation(child, content)[0]
@@ -718,7 +740,7 @@ func parseTypeScriptPropertySignatureNode(node *sitter.Node, content []byte) (*F
 			case types.NodeKindFunctionType:
 				method = &Method{
 					BaseElement: &BaseElement{
-						Name:  field.Name,
+						Name:  field.Name, // Use the field name we already parsed
 						Type:  types.ElementTypeMethod,
 						Scope: types.ScopeBlock,
 						Range: []int32{
@@ -743,6 +765,7 @@ func parseTypeScriptPropertySignatureNode(node *sitter.Node, content []byte) (*F
 			}
 		}
 	}
+
 	return field, ref, method
 }
 

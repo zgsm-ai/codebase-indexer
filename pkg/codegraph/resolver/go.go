@@ -213,6 +213,11 @@ func (r *GoResolver) processStructFields(structTypeNode *sitter.Node, element *C
 					} else {
 						fieldType = typeNode.Utf8Text(rc.SourceFile.Content)
 					}
+				} else if typeNode.Kind() == string(types.NodeKindGenericType) {
+					typeNode = typeNode.ChildByFieldName("type")
+					if typeNode != nil {
+						fieldType = typeNode.Utf8Text(rc.SourceFile.Content)
+					}
 				} else {
 					fieldType = typeNode.Utf8Text(rc.SourceFile.Content)
 				}
@@ -920,7 +925,7 @@ func isPrimitiveType(typeName string) bool {
 		"bool", "int", "int8", "int16", "int32", "int64",
 		"uint", "uint8", "uint16", "uint32", "uint64", "uintptr",
 		"float32", "float64", "complex64", "complex128",
-		"byte", "rune", "string", "any", "interface{}", "struct", "func", "chan",
+		"byte", "rune", "string", "any", "interface{}", "struct", "func", "chan", "map",
 	}
 
 	for _, t := range primitiveTypes {
