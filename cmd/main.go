@@ -262,6 +262,13 @@ func initDir(appName string) error {
 	}
 	fmt.Printf("upload temporary directory: %s\n", uploadTmpPath)
 
+	// Initialize index directory
+	indexPath, err := utils.GetIndexDir(rootPath)
+	if err != nil {
+		return fmt.Errorf("failed to get index directory: %v", err)
+	}
+	fmt.Printf("index directory: %s\n", indexPath)
+
 	// Initialize cache db directory
 	cacheDbPath, err := utils.GetCacheDbDir(cachePath)
 	if err != nil {

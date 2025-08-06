@@ -183,6 +183,23 @@ func GetCacheWorkspaceEmbeddingDir(cachePath string) (string, error) {
 	return workspaceEmbeddingPath, nil
 }
 
+func GetIndexDir(rootPath string) (string, error) {
+	if _, err := os.Stat(rootPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("root path %s does not exist", rootPath)
+	}
+
+	indexPath := filepath.Join(rootPath, "index")
+
+	// Ensure config directory exists
+	if err := os.MkdirAll(indexPath, 0755); err != nil {
+		return "", err
+	}
+
+	IndexDir = indexPath
+
+	return indexPath, nil
+}
+
 // CleanUploadTmpDir cleans temporary upload directory
 func CleanUploadTmpDir() error {
 	return os.RemoveAll(UploadTmpDir)

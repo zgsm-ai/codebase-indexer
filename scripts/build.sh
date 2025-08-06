@@ -55,6 +55,74 @@ fi
 echo "Starting Go build process for Version: $APP_VERSION, OS: $TARGET_OS, Arch: $TARGET_ARCH..."
 
 # Set environment variables and build
+# Configure CC and CGO settings based on target OS and architecture
+export CGO_ENABLED=1
+
+case "$TARGET_OS" in
+  "linux")
+    case "$TARGET_ARCH" in
+      "amd64")
+        export CC=gcc
+        export CGO_CFLAGS="-O2 -g"
+        ;;
+      "arm64")
+        export CC=aarch64-linux-gnu-gcc
+        export CGO_CFLAGS="-O2 -g"
+        ;;
+      "386")
+        export CC=gcc
+        export CGO_CFLAGS="-O2 -g -m32"
+        ;;
+      "arm")
+        export CC=arm-linux-gnueabihf-gcc
+        export CGO_CFLAGS="-O2 -g"
+        ;;
+      *)
+        echo "Warning: Unsupported Linux architecture: $TARGET_ARCH, using default gcc"
+        export CC=gcc
+        ;;
+    esac
+    ;;
+  "windows")
+    case "$TARGET_ARCH" in
+      "amd64")
+        export CC=x86_64-w64-mingw32-gcc
+        export CGO_CFLAGS="-O2 -g"
+        ;;
+      "386")
+        export CC=i686-w64-mingw32-gcc
+        export CGO_CFLAGS="-O2 -g"
+        ;;
+      "arm64")
+        export CC=aarch64-w64-mingw32-gcc
+        export CGO_CFLAGS="-O2 -g"
+        ;;
+      *)
+        echo "Warning: Unsupported Windows architecture: $TARGET_ARCH, using default x86_64-w64-mingw32-gcc"
+        export CC=x86_64-w64-mingw32-gcc
+        ;;
+    esac
+    ;;
+  "darwin")
+    case "$TARGET_ARCH" in
+      "amd64")
+        export CC=clang-12
+        export CGO_CFLAGS="-O2 -g -arch x86_64"
+        ;;
+      "arm64")
+        export CC=clang-12
+        export CGO_CFLAGS="-O2 -g -arch arm64"
+        ;;
+      *)
+        echo "Warning: Unsupported macOS architecture: $TARGET_ARCH, using default clang-12"
+        export CC=clang-12
+        ;;
+    esac
+    ;;
+  *)
+    echo "Warning: Unsupported target OS: $TARGET_OS, using default CC"
+    ;;
+esac
 GOOS="$TARGET_OS" GOARCH="$TARGET_ARCH" go build -ldflags="$LD_FLAGS" -o "$PROJECT_ROOT/$OUTPUT_DIR/$OUTPUT_FILENAME" "$MAIN_PACKAGE_PATH"
 
 if [ $? -eq 0 ]; then
