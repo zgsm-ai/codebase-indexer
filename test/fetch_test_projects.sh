@@ -8,16 +8,16 @@ mkdir -p ${TARGET_DIR}
 LANGUAGES=(
     "c"
     "cpp"
-    "csharp"
-    "go"
+    # "csharp"
+    # "go"
     "java"
-    "javascript"
-    "kotlin"
+    # "javascript"
+    # "kotlin"
     "python"
-    "ruby"
-    "rust"
-    "scala"
-    "typescript"
+    # "ruby"
+    # "rust"
+    # "scala"
+    # "typescript"
 )
 
 # 每个语言对应的项目列表（用|分隔） - 使用SSH地址

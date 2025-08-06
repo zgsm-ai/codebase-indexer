@@ -175,7 +175,7 @@ func TestJavaResolver_ResolveClass(t *testing.T) {
 		"UserServiceImpl": {
 			Scope:        types.ScopeProject,
 			SuperClasses: []string{"BaseService"},
-			SuperIfaces:  []string{"UserApi","String", "Loggable", "Serializable"},
+			SuperIfaces:  []string{"UserApi", "String", "Loggable", "Serializable"},
 		},
 	}
 
@@ -360,7 +360,7 @@ func TestJavaResolver_ResolveVariable(t *testing.T) {
 				{BaseElement: &resolver.BaseElement{Name: "result", Type: types.ElementTypeVariable}, VariableType: []string{types.PrimitiveType}},
 				{BaseElement: &resolver.BaseElement{Name: "status", Type: types.ElementTypeVariable}, VariableType: []string{"Status"}},
 			},
-				description: "测试 TestVar.java 中所有变量的类型解析",
+			description: "测试 TestVar.java 中所有变量的类型解析",
 		},
 	}
 
@@ -473,7 +473,6 @@ public interface SimpleInterface extends InterfaceA, InterfaceB, com.example.api
 			wantExtends:   []string{},
 			description:   "测试Savable接口声明解析",
 		},
-
 	}
 
 	for _, tt := range testCases {
@@ -570,6 +569,44 @@ func TestJavaResolver_ResolveLocalVariableValue(t *testing.T) {
 }
 
 func TestJavaResolver_ResolveCall(t *testing.T) {
+	logger := initLogger()
+	parser := NewSourceFileParser(logger)
+
+	testCases := []struct {
+		name        string
+		sourceFile  *types.SourceFile
+		wantErr     error
+		wantCalls   []resolver.Call
+		description string
+	}{
+		{name: "class_literal",
+			sourceFile: &types.SourceFile{
+				Path:    "testdata/com/example/test/TestCall.java",
+				Content: readFile("testdata/com/example/test/TestCall.java"),
+			},
+			wantErr:   nil,
+			wantCalls: []resolver.Call{
+				{BaseElement: &resolver.BaseElement{Name: "string", Type: types.ElementTypeFunctionCall}, Owner: ""},
+				{BaseElement: &resolver.BaseElement{Name :"List", Type: types.ElementTypeFunctionCall}, Owner: "java.util"},
+			},
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := parser.Parse(context.Background(), tt.sourceFile)
+			assert.ErrorIs(t, err, tt.wantErr)
+			assert.NotNil(t, res)
+			for _, elem := range res.Elements {
+				if call, ok := elem.(*resolver.Call); ok {
+					fmt.Printf("  【方法调用】%s, 所属: %s\n", call.GetName(), call.Owner)
+				}
+				if ref, ok := elem.(*resolver.Reference); ok {
+					fmt.Printf("【引用】%s, 所属: %s\n", ref.GetName(), ref.Owner)
+				}
+			}
+		})
+	}
 }
 func TestJavaResolver_AllResolveMethods(t *testing.T) {
 	logger := initLogger()

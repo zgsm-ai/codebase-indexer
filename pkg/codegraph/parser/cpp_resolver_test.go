@@ -29,7 +29,7 @@ func TestCPPResolver_ResolveImport(t *testing.T) {
 		{
 			name: "普通头文件导入",
 			sourceFile: &types.SourceFile{
-				Path: "testdata/ImportTest.cpp",
+				Path: "testdata/cpp/ImportTest.cpp",
 				Content: []byte(`#include "test.h"
 #include "utils/helper.hpp"
 `),
@@ -40,7 +40,7 @@ func TestCPPResolver_ResolveImport(t *testing.T) {
 		{
 			name: "系统头文件导入",
 			sourceFile: &types.SourceFile{
-				Path: "testdata/SystemImportTest.cpp",
+				Path: "testdata/cpp/SystemImportTest.cpp",
 				Content: []byte(`#include <vector>
 #include <string>
 `),
@@ -51,7 +51,7 @@ func TestCPPResolver_ResolveImport(t *testing.T) {
 		{
 			name: "相对路径头文件导入",
 			sourceFile: &types.SourceFile{
-				Path: "testdata/RelativeImportTest.cpp",
+				Path: "testdata/cpp/RelativeImportTest.cpp",
 				Content: []byte(`#include "./local.hpp"
 #include "../common.hpp"
 `),
@@ -62,7 +62,7 @@ func TestCPPResolver_ResolveImport(t *testing.T) {
 		{
 			name: "嵌套目录头文件导入",
 			sourceFile: &types.SourceFile{
-				Path: "testdata/NestedImportTest.cpp",
+				Path: "testdata/cpp/NestedImportTest.cpp",
 				Content: []byte(`#include "nested/dir/deep.hpp"
 `),
 			},
@@ -72,7 +72,7 @@ func TestCPPResolver_ResolveImport(t *testing.T) {
 		{
 			name: "混合引号和尖括号",
 			sourceFile: &types.SourceFile{
-				Path: "testdata/MixedImportTest.cpp",
+				Path: "testdata/cpp/MixedImportTest.cpp",
 				Content: []byte(`#include "test.h"
 #include <map>
 `),
@@ -83,7 +83,7 @@ func TestCPPResolver_ResolveImport(t *testing.T) {
 		{
 			name: "using声明导入",
 			sourceFile: &types.SourceFile{
-				Path: "testdata/UsingImportTest.cpp",
+				Path: "testdata/cpp/UsingImportTest.cpp",
 				Content: []byte(`using namespace std;
 using std::vector;
 using myns::MyClass;
@@ -129,8 +129,8 @@ func TestCPPResolver_ResolveFunction(t *testing.T) {
 		{
 			name: "testfunc.cpp 全部函数声明解析",
 			sourceFile: &types.SourceFile{
-				Path:    "testdata/testfunc.cpp",
-				Content: readFile("testdata/testfunc.cpp"),
+				Path:    "testdata/cpp/testfunc.cpp",
+				Content: readFile("testdata/cpp/testfunc.cpp"),
 			},
 			wantErr: nil,
 			wantFuncs: []resolver.Declaration{
@@ -285,8 +285,8 @@ func TestCPPResolver_ResolveCall(t *testing.T) {
 	parser := NewSourceFileParser(logger)
 
 	sourceFile := &types.SourceFile{
-		Path:    "testdata/testcall.cpp",
-		Content: readFile("testdata/testcall.cpp"),
+		Path:    "testdata/cpp/testcall.cpp",
+		Content: readFile("testdata/cpp/testcall.cpp"),
 	}
 	res, err := parser.Parse(context.Background(), sourceFile)
 	assert.NoError(t, err)
@@ -295,8 +295,10 @@ func TestCPPResolver_ResolveCall(t *testing.T) {
 	// Collect all function calls
 	callMap := make(map[string]*resolver.Call)
 	for _, element := range res.Elements {
+		// fmt.Println(element.GetName(),"element name",element.GetType())
 		if call, ok := element.(*resolver.Call); ok {
 			callMap[call.GetName()] = call
+			fmt.Println(call.GetName(),"call name")
 		}
 	}
 
@@ -317,6 +319,8 @@ func TestCPPResolver_ResolveCall(t *testing.T) {
 		{"obj", "", 4},                   // Function object call (int, int, int, int)
 		{"append", "str", 2},             // Method chaining (first call) (const char*, size_t)
 		{"at", "", 1},                    // Method chaining (second call) (size_t)
+		{"A", "ns", 0},
+		{"B", "ns", 1},
 	}
 
 	// Verify each expected function call
@@ -347,8 +351,8 @@ func TestCPPResolver_ResolveVariable(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
 	sourceFile := &types.SourceFile{
-		Path:    "testdata/testvar.cpp",
-		Content: readFile("testdata/testvar.cpp"),
+		Path:    "testdata/cpp/testvar.cpp",
+		Content: readFile("testdata/cpp/testvar.cpp"),
 	}
 	res, err := parser.Parse(context.Background(), sourceFile)
 	assert.NoError(t, err)
@@ -496,8 +500,8 @@ func TestCPPResolver_ResolveClass(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
 	sourceFile := &types.SourceFile{
-		Path:    "testdata/testclass.cpp",
-		Content: readFile("testdata/testclass.cpp"),
+		Path:    "testdata/cpp/testclass.cpp",
+		Content: readFile("testdata/cpp/testclass.cpp"),
 	}
 	res, err := parser.Parse(context.Background(), sourceFile)
 	assert.NoError(t, err)

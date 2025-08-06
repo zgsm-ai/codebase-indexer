@@ -165,5 +165,5 @@
   ) @call.function
 
 (new_expression
-  constructor:[(member_expression)(identifier)@call.struct]
+  constructor:[(member_expression)(identifier)]@call.struct
 )

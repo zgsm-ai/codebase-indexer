@@ -40,6 +40,8 @@ type EventRepository interface {
 	GetEventsByWorkspaceForDeduplication(workspacePath string) ([]*model.Event, error)
 	// GetEventsCountByType 获取满足事件类型条件的事件总数
 	GetEventsCountByType(eventTypes []string) (int64, error)
+	// GetLatestEventByWorkspaceAndSourcePath 根据工作区路径和源文件路径获取最新记录
+	GetLatestEventByWorkspaceAndSourcePath(workspacePath, sourceFilePath string) (*model.Event, error)
 }
 
 // eventRepository 事件Repository实现
@@ -771,4 +773,46 @@ func (r *eventRepository) GetEventsCountByType(eventTypes []string) (int64, erro
 	}
 
 	return count, nil
+}
+
+// GetLatestEventByWorkspaceAndSourcePath 根据工作区路径和源文件路径获取最新记录
+func (r *eventRepository) GetLatestEventByWorkspaceAndSourcePath(workspacePath, sourceFilePath string) (*model.Event, error) {
+	query := `
+		SELECT id, workspace_path, event_type, source_file_path, target_file_path,
+			codegraph_status, embedding_status, created_at, updated_at
+		FROM events
+		WHERE workspace_path = ? AND source_file_path = ?
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+
+	row := r.db.GetDB().QueryRow(query, workspacePath, sourceFilePath)
+
+	var event model.Event
+	var createdAt, updatedAt time.Time
+
+	err := row.Scan(
+		&event.ID,
+		&event.WorkspacePath,
+		&event.EventType,
+		&event.SourceFilePath,
+		&event.TargetFilePath,
+		&event.CodegraphStatus,
+		&event.EmbeddingStatus,
+		&createdAt,
+		&updatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // 没有找到记录，返回nil而不是错误
+		}
+		r.logger.Error("Failed to get latest event by workspace and source path: %v", err)
+		return nil, fmt.Errorf("failed to get latest event by workspace and source path: %w", err)
+	}
+
+	event.CreatedAt = createdAt
+	event.UpdatedAt = updatedAt
+
+	return &event, nil
 }

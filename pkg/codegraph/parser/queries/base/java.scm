@@ -83,20 +83,6 @@
   )
 ) @local_variable
 
-;; ----------------------------------------other---------------------------------------
-;; Type parameters
-(type_parameters
-  (type_parameter) @type_parameters.name) @type_parameters
-
-;; Annotation declarations
-(annotation_type_declaration
-  name: (identifier) @definition.annotation.name) @definition.annotation
-
-;; 注解调用
-(marker_annotation
-  name: (identifier) @annotation.name
-  ) @annotation
-
 
 ;; -------------------------------- Initializer/Assignment expression --------------------------------
 ;; 方法调用
@@ -105,3 +91,73 @@
   name: (identifier) @call.method.name
   arguments: (argument_list) @call.method.arguments
   ) @call.method
+
+
+;; Class<java.util.List> clazz2 = java.util.List.class;
+(class_literal
+  [
+    (type_identifier)
+    (scoped_type_identifier)
+  ] @call.class_literal.type
+) @call.class_literal
+
+(class_literal
+  (array_type
+    element: [
+      (type_identifier)
+      (scoped_type_identifier)
+    ]
+  ) @call.class_literal.type
+) @call.class_literal
+
+
+;;  (Object) a
+(cast_expression
+  type: [
+    (type_identifier)
+    (scoped_type_identifier)
+    (generic_type)
+    (array_type)
+  ] @call.cast.type
+) @call.cast
+
+;; a instanceof Parent
+(instanceof_expression
+  right: [
+    (scoped_type_identifier)
+    (type_identifier)
+  ] @call.instanceof.type
+) @call.instanceof
+
+(instanceof_expression
+  right: (array_type
+    element: [
+      (type_identifier)
+      (scoped_type_identifier)
+    ]
+  ) @call.instanceof.type
+) @call.instanceof
+
+;; new Child()
+(object_creation_expression
+  type: [
+    (scoped_type_identifier)
+    (generic_type)
+    (type_identifier)
+  ] @call.new.type
+  arguments: (argument_list) @call.new.args
+) @call.new
+
+;; new Dog[3]
+(array_creation_expression
+  type: [
+    (type_identifier)
+    (scoped_type_identifier)
+  ] @call.new_array.type
+) @call.new_array
+
+
+
+
+
+

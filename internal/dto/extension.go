@@ -352,17 +352,8 @@ type IndexStatus struct {
 	ProcessTs int64 `json:"processTs"`
 }
 
-// ProjectIndexStatus represents the index status for a project
-// @Description 项目索引状态
-type ProjectIndexStatus struct {
-	// 项目名称
-	// example: zgsm
-	Name string `json:"name"`
-
-	// 向量索引状态
+type IndexStatusData struct {
 	Embedding IndexStatus `json:"embedding"`
-
-	// 代码关系索引状态
 	Codegraph IndexStatus `json:"codegraph"`
 }
 
@@ -378,10 +369,7 @@ type IndexStatusResponse struct {
 	Message string `json:"message"`
 
 	// 项目索引状态数据
-	Data struct {
-		// 项目列表
-		Projects []ProjectIndexStatus `json:"projects"`
-	} `json:"data"`
+	Data IndexStatusData `json:"data"`
 }
 
 // IndexStatusQuery represents the query parameters for index status

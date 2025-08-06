@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,18 +29,19 @@ type StorageManager struct {
 }
 
 // NewStorageManager creates a new configuration manager
-func NewStorageManager(cacheDir string, logger logger.Logger) (StorageInterface, error) {
-	// Make sure codebase directory exists
-	codebasePath := filepath.Join(cacheDir, "codebase")
-	if _, err := os.Stat(codebasePath); os.IsNotExist(err) {
-		if err := os.MkdirAll(codebasePath, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create codebase directory: %v", err)
-		}
+func NewStorageManager(workspaceDir string, logger logger.Logger) (StorageInterface, error) {
+	if workspaceDir == "" || strings.Contains(workspaceDir, "\x00") {
+		return nil, fmt.Errorf("invalid codebase directory path")
+	}
+
+	// Try to create directory to verify write permission
+	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create codebase directory: %v", err)
 	}
 
 	// Initialize codebaseConfigs map
 	sm := &StorageManager{
-		codebasePath:    codebasePath,
+		codebasePath:    workspaceDir,
 		logger:          logger,
 		codebaseConfigs: make(map[string]*config.CodebaseConfig),
 	}

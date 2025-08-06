@@ -36,7 +36,7 @@ func (ts *TypeScriptResolver) resolveImport(ctx context.Context, element *Import
 		case types.ElementTypeImportAlias:
 			element.Alias = content
 		case types.ElementTypeImportSource:
-			element.Source = strings.Trim(strings.Trim(content, "'"), "\"")
+			element.Source = strings.Trim(strings.Trim(content, types.SingleQuote), types.DoubleQuote)
 		}
 	}
 	if element.Name == types.EmptyString && element.Source != types.EmptyString {
@@ -196,7 +196,7 @@ func (ts *TypeScriptResolver) resolveVariable(ctx context.Context, element *Vari
 			// 收集类型信息
 			typeStr := string(content)
 			// 移除TypeScript类型声明中的冒号前缀
-			typeStr = strings.TrimPrefix(typeStr, ":")
+			typeStr = strings.TrimPrefix(typeStr, types.Colon)
 			typeStr = strings.TrimSpace(typeStr)
 			variableType = typeStr
 
@@ -210,7 +210,7 @@ func (ts *TypeScriptResolver) resolveVariable(ctx context.Context, element *Vari
 			return nil, err
 		}
 		// 为解构出的变量添加类型信息
-		if len(basicElems) > 0 && variableType != "" {
+		if len(basicElems) > 0 && variableType != types.EmptyString {
 			// 使用新方法处理解构类型分配
 			elements = ts.processDestructuringWithType(basicElems, variableType)
 			return elements, nil
@@ -248,7 +248,7 @@ func (ts *TypeScriptResolver) resolveVariable(ctx context.Context, element *Vari
 			element.BaseElement.Name = content
 			updateElementRange(element, &capture)
 		case types.ElementTypeVariableType:
-			typeContent := strings.TrimPrefix(content, ":")
+			typeContent := strings.TrimPrefix(content, types.Colon)
 			typeContent = strings.TrimSpace(typeContent)
 
 			if isTypeScriptPrimitiveType(typeContent) {
@@ -257,8 +257,8 @@ func (ts *TypeScriptResolver) resolveVariable(ctx context.Context, element *Vari
 				element.VariableType = []string{typeContent}
 				ref := NewReference(element, &capture.Node, typeContent, "")
 				// 处理带点号的类型名称（如 typescript.go）
-				if strings.Contains(typeContent, ".") {
-					parts := strings.Split(typeContent, ".")
+				if strings.Contains(typeContent, types.Dot) {
+					parts := strings.Split(typeContent, types.Dot)
 					if len(parts) == 2 {
 						ref.BaseElement.Name = parts[1]
 						ref.Owner = parts[0]
@@ -269,6 +269,7 @@ func (ts *TypeScriptResolver) resolveVariable(ctx context.Context, element *Vari
 		//枚举字段
 		case types.ElementTypeEnumConstantName:
 			element.BaseElement.Name = CleanParam(content)
+			element.Scope = determineVariableScope(&capture.Node)
 			element.VariableType = []string{types.PrimitiveType}
 		}
 	}
@@ -438,7 +439,7 @@ func extractPropertyTypes(typeStr string) map[string]string {
 		}
 
 		// 按冒号分割属性名和类型
-		parts := strings.SplitN(prop, ":", 2)
+		parts := strings.SplitN(prop, types.Colon, 2)
 		if len(parts) < 2 {
 			continue
 		}
@@ -447,7 +448,7 @@ func extractPropertyTypes(typeStr string) map[string]string {
 		propType := strings.TrimSpace(parts[1])
 
 		// 确保只保留有效的属性名和类型
-		if propName != "" && propType != "" {
+		if propName != types.EmptyString && propType != types.EmptyString {
 			result[propName] = propType
 		}
 	}
@@ -460,7 +461,7 @@ func (ts *TypeScriptResolver) processDestructuringWithType(
 	basicElems []Element,
 	typeAnnotation string) []Element {
 	// 如果类型注解为空或元素为空，直接返回
-	if typeAnnotation == "" || len(basicElems) == 0 {
+	if typeAnnotation == types.EmptyString || len(basicElems) == 0 {
 		return basicElems
 	}
 	// 解析对象类型中的属性类型映射
@@ -608,7 +609,7 @@ func parseTypeScriptMethodNode(node *sitter.Node, content []byte, className stri
 				Name: string(patternNode.Utf8Text(content)),
 				Type: []string{},
 			}
-			typeContent := strings.TrimPrefix(string(patternType.Utf8Text(content)), ":")
+			typeContent := strings.TrimPrefix(string(patternType.Utf8Text(content)), types.Colon)
 			typeContent = strings.TrimSpace(typeContent)
 			if isTypeScriptPrimitiveType(typeContent) {
 				parameter.Type = []string{types.PrimitiveType}
@@ -645,16 +646,16 @@ func parseTypeScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Refer
 			fieldName := child.Utf8Text(content)
 			if field.Modifier != types.ModifierPrivate {
 				// 移除#前缀并设置为私有
-				field.Name = strings.TrimPrefix(fieldName, "#")
+				field.Name = strings.TrimPrefix(fieldName, types.Hash)
 				field.Modifier = types.ModifierPrivate
 			} else {
 				field.Name = fieldName
 			}
 		case types.NodeKindTypeAnnotation:
 			typeText := child.Utf8Text(content)
-			typeText = strings.TrimPrefix(typeText, ":")
+			typeText = strings.TrimPrefix(typeText, types.Colon)
 			typeText = strings.TrimSpace(typeText)
-			typeText = strings.TrimPrefix(typeText, "@")
+			typeText = strings.TrimPrefix(typeText, types.EmailAt)
 			field.Type = typeText
 
 			if !isTypeScriptPrimitiveType(typeText) {
@@ -671,8 +672,8 @@ func parseTypeScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Refer
 						Scope: types.ScopeBlock,
 					},
 				}
-				if strings.Contains(typeText, ".") {
-					parts := strings.SplitN(typeText, ".", 2)
+				if strings.Contains(typeText, types.Dot) {
+					parts := strings.SplitN(typeText, types.Dot, 2)
 					ref.BaseElement.Name = parts[1]
 					ref.Owner = parts[0]
 				}
@@ -685,15 +686,34 @@ func parseTypeScriptPropertySignatureNode(node *sitter.Node, content []byte) (*F
 	field := &Field{}
 	var ref *Reference
 	var method *Method
-	field.Name = node.ChildByFieldName("name").Utf8Text(content)
-	field.Type = node.ChildByFieldName("type").Utf8Text(content)
-	nodeType := node.ChildByFieldName("type")
-	if nodeType.Kind() == string(types.NodeKindTypeAnnotation) {
-		for i := uint(0); i < nodeType.ChildCount(); i++ {
-			child := nodeType.Child(i)
+
+	nameNode := node.ChildByFieldName("name")
+	if nameNode != nil {
+		field.Name = nameNode.Utf8Text(content)
+	}
+
+	typeNode := node.ChildByFieldName("type")
+	if typeNode == nil {
+		return field, ref, method
+	}
+
+	typeContent := strings.TrimPrefix(string(typeNode.Utf8Text(content)), types.Colon)
+	typeContent = strings.TrimSpace(typeContent)
+	if isTypeScriptPrimitiveType(typeContent) {
+		field.Type = types.PrimitiveType
+	} else {
+		field.Type = typeContent
+	}
+
+	if typeNode.Kind() == string(types.NodeKindTypeAnnotation) {
+		for i := uint(0); i < typeNode.ChildCount(); i++ {
+			child := typeNode.Child(i)
+			if child == nil {
+				continue
+			}
 			switch types.ToNodeKind(child.Kind()) {
 			case types.NodeKindTypeIdentifier:
-				typeText := parseTypeAnnotation(child, content)[0]
+				typeText := parseReturnTypeNode(child, content)[0]
 				field.Type = typeText
 				if typeText != types.PrimitiveType {
 					ref = &Reference{
@@ -718,7 +738,7 @@ func parseTypeScriptPropertySignatureNode(node *sitter.Node, content []byte) (*F
 			case types.NodeKindFunctionType:
 				method = &Method{
 					BaseElement: &BaseElement{
-						Name:  field.Name,
+						Name:  field.Name, // Use the field name we already parsed
 						Type:  types.ElementTypeMethod,
 						Scope: types.ScopeBlock,
 						Range: []int32{
@@ -738,11 +758,12 @@ func parseTypeScriptPropertySignatureNode(node *sitter.Node, content []byte) (*F
 				}
 				returnTypeNode := child.ChildByFieldName("return_type")
 				if returnTypeNode != nil {
-					method.ReturnType = parseTypeAnnotation(returnTypeNode, content)
+					method.ReturnType = parseReturnTypeNode(returnTypeNode, content)
 				}
 			}
 		}
 	}
+
 	return field, ref, method
 }
 
@@ -801,7 +822,7 @@ func parseOptionalParameterNode(paramNode *sitter.Node, content []byte) Paramete
 	// 获取参数类型
 	typeNode := paramNode.ChildByFieldName("type")
 	if typeNode != nil {
-		paramType = parseTypeAnnotation(typeNode, content)
+		paramType = parseReturnTypeNode(typeNode, content)
 	}
 
 	return Parameter{
@@ -841,7 +862,7 @@ func parseRequiredParameterNode(paramNode *sitter.Node, content []byte) Paramete
 	// 获取参数类型
 	typeNode := paramNode.ChildByFieldName("type")
 	if typeNode != nil {
-		paramType = parseTypeAnnotation(typeNode, content)
+		paramType = parseReturnTypeNode(typeNode, content)
 	}
 
 	return Parameter{
@@ -860,44 +881,23 @@ func parseTypeScriptMethodParameters(element *Method, paramsNode sitter.Node, co
 	element.Parameters = parseTypeScriptParamNodes(paramsNode, content)
 }
 
-// parseTypeAnnotation 解析类型注解
-func parseTypeAnnotation(typeNode *sitter.Node, content []byte) []string {
-	// 获取类型文本
-	typeText := string(typeNode.Utf8Text(content))
-	typeText = strings.TrimPrefix(typeText, ":")
-	typeText = strings.TrimSpace(typeText)
-	typeText = strings.TrimPrefix(typeText, "@")
-
-	// 直接判断类型文本是否为基本类型
-	if isTypeScriptPrimitiveType(typeText) {
-		return []string{types.PrimitiveType}
-	}
-
-	// 非基本类型，返回原始类型名
-	return []string{typeText}
-}
-
 // isNodeDelimiter 检查节点是否为分隔符
 func isNodeDelimiter(node *sitter.Node) bool {
 	kind := node.Kind()
 	return kind == "," || kind == "(" || kind == ")" || kind == "{" || kind == "}"
 }
 
-// parseReturnTypeNode 解析函数返回类型节点
+// parseReturnTypeNode 解析类型节点
 func parseReturnTypeNode(node *sitter.Node, content []byte) []string {
 	// 获取类型文本
 	typeText := string(node.Utf8Text(content))
-	// 去掉类型声明中的冒号前缀和空格
-	typeText = strings.TrimPrefix(typeText, ":")
+	typeText = strings.TrimPrefix(typeText, types.Colon)
 	typeText = strings.TrimSpace(typeText)
-	// 处理带@前缀的类型
-	typeText = strings.TrimPrefix(typeText, "@")
+	typeText = strings.TrimPrefix(typeText, types.EmailAt)
 
-	// 直接判断类型文本是否为基本类型
 	if isTypeScriptPrimitiveType(typeText) {
 		return []string{types.PrimitiveType}
 	}
 
-	// 非基本类型，返回原始类型名
 	return []string{typeText}
 }

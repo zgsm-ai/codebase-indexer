@@ -27,19 +27,19 @@ type EmbeddingFileRepo struct {
 }
 
 // NewEmbeddingFileRepo creates a new configuration manager
-func NewEmbeddingFileRepo(codebaseDir string, logger logger.Logger) (EmbeddingFileRepository, error) {
-	if codebaseDir == "" || strings.Contains(codebaseDir, "\x00") {
+func NewEmbeddingFileRepo(workspaceDir string, logger logger.Logger) (EmbeddingFileRepository, error) {
+	if workspaceDir == "" || strings.Contains(workspaceDir, "\x00") {
 		return nil, fmt.Errorf("invalid codebase directory path")
 	}
 
 	// Try to create directory to verify write permission
-	if err := os.MkdirAll(codebaseDir, 0755); err != nil {
+	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create codebase directory: %v", err)
 	}
 
 	// Initialize codebaseConfigs map
 	sm := &EmbeddingFileRepo{
-		codebasePath:    codebaseDir,
+		codebasePath:    workspaceDir,
 		logger:          logger,
 		codebaseConfigs: make(map[string]*config.CodebaseEmbeddingConfig),
 	}

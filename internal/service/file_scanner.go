@@ -165,10 +165,10 @@ func (ws *fileScanService) UpdateWorkspaceStats(workspace *model.Workspace) erro
 	fileNum := len(codebaseConfig.HashTree)
 
 	// 更新工作区文件数量
-	workspace.FileNum = fileNum
+	updateWorkspace := model.Workspace{WorkspacePath: workspace.WorkspacePath, FileNum: fileNum}
 
 	// 更新工作区信息
-	err = ws.workspaceRepo.UpdateWorkspace(workspace)
+	err = ws.workspaceRepo.UpdateWorkspace(&updateWorkspace)
 	if err != nil {
 		return fmt.Errorf("failed to update workspace: %w", err)
 	}
@@ -213,7 +213,7 @@ func (ws *fileScanService) updateExistingEvent(existingEvent, newEvent *model.Ev
 
 	ws.logger.Info("update existing event for path: %s, type: %s, embedding status: %s", existingEvent.SourceFilePath, newEvent.EventType, existingEvent.EmbeddingStatus)
 	// 更新事件类型和其他必要信息
-	existingEvent.EventType = newEvent.EventType
+	updateEvent := &model.Event{ID: existingEvent.ID, EventType: newEvent.EventType}
 	// 调用 repository 更新事件
-	return ws.eventRepo.UpdateEvent(existingEvent)
+	return ws.eventRepo.UpdateEvent(updateEvent)
 }

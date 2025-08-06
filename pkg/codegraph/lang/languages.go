@@ -97,14 +97,14 @@ var treeSitterParsers = []*TreeSitterParser{
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sitterc.Language())
 		},
-		SupportedExts: []string{".c", ".h"},
+		SupportedExts: []string{".c"},
 	},
 	{
 		Language: CPP,
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sittercpp.Language())
 		},
-		SupportedExts: []string{".cpp", ".cc", ".cxx", ".hpp"},
+		SupportedExts: []string{".cpp", ".cc", ".cxx", ".hpp", ".h"},
 	},
 	//{
 	//	Language: CSharp,

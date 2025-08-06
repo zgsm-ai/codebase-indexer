@@ -4,6 +4,7 @@ import (
 	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/resolver"
 	"codebase-indexer/pkg/codegraph/types"
+	"fmt"
 )
 
 type FileElementTable struct {
@@ -16,6 +17,7 @@ type FileElementTable struct {
 
 func newRootElement(elementTypeValue string, rootIndex uint32) resolver.Element {
 	elementType := types.ToElementType(elementTypeValue)
+	
 	base := resolver.NewBaseElement(rootIndex)
 	switch elementType {
 	case types.ElementTypePackage:
@@ -39,6 +41,15 @@ func newRootElement(elementTypeValue string, rootIndex uint32) resolver.Element 
 	case types.ElementTypeTypedef:
 		base.Type = types.ElementTypeClass
 		return &resolver.Class{BaseElement: base}
+	case types.ElementTypeEnum:
+		base.Type = types.ElementTypeClass
+		return &resolver.Class{BaseElement: base}
+	case types.ElementTypeNamespace:
+		base.Type = types.ElementTypeClass
+		return &resolver.Class{BaseElement: base}
+	case types.ElementTypeTypeAlias:
+		base.Type = types.ElementTypeClass
+		return &resolver.Class{BaseElement: base}
 	case types.ElementTypeMethod:
 		base.Type = types.ElementTypeMethod
 		return &resolver.Method{BaseElement: base}
@@ -50,6 +61,27 @@ func newRootElement(elementTypeValue string, rootIndex uint32) resolver.Element 
 		return &resolver.Call{BaseElement: base}
 	case types.ElementTypeStructCall:
 		base.Type = types.ElementTypeMethodCall
+		return &resolver.Call{BaseElement: base}
+	case types.ElementTypeNewExpression:
+		base.Type = types.ElementTypeMethodCall
+		return &resolver.Call{BaseElement: base}
+	case types.ElementTypeTemplateCall:
+		base.Type = types.ElementTypeFunctionCall
+		return &resolver.Call{BaseElement: base}
+	case types.ElementTypeClassLiteral:
+		base.Type = types.ElementTypeFunctionCall
+		return &resolver.Call{BaseElement: base}
+	case types.ElementTypeCastExpression:
+		base.Type = types.ElementTypeFunctionCall
+		return &resolver.Call{BaseElement: base}
+	case types.ElementTypeInstanceofExpression:
+		base.Type = types.ElementTypeFunctionCall
+		return &resolver.Call{BaseElement: base}
+	case types.ElementTypeArrayCreation:
+		base.Type = types.ElementTypeFunctionCall
+		return &resolver.Call{BaseElement: base}
+	case types.ElementTypeCompoundLiteral:
+		base.Type = types.ElementTypeFunctionCall
 		return &resolver.Call{BaseElement: base}
 	case types.ElementTypeInterface:
 		base.Type = types.ElementTypeInterface
@@ -69,13 +101,12 @@ func newRootElement(elementTypeValue string, rootIndex uint32) resolver.Element 
 	case types.ElementTypeConstant:
 		base.Type = types.ElementTypeVariable
 		return &resolver.Variable{BaseElement: base}
-	case types.ElementTypeEnum:
-		base.Type = types.ElementTypeVariable
-		return &resolver.Variable{BaseElement: base}
 	case types.ElementTypeEnumConstant:
 		base.Type = types.ElementTypeVariable
 		return &resolver.Variable{BaseElement: base}
 	default:
+		fmt.Println("elementType", elementType)
+		fmt.Println("elementTypeValue", elementTypeValue)
 		base.Type = types.ElementTypeUndefined
 		return base
 	}

@@ -238,5 +238,17 @@ public class SimpleEnumExample {
         Planet earth = Planet.EARTH;
         double result = Operation.PLUS.apply(1, 2);
         Status status = Status.PENDING;
+
+
+        Class<String> stringClass = String.class;
+		Class<java.util.List> clazz2 = java.util.List.class;
+		Class<String[]> clazz3 = String[].class;
+		Class<java.util.Map.Entry> clazz4 = java.util.Map.Entry.class;
+		Class<Map.Entry<String, Integer>> clazz4b = Map.Entry.class;
+		Class<int[][]> clazz5 = int[][].class;
+        Class<String[][]> clazz5b = String[][].class;
+		Class<?> clazz2D = my.custom.MyType[][].class;
+		Class<?> clazz6 = java.util.Map.Entry[][].class;
+
     }
 }

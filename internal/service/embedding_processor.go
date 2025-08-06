@@ -390,6 +390,13 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePath(event *model.Event) er
 			ep.logger.Error("failed to save codebase embedding config after cleaning filepath: %v", err)
 			return fmt.Errorf("failed to save codebase embedding config: %w", err)
 		}
+		embeddingFileNum := len(codebaseConfig.HashTree)
+		updateWorkspace := model.Workspace{WorkspacePath: event.WorkspacePath, FileNum: embeddingFileNum}
+		err = ep.workspaceRepo.UpdateWorkspace(&updateWorkspace)
+		if err != nil {
+			ep.logger.Error("failed to update workspace: %v", err)
+			return fmt.Errorf("failed to update workspace: %w", err)
+		}
 		ep.logger.Info("workspace filepath cleaned successfully for event: %s", event.SourceFilePath)
 	} else {
 		ep.logger.Debug("no filepath records found to clean for event: %s", event.SourceFilePath)
@@ -451,6 +458,14 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePaths(events []*model.Event
 		if updated {
 			if err := ep.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig); err != nil {
 				ep.logger.Error("failed to save codebase embedding config after cleaning filepath: %v", err)
+				failureCount++
+				continue
+			}
+			embeddingFileNum := len(codebaseEmbeddingConfig.HashTree)
+			updateWorkspace := model.Workspace{WorkspacePath: codebaseEmbeddingConfig.CodebasePath, FileNum: embeddingFileNum}
+			err := ep.workspaceRepo.UpdateWorkspace(&updateWorkspace)
+			if err != nil {
+				ep.logger.Error("failed to update workspace: %v", err)
 				failureCount++
 				continue
 			}

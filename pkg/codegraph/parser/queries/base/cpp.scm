@@ -1,15 +1,16 @@
 (preproc_include
-  path: (system_lib_string)* @import.name
-  path: (string_literal)* @import.name
-  ) @import
+  path: (system_lib_string) @import.name
+) @import
+
+(preproc_include
+  path: (string_literal) @import.name
+) @import
 
 (using_declaration
   (identifier) @import.name
   ) @import
 
-(namespace_definition
-  name: (namespace_identifier) @namespace.name
-  ) @namespace
+
 
 ;; ----------------------------类的声明-------------------------------
 (class_specifier
@@ -35,15 +36,27 @@
 
 ;; Enum declarations - treat enum name as class
 (enum_specifier
-  name: (type_identifier) ? @definition.enum.name
+  name: (type_identifier) @definition.enum.name
   ;;做占位，用于区分声明和定义
   body: (_)
 )@definition.enum
 
 (type_definition
-  type: (_) @definition.type.original_type
-  declarator: (_) @definition.type.alias
-)@definition.type
+  type: (_) @definition.typedef.name
+  declarator: (_) @definition.typedef.alias
+)@definition.typedef
+
+;; Type alias declarations (these are definitions)
+(alias_declaration
+  name: (type_identifier) @definition.type_alias.alias
+  type: (_) @definition.type_alias.name
+) @definition.type_alias
+
+;; namespace Math {}
+(namespace_definition
+  name: (namespace_identifier) @namespace.name
+  ) @namespace
+
 
 
 ;; ------------------------------变量声明----------------------------------
@@ -95,7 +108,6 @@
       declarator: (array_declarator
         declarator: (identifier) @variable.name)
       value: (_)? @variable.value)
-
     ; 情形 B：没有初始化
     (array_declarator
       declarator: (identifier) @variable.name)
@@ -119,48 +131,6 @@
   name: (identifier) @definition.enum.constant.name
   value: (_)? @definition.enum.constant.value
 )@definition.enum.constant
-
-
-
-
-;; Type alias declarations (these are definitions)
-(alias_declaration
-  name: (type_identifier) @definition.type_alias.name) @definition.type_alias
-
-;; Typedef declarations
-(type_definition
-  declarator: (type_identifier) @definition.typedef.name) @definition.typedef
-
-;; -----------------------------函数的声明，暂不考虑----------------------------------
-(declaration
-  type: (_) @declaration.function.return_type
-  declarator: (function_declarator
-                declarator: (identifier) @declaration.function.name
-                parameters: (parameter_list) @declaration.function.parameters
-                )
-  ) @declaration.function
-;; 返回值带指针
-(declaration
-  type: (_) @declaration.function.return_type
-  declarator: (pointer_declarator
-                declarator: (
-                  function_declarator
-                    declarator: (identifier) @declaration.function.name
-                    parameters: (parameter_list) @declaration.function.parameters
-                )
-              )@declaration.function.reference
-) @declaration.function
-;; 返回值带引用
-(declaration
-  type: (_) @declaration.function.return_type           
-  declarator: (reference_declarator                
-                (function_declarator
-                  declarator: (identifier) @declaration.function.name
-                  parameters: (parameter_list) @declaration.function.parameters
-                )
-              )@declaration.function.reference
-) @declaration.function
-
 
 
 ;;-----------------------函数/方法定义----------------------------
@@ -223,7 +193,7 @@
               field: (field_identifier) @call.method.name
               )
   arguments: (argument_list) @call.method.arguments
-  ) @call.method
+) @call.method
 
 ;; add(a,b)
 (call_expression
@@ -241,7 +211,29 @@
 ) @call.function
 
 ;; max<int>(1,2)
+;;(call_expression
+;;  function: (template_function 
+;;  name: (_) @call.function.name)
+;;  arguments: (argument_list) @call.function.arguments
+;;) @call.function
+
+;; auto c = foo<int>(42, "hello");
 (call_expression
-  function: (template_function name: (_) @call.function.name)
-  arguments: (argument_list) @call.function.arguments
-) @call.function
+  function: (template_function
+    name: (_) @call.template.name
+    arguments: (template_argument_list) @call.template.args)
+  arguments: (argument_list) 
+) @call.template
+
+
+(new_expression
+  type: (qualified_identifier
+           scope: (namespace_identifier) @call.new.owner
+           name: (type_identifier) @call.new.type
+         ) 
+  arguments: (argument_list)? @call.new.args
+) @call.new
+(new_expression
+  type: (type_identifier) @call.new.type                  
+  arguments: (argument_list)? @call.new.args
+) @call.new

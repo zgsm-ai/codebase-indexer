@@ -12,7 +12,34 @@ import (
 )
 
 func TestCResolver(t *testing.T) {
+	logger := initLogger()                // 如果有日志初始化
+	parser := NewSourceFileParser(logger) // 假设有类似 Java 的解析器
+	res, err := parser.Parse(context.Background(), &types.SourceFile{
+		Path:    "testdata/cpp/test.h",
+		Content: readFile("testdata/cpp/test.h"),
+	})
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+	for _, elem := range res.Elements {
+		if !resolver.IsValidElement(elem) {
+			fmt.Printf("📦 Type: %s | Name: %s | Path: %s\n", elem.GetType(), elem.GetName(), elem.GetPath())
+			fmt.Printf("🔍 Range: %v | Scope: %s\n", elem.GetRange(), elem.GetScope())
+			fmt.Println("--------------------------------------------------")
+		}
 
+		//fmt.Printf("📦 Type: %s | Name: %s | Path: %s\n", elem.GetType(), elem.GetName(), elem.GetPath())
+		//fmt.Printf("🔍 Range: %v | Scope: %s\n", elem.GetRange(), elem.GetScope())
+		//fmt.Println("--------------------------------------------------")
+
+	}
+	for _, elem := range res.Imports {
+		fmt.Printf("📦 Type: %s | Name: %s | Path: %s\n", elem.GetType(), elem.GetName(), elem.GetPath())
+		fmt.Printf("🔍 Range: %v | Scope: %s\n", elem.GetRange(), elem.GetScope())
+		fmt.Println("--------------------------------------------------")
+		if !resolver.IsValidElement(elem) {
+			fmt.Println("Error: ")
+		}
+	}
 }
 func TestCResolver_ResolveImport(t *testing.T) {
 	logger := initLogger()                // 如果有日志初始化
@@ -536,8 +563,325 @@ func TestCResolver_ResolveStruct(t *testing.T) {
 	}
 }
 
-
 func TestCResolver_ResolveVariable(t *testing.T) {
-	
+	logger := initLogger()
+	parser := NewSourceFileParser(logger)
+	testCases := []struct {
+		name          string
+		sourceFile    *types.SourceFile
+		wantErr       error
+		wantVariables []resolver.Variable
+		description   string
+	}{
+		{
+			name: "testVar.c 全部变量和字段解析",
+			sourceFile: &types.SourceFile{
+				Path:    "testdata/c/testVar.c",
+				Content: readFile("testdata/c/testVar.c"),
+			},
+			wantErr: nil,
+			wantVariables: []resolver.Variable{
+				// 枚举值
+				{BaseElement: &resolver.BaseElement{Name: "RED"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "GREEN"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "BLUE"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "ACTIVE"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "INACTIVE"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "PENDING"}, VariableType: []string{types.PrimitiveType}},
 
+				// 联合体成员
+				{BaseElement: &resolver.BaseElement{Name: "i"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "f"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "str"}, VariableType: []string{types.PrimitiveType}},
+
+				// Point结构体成员
+				{BaseElement: &resolver.BaseElement{Name: "x"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "y"}, VariableType: []string{types.PrimitiveType}},
+
+				// Person结构体成员
+				{BaseElement: &resolver.BaseElement{Name: "age"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "height"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "weight"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "gender"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "id"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "name"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "scores"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "grades"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "email"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "data_ptr"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "location"}, VariableType: []string{"Point"}},
+				{BaseElement: &resolver.BaseElement{Name: "favorite_color"}, VariableType: []string{"Color"}},
+				{BaseElement: &resolver.BaseElement{Name: "status"}, VariableType: []string{"Status"}},
+				{BaseElement: &resolver.BaseElement{Name: "extra_info"}, VariableType: []string{"Data"}},
+
+				// 全局基本类型变量
+				{BaseElement: &resolver.BaseElement{Name: "a"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "b"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "c"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "x"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "y"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "d1"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "d2"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "ch1"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "ch2"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "uid1"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "uid2"}, VariableType: []string{types.PrimitiveType}},
+
+				// 全局数组
+				{BaseElement: &resolver.BaseElement{Name: "arr"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "matrix"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "str"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "values"}, VariableType: []string{types.PrimitiveType}},
+
+				// 全局指针
+				{BaseElement: &resolver.BaseElement{Name: "ptr1"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "ptr2"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "str_ptr"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "float_ptr"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "void_ptr"}, VariableType: []string{types.PrimitiveType}},
+
+				// 全局结构体变量
+				{BaseElement: &resolver.BaseElement{Name: "person1"}, VariableType: []string{"Person"}},
+				{BaseElement: &resolver.BaseElement{Name: "person2"}, VariableType: []string{"Person"}},
+				{BaseElement: &resolver.BaseElement{Name: "person_array"}, VariableType: []string{"Person"}},
+				{BaseElement: &resolver.BaseElement{Name: "person_ptr"}, VariableType: []string{"Person"}},
+
+				// 全局联合体变量
+				{BaseElement: &resolver.BaseElement{Name: "data1"}, VariableType: []string{"Data"}},
+				{BaseElement: &resolver.BaseElement{Name: "data2"}, VariableType: []string{"Data"}},
+
+				// 全局枚举变量
+				{BaseElement: &resolver.BaseElement{Name: "color1"}, VariableType: []string{"Color"}},
+				{BaseElement: &resolver.BaseElement{Name: "status1"}, VariableType: []string{"Status"}},
+
+				// 静态变量
+				{BaseElement: &resolver.BaseElement{Name: "static_var"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "static_point"}, VariableType: []string{"Point"}},
+
+				// const变量
+				{BaseElement: &resolver.BaseElement{Name: "const_int"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "const_float"}, VariableType: []string{types.PrimitiveType}},
+
+				// 局部变量
+				{BaseElement: &resolver.BaseElement{Name: "local_int"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "local_int2"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "local_arr"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "local_person"}, VariableType: []string{"Person"}},
+
+				// 指针数组
+				{BaseElement: &resolver.BaseElement{Name: "values"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "ptrs"}, VariableType: []string{types.PrimitiveType}},
+				{BaseElement: &resolver.BaseElement{Name: "ptrs2"}, VariableType: []string{types.PrimitiveType}},
+			},
+		},
+	}
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := parser.Parse(context.Background(), tt.sourceFile)
+			assert.ErrorIs(t, err, tt.wantErr)
+			assert.NotNil(t, res)
+
+			if err == nil {
+				// 遍历期望的变量，断言解析结果中存在同名变量且类型一致
+				varMap := make(map[string]*resolver.Variable)
+				for _, element := range res.Elements {
+
+					if v, ok := element.(*resolver.Variable); ok {
+						varMap[v.BaseElement.Name] = v
+					}
+				}
+				for _, wantVar := range tt.wantVariables {
+					actualVar, exists := varMap[wantVar.BaseElement.Name]
+					assert.True(t, exists, "未找到变量: %s", wantVar.BaseElement.Name)
+					if exists {
+						assert.Equal(t, wantVar.VariableType, actualVar.VariableType,
+							"变量 %s 的类型不匹配，期望 %v，实际 %v",
+							wantVar.BaseElement.Name, wantVar.VariableType, actualVar.VariableType)
+						assert.True(t, resolver.IsValidElement(actualVar))
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestCResolver_ResolveCall(t *testing.T) {
+	logger := initLogger()
+	parser := NewSourceFileParser(logger)
+	testCases := []struct {
+		name        string
+		sourceFile  *types.SourceFile
+		wantErr     error
+		wantCalls   []resolver.Call
+		description string
+	}{
+		{
+			name: "testCall.c 全部函数调用解析",
+			sourceFile: &types.SourceFile{
+				Path:    "testdata/c/testCall.c",
+				Content: readFile("testdata/c/testCall.c"),
+			},
+			wantErr: nil,
+			wantCalls: []resolver.Call{
+				// 0个参数的函数调用
+				{
+					BaseElement: &resolver.BaseElement{
+						Name: "initialize_system",
+					},
+					Parameters: []*resolver.Parameter{},
+				},
+				{
+					BaseElement: &resolver.BaseElement{
+						Name: "get_default_config",
+					},
+					Parameters: []*resolver.Parameter{},
+				},
+
+				// 1个参数的函数调用
+				{
+					BaseElement: &resolver.BaseElement{
+						Name: "free",
+					},
+					Parameters: []*resolver.Parameter{
+						{}, // 参数1
+					},
+				},
+				{
+					BaseElement: &resolver.BaseElement{
+						Name: "parse_raw_data",
+					},
+					Parameters: []*resolver.Parameter{
+						{}, // 参数1
+					},
+				},
+
+				// 2个参数的函数调用
+				{
+					BaseElement: &resolver.BaseElement{
+						Name: "fmax",
+					},
+					Parameters: []*resolver.Parameter{
+						{}, // 参数1
+						{}, // 参数2
+					},
+				},
+				{
+					BaseElement: &resolver.BaseElement{
+						Name: "run_with_logger",
+					},
+					Parameters: []*resolver.Parameter{
+						{}, // 参数1
+						{}, // 参数2
+					},
+				},
+				{
+					BaseElement: &resolver.BaseElement{
+						Name: "process_and_validate",
+					},
+					Parameters: []*resolver.Parameter{
+						{}, // 参数1
+						{}, // 参数2
+					},
+				},
+
+				// 3个参数的函数调用
+				{
+					BaseElement: &resolver.BaseElement{
+						Name: "log_student",
+					},
+					Parameters: []*resolver.Parameter{
+						{}, // 参数1
+						{}, // 参数2
+						{}, // 参数3
+					},
+				},
+				{
+					BaseElement: &resolver.BaseElement{
+						Name: "get_timestamp_and_status",
+					},
+					Parameters: []*resolver.Parameter{
+						{}, // 参数1
+						{}, // 参数2
+						{}, // 参数3
+					},
+				},
+				{
+					BaseElement: &resolver.BaseElement{
+						Name: "create_student",
+					},
+					Parameters: []*resolver.Parameter{
+						{}, // 参数1
+						{}, // 参数2
+						{}, // 参数3
+					},
+				},
+
+				// 4个参数的函数调用
+				{
+					BaseElement: &resolver.BaseElement{
+						Name: "compute_weighted_average",
+					},
+					Parameters: []*resolver.Parameter{
+						{}, // 参数1
+						{}, // 参数2
+						{}, // 参数3
+						{}, // 参数4
+					},
+				},
+				{
+					BaseElement: &resolver.BaseElement{
+						Name: "custom_log",
+					},
+					Parameters: []*resolver.Parameter{
+						{}, // 参数1
+						{}, // 参数2
+						{}, // 参数3
+						{}, // 参数4
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := parser.Parse(context.Background(), tt.sourceFile)
+			assert.ErrorIs(t, err, tt.wantErr)
+			assert.NotNil(t, res)
+
+			if err == nil {
+				// 遍历期望的函数调用，断言解析结果中存在同名调用且参数个数一致
+				callMap := make(map[string][]*resolver.Call)
+				for _, element := range res.Elements {
+					if c, ok := element.(*resolver.Call); ok {
+						callMap[c.BaseElement.Name] = append(callMap[c.BaseElement.Name], c)
+					}
+				}
+
+				// 验证每个期望的函数调用
+				for _, expectedCall := range tt.wantCalls {
+					expectedName := expectedCall.BaseElement.Name
+					expectedParamCount := len(expectedCall.Parameters)
+
+					calls, exists := callMap[expectedName]
+					assert.True(t, exists, "期望找到函数调用: %s", expectedName)
+
+					if exists {
+						// 检查是否有至少一个调用的参数个数匹配
+						found := false
+						for _, call := range calls {
+							fmt.Println("name", call.GetName())
+							fmt.Println("LEN", len(call.Parameters))
+							fmt.Println("--------------------------------")
+							if len(call.Parameters) == expectedParamCount {
+								found = true
+								break
+							}
+						}
+						assert.True(t, found, "函数 %s 应该有 %d 个参数的调用", expectedName, expectedParamCount)
+					}
+				}
+			}
+		})
+	}
 }
