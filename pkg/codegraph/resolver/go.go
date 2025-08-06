@@ -315,6 +315,9 @@ func (r *GoResolver) resolveVariable(ctx context.Context, element *Variable, rc 
 		// 需要同时处理const，variable，local_variable
 		if strings.HasSuffix(nodeCaptureName, ".type") {
 			// 检查是否为基本数据类型
+			if isStructOrFunc(&capture.Node) {
+				return nil, nil
+			}
 			if isPrimitiveType(content) {
 				// 设置为基本数据类型
 				element.VariableType = []string{types.PrimitiveType}
@@ -932,6 +935,17 @@ func isPrimitiveType(typeName string) bool {
 		if strings.Contains(typeName, t) {
 			return true
 		}
+	}
+	return false
+}
+
+// 判断var是否是struct或者func
+func isStructOrFunc(node *sitter.Node) bool {
+	if node.Kind() == string(types.NodeKindStructType) {
+		return true
+	}
+	if node.Kind() == string(types.NodeKindFunctionType) {
+		return true
 	}
 	return false
 }

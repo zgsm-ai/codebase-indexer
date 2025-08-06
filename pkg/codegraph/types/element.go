@@ -15,6 +15,8 @@ const (
 	EmailAt           = "@"
 	Space             = " "
 	LF                = "\n"
+	Hash              = "#"
+	SingleQuote       = "'"
 	Static            = "static"
 	Arrow             = "arrow"
 	PackagePrivate    = "package-private"
@@ -248,6 +250,7 @@ const (
 	NodeKindShortVarDeclaration                NodeKind = "short_var_declaration"
 	NodeKindCompositeLiteral                   NodeKind = "composite_literal"
 	NodeKindCallExpression                     NodeKind = "call_expression"
+	NodeKindAwaitExpression                    NodeKind = "await_expression"
 	NodeKindParameterList                      NodeKind = "parameter_list"
 	NodeKindParameterDeclaration               NodeKind = "parameter_declaration"
 	NodeKindTypeElem                           NodeKind = "type_elem"
@@ -344,6 +347,7 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindShortVarDeclaration):                NodeKindShortVarDeclaration,
 	string(NodeKindCompositeLiteral):                   NodeKindCompositeLiteral,
 	string(NodeKindCallExpression):                     NodeKindCallExpression,
+	string(NodeKindAwaitExpression):                    NodeKindAwaitExpression,
 	string(NodeKindParameterList):                      NodeKindParameterList,
 	string(NodeKindParameterDeclaration):               NodeKindParameterDeclaration,
 	string(NodeKindPropertyIdentifier):                 NodeKindPropertyIdentifier,

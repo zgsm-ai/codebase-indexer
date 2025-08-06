@@ -19,13 +19,6 @@
     )@import
   )
 
-;; function
-(function_declaration
-  name: (identifier) @definition.function.name
-  parameters: (parameter_list) @definition.function.parameters
-  result:(parameter_list)? @definition.function.return_type
-  ) @definition.function
-
 ;;-----------------------------变量定义--------------------------
 
 ;; 全局变量声明 - 直接捕获标识符节点
@@ -90,7 +83,26 @@
   )
 )
 
-;;-----------------------------函数定义--------------------------
+(type_declaration (type_spec name: (type_identifier) @variable type: (type_identifier) @variable.type))
+
+;;-----------------------------结构体定义--------------------------
+;;变量定义结构体
+(var_declaration (var_spec name: (identifier) @definition.struct.name type: (struct_type) @definition.struct.type)) @definition.struct
+
+(type_declaration (type_spec name: (type_identifier) @definition.struct.name type: (struct_type) @definition.struct.type)) @definition.struct
+
+;;-----------------------------接口定义--------------------------
+
+(type_declaration (type_spec name: (type_identifier) @definition.interface.name type: (interface_type) @definition.interface.type)) @definition.interface
+
+;;-----------------------------函数/方法定义--------------------------
+
+;; function
+(function_declaration
+  name: (identifier) @definition.function.name
+  parameters: (parameter_list) @definition.function.parameters
+  result:(parameter_list)? @definition.function.return_type
+  ) @definition.function
 
 ;; method
 (method_declaration
@@ -105,22 +117,30 @@
   result:(parameter_list)? @definition.function.return_type
   ) @definition.method
 
-(type_declaration (type_spec name: (type_identifier) @definition.interface.name type: (interface_type) @definition.interface.type)) @definition.interface
+;;var定义函数
+(var_declaration (var_spec 
+  name: (identifier) @definition.function.name 
+  type: (function_type
+    parameters: (parameter_list) @definition.function.parameters
+    result:(parameter_list)? @definition.function.return_type
+  )
+)) @definition.function
 
-(type_declaration (type_spec name: (type_identifier) @definition.struct.name type: (struct_type) @definition.struct.type)) @definition.struct
+(type_declaration (type_spec 
+  name: (type_identifier) @definition.function.name 
+  type: (function_type
+    parameters: (parameter_list) @definition.function.parameters
+    result:(parameter_list)? @definition.function.return_type
+  )
+)) @definition.function
 
-(type_declaration (type_spec name: (type_identifier) @variable type: (type_identifier) @variable.type))
-
-;; 常量声明 - 直接捕获标识符节点
-
+;;------------------------------------方法调用--------------------------
 
 ;; function/method_call
 (call_expression
   function:[(selector_expression)(identifier)(parenthesized_expression)]@call.function.field
   arguments: (argument_list) @call.function.arguments
   ) @call.function
-
-
 
 ;;------------------------------------右值--------------------------
 ;;右边非基础类型赋值走call

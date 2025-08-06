@@ -35,7 +35,7 @@ func (js *JavaScriptResolver) resolveImport(ctx context.Context, element *Import
 			element.Alias = content
 		case types.ElementTypeImportSource:
 			// 先去掉单引号，再去掉双引号
-			element.Source = strings.Trim(strings.Trim(content, "'"), "\"")
+			element.Source = strings.Trim(strings.Trim(content, types.SingleQuote), types.DoubleQuote)
 		}
 	}
 
@@ -122,39 +122,17 @@ func (js *JavaScriptResolver) resolveMethod(ctx context.Context, element *Method
 	return elements, nil
 }
 
-// parseJavaScriptMethodParameters 解析JavaScript方法参数
-func parseJavaScriptMethodParameters(element *Method, paramsNode sitter.Node, content []byte) {
-	element.Parameters = make([]Parameter, 0)
-	for i := uint(0); i < paramsNode.ChildCount(); i++ {
-		child := paramsNode.Child(i)
-		if child != nil && child.Kind() == types.Identifier {
-			paramNode := child
-			paramName := paramNode.Utf8Text(content)
-			element.Parameters = append(element.Parameters, Parameter{
-				Name: paramName,
-				Type: nil, // JavaScript作为动态语言，参数类型通常无法从语法中直接获取
-			})
-		}
-	}
-}
-
 func (js *JavaScriptResolver) resolveClass(ctx context.Context, element *Class, rc *ResolveContext) ([]Element, error) {
 	elements := []Element{element}
-	rootCapure := rc.Match.Captures[0]
-	captureName := rc.CaptureNames[rootCapure.Index]
-	updateRootElement(element, &rootCapure, captureName, rc.SourceFile.Content)
-	// 初始化字段和方法数组
 	element.Fields = []*Field{}
 	element.Methods = []*Method{}
 	element.SuperClasses = []string{}
-
+	rootCapure := rc.Match.Captures[0]
+	captureName := rc.CaptureNames[rootCapure.Index]
+	updateRootElement(element, &rootCapure, captureName, rc.SourceFile.Content)
 	for _, capture := range rc.Match.Captures {
-		if capture.Node.IsMissing() || capture.Node.IsError() {
-			continue
-		}
 		nodeCaptureName := rc.CaptureNames[capture.Index]
 		content := capture.Node.Utf8Text(rc.SourceFile.Content)
-
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeClass:
 			element.Type = types.ElementTypeClass
@@ -166,10 +144,8 @@ func (js *JavaScriptResolver) resolveClass(ctx context.Context, element *Class, 
 		case types.ElementTypeClassName:
 			element.BaseElement.Name = content
 		case types.ElementTypeClassExtends:
-			//获取继承的类名
 			Node := capture.Node
 			content = Node.Child(1).Utf8Text(rc.SourceFile.Content)
-			// 处理类继承关系
 			element.SuperClasses = append(element.SuperClasses, content)
 		}
 	}
@@ -190,7 +166,6 @@ func (js *JavaScriptResolver) resolveVariable(ctx context.Context, element *Vari
 		JavaScript中变量都没有类型，Variable元素的VariableType为空
 	*/
 	elements := []Element{}
-	// 变量名
 	var variableName string
 	rootCapure := rc.Match.Captures[0]
 	rootCaptureName := rc.CaptureNames[rootCapure.Index]
@@ -213,6 +188,7 @@ func (js *JavaScriptResolver) resolveVariable(ctx context.Context, element *Vari
 		// 添加handleDestructuringWithPath函数，传递元素路径
 		return js.handleDestructuringWithPath(&rootCapure.Node, rc.SourceFile.Content, element)
 	}
+	// 检查是否为import导入和箭头函数
 	if rc.Match != nil && len(rc.Match.Captures) > 0 {
 		if rightNode := findRightNode(&rootCapure.Node); rightNode != nil {
 			if isRequireImport(rightNode, rc.SourceFile.Content) {
@@ -290,6 +266,22 @@ func (js *JavaScriptResolver) resolveCall(ctx context.Context, element *Call, rc
 	return elements, nil
 }
 
+// parseJavaScriptMethodParameters 解析JavaScript方法参数
+func parseJavaScriptMethodParameters(element *Method, paramsNode sitter.Node, content []byte) {
+	element.Parameters = make([]Parameter, 0)
+	for i := uint(0); i < paramsNode.ChildCount(); i++ {
+		child := paramsNode.Child(i)
+		if child != nil && child.Kind() == types.Identifier {
+			paramNode := child
+			paramName := paramNode.Utf8Text(content)
+			element.Parameters = append(element.Parameters, Parameter{
+				Name: paramName,
+				Type: nil, // JavaScript作为动态语言，参数类型通常无法从语法中直接获取
+			})
+		}
+	}
+}
+
 // parseJavaScriptParameters 解析JavaScript函数参数
 func parseJavaScriptParameters(element *Function, paramsNode sitter.Node, content []byte) {
 	element.Parameters = make([]Parameter, 0)
@@ -311,13 +303,13 @@ func parseJavaScriptParameters(element *Function, paramsNode sitter.Node, conten
 func extractModifiers(content string) string {
 	// JavaScript中函数和方法的可能修饰符
 	modifiers := []string{"async", "static", "get", "set", "*"}
-	result := ""
+	result := types.EmptyString
 
 	// 按空格分割函数声明
 	for _, mod := range modifiers {
 		if containsModifier(content, mod) {
 			if result != types.EmptyString {
-				result += " "
+				result += types.Space
 			}
 			result += mod
 		}
@@ -493,11 +485,11 @@ func parseJavaScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Refer
 	}
 
 	fieldName := nameNode.Utf8Text(content)
-	isPrivate := strings.HasPrefix(fieldName, "#")
+	isPrivate := strings.HasPrefix(fieldName, types.Hash)
 
 	// 处理私有字段
 	if isPrivate {
-		fieldName = strings.TrimPrefix(fieldName, "#")
+		fieldName = strings.TrimPrefix(fieldName, types.Hash)
 		field.Modifier = types.ModifierPrivate
 	} else {
 		field.Modifier = types.ModifierPublic
@@ -541,7 +533,7 @@ func parseJavaScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Refer
 					if objectNode != nil && propertyNode != nil {
 						ref.Owner = objectNode.Utf8Text(content)
 						ref.BaseElement.Name = propertyNode.Utf8Text(content)
-						fieldType = ref.Owner + "." + ref.BaseElement.Name
+						fieldType = ref.Owner + types.Dot + ref.BaseElement.Name
 					} else {
 						ref.BaseElement.Name = fieldType
 					}
@@ -589,7 +581,7 @@ func parseJavaScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Refer
 				}
 				ref.BaseElement.Scope = types.ScopeBlock
 				ref.BaseElement.Name = propertyNode.Utf8Text(content)
-				fieldType = ref.Owner + "." + ref.BaseElement.Name
+				fieldType = ref.Owner + types.Dot + ref.BaseElement.Name
 			} else {
 				fieldType = valueNode.Utf8Text(content)
 			}
@@ -657,7 +649,7 @@ func (js *JavaScriptResolver) handleDestructuringWithPath(node *sitter.Node, con
 	if nodeKind == types.NodeKindArrayPattern || nodeKind == types.NodeKindObjectPattern {
 		for i := uint(0); i < nameNode.ChildCount(); i++ {
 			identifierNode := nameNode.Child(i)
-			varName := ""
+			varName := types.EmptyString
 			if identifierNode.Kind() == string(types.Identifier) || identifierNode.Kind() == string(types.NodeKindShorthandPropertyIdentifierPattern) {
 				varName = identifierNode.Utf8Text(content)
 			} else if identifierNode.Kind() == string(types.NodeKindPairPattern) {
@@ -671,7 +663,7 @@ func (js *JavaScriptResolver) handleDestructuringWithPath(node *sitter.Node, con
 					varName = idNode.Utf8Text(content)
 				}
 			}
-			if varName != "" {
+			if varName != types.EmptyString {
 				varElement := createVariableElement(string(varName), scope, element)
 				elements = append(elements, varElement)
 			}
@@ -980,7 +972,7 @@ func extractMemberExpressionPath(node *sitter.Node, call *Call, content []byte) 
 
 	// 设置对象路径作为所有者
 	if len(objPath) > 0 {
-		call.Owner = strings.Join(objPath, ".")
+		call.Owner = strings.Join(objPath, types.Dot)
 	}
 }
 
@@ -1093,14 +1085,14 @@ func isImportExpression(valueNode *sitter.Node, content []byte) bool {
 	}
 
 	// 情况1: await import(...)
-	if valueNode.Kind() == "await_expression" {
+	if valueNode.Kind() == string(types.NodeKindAwaitExpression) {
 		// 尝试使用ChildByFieldName获取call_expression
 		callNode := valueNode.ChildByFieldName("expression")
 		if callNode == nil {
 			// 如果ChildByFieldName失败，尝试遍历所有子节点查找call_expression
 			for i := uint(0); i < valueNode.ChildCount(); i++ {
 				childNode := valueNode.Child(i)
-				if childNode != nil && childNode.Kind() == "call_expression" {
+				if childNode != nil && childNode.Kind() == string(types.NodeKindCallExpression) {
 					callNode = childNode
 					break
 				}
@@ -1117,7 +1109,7 @@ func isImportExpression(valueNode *sitter.Node, content []byte) bool {
 	}
 
 	// 情况2: 直接import(...)
-	if valueNode.Kind() == "call_expression" {
+	if valueNode.Kind() == string(types.NodeKindCallExpression) {
 		funcNode := valueNode.ChildByFieldName("function")
 		if funcNode != nil && string(funcNode.Utf8Text(content)) == "import" {
 			return true
@@ -1134,7 +1126,7 @@ func isImportExpression(valueNode *sitter.Node, content []byte) bool {
 		}
 
 		// 检查当前节点
-		if node.Kind() == "call_expression" {
+		if node.Kind() == string(types.NodeKindCallExpression) {
 			funcNode := node.ChildByFieldName("function")
 			if funcNode != nil && string(funcNode.Utf8Text(content)) == "import" {
 				return true
