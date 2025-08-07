@@ -88,7 +88,9 @@ type FileElementTable struct {
 	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
 	Language      string                 `protobuf:"bytes,2,opt,name=language,proto3" json:"language,omitempty"`
 	Timestamp     int64                  `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Elements      []*BaseElement         `protobuf:"bytes,4,rep,name=elements,proto3" json:"elements,omitempty"`
+	Imports       []*Import              `protobuf:"bytes,4,rep,name=imports,proto3" json:"imports,omitempty"`
+	Package       *Package               `protobuf:"bytes,5,opt,name=package,proto3" json:"package,omitempty"`
+	Elements      []*Element             `protobuf:"bytes,6,rep,name=elements,proto3" json:"elements,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -144,39 +146,52 @@ func (x *FileElementTable) GetTimestamp() int64 {
 	return 0
 }
 
-func (x *FileElementTable) GetElements() []*BaseElement {
+func (x *FileElementTable) GetImports() []*Import {
+	if x != nil {
+		return x.Imports
+	}
+	return nil
+}
+
+func (x *FileElementTable) GetPackage() *Package {
+	if x != nil {
+		return x.Package
+	}
+	return nil
+}
+
+func (x *FileElementTable) GetElements() []*Element {
 	if x != nil {
 		return x.Elements
 	}
 	return nil
 }
 
-// BaseElement 基础元素定义，对应 resolver.BaseElement
-type BaseElement struct {
+// 导入
+type Import struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	IsDefinition  bool                   `protobuf:"varint,2,opt,name=is_definition,json=isDefinition,proto3" json:"is_definition,omitempty"`
-	ElementType   ElementType            `protobuf:"varint,3,opt,name=element_type,json=elementType,proto3,enum=codegraphpb.ElementType" json:"element_type,omitempty"`
+	Source        string                 `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
+	Alias         string                 `protobuf:"bytes,3,opt,name=alias,proto3" json:"alias,omitempty"`
 	Range         []int32                `protobuf:"varint,4,rep,packed,name=range,proto3" json:"range,omitempty"`
-	Relations     []*Relation            `protobuf:"bytes,5,rep,name=relations,proto3" json:"relations,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *BaseElement) Reset() {
-	*x = BaseElement{}
+func (x *Import) Reset() {
+	*x = Import{}
 	mi := &file_pkg_codegraph_proto_file_element_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BaseElement) String() string {
+func (x *Import) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BaseElement) ProtoMessage() {}
+func (*Import) ProtoMessage() {}
 
-func (x *BaseElement) ProtoReflect() protoreflect.Message {
+func (x *Import) ProtoReflect() protoreflect.Message {
 	mi := &file_pkg_codegraph_proto_file_element_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -188,42 +203,173 @@ func (x *BaseElement) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BaseElement.ProtoReflect.Descriptor instead.
-func (*BaseElement) Descriptor() ([]byte, []int) {
+// Deprecated: Use Import.ProtoReflect.Descriptor instead.
+func (*Import) Descriptor() ([]byte, []int) {
 	return file_pkg_codegraph_proto_file_element_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *BaseElement) GetName() string {
+func (x *Import) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *BaseElement) GetIsDefinition() bool {
+func (x *Import) GetSource() string {
 	if x != nil {
-		return x.IsDefinition
+		return x.Source
 	}
-	return false
+	return ""
 }
 
-func (x *BaseElement) GetElementType() ElementType {
+func (x *Import) GetAlias() string {
 	if x != nil {
-		return x.ElementType
+		return x.Alias
 	}
-	return ElementType_ELEMENT_TYPE_UNDEFINED
+	return ""
 }
 
-func (x *BaseElement) GetRange() []int32 {
+func (x *Import) GetRange() []int32 {
 	if x != nil {
 		return x.Range
 	}
 	return nil
 }
 
-func (x *BaseElement) GetRelations() []*Relation {
+// 包
+type Package struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Range         []int32                `protobuf:"varint,2,rep,packed,name=range,proto3" json:"range,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Package) Reset() {
+	*x = Package{}
+	mi := &file_pkg_codegraph_proto_file_element_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Package) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Package) ProtoMessage() {}
+
+func (x *Package) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_codegraph_proto_file_element_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Package.ProtoReflect.Descriptor instead.
+func (*Package) Descriptor() ([]byte, []int) {
+	return file_pkg_codegraph_proto_file_element_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Package) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Package) GetRange() []int32 {
+	if x != nil {
+		return x.Range
+	}
+	return nil
+}
+
+// Element 代码元素定义
+type Element struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	IsDefinition  bool                   `protobuf:"varint,2,opt,name=is_definition,json=isDefinition,proto3" json:"is_definition,omitempty"`
+	ElementType   ElementType            `protobuf:"varint,3,opt,name=element_type,json=elementType,proto3,enum=codegraphpb.ElementType" json:"element_type,omitempty"`
+	Range         []int32                `protobuf:"varint,4,rep,packed,name=range,proto3" json:"range,omitempty"`
+	Relations     []*Relation            `protobuf:"bytes,5,rep,name=relations,proto3" json:"relations,omitempty"`
+	ExtraData     map[string][]byte      `protobuf:"bytes,6,rep,name=extra_data,json=extraData,proto3" json:"extra_data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Element) Reset() {
+	*x = Element{}
+	mi := &file_pkg_codegraph_proto_file_element_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Element) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Element) ProtoMessage() {}
+
+func (x *Element) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_codegraph_proto_file_element_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Element.ProtoReflect.Descriptor instead.
+func (*Element) Descriptor() ([]byte, []int) {
+	return file_pkg_codegraph_proto_file_element_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Element) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Element) GetIsDefinition() bool {
+	if x != nil {
+		return x.IsDefinition
+	}
+	return false
+}
+
+func (x *Element) GetElementType() ElementType {
+	if x != nil {
+		return x.ElementType
+	}
+	return ElementType_UNDEFINED
+}
+
+func (x *Element) GetRange() []int32 {
+	if x != nil {
+		return x.Range
+	}
+	return nil
+}
+
+func (x *Element) GetRelations() []*Relation {
 	if x != nil {
 		return x.Relations
+	}
+	return nil
+}
+
+func (x *Element) GetExtraData() map[string][]byte {
+	if x != nil {
+		return x.ExtraData
 	}
 	return nil
 }
@@ -241,7 +387,7 @@ type Relation struct {
 
 func (x *Relation) Reset() {
 	*x = Relation{}
-	mi := &file_pkg_codegraph_proto_file_element_proto_msgTypes[2]
+	mi := &file_pkg_codegraph_proto_file_element_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -253,7 +399,7 @@ func (x *Relation) String() string {
 func (*Relation) ProtoMessage() {}
 
 func (x *Relation) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_codegraph_proto_file_element_proto_msgTypes[2]
+	mi := &file_pkg_codegraph_proto_file_element_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -266,7 +412,7 @@ func (x *Relation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Relation.ProtoReflect.Descriptor instead.
 func (*Relation) Descriptor() ([]byte, []int) {
-	return file_pkg_codegraph_proto_file_element_proto_rawDescGZIP(), []int{2}
+	return file_pkg_codegraph_proto_file_element_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Relation) GetElementName() string {
@@ -301,18 +447,33 @@ var File_pkg_codegraph_proto_file_element_proto protoreflect.FileDescriptor
 
 const file_pkg_codegraph_proto_file_element_proto_rawDesc = "" +
 	"\n" +
-	"&pkg/codegraph/proto/file_element.proto\x12\vcodegraphpb\x1a\x1fpkg/codegraph/proto/types.proto\"\x96\x01\n" +
+	"&pkg/codegraph/proto/file_element.proto\x12\vcodegraphpb\x1a\x1fpkg/codegraph/proto/types.proto\"\xf1\x01\n" +
 	"\x10FileElementTable\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1a\n" +
 	"\blanguage\x18\x02 \x01(\tR\blanguage\x12\x1c\n" +
-	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp\x124\n" +
-	"\belements\x18\x04 \x03(\v2\x18.codegraphpb.BaseElementR\belements\"\xce\x01\n" +
-	"\vBaseElement\x12\x12\n" +
+	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp\x12-\n" +
+	"\aimports\x18\x04 \x03(\v2\x13.codegraphpb.ImportR\aimports\x12.\n" +
+	"\apackage\x18\x05 \x01(\v2\x14.codegraphpb.PackageR\apackage\x120\n" +
+	"\belements\x18\x06 \x03(\v2\x14.codegraphpb.ElementR\belements\"`\n" +
+	"\x06Import\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
+	"\x06source\x18\x02 \x01(\tR\x06source\x12\x14\n" +
+	"\x05alias\x18\x03 \x01(\tR\x05alias\x12\x14\n" +
+	"\x05range\x18\x04 \x03(\x05R\x05range\"3\n" +
+	"\aPackage\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05range\x18\x02 \x03(\x05R\x05range\"\xcc\x02\n" +
+	"\aElement\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12#\n" +
 	"\ris_definition\x18\x02 \x01(\bR\fisDefinition\x12;\n" +
 	"\felement_type\x18\x03 \x01(\x0e2\x18.codegraphpb.ElementTypeR\velementType\x12\x14\n" +
 	"\x05range\x18\x04 \x03(\x05R\x05range\x123\n" +
-	"\trelations\x18\x05 \x03(\v2\x15.codegraphpb.RelationR\trelations\"\xa6\x01\n" +
+	"\trelations\x18\x05 \x03(\v2\x15.codegraphpb.RelationR\trelations\x12B\n" +
+	"\n" +
+	"extra_data\x18\x06 \x03(\v2#.codegraphpb.Element.ExtraDataEntryR\textraData\x1a<\n" +
+	"\x0eExtraDataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01\"\xa6\x01\n" +
 	"\bRelation\x12!\n" +
 	"\felement_name\x18\x01 \x01(\tR\velementName\x12!\n" +
 	"\felement_path\x18\x02 \x01(\tR\velementPath\x12\x14\n" +
@@ -340,24 +501,30 @@ func file_pkg_codegraph_proto_file_element_proto_rawDescGZIP() []byte {
 }
 
 var file_pkg_codegraph_proto_file_element_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_pkg_codegraph_proto_file_element_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_pkg_codegraph_proto_file_element_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_pkg_codegraph_proto_file_element_proto_goTypes = []any{
 	(RelationType)(0),        // 0: codegraphpb.RelationType
 	(*FileElementTable)(nil), // 1: codegraphpb.FileElementTable
-	(*BaseElement)(nil),      // 2: codegraphpb.BaseElement
-	(*Relation)(nil),         // 3: codegraphpb.Relation
-	(ElementType)(0),         // 4: codegraphpb.ElementType
+	(*Import)(nil),           // 2: codegraphpb.Import
+	(*Package)(nil),          // 3: codegraphpb.Package
+	(*Element)(nil),          // 4: codegraphpb.Element
+	(*Relation)(nil),         // 5: codegraphpb.Relation
+	nil,                      // 6: codegraphpb.Element.ExtraDataEntry
+	(ElementType)(0),         // 7: codegraphpb.ElementType
 }
 var file_pkg_codegraph_proto_file_element_proto_depIdxs = []int32{
-	2, // 0: codegraphpb.FileElementTable.elements:type_name -> codegraphpb.BaseElement
-	4, // 1: codegraphpb.BaseElement.element_type:type_name -> codegraphpb.ElementType
-	3, // 2: codegraphpb.BaseElement.relations:type_name -> codegraphpb.Relation
-	0, // 3: codegraphpb.Relation.relation_type:type_name -> codegraphpb.RelationType
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	2, // 0: codegraphpb.FileElementTable.imports:type_name -> codegraphpb.Import
+	3, // 1: codegraphpb.FileElementTable.package:type_name -> codegraphpb.Package
+	4, // 2: codegraphpb.FileElementTable.elements:type_name -> codegraphpb.Element
+	7, // 3: codegraphpb.Element.element_type:type_name -> codegraphpb.ElementType
+	5, // 4: codegraphpb.Element.relations:type_name -> codegraphpb.Relation
+	6, // 5: codegraphpb.Element.extra_data:type_name -> codegraphpb.Element.ExtraDataEntry
+	0, // 6: codegraphpb.Relation.relation_type:type_name -> codegraphpb.RelationType
+	7, // [7:7] is the sub-list for method output_type
+	7, // [7:7] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_pkg_codegraph_proto_file_element_proto_init() }
@@ -372,7 +539,7 @@ func file_pkg_codegraph_proto_file_element_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_codegraph_proto_file_element_proto_rawDesc), len(file_pkg_codegraph_proto_file_element_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   3,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

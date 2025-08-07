@@ -82,8 +82,8 @@ func IsSameParentDir(a, b string) bool {
 	return parentA == parentB
 }
 
-// ListFiles 列出指定目录下的所有文件（不包含子目录）
-func ListFiles(dir string) ([]string, error) {
+// ListOnlyFiles 列出指定目录下的所有文件（不包含子目录、隐藏目录）
+func ListOnlyFiles(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -92,12 +92,35 @@ func ListFiles(dir string) ([]string, error) {
 	var files []string
 	for _, entry := range entries {
 		if !entry.IsDir() { // 只保留文件，过滤目录
-			// 获取文件的完整路径
+			if IsHiddenFile(entry.Name()) {
+				continue
+			}
+			// 获取目录的完整路径
 			fullPath := filepath.Join(dir, entry.Name())
 			files = append(files, fullPath)
 		}
 	}
 	return files, nil
+}
+
+// ListSubDirs 列出指定目录下的子目录(不包括文件、隐藏目录)
+func ListSubDirs(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var subDirs []string
+	for _, entry := range entries {
+		if entry.IsDir() { // 只保留目录，过滤文件或隐藏目录
+			if IsHiddenFile(entry.Name()) {
+				continue
+			}
+			// 获取文件的完整路径
+			fullPath := filepath.Join(dir, entry.Name())
+			subDirs = append(subDirs, fullPath)
+		}
+	}
+	return subDirs, nil
 }
 
 // EnsureTrailingSeparator 确保路径尾部带有系统对应的路径分隔符

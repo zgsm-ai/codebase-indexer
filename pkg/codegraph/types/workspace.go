@@ -2,7 +2,6 @@ package types
 
 import (
 	"errors"
-	"io"
 	"io/fs"
 	"path/filepath"
 	"regexp"
@@ -50,18 +49,19 @@ type WalkContext struct {
 
 // WalkFunc is the type of the function called for each file or directory
 
-type WalkFunc func(walkCtx *WalkContext, reader io.ReadCloser) error
+type WalkFunc func(walkCtx *WalkContext) error
 
 var SkipDir = errors.New("skip this directory")
 
 type WalkOptions struct {
 	IgnoreError  bool
-	VisitPattern VisitPattern
+	VisitPattern *VisitPattern
 }
 
 type SkipFunc func(path string) bool
 
 type VisitPattern struct {
+	MaxFileLimit    int
 	ExcludeExts     []string
 	IncludeExts     []string
 	ExcludePrefixes []string

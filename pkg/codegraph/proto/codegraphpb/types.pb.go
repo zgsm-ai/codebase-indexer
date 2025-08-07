@@ -25,37 +25,43 @@ const (
 type ElementType int32
 
 const (
-	ElementType_ELEMENT_TYPE_UNDEFINED ElementType = 0
-	ElementType_ELEMENT_TYPE_FUNCTION  ElementType = 1
-	ElementType_ELEMENT_TYPE_METHOD    ElementType = 2
-	ElementType_ELEMENT_TYPE_CALL      ElementType = 3
-	ElementType_ELEMENT_TYPE_REFERENCE ElementType = 4
-	ElementType_ELEMENT_TYPE_CLASS     ElementType = 5
-	ElementType_ELEMENT_TYPE_INTERFACE ElementType = 6
-	ElementType_ELEMENT_TYPE_VARIABLE  ElementType = 7
+	ElementType_UNDEFINED ElementType = 0
+	ElementType_FUNCTION  ElementType = 1
+	ElementType_METHOD    ElementType = 2
+	ElementType_CALL      ElementType = 3
+	ElementType_REFERENCE ElementType = 4
+	ElementType_CLASS     ElementType = 5
+	ElementType_INTERFACE ElementType = 6
+	ElementType_VARIABLE  ElementType = 7
+	ElementType_IMPORT    ElementType = 8
+	ElementType_PACKAGE   ElementType = 9
 )
 
 // Enum value maps for ElementType.
 var (
 	ElementType_name = map[int32]string{
-		0: "ELEMENT_TYPE_UNDEFINED",
-		1: "ELEMENT_TYPE_FUNCTION",
-		2: "ELEMENT_TYPE_METHOD",
-		3: "ELEMENT_TYPE_CALL",
-		4: "ELEMENT_TYPE_REFERENCE",
-		5: "ELEMENT_TYPE_CLASS",
-		6: "ELEMENT_TYPE_INTERFACE",
-		7: "ELEMENT_TYPE_VARIABLE",
+		0: "UNDEFINED",
+		1: "FUNCTION",
+		2: "METHOD",
+		3: "CALL",
+		4: "REFERENCE",
+		5: "CLASS",
+		6: "INTERFACE",
+		7: "VARIABLE",
+		8: "IMPORT",
+		9: "PACKAGE",
 	}
 	ElementType_value = map[string]int32{
-		"ELEMENT_TYPE_UNDEFINED": 0,
-		"ELEMENT_TYPE_FUNCTION":  1,
-		"ELEMENT_TYPE_METHOD":    2,
-		"ELEMENT_TYPE_CALL":      3,
-		"ELEMENT_TYPE_REFERENCE": 4,
-		"ELEMENT_TYPE_CLASS":     5,
-		"ELEMENT_TYPE_INTERFACE": 6,
-		"ELEMENT_TYPE_VARIABLE":  7,
+		"UNDEFINED": 0,
+		"FUNCTION":  1,
+		"METHOD":    2,
+		"CALL":      3,
+		"REFERENCE": 4,
+		"CLASS":     5,
+		"INTERFACE": 6,
+		"VARIABLE":  7,
+		"IMPORT":    8,
+		"PACKAGE":   9,
 	}
 )
 
@@ -90,16 +96,20 @@ var File_pkg_codegraph_proto_types_proto protoreflect.FileDescriptor
 
 const file_pkg_codegraph_proto_types_proto_rawDesc = "" +
 	"\n" +
-	"\x1fpkg/codegraph/proto/types.proto\x12\vcodegraphpb*\xdf\x01\n" +
-	"\vElementType\x12\x1a\n" +
-	"\x16ELEMENT_TYPE_UNDEFINED\x10\x00\x12\x19\n" +
-	"\x15ELEMENT_TYPE_FUNCTION\x10\x01\x12\x17\n" +
-	"\x13ELEMENT_TYPE_METHOD\x10\x02\x12\x15\n" +
-	"\x11ELEMENT_TYPE_CALL\x10\x03\x12\x1a\n" +
-	"\x16ELEMENT_TYPE_REFERENCE\x10\x04\x12\x16\n" +
-	"\x12ELEMENT_TYPE_CLASS\x10\x05\x12\x1a\n" +
-	"\x16ELEMENT_TYPE_INTERFACE\x10\x06\x12\x19\n" +
-	"\x15ELEMENT_TYPE_VARIABLE\x10\aB-Z+pkg/codegraph/proto/codegraphpb;codegraphpbb\x06proto3"
+	"\x1fpkg/codegraph/proto/types.proto\x12\vcodegraphpb*\x90\x01\n" +
+	"\vElementType\x12\r\n" +
+	"\tUNDEFINED\x10\x00\x12\f\n" +
+	"\bFUNCTION\x10\x01\x12\n" +
+	"\n" +
+	"\x06METHOD\x10\x02\x12\b\n" +
+	"\x04CALL\x10\x03\x12\r\n" +
+	"\tREFERENCE\x10\x04\x12\t\n" +
+	"\x05CLASS\x10\x05\x12\r\n" +
+	"\tINTERFACE\x10\x06\x12\f\n" +
+	"\bVARIABLE\x10\a\x12\n" +
+	"\n" +
+	"\x06IMPORT\x10\b\x12\v\n" +
+	"\aPACKAGE\x10\tB-Z+pkg/codegraph/proto/codegraphpb;codegraphpbb\x06proto3"
 
 var (
 	file_pkg_codegraph_proto_types_proto_rawDescOnce sync.Once

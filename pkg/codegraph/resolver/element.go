@@ -153,8 +153,8 @@ type Field struct {
 }
 
 type Parameter struct {
-	Name string
-	Type []string
+	Name string   `json:"name"`
+	Type []string `json:"type"`
 }
 
 type Interface struct {

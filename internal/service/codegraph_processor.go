@@ -68,7 +68,7 @@ func (ep *CodegraphProcessor) ProcessActiveWorkspaces(ctx context.Context) ([]*m
 
 // ProcessAddFileEvent 处理添加文件事件
 func (c *CodegraphProcessor) ProcessAddFileEvent(ctx context.Context, event *model.Event) error {
-	fileInfo, err := c.workspaceReader.Stat(ctx, event.WorkspacePath, event.SourceFilePath)
+	fileInfo, err := c.workspaceReader.Stat(event.SourceFilePath)
 	if errors.Is(err, workspace.ErrPathNotExists) {
 		c.logger.Error("codegraph failed to process add event, file %s not exists.", event.SourceFilePath)
 		if err = c.updateEventFinally(event, err); err != nil {
@@ -96,7 +96,7 @@ func (c *CodegraphProcessor) ProcessAddFileEvent(ctx context.Context, event *mod
 
 // ProcessModifyFileEvent 处理修改文件事件
 func (c *CodegraphProcessor) ProcessModifyFileEvent(ctx context.Context, event *model.Event) error {
-	fileInfo, err := c.workspaceReader.Stat(ctx, event.WorkspacePath, event.SourceFilePath)
+	fileInfo, err := c.workspaceReader.Stat(event.SourceFilePath)
 	if errors.Is(err, workspace.ErrPathNotExists) {
 		c.logger.Error("codegraph failed to process modify event, file %s not exists", event.SourceFilePath)
 		if err = c.updateEventFinally(event, err); err != nil {
@@ -143,7 +143,7 @@ func (c *CodegraphProcessor) ProcessRenameFileEvent(ctx context.Context, event *
 
 func (c *CodegraphProcessor) ProcessOpenWorkspaceEvent(ctx context.Context, event *model.Event) error {
 	// TODO 增加比对逻辑，如果构建过索引，进行比对。
-	fileInfo, err := c.workspaceReader.Stat(ctx, event.WorkspacePath, event.WorkspacePath)
+	fileInfo, err := c.workspaceReader.Stat(event.WorkspacePath)
 	if errors.Is(err, workspace.ErrPathNotExists) {
 		c.logger.Error("codegraph failed to process open_workspace event event, workspace %s not exists",
 			event.WorkspacePath)

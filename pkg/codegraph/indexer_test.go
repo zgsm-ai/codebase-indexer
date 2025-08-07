@@ -8,7 +8,6 @@ import (
 	"codebase-indexer/pkg/logger"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -25,7 +24,7 @@ import (
 
 var tempDir = "/tmp/"
 
-var visitPattern = types.VisitPattern{ExcludeDirs: []string{".git", ".idea"}, IncludeExts: []string{".go"}}
+var testVisitPattern = &types.VisitPattern{ExcludeDirs: []string{".git", ".idea"}, IncludeExts: []string{".go"}}
 
 // TODO 性能（内存、cpu）监控；各种路径、项目名（中文、符号）测试；索引数量统计；大仓库测试
 
@@ -100,7 +99,7 @@ func teardownTestEnvironment(t *testing.T, env *testEnvironment, projects []*wor
 }
 
 // createTestIndexer 创建测试用的索引器
-func createTestIndexer(env *testEnvironment, visitPattern types.VisitPattern) *Indexer {
+func createTestIndexer(env *testEnvironment, visitPattern *types.VisitPattern) *Indexer {
 	return NewCodeIndexer(
 		env.sourceFileParser,
 		env.dependencyAnalyzer,
@@ -112,9 +111,9 @@ func createTestIndexer(env *testEnvironment, visitPattern types.VisitPattern) *I
 }
 
 // countGoFiles 统计工作区中的 Go 文件数量
-func countGoFiles(ctx context.Context, workspaceReader *workspace.WorkspaceReader, workspaceDir string, visitPattern types.VisitPattern) (int, error) {
+func countGoFiles(ctx context.Context, workspaceReader *workspace.WorkspaceReader, workspaceDir string, visitPattern *types.VisitPattern) (int, error) {
 	var goCount int
-	err := workspaceReader.WalkFile(ctx, workspaceDir, func(walkCtx *types.WalkContext, reader io.ReadCloser) error {
+	err := workspaceReader.WalkFile(ctx, workspaceDir, func(walkCtx *types.WalkContext) error {
 		if walkCtx.Info.IsDir {
 			return nil
 		}
@@ -146,7 +145,9 @@ func countIndexedFiles(ctx context.Context, storage store.GraphStorage, projects
 }
 
 // validateStorageState 验证存储状态，确保索引数量与文件数量一致
-func validateStorageState(t *testing.T, ctx context.Context, workspaceReader *workspace.WorkspaceReader, storage store.GraphStorage, workspaceDir string, projects []*workspace.Project, visitPattern types.VisitPattern) {
+func validateStorageState(t *testing.T, ctx context.Context, workspaceReader *workspace.WorkspaceReader,
+	storage store.GraphStorage, workspaceDir string,
+	projects []*workspace.Project, visitPattern *types.VisitPattern) {
 	// 统计 Go 文件数量
 	goCount, err := countGoFiles(ctx, workspaceReader, workspaceDir, visitPattern)
 	assert.NoError(t, err)
@@ -179,7 +180,7 @@ func cleanIndexStoreTest(ctx context.Context, projects []*workspace.Project, sto
 // getTestFiles 获取测试用的文件列表
 func getTestFiles(t *testing.T, workspaceDir string) []string {
 	filePath := filepath.Join(workspaceDir, "test", "mocks")
-	files, err := utils.ListFiles(filePath)
+	files, err := utils.ListOnlyFiles(filePath)
 	assert.NoError(t, err)
 	return files
 }
@@ -246,17 +247,17 @@ func TestIndexer_IndexWorkspace(t *testing.T) {
 	env := setupTestEnvironment(t)
 
 	// 创建测试索引器
-	indexer := createTestIndexer(env, visitPattern)
+	indexer := createTestIndexer(env, testVisitPattern)
 
 	// 查找工作区中的项目
-	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, visitPattern)
+	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, testVisitPattern)
 
 	// 测试 IndexWorkspace - 索引整个工作区
-	err := indexer.IndexWorkspace(context.Background(), env.workspaceDir)
+	_, err := indexer.IndexWorkspace(context.Background(), env.workspaceDir)
 	assert.NoError(t, err)
 
 	// 验证存储状态 - 确保索引数量与文件数量一致
-	validateStorageState(t, env.ctx, env.workspaceReader, env.storage, env.workspaceDir, projects, visitPattern)
+	validateStorageState(t, env.ctx, env.workspaceReader, env.storage, env.workspaceDir, projects, testVisitPattern)
 
 	// 清理测试环境
 	teardownTestEnvironment(t, env, projects)
@@ -268,7 +269,7 @@ func TestIndexer_IndexProjectFilesWhenProjectHasIndex(t *testing.T) {
 	defer teardownTestEnvironment(t, env, nil)
 
 	// 创建测试索引器，使用排除 mocks 目录的访问模式
-	newVisitPattern := types.VisitPattern{ExcludeDirs: []string{".git", ".idea", "mocks"}, IncludeExts: []string{".go"}}
+	newVisitPattern := &types.VisitPattern{ExcludeDirs: []string{".git", ".idea", "mocks"}, IncludeExts: []string{".go"}}
 	indexer := createTestIndexer(env, newVisitPattern)
 
 	// 查找工作区中的项目
@@ -279,7 +280,7 @@ func TestIndexer_IndexProjectFilesWhenProjectHasIndex(t *testing.T) {
 	assert.NoError(t, err)
 
 	// 步骤1: 先索引工作区（排除 mocks 目录）
-	err = indexer.IndexWorkspace(env.ctx, env.workspaceDir)
+	_, err = indexer.IndexWorkspace(env.ctx, env.workspaceDir)
 	assert.NoError(t, err)
 
 	// 步骤2: 获取测试文件并创建路径键映射
@@ -307,10 +308,10 @@ func TestIndexer_IndexProjectFilesWhenProjectHasNoIndex(t *testing.T) {
 	defer teardownTestEnvironment(t, env, nil)
 
 	// 创建测试索引器
-	indexer := createTestIndexer(env, visitPattern)
+	indexer := createTestIndexer(env, testVisitPattern)
 
 	// 查找工作区中的项目
-	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, visitPattern)
+	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, testVisitPattern)
 
 	// 清理索引存储
 	err := cleanIndexStoreTest(env.ctx, projects, env.storage)
@@ -333,7 +334,7 @@ func TestIndexer_IndexProjectFilesWhenProjectHasNoIndex(t *testing.T) {
 	validateFilesIndexed(t, env.ctx, env.storage, projects, pathKeys)
 
 	// 步骤6: 验证存储状态 - 确保索引数量与文件数量一致
-	validateStorageState(t, env.ctx, env.workspaceReader, env.storage, env.workspaceDir, projects, visitPattern)
+	validateStorageState(t, env.ctx, env.workspaceReader, env.storage, env.workspaceDir, projects, testVisitPattern)
 }
 
 func TestIndexer_RemoveIndexes(t *testing.T) {
@@ -342,10 +343,10 @@ func TestIndexer_RemoveIndexes(t *testing.T) {
 	defer teardownTestEnvironment(t, env, nil)
 
 	// 创建测试索引器
-	indexer := createTestIndexer(env, visitPattern)
+	indexer := createTestIndexer(env, testVisitPattern)
 
 	// 查找工作区中的项目
-	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, visitPattern)
+	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, testVisitPattern)
 
 	// 清理索引存储
 	err := cleanIndexStoreTest(env.ctx, projects, env.storage)
@@ -391,17 +392,17 @@ func TestIndexer_QueryElements(t *testing.T) {
 	defer teardownTestEnvironment(t, env, nil)
 
 	// 创建测试索引器
-	indexer := createTestIndexer(env, visitPattern)
+	indexer := createTestIndexer(env, testVisitPattern)
 
 	// 查找工作区中的项目
-	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, visitPattern)
+	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, testVisitPattern)
 
 	// 清理索引存储
 	err := cleanIndexStoreTest(env.ctx, projects, env.storage)
 	assert.NoError(t, err)
 
 	// 步骤1: 索引整个工作区
-	err = indexer.IndexWorkspace(env.ctx, env.workspaceDir)
+	_, err = indexer.IndexWorkspace(env.ctx, env.workspaceDir)
 	assert.NoError(t, err)
 
 	// 步骤2: 获取测试文件
@@ -426,17 +427,17 @@ func TestIndexer_QuerySymbols_WithExistFile(t *testing.T) {
 	defer teardownTestEnvironment(t, env, nil)
 
 	// 创建测试索引器
-	indexer := createTestIndexer(env, visitPattern)
+	indexer := createTestIndexer(env, testVisitPattern)
 
 	// 查找工作区中的项目
-	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, visitPattern)
+	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, testVisitPattern)
 
 	// 清理索引存储
 	err := cleanIndexStoreTest(env.ctx, projects, env.storage)
 	assert.NoError(t, err)
 
 	// 步骤1: 索引整个工作区
-	err = indexer.IndexWorkspace(env.ctx, env.workspaceDir)
+	_, err = indexer.IndexWorkspace(env.ctx, env.workspaceDir)
 	assert.NoError(t, err)
 
 	// 步骤2: 准备测试文件和符号名称
@@ -466,13 +467,13 @@ func TestIndexer_IndexWorkspace_NotExists(t *testing.T) {
 	defer teardownTestEnvironment(t, env, nil)
 
 	// 创建测试索引器
-	indexer := createTestIndexer(env, visitPattern)
+	indexer := createTestIndexer(env, testVisitPattern)
 
 	// 步骤1: 使用不存在的工作区路径
 	nonExistentWorkspace := filepath.Join(tempDir, "non_existent_workspace")
 
 	// 步骤2: 尝试索引不存在的工作区，应该返回错误
-	err := indexer.IndexWorkspace(env.ctx, nonExistentWorkspace)
+	_, err := indexer.IndexWorkspace(env.ctx, nonExistentWorkspace)
 	assert.ErrorContains(t, err, "not exists")
 }
 
@@ -482,7 +483,7 @@ func TestIndexer_IndexFiles_NoProject(t *testing.T) {
 	defer teardownTestEnvironment(t, env, nil)
 
 	// 创建测试索引器
-	indexer := createTestIndexer(env, visitPattern)
+	indexer := createTestIndexer(env, testVisitPattern)
 
 	// 步骤1: 使用不存在的项目路径
 	nonExistentWorkspace := filepath.Join(tempDir, "non_existent_workspace")

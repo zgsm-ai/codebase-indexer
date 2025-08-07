@@ -18,7 +18,10 @@ import (
 
 var ErrPathNotExists = errors.New("no such file or directory")
 
-var DefaultVisitPattern = types.VisitPattern{ExcludeDirs: []string{".git", ".idea", ".vscode", "node_modules"}}
+var DefaultVisitPattern = &types.VisitPattern{ExcludeDirs: []string{".git", ".idea", ".vscode", "node_modules", "vendor"}}
+
+const ReadFileMaxLine = 1_0000
+const MaxFileVisitLimit = 10_0000
 
 type WorkspaceReader struct {
 	logger logger.Logger
@@ -30,13 +33,13 @@ func NewWorkSpaceReader(logger logger.Logger) *WorkspaceReader {
 	}
 }
 
-func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, visitPattern types.VisitPattern) []*Project {
+func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, visitPattern *types.VisitPattern) []*Project {
 
 	start := time.Now()
 	w.logger.Info("find_projects start to scan workspace：%s", workspace)
 
-	// 创建 ModuleResolver 实例
-	//moduleResolver := NewModuleResolver(w.logger)
+	// 创建 moduleResolver 实例
+	moduleResolver := newModuleResolver(w.logger)
 
 	var projects []*Project
 	maxLayer := 3
@@ -54,11 +57,16 @@ func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, vi
 	// 1. 当前目录是 git 仓库
 	if hasGitDir(workspace) {
 		projectName := filepath.Base(workspace)
-		projects = append(projects, &Project{
+		project := &Project{
 			Path: workspace,
 			Name: projectName,
 			Uuid: generateUuid(projectName, workspace),
-		})
+		}
+		projects = append(projects, project)
+		if err := moduleResolver.ResolveProjectModules(ctx, project, project.Path, 2); err != nil {
+			w.logger.Error("find_projects resolve project modules err:%v", err)
+		}
+
 		foundGit = true
 	} else {
 		// 2. 使用广度优先遍历查找 git 仓库
@@ -103,11 +111,17 @@ func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, vi
 
 					if hasGitDir(subDir) {
 						projectName := filepath.Base(subDir)
-						projects = append(projects, &Project{
+						project := &Project{
 							Path: subDir,
 							Name: projectName,
 							Uuid: generateUuid(projectName, subDir),
-						})
+						}
+						projects = append(projects, project)
+
+						if err = moduleResolver.ResolveProjectModules(ctx, project, project.Path, 2); err != nil {
+							w.logger.Error("find_projects resolve project modules err:%v", err)
+						}
+
 						foundGit = true
 						// 不递归 .git 仓库下的子目录
 						continue
@@ -123,21 +137,16 @@ func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, vi
 	// 3. 没有发现任何 git 仓库，将当前目录作为唯一项目
 	if !foundGit {
 		projectName := filepath.Base(workspace)
-		projects = append(projects, &Project{
+		project := &Project{
 			Path: workspace,
 			Name: projectName,
 			Uuid: generateUuid(projectName, workspace),
-		})
+		}
+		projects = append(projects, project)
+		if err := moduleResolver.ResolveProjectModules(ctx, project, project.Path, 2); err != nil {
+			w.logger.Error("find_projects resolve project modules err:%v", err)
+		}
 	}
-	// 解析所有语言包信息（包括Go模块）
-	//for _, p := range projects {
-	//	err := moduleResolver.ResolveProjectModules(ctx, p)
-	//	if err != nil {
-	//		w.logger.Error("find_projects resolve project modules err:%v", err)
-	//	} else {
-	//		w.logger.Info("find_projects resolved project modules for project %s", p.Path)
-	//	}
-	//}
 
 	var projectNames string
 	for _, p := range projects {
@@ -164,6 +173,10 @@ func (w *WorkspaceReader) ReadFile(ctx context.Context, path string, option type
 	if option.StartLine <= 0 {
 		option.StartLine = 1
 	}
+	// endLine 设置默认值，且不超过最大值
+	if option.EndLine <= 0 || option.EndLine > ReadFileMaxLine {
+		option.EndLine = ReadFileMaxLine
+	}
 
 	// 打开文件
 	file, err := os.Open(path)
@@ -179,6 +192,12 @@ func (w *WorkspaceReader) ReadFile(ctx context.Context, path string, option type
 
 	// 读取行
 	for {
+
+		// 如果EndLine > 0 且当前行号大于EndLine，则退出
+		if lineNum > option.EndLine {
+			break
+		}
+
 		// 读取一行，允许超过默认缓冲区大小
 		line, isPrefix, err := reader.ReadLine()
 		if err != nil {
@@ -207,10 +226,6 @@ func (w *WorkspaceReader) ReadFile(ctx context.Context, path string, option type
 
 		// 如果当前行号大于等于StartLine，则添加到结果中
 		if lineNum >= option.StartLine {
-			// 如果EndLine > 0 且当前行号大于EndLine，则退出
-			if option.EndLine > 0 && lineNum > option.EndLine {
-				break
-			}
 			lines = append(lines, lineStr)
 		}
 		lineNum++
@@ -250,6 +265,11 @@ func (w *WorkspaceReader) WalkFile(ctx context.Context, dir string, walkFn types
 	if !exists {
 		return ErrPathNotExists
 	}
+	if walkOpts.VisitPattern.MaxFileLimit <= 0 {
+		walkOpts.VisitPattern.MaxFileLimit = MaxFileVisitLimit
+	}
+
+	var fileVisitCount int
 
 	return filepath.WalkDir(dir, func(filePath string, info fs.DirEntry, err error) error {
 		if err != nil && !walkOpts.IgnoreError {
@@ -289,13 +309,18 @@ func (w *WorkspaceReader) WalkFile(ctx context.Context, dir string, walkFn types
 			return nil
 		}
 
+		fileVisitCount++
+		if fileVisitCount > walkOpts.VisitPattern.MaxFileLimit {
+			return filepath.SkipAll
+		}
+
 		// 构建 WalkContext
 		walkCtx := &types.WalkContext{
 			Path:         filePath,
 			RelativePath: relativePath,
 			Info: &types.FileInfo{
 				Name: info.Name(),
-				Path: relativePath,
+				Path: filePath,
 			},
 			ParentPath: filepath.Dir(filePath),
 		}
@@ -307,17 +332,7 @@ func (w *WorkspaceReader) WalkFile(ctx context.Context, dir string, walkFn types
 			walkCtx.Info.IsDir = fileInfo.IsDir()
 		}
 
-		file, err := os.Open(filePath)
-		if err != nil && !walkOpts.IgnoreError {
-			return err
-		}
-		if file == nil {
-			return nil
-		}
-
-		defer file.Close()
-
-		return walkFn(walkCtx, file)
+		return walkFn(walkCtx)
 	})
 }
 
@@ -483,7 +498,7 @@ func (w *WorkspaceReader) GetProjectByFilePath(ctx context.Context, workspace st
 	return nil, fmt.Errorf("failed to find project which file %s belongs to in workspace %s", filePath, workspace)
 }
 
-func (w *WorkspaceReader) Stat(ctx context.Context, workspace, filePath string) (*types.FileInfo, error) {
+func (w *WorkspaceReader) Stat(filePath string) (*types.FileInfo, error) {
 	stat, err := os.Stat(filePath)
 	if os.IsNotExist(err) {
 		return nil, ErrPathNotExists
@@ -498,4 +513,55 @@ func (w *WorkspaceReader) Stat(ctx context.Context, workspace, filePath string) 
 		ModTime: stat.ModTime(),
 		IsDir:   stat.IsDir(),
 	}, nil
+}
+
+func (w *WorkspaceReader) List(ctx context.Context, path string) ([]*types.FileInfo, error) {
+	// 检查上下文是否已取消（尽早退出）
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return nil, fmt.Errorf("read directory err: %w", err)
+	}
+
+	// 预分配切片容量，避免动态扩容
+	files := make([]*types.FileInfo, 0, len(entries))
+
+	for _, e := range entries {
+		// 循环中检查上下文，支持中途取消
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+		// 构建完整路径（确保路径格式正确）
+		fullPath := filepath.Join(path, e.Name())
+
+		fileInfo := &types.FileInfo{
+			Name:  e.Name(),
+			Path:  fullPath,
+			IsDir: e.IsDir(),
+		}
+
+		// 非目录文件获取详细信息
+		if !e.IsDir() {
+			info, err := e.Info()
+			if err != nil {
+				// 记录错误但不中断，仅文件元信息可能不完整
+				w.logger.Warn("workspace_reader failed to get file info for %s: %v", fullPath, err)
+			} else {
+				fileInfo.Size = info.Size()
+				fileInfo.Mode = info.Mode()
+				fileInfo.ModTime = info.ModTime()
+			}
+		}
+
+		files = append(files, fileInfo)
+	}
+
+	return files, nil
 }

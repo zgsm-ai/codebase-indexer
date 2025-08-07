@@ -10,11 +10,9 @@ const ( //
 )
 
 type IndexTaskMetrics struct {
-	TotalFiles        int
-	TotalSourceFiles  int
-	TotalSucceedFiles int
-	TotalFailedFiles  int
-	FailedFilePaths   []string
+	TotalFiles       int
+	TotalFailedFiles int
+	FailedFilePaths  []string
 }
 
 // CodeDefinition 代码文件结构

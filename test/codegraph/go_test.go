@@ -6,7 +6,7 @@ import (
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
 	"github.com/stretchr/testify/assert"
-	"io"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -71,7 +71,7 @@ func TestIndexGoProjects(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			err = indexer.IndexWorkspace(context.Background(), tc.Path)
+			_, err = indexer.IndexWorkspace(context.Background(), tc.Path)
 			assert.NoError(t, err)
 			summary, err := indexer.GetSummary(context.Background(), tc.Path)
 			assert.NoError(t, err)
@@ -87,7 +87,7 @@ func TestWalkProjectCostTime(t *testing.T) {
 	testCases := []struct {
 		name  string
 		path  string
-		logic func(*testing.T, *testEnvironment, *types.WalkContext, io.ReadCloser)
+		logic func(*testing.T, *testEnvironment, *types.WalkContext)
 	}{
 		{
 			name: "do nothing",
@@ -96,8 +96,8 @@ func TestWalkProjectCostTime(t *testing.T) {
 		{
 			name: "do index",
 			path: filepath.Join(GoProjectRootDir, "kubernetes"),
-			logic: func(t *testing.T, environment *testEnvironment, walkContext *types.WalkContext, closer io.ReadCloser) {
-				bytes, err := io.ReadAll(closer)
+			logic: func(t *testing.T, environment *testEnvironment, walkContext *types.WalkContext) {
+				bytes, err := os.ReadFile(walkContext.Path)
 				assert.NoError(t, err)
 				_, err = environment.sourceFileParser.Parse(ctx, &types.SourceFile{
 					Path:    walkContext.Path,
@@ -115,10 +115,10 @@ func TestWalkProjectCostTime(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var fileCnt int
 			start := time.Now()
-			err = env.workspaceReader.WalkFile(ctx, tt.path, func(walkCtx *types.WalkContext, reader io.ReadCloser) error {
+			err = env.workspaceReader.WalkFile(ctx, tt.path, func(walkCtx *types.WalkContext) error {
 				fileCnt++
 				if tt.logic != nil {
-					tt.logic(t, env, walkCtx, reader)
+					tt.logic(t, env, walkCtx)
 				}
 				return nil
 			}, types.WalkOptions{IgnoreError: true, VisitPattern: types.VisitPattern{ExcludeDirs: excludeDir, IncludeExts: []string{".go"}}})

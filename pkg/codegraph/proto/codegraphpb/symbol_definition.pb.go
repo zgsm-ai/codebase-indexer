@@ -140,7 +140,7 @@ func (x *Definition) GetElementType() ElementType {
 	if x != nil {
 		return x.ElementType
 	}
-	return ElementType_ELEMENT_TYPE_UNDEFINED
+	return ElementType_UNDEFINED
 }
 
 var File_pkg_codegraph_proto_symbol_definition_proto protoreflect.FileDescriptor

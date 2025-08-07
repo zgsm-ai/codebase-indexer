@@ -3,6 +3,8 @@ package utils
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"sort"
 	"testing"
 )
 
@@ -139,7 +141,7 @@ func TestListFiles(t *testing.T) {
 			}
 
 			// 调用被测试函数
-			files, err := ListFiles(targetDir)
+			files, err := ListOnlyFiles(targetDir)
 
 			// 验证错误是否符合预期
 			if (err != nil) != tc.wantErr {
@@ -176,6 +178,132 @@ func TestEnsureTrailingSeparator(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := EnsureTrailingSeparator(tt.input); got != tt.expected {
 				t.Errorf("输入: %q\n期望: %q\n实际: %q", tt.input, tt.expected, got)
+			}
+		})
+	}
+}
+
+func TestListSubDirs(t *testing.T) {
+	testCases := []struct {
+		name        string
+		setup       func(t *testing.T) string
+		teardown    func(t *testing.T, dir string)
+		wantSubDirs []string
+		wantErr     bool
+	}{
+		{
+			name: "空目录",
+			setup: func(t *testing.T) string {
+				return t.TempDir()
+			},
+			teardown:    func(t *testing.T, dir string) {},
+			wantSubDirs: []string{},
+			wantErr:     false,
+		},
+		{
+			name: "包含普通目录和隐藏目录",
+			setup: func(t *testing.T) string {
+				rootDir := t.TempDir()
+
+				// 创建普通目录
+				os.Mkdir(filepath.Join(rootDir, "normal_dir1"), 0755)
+				os.Mkdir(filepath.Join(rootDir, "normal_dir2"), 0755)
+
+				// 创建隐藏目录（以.开头）
+				os.Mkdir(filepath.Join(rootDir, ".hidden_dir1"), 0755)
+				os.Mkdir(filepath.Join(rootDir, "_hidden_dir2"), 0755) // 非隐藏目录
+
+				// 创建文件（不应被列出）
+				f, _ := os.Create(filepath.Join(rootDir, "file.txt"))
+				f.Close()
+
+				return rootDir
+			},
+			teardown:    func(t *testing.T, dir string) {},
+			wantSubDirs: []string{"normal_dir1", "normal_dir2", "_hidden_dir2"},
+			wantErr:     false,
+		},
+		{
+			name: "只有隐藏目录",
+			setup: func(t *testing.T) string {
+				rootDir := t.TempDir()
+				os.Mkdir(filepath.Join(rootDir, ".hidden1"), 0755)
+				os.Mkdir(filepath.Join(rootDir, ".hidden2"), 0755)
+				return rootDir
+			},
+			teardown:    func(t *testing.T, dir string) {},
+			wantSubDirs: []string{},
+			wantErr:     false,
+		},
+		{
+			name: "目录不存在",
+			setup: func(t *testing.T) string {
+				return filepath.Join(t.TempDir(), "non_existent_dir")
+			},
+			teardown:    func(t *testing.T, dir string) {},
+			wantSubDirs: []string{},
+			wantErr:     true,
+		},
+		{
+			name: "权限不足的目录",
+			setup: func(t *testing.T) string {
+				if runtime.GOOS == "windows" {
+					t.Skip("Windows系统权限测试暂不支持")
+				}
+
+				rootDir := t.TempDir()
+				restrictedDir := filepath.Join(rootDir, "restricted")
+				os.Mkdir(restrictedDir, 0000) // 无任何权限
+
+				return restrictedDir
+			},
+			teardown: func(t *testing.T, dir string) {
+				// 恢复权限以便清理
+				os.Chmod(dir, 0755)
+			},
+			wantSubDirs: []string{},
+			wantErr:     true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := tc.setup(t)
+			defer tc.teardown(t, dir)
+
+			subDirs, err := ListSubDirs(dir)
+
+			// 检查错误
+			if (err != nil) != tc.wantErr {
+				t.Errorf("错误预期: %v, 实际: %v", tc.wantErr, err)
+				return
+			}
+
+			if tc.wantErr {
+				return
+			}
+
+			// 提取目录名并排序
+			var gotNames []string
+			for _, d := range subDirs {
+				gotNames = append(gotNames, filepath.Base(d))
+			}
+			sort.Strings(gotNames)
+			sort.Strings(tc.wantSubDirs)
+
+			// 比较数量
+			if len(gotNames) != len(tc.wantSubDirs) {
+				t.Errorf("目录数量不匹配: 预期 %d, 实际 %d, 结果: %v",
+					len(tc.wantSubDirs), len(gotNames), gotNames)
+				return
+			}
+
+			// 比较每个目录名
+			for i := range gotNames {
+				if gotNames[i] != tc.wantSubDirs[i] {
+					t.Errorf("索引 %d 不匹配: 预期 %s, 实际 %s",
+						i, tc.wantSubDirs[i], gotNames[i])
+				}
 			}
 		})
 	}

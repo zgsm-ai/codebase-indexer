@@ -1,9 +1,11 @@
 package codegraph
 
 import (
+	"codebase-indexer/internal/repository"
 	"codebase-indexer/pkg/codegraph/analyzer"
 	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/parser"
+	"codebase-indexer/pkg/codegraph/pool"
 	"codebase-indexer/pkg/codegraph/proto"
 	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
 	"codebase-indexer/pkg/codegraph/resolver"
@@ -15,30 +17,26 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
+	"sync"
 	"time"
 )
 
-// projectFiles 用于存储项目和对应的文件列表
-type projectFiles struct {
-	p     *workspace.Project
-	files []string
-}
-
 type IndexerConfig struct {
 	MaxConcurrency int
-	VisitPattern   types.VisitPattern
+	BatchSize      int
+	VisitPattern   *types.VisitPattern
 }
 
 // Indexer 代码索引器
 type Indexer struct {
-	parser          *parser.SourceFileParser     // 单文件语法解析
-	analyzer        *analyzer.DependencyAnalyzer // 跨文件依赖分析
-	workspaceReader *workspace.WorkspaceReader   // 进行工作区的文件读取、项目识别、项目列表维护
-	storage         store.GraphStorage           // 存储
-	config          IndexerConfig
-	logger          logger.Logger
+	parser              *parser.SourceFileParser     // 单文件语法解析
+	analyzer            *analyzer.DependencyAnalyzer // 跨文件依赖分析
+	workspaceReader     *workspace.WorkspaceReader   // 进行工作区的文件读取、项目识别、项目列表维护
+	storage             store.GraphStorage           // 存储
+	workspaceRepository repository.WorkspaceRepository
+	config              IndexerConfig
+	logger              logger.Logger
 }
 
 // TODO 多子项目、多语言支持。monorepo, 不光通过语言隔离、还要通过子项目隔离。
@@ -49,38 +47,40 @@ func NewCodeIndexer(
 	analyzer *analyzer.DependencyAnalyzer,
 	workspaceReader *workspace.WorkspaceReader,
 	storage store.GraphStorage,
+	workspaceRepository repository.WorkspaceRepository,
 	config IndexerConfig,
 	logger logger.Logger,
 ) *Indexer {
 	return &Indexer{
-		parser:          parser,
-		analyzer:        analyzer,
-		workspaceReader: workspaceReader,
-		storage:         storage,
-		config:          config,
-		logger:          logger,
+		parser:              parser,
+		analyzer:            analyzer,
+		workspaceReader:     workspaceReader,
+		storage:             storage,
+		workspaceRepository: workspaceRepository,
+		config:              config,
+		logger:              logger,
 	}
 }
 
 // IndexWorkspace 索引整个工作区
-func (i *Indexer) IndexWorkspace(ctx context.Context, workspace string) (*types.IndexTaskMetrics, error) {
+func (i *Indexer) IndexWorkspace(ctx context.Context, workspacePath string) (*types.IndexTaskMetrics, error) {
 	taskMetrics := &types.IndexTaskMetrics{}
 	workspaceStart := time.Now()
-	i.logger.Info("index_workspace start to index workspace：%s", workspace)
-	exists, err := i.workspaceReader.Exists(ctx, workspace)
+	i.logger.Info("index_workspace start to index workspace：%s", workspacePath)
+	exists, err := i.workspaceReader.Exists(ctx, workspacePath)
 	if err == nil && !exists {
-		return taskMetrics, fmt.Errorf("index_workspace workspace %s not exists", workspace)
+		return taskMetrics, fmt.Errorf("index_workspace workspace %s not exists", workspacePath)
 	}
-	projects := i.workspaceReader.FindProjects(ctx, workspace, types.VisitPattern{})
+	projects := i.workspaceReader.FindProjects(ctx, workspacePath, workspace.DefaultVisitPattern)
 	if len(projects) == 0 {
-		return taskMetrics, fmt.Errorf("index_workspace find no projects in workspace: %s", workspace)
+		return taskMetrics, fmt.Errorf("index_workspace find no projects in workspace: %s", workspacePath)
 	}
 
 	var errs []error
 
 	// 循环项目，逐个处理
 	for _, project := range projects {
-		projectTaskMetrics, err := i.indexProject(ctx, project)
+		projectTaskMetrics, err := i.indexProject(ctx, workspacePath, project)
 		if err != nil {
 			i.logger.Error("index_workspace index project %s err: %v",
 				project.Path, utils.TruncateError(errors.Join(err...)))
@@ -89,20 +89,19 @@ func (i *Indexer) IndexWorkspace(ctx context.Context, workspace string) (*types.
 		}
 
 		taskMetrics.TotalFiles += projectTaskMetrics.TotalFiles
-		taskMetrics.TotalSourceFiles += projectTaskMetrics.TotalSourceFiles
-		taskMetrics.TotalSucceedFiles += projectTaskMetrics.TotalSucceedFiles
 		taskMetrics.TotalFailedFiles += projectTaskMetrics.TotalFailedFiles
 		taskMetrics.FailedFilePaths = append(taskMetrics.FailedFilePaths, projectTaskMetrics.FailedFilePaths...)
 	}
 
 	i.logger.Info("index_workspace %s index workspace finish, cost %d ms, visit %d files, "+
-		"%d valid source files, parsed %d files successfully, failed %d files", workspace, time.Since(workspaceStart).Milliseconds(),
-		taskMetrics.TotalFiles, taskMetrics.TotalSourceFiles, taskMetrics.TotalSucceedFiles, taskMetrics.TotalFailedFiles)
+		"parsed %d files successfully, failed %d files", workspacePath, time.Since(workspaceStart).Milliseconds(),
+		taskMetrics.TotalFiles, taskMetrics.TotalFiles-taskMetrics.TotalFailedFiles)
 	return taskMetrics, nil
 }
 
 // indexProject 索引单个项目
-func (i *Indexer) indexProject(ctx context.Context, project *workspace.Project) (types.IndexTaskMetrics, []error) {
+func (i *Indexer) indexProject(ctx context.Context, workspacePath string, project *workspace.Project) (*types.IndexTaskMetrics, []error) {
+
 	// todo 并发、批量处理
 	// 阶段0：收集要处理的源码文件（可并发）
 	// 阶段1：解析 （可并发）
@@ -111,55 +110,182 @@ func (i *Indexer) indexProject(ctx context.Context, project *workspace.Project) 
 	// 阶段4：依赖分析 （依赖元素的具体类型）
 	// 阶段5：保存索引
 	var errs []error
+	projectMetrics := &types.IndexTaskMetrics{FailedFilePaths: make([]string, 0)}
 	projectUuid := project.Uuid
 	projectStart := time.Now()
 	i.logger.Info("index_project start to index project：%s", project.Path)
 
-	fileElementTables, projectTaskMetrics, err := i.ParseProjectFiles(ctx, project)
+	workspaceModel, err := i.workspaceRepository.GetWorkspaceByPath(workspacePath)
 	if err != nil {
-		return types.IndexTaskMetrics{}, append(errs, err)
+		return nil, append(errs, err)
 	}
+	if workspaceModel == nil {
+		return nil, append(errs, fmt.Errorf("index_project workspace %s not found in database", workspacePath))
+	}
+	previousNum := workspaceModel.CodegraphFileNum
+
+	sourceFiles, err := i.CollectProjectSourceFiles(ctx, project.Path, i.config.VisitPattern)
+	if err != nil {
+		return projectMetrics, append(errs, fmt.Errorf("index_project collect project files err:%v", err))
+	}
+	totalFiles := len(sourceFiles)
+	if totalFiles == 0 {
+		i.logger.Info("index_project found no source files in project %s, not index.", project.Path)
+		return projectMetrics, nil
+	}
+	projectMetrics.TotalFiles = totalFiles
+	i.logger.Info("index_project collect project files finish. cost %d ms, found %d source files to index",
+		time.Since(projectStart).Milliseconds(), totalFiles)
+
+	taskPool := pool.NewTaskPool(i.config.MaxConcurrency, i.logger)
+
+	defer taskPool.Close()
+
+	var mux sync.Mutex
+	var parsedFilesCnt int
+	for m := 0; m < totalFiles; {
+		batch := utils.Min(totalFiles-m-1, i.config.BatchSize)
+		err := taskPool.Submit(ctx, func(ctx context.Context, taskId uint64) {
+			batchStart := time.Now()
+			i.logger.Debug("index_project task-%d start to parse source files, batch [%d:%d], total %d, batch_size %d",
+				taskId, m, m+batch, totalFiles, batch)
+			// 解析
+			elementTables, err := func() ([]*parser.FileElementTable, error) {
+				elementTables, metrics, err := i.parseFiles(ctx, sourceFiles[m:m+batch])
+				mux.Lock()
+				defer mux.Unlock()
+				parsedFilesCnt += len(elementTables)
+				projectMetrics.TotalFailedFiles += metrics.TotalFailedFiles
+				projectMetrics.FailedFilePaths = append(projectMetrics.FailedFilePaths, metrics.FailedFilePaths...)
+				return elementTables, err
+			}()
+			if len(elementTables) == 0 {
+				return
+			}
+			i.logger.Debug("index_project task-%d batch [%d:%d] parse files. cost %d ms", taskId,
+				m, m+batch, time.Since(batchStart).Milliseconds())
+			// 检查elements，剔除不合法的，并打印日志
+			i.checkElementTables(elementTables)
+
+			symbolStart := time.Now()
+			// 项目符号表存储
+			if err = i.analyzer.SaveSymbolDefinitions(ctx, projectUuid, elementTables); err != nil {
+				errs = append(errs, err)
+			}
+			i.logger.Debug("index_project task-%d batch [%d:%d] save symbols. cost %d ms", taskId,
+				m, m+batch, time.Since(symbolStart).Milliseconds())
+
+			// 预处理 import
+			if err := i.preprocessImports(ctx, elementTables, project); err != nil {
+				i.logger.Debug("index_project task-%d preprocess import error: %v", utils.TruncateError(err))
+			}
+
+			// element存储，后面依赖分析，基于磁盘，避免大型项目占用太多内存。
+			protoElementTables := proto.FileElementTablesToProto(elementTables)
+			// 关系索引存储
+			if err = i.storage.BatchSave(ctx, projectUuid, workspace.FileElementTables(protoElementTables)); err != nil {
+				errs = append(errs, err)
+				projectMetrics.TotalFailedFiles += batch
+				projectMetrics.FailedFilePaths = append(projectMetrics.FailedFilePaths, sourceFiles[m:m+batch]...)
+			}
+			i.logger.Debug("index_project task-%d batch [%d:%d] save element_tables. cost %d ms", taskId,
+				m, m+batch, time.Since(batchStart).Milliseconds())
+
+			i.logger.Debug("index_project task-%d batch [%d:%d] end. cost %d ms", taskId,
+				m, m+batch, time.Since(batchStart).Milliseconds())
+
+		})
+		if err != nil {
+			errs = append(errs, err)
+		}
+		m += batch
+	}
+	// 等待所有文件处理完成，进行依赖分析
+	taskPool.Wait()
 
 	i.logger.Info("index_project project %s files parse finish. cost %d ms, visit %d files, "+
-		"%d valid source files, parsed %d files successfully, failed %d files",
-		project.Path, time.Since(projectStart).Milliseconds(), projectTaskMetrics.TotalFiles,
-		projectTaskMetrics.TotalSourceFiles,
-		projectTaskMetrics.TotalSucceedFiles, projectTaskMetrics.TotalFailedFiles)
+		"parsed %d files successfully, failed %d files",
+		project.Path, time.Since(projectStart).Milliseconds(), projectMetrics.TotalFiles,
+		projectMetrics.TotalFiles-projectMetrics.TotalFailedFiles, projectMetrics.TotalFailedFiles)
 
-	if len(fileElementTables) == 0 {
-		errs = append(errs, fmt.Errorf("index_project project %s parsed no source files", project.Path))
-		return types.IndexTaskMetrics{}, errs
+	if projectMetrics.TotalFiles-projectMetrics.TotalFailedFiles == 0 {
+		i.logger.Info("index_project project %s parse and save 0 element_tables successfully, process end.",
+			project.Path)
+		return projectMetrics, errs
 	}
 
-	// 检查elements，剔除不合法的，并打印日志
-	i.checkElementTables(fileElementTables)
+	analyzeStart := time.Now()
 
-	// 项目符号表构建与存储
-	if err = i.analyzer.SaveSymbolDefinitions(ctx, projectUuid, fileElementTables); err != nil {
-		errs = append(errs, err)
-		return types.IndexTaskMetrics{}, errs
+	// 更新进度，更新10次
+	// TODO 优化为由快到慢
+	updateTimes := 10
+	updateBatch := (parsedFilesCnt + updateTimes - 1) / updateTimes
+
+	elementTablesCnt := 0
+	// 迭代进行依赖分析
+	iter := i.storage.Iter(ctx, projectUuid)
+	defer iter.Close()
+	for iter.Next() {
+		var elementTable codegraphpb.FileElementTable
+		if err = store.UnmarshalValue(iter.Value(), &elementTable); err != nil {
+			errs = append(errs, fmt.Errorf("index_project unmarshal element_table err:%w", err))
+			continue
+		}
+
+		// 依赖分析
+		if err = i.analyzer.Analyze(ctx, projectUuid, []*codegraphpb.FileElementTable{&elementTable}); err != nil {
+			errs = append(errs, err)
+			return projectMetrics, errs
+		}
+
+		// TODO 没发生更新，则不需要存储
+		if err = i.storage.BatchSave(ctx, projectUuid,
+			workspace.FileElementTables([]*codegraphpb.FileElementTable{&elementTable})); err != nil {
+			projectMetrics.TotalFailedFiles++
+			projectMetrics.FailedFilePaths = append(projectMetrics.FailedFilePaths, elementTable.Path)
+			errs = append(errs, err)
+			return projectMetrics, errs
+		}
+		if elementTablesCnt%updateBatch == 0 {
+			i.logger.Debug("index_project start to update workspace ")
+			if err = i.workspaceRepository.UpdateCodegraphInfo(workspacePath, elementTablesCnt+previousNum,
+				time.Now().Unix()); err != nil {
+				i.logger.Error("index_project update workspace %s codegraph successful file num %d/%d, err:%v",
+					workspacePath, elementTablesCnt, parsedFilesCnt, err)
+			}
+		}
+		elementTablesCnt++
 	}
 
-	// 依赖分析
-	if err = i.analyzer.Analyze(ctx, project, fileElementTables); err != nil {
-		errs = append(errs, err)
-		return types.IndexTaskMetrics{}, errs
+	// 最终更新
+	if err = i.workspaceRepository.UpdateCodegraphInfo(workspacePath, elementTablesCnt+previousNum,
+		time.Now().Unix()); err != nil {
+		i.logger.Error("index_project update workspace %s codegraph successful file num %d/%d, err:%v",
+			workspacePath, elementTablesCnt, parsedFilesCnt, err)
 	}
 
-	// 转换为 proto
-	protoElementTables := proto.FileElementTablesToProto(fileElementTables)
+	i.logger.Info("index_project project %s analyze dependency end, analyzed %d elements, cost %d ms.",
+		project.Path, time.Since(analyzeStart).Milliseconds())
 
-	saveStart := time.Now()
-	// 关系索引存储
-	if err = i.storage.BatchSave(ctx, projectUuid, workspace.FileElementTables(protoElementTables)); err != nil {
-		errs = append(errs, err)
-		return types.IndexTaskMetrics{}, errs
+	i.logger.Info("index_project: finish %s, cost %d ms, processed %d files.", project.Path,
+		time.Since(projectStart).Milliseconds(), elementTablesCnt)
+
+	return projectMetrics, nil
+}
+
+// preprocessImports 预处理（过滤、转换分隔符）
+func (i *Indexer) preprocessImports(ctx context.Context, elementTables []*parser.FileElementTable,
+	project *workspace.Project) error {
+	var errs []error
+	for _, ft := range elementTables {
+		imps, err := i.analyzer.PreprocessImports(ctx, ft.Language, project, ft.Imports)
+		if err != nil {
+			errs = append(errs, err)
+		} else {
+			ft.Imports = imps
+		}
 	}
-
-	i.logger.Info("index_project: finish %s, cost %d ms, saved %d file element_tables, cost %d ms.", project.Path,
-		time.Since(projectStart).Milliseconds(), len(protoElementTables), time.Since(saveStart).Milliseconds())
-
-	return projectTaskMetrics, nil
+	return errors.Join(errs...)
 }
 
 // ParseProjectFiles 解析项目中的所有文件
@@ -168,17 +294,17 @@ func (i *Indexer) ParseProjectFiles(ctx context.Context, p *workspace.Project) (
 	projectTaskMetrics := types.IndexTaskMetrics{}
 
 	// TODO walk 目录收集列表， 并发构建，批量保存结果
-	if err := i.workspaceReader.WalkFile(ctx, p.Path, func(walkCtx *types.WalkContext, reader io.ReadCloser) error {
+	if err := i.workspaceReader.WalkFile(ctx, p.Path, func(walkCtx *types.WalkContext) error {
 		projectTaskMetrics.TotalFiles++
 		language, err := lang.InferLanguage(walkCtx.Path)
 		if err != nil || language == types.EmptyString {
 			// not supported language or not source file
 			return nil
 		}
-		projectTaskMetrics.TotalSourceFiles++
 
-		content, err := io.ReadAll(reader)
+		content, err := i.workspaceReader.ReadFile(ctx, walkCtx.Path, types.ReadOptions{})
 		if err != nil {
+			projectTaskMetrics.TotalFailedFiles++
 			return err
 		}
 		fileElementTable, err := i.parser.Parse(ctx, &types.SourceFile{
@@ -190,7 +316,6 @@ func (i *Indexer) ParseProjectFiles(ctx context.Context, p *workspace.Project) (
 			projectTaskMetrics.TotalFailedFiles++
 			return err
 		}
-		projectTaskMetrics.TotalSucceedFiles++
 		fileElementTables = append(fileElementTables, fileElementTable)
 		return nil
 	}, types.WalkOptions{
@@ -208,7 +333,7 @@ func (i *Indexer) RemoveIndexes(ctx context.Context, workspacePath string, fileP
 	start := time.Now()
 	i.logger.Info("remove_indexes start to remove workspace %s files: %v", workspacePath, filePaths)
 
-	projects := i.workspaceReader.FindProjects(ctx, workspacePath, types.VisitPattern{})
+	projects := i.workspaceReader.FindProjects(ctx, workspacePath, workspace.DefaultVisitPattern)
 	if len(projects) == 0 {
 		return fmt.Errorf("no project found in workspace %s", workspacePath)
 	}
@@ -219,15 +344,15 @@ func (i *Indexer) RemoveIndexes(ctx context.Context, workspacePath string, fileP
 		return fmt.Errorf("group files by project failed: %w", err)
 	}
 
-	for _, pfiles := range projectFilesMap {
+	for projectUuid, files := range projectFilesMap {
 		pStart := time.Now()
-		i.logger.Info("remove_indexes start to remove project %s files index", pfiles.p.Name)
+		i.logger.Info("remove_indexes start to remove project %s files index", projectUuid)
 
-		if err := i.removeIndexByFilePaths(ctx, pfiles.p.Uuid, pfiles.files); err != nil {
+		if err := i.removeIndexByFilePaths(ctx, projectUuid, files); err != nil {
 			errs = append(errs, err)
 		}
 
-		i.logger.Info("remove_indexes remove project %s files index end, cost %d ms", pfiles.p.Name,
+		i.logger.Info("remove_indexes remove project %s files index end, cost %d ms", projectUuid,
 			time.Since(pStart).Milliseconds())
 	}
 
@@ -481,7 +606,7 @@ func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePath
 	if err == nil && !exists {
 		return fmt.Errorf("index_files workspace %s not exists", workspacePath)
 	}
-	projects := i.workspaceReader.FindProjects(ctx, workspacePath, types.VisitPattern{})
+	projects := i.workspaceReader.FindProjects(ctx, workspacePath, workspace.DefaultVisitPattern)
 	if len(projects) == 0 {
 		return fmt.Errorf("no project found in workspace %s", workspacePath)
 	}
@@ -492,19 +617,29 @@ func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePath
 		return fmt.Errorf("group files by project failed: %w", err)
 	}
 
-	for puuid, pfiles := range projectFilesMap {
-		if i.storage.Size(ctx, puuid, store.PathKeySystemPrefix) == 0 {
-			i.logger.Info("index_files project %s has not indexed yet, index project.", puuid)
+	for projectUuid, files := range projectFilesMap {
+		if i.storage.Size(ctx, projectUuid, store.PathKeySystemPrefix) == 0 {
+			i.logger.Info("index_files project %s has not indexed yet, index project.", projectUuid)
+			var project *workspace.Project
+			for _, p := range projects {
+				if p.Uuid == projectUuid {
+					project = p
+				}
+			}
+			if project == nil {
+				errs = append(errs, fmt.Errorf("index_files failed to find project by uuid %s", projectUuid))
+				continue
+			}
 			// 如果项目没有索引过，索引整个项目
-			_, err := i.indexProject(ctx, pfiles.p)
+			_, err := i.indexProject(ctx, workspacePath, project)
 			if err != nil {
-				i.logger.Error("index_files index project %s err: %v", pfiles.p.Path, utils.TruncateError(errors.Join(err...)))
+				i.logger.Error("index_files index project %s err: %v", projectUuid, utils.TruncateError(errors.Join(err...)))
 				errs = append(errs, err...)
 			}
 		} else {
-			i.logger.Info("index_files project %s has index, index files.", puuid)
+			i.logger.Info("index_files project %s has index, index files.", projectUuid)
 			// 索引指定文件
-			if err := i.indexProjectFiles(ctx, puuid, pfiles); err != nil {
+			if err := i.indexProjectFiles(ctx, projectUuid, files); err != nil {
 				errs = append(errs, err)
 			}
 		}
@@ -517,12 +652,12 @@ func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePath
 }
 
 // indexProjectFiles 索引项目中的指定文件
-func (i *Indexer) indexProjectFiles(ctx context.Context, puuid string, pfiles projectFiles) error {
+func (i *Indexer) indexProjectFiles(ctx context.Context, projectUuid string, filePaths []string) error {
 	var errs []error
 	fileTables := make([]*parser.FileElementTable, 0)
 
 	// 处理每个文件
-	for _, f := range pfiles.files {
+	for _, f := range filePaths {
 		if language, err := lang.InferLanguage(f); language == types.EmptyString || err != nil {
 			continue
 		}
@@ -545,24 +680,23 @@ func (i *Indexer) indexProjectFiles(ctx context.Context, puuid string, pfiles pr
 	}
 
 	if len(fileTables) == 0 {
-		return fmt.Errorf("no valid files to index in project %s", pfiles.p.Name)
+		return fmt.Errorf("no valid filePaths to index in project %s", projectUuid)
 	}
 
 	// 保存本地符号表
-	if err := i.analyzer.SaveSymbolDefinitions(ctx, puuid, fileTables); err != nil {
+	if err := i.analyzer.SaveSymbolDefinitions(ctx, projectUuid, fileTables); err != nil {
 		return fmt.Errorf("save symbol definitions error: %w", err)
-	}
-
-	// 依赖分析
-	if err := i.analyzer.Analyze(ctx, pfiles.p, fileTables); err != nil {
-		return fmt.Errorf("analyze dependency error: %w", err)
 	}
 
 	// 转换为 proto
 	protoElementTables := proto.FileElementTablesToProto(fileTables)
+	// 依赖分析
+	if err := i.analyzer.Analyze(ctx, projectUuid, protoElementTables); err != nil {
+		return fmt.Errorf("analyze dependency error: %w", err)
+	}
 
 	// 关系索引存储
-	if err := i.storage.BatchSave(ctx, puuid, workspace.FileElementTables(protoElementTables)); err != nil {
+	if err := i.storage.BatchSave(ctx, projectUuid, workspace.FileElementTables(protoElementTables)); err != nil {
 		return fmt.Errorf("batch save error: %w", err)
 	}
 
@@ -573,7 +707,7 @@ func (i *Indexer) indexProjectFiles(ctx context.Context, puuid string, pfiles pr
 func (i *Indexer) QueryElements(ctx context.Context, workspacePath string, filePaths []string) ([]*codegraphpb.FileElementTable, error) {
 	i.logger.Info("query_elements start to query workspace %s files: %v", workspacePath, filePaths)
 
-	projects := i.workspaceReader.FindProjects(ctx, workspacePath, types.VisitPattern{})
+	projects := i.workspaceReader.FindProjects(ctx, workspacePath, workspace.DefaultVisitPattern)
 	if len(projects) == 0 {
 		return nil, fmt.Errorf("no project found in workspace %s", workspacePath)
 	}
@@ -587,7 +721,7 @@ func (i *Indexer) QueryElements(ctx context.Context, workspacePath string, fileP
 	}
 
 	for puuid, pfiles := range projectFilesMap {
-		for _, fp := range pfiles.files {
+		for _, fp := range pfiles {
 			language, err := lang.InferLanguage(fp)
 			if err != nil {
 				continue
@@ -618,7 +752,7 @@ func (i *Indexer) QueryElements(ctx context.Context, workspacePath string, fileP
 func (i *Indexer) QuerySymbols(ctx context.Context, workspacePath string, filePath string, symbolNames []string) ([]*codegraphpb.SymbolDefinition, error) {
 	i.logger.Info("query_symbols start to query workspace %s file %s symbols: %v", workspacePath, filePath, symbolNames)
 
-	projects := i.workspaceReader.FindProjects(ctx, workspacePath, types.VisitPattern{})
+	projects := i.workspaceReader.FindProjects(ctx, workspacePath, workspace.DefaultVisitPattern)
 	if len(projects) == 0 {
 		return nil, fmt.Errorf("no project found in workspace %s", workspacePath)
 	}
@@ -668,23 +802,20 @@ func (i *Indexer) QuerySymbols(ctx context.Context, workspacePath string, filePa
 }
 
 // groupFilesByProject 根据项目对文件进行分组
-func (i *Indexer) groupFilesByProject(projects []*workspace.Project, filePaths []string) (map[string]projectFiles, error) {
-	projectFilesMap := make(map[string]projectFiles)
+func (i *Indexer) groupFilesByProject(projects []*workspace.Project, filePaths []string) (map[string][]string, error) {
+	projectFilesMap := make(map[string][]string)
 	var errs []error
 
 	for _, p := range projects {
 		for _, filePath := range filePaths {
 			if strings.HasPrefix(filePath, p.Path) {
 				projectUuid := p.Uuid
-				pf, ok := projectFilesMap[projectUuid]
+				files, ok := projectFilesMap[projectUuid]
 				if !ok {
-					pf = projectFiles{
-						p:     p,
-						files: make([]string, 0),
-					}
+					files = make([]string, 0)
 				}
-				pf.files = append(pf.files, filePath)
-				projectFilesMap[projectUuid] = pf
+				files = append(files, filePath)
+				projectFilesMap[projectUuid] = files
 			}
 		}
 	}
@@ -736,7 +867,7 @@ func (i *Indexer) checkElementTables(elementTables []*parser.FileElementTable) {
 		ft.Imports = newImports
 		ft.Elements = newElements
 	}
-	i.logger.Info("check_element: files total %d, elements before total %d, filtered %d, cost %d ms",
+	i.logger.Debug("check_element: files total %d, elements before total %d, filtered %d, cost %d ms",
 		len(elementTables), total, filtered, time.Since(start).Milliseconds())
 }
 
@@ -785,7 +916,7 @@ func (b *Indexer) QueryRelations(ctx context.Context, opts *types.QueryRelationO
 	}
 
 	var res []*types.GraphNode
-	var foundSymbols []*codegraphpb.BaseElement
+	var foundSymbols []*codegraphpb.Element
 
 	// Find root symbols based on query options
 	if opts.SymbolName != types.EmptyString {
@@ -845,8 +976,8 @@ func (b *Indexer) QueryRelations(ctx context.Context, opts *types.QueryRelationO
 
 // querySymbolsByPosition 按位置查询 occurrence
 func (i *Indexer) querySymbolsByPosition(ctx context.Context, fileTable *codegraphpb.FileElementTable,
-	opts *types.QueryRelationOptions) []*codegraphpb.BaseElement {
-	var nodes []*codegraphpb.BaseElement
+	opts *types.QueryRelationOptions) []*codegraphpb.Element {
+	var nodes []*codegraphpb.Element
 	if opts.StartLine <= 0 || opts.EndLine < opts.StartLine {
 		i.logger.Debug("query_symbol_by_position invalid opts startLine %d or endLine %d", opts.StartLine,
 			opts.EndLine)
@@ -872,8 +1003,8 @@ func isValidRange(range_ []int32) bool {
 }
 
 // querySymbolsByNameAndLine 通过 symbolName + startLine
-func (i *Indexer) querySymbolsByNameAndLine(doc *codegraphpb.FileElementTable, opts *types.QueryRelationOptions) []*codegraphpb.BaseElement {
-	var nodes []*codegraphpb.BaseElement
+func (i *Indexer) querySymbolsByNameAndLine(doc *codegraphpb.FileElementTable, opts *types.QueryRelationOptions) []*codegraphpb.Element {
+	var nodes []*codegraphpb.Element
 	queryName := opts.SymbolName
 	// 根据名字和 行号， 找到symbol
 	for _, s := range doc.Elements {
@@ -1004,7 +1135,7 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 
 	var res []*types.Definition
 
-	var foundSymbols []*codegraphpb.BaseElement
+	var foundSymbols []*codegraphpb.Element
 	queryStartLine := int32(options.StartLine - 1)
 	queryEndLine := int32(options.EndLine - 1)
 
@@ -1207,7 +1338,7 @@ func (i *Indexer) searchSymbolNames(ctx context.Context, projectUuid string, nam
 	return filteredResult, nil
 }
 
-func (i *Indexer) findSymbolInDocByRange(fileElementTable *codegraphpb.FileElementTable, symbolRange []int32) *codegraphpb.BaseElement {
+func (i *Indexer) findSymbolInDocByRange(fileElementTable *codegraphpb.FileElementTable, symbolRange []int32) *codegraphpb.Element {
 	//TODO 二分查找
 	for _, s := range fileElementTable.Elements {
 		// 开始行
@@ -1224,8 +1355,8 @@ func (i *Indexer) findSymbolInDocByRange(fileElementTable *codegraphpb.FileEleme
 }
 
 func (i *Indexer) findSymbolInDocByLineRange(ctx context.Context,
-	fileElementTable *codegraphpb.FileElementTable, startLine int32, endLine int32) []*codegraphpb.BaseElement {
-	var res []*codegraphpb.BaseElement
+	fileElementTable *codegraphpb.FileElementTable, startLine int32, endLine int32) []*codegraphpb.Element {
+	var res []*codegraphpb.Element
 	for _, s := range fileElementTable.Elements {
 		// s
 		// 开始行
@@ -1245,7 +1376,7 @@ func (i *Indexer) findSymbolInDocByLineRange(ctx context.Context,
 }
 
 func (i *Indexer) findReferenceSymbolBelonging(f *codegraphpb.FileElementTable,
-	referenceElement *codegraphpb.BaseElement) *codegraphpb.BaseElement {
+	referenceElement *codegraphpb.Element) *codegraphpb.Element {
 	if len(referenceElement.GetRange()) < 3 {
 		i.logger.Debug("find_symbol_belong %s invalid referenceElement range %s %s %v",
 			f.Path, referenceElement.Name, referenceElement.Range)
@@ -1462,6 +1593,65 @@ func (i *Indexer) getSymbolDefinitionByName(ctx context.Context, projectUuid str
 	var symbolDefinition codegraphpb.SymbolDefinition
 	err = store.UnmarshalValue(bytes, &symbolDefinition)
 	return &symbolDefinition, err
+}
+
+func (i *Indexer) CollectProjectSourceFiles(ctx context.Context, projectPath string, visitPattern *types.VisitPattern) ([]string, error) {
+
+	filePaths := make([]string, 0, 100)
+
+	err := i.workspaceReader.WalkFile(ctx, projectPath, func(walkCtx *types.WalkContext) error {
+		if walkCtx.Info.IsDir {
+			return nil
+		}
+
+		filePaths = append(filePaths, walkCtx.Path)
+		return nil
+	}, types.WalkOptions{IgnoreError: true, VisitPattern: visitPattern})
+	if err != nil {
+		return nil, err
+	}
+	return filePaths, nil
+}
+
+func (i *Indexer) parseFiles(ctx context.Context, filePaths []string) ([]*parser.FileElementTable, *types.IndexTaskMetrics, error) {
+	fileElementTables := make([]*parser.FileElementTable, 0)
+	projectTaskMetrics := &types.IndexTaskMetrics{TotalFiles: len(filePaths),
+		FailedFilePaths: make([]string, 0),
+	}
+	var errs []error
+
+	for _, path := range filePaths {
+		language, err := lang.InferLanguage(path)
+		if err != nil || language == types.EmptyString {
+			// not supported language or not source file
+			projectTaskMetrics.TotalFailedFiles++
+			projectTaskMetrics.FailedFilePaths = append(projectTaskMetrics.FailedFilePaths, path)
+			errs = append(errs, err)
+			continue
+		}
+		bytes, err := i.workspaceReader.ReadFile(ctx, path, types.ReadOptions{})
+		if err != nil {
+			projectTaskMetrics.TotalFailedFiles++
+			projectTaskMetrics.FailedFilePaths = append(projectTaskMetrics.FailedFilePaths, path)
+			errs = append(errs, err)
+			continue
+		}
+
+		fileElementTable, err := i.parser.Parse(ctx, &types.SourceFile{
+			Path:    path,
+			Content: bytes,
+		})
+
+		if err != nil {
+			projectTaskMetrics.TotalFailedFiles++
+			projectTaskMetrics.FailedFilePaths = append(projectTaskMetrics.FailedFilePaths, path)
+			errs = append(errs, err)
+			continue
+		}
+		fileElementTables = append(fileElementTables, fileElementTable)
+	}
+
+	return fileElementTables, projectTaskMetrics, errors.Join(errs...)
 }
 
 func isInLinesRange(current, start, end int32) bool {

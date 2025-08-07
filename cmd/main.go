@@ -29,7 +29,6 @@ import (
 	packageclassifier "codebase-indexer/pkg/codegraph/analyzer/package_classifier"
 	"codebase-indexer/pkg/codegraph/parser"
 	"codebase-indexer/pkg/codegraph/store"
-	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/codegraph/workspace"
 	"codebase-indexer/pkg/logger"
 	// "google.golang.org/grpc"
@@ -142,7 +141,7 @@ func main() {
 	dependencyAnalyzer := analyzer.NewDependencyAnalyzer(appLogger, packageClassifier, workspaceReader, codegraphStore)
 
 	indexer := codegraph.NewCodeIndexer(sourceFileParser, dependencyAnalyzer, workspaceReader, codegraphStore,
-		codegraph.IndexerConfig{VisitPattern: types.VisitPattern{}}, appLogger) //todo 文件忽略列表
+		workspaceRepo, codegraph.IndexerConfig{VisitPattern: workspace.DefaultVisitPattern}, appLogger) //todo 文件忽略列表
 	codegraphProcessor := service.NewCodegraphProcessor(workspaceReader, indexer, workspaceRepo, eventRepo, appLogger)
 
 	// Initialize job layer

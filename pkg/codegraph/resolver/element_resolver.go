@@ -37,7 +37,7 @@ func resolve(ctx context.Context, b ElementResolver, element Element, rc *Resolv
 	case *Call:
 		return b.resolveCall(ctx, element, rc)
 	default:
-		fmt.Println("element_resover not supported element", element.GetType(), "Range:", element.GetRange())
+		fmt.Println("element_resolver not supported element", element.GetType(), "Range:", element.GetRange())
 		return nil, fmt.Errorf("element_resover not supported element %v", element)
 	}
 }
@@ -45,5 +45,29 @@ func resolve(ctx context.Context, b ElementResolver, element Element, rc *Resolv
 // IsValidElement 检查必须字段
 func IsValidElement(e Element) bool {
 	return e.GetName() != types.EmptyString && e.GetType() != types.EmptyString &&
-		e.GetPath() != types.EmptyString && len(e.GetRange()) == 4
+		e.GetPath() != types.EmptyString && len(e.GetRange()) == 4 && IsValidElementType(e)
+}
+
+func IsValidElementType(e Element) bool {
+	switch element := e.(type) {
+	case *Import:
+		return element.Type == types.ElementTypeImport
+	case *Package:
+		return element.Type == types.ElementTypePackage
+	case *Function:
+		return element.Type == types.ElementTypeFunction
+	case *Method:
+		return element.Type == types.ElementTypeMethod
+	case *Class:
+		return element.Type == types.ElementTypeClass
+	case *Variable:
+		return element.Type == types.ElementTypeVariable
+	case *Interface:
+		return element.Type == types.ElementTypeInterface
+	case *Call:
+		return element.Type == types.ElementTypeFunctionCall ||
+			element.Type == types.ElementTypeMethodCall
+	default:
+		return false
+	}
 }
