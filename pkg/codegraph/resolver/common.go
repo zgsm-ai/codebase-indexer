@@ -284,3 +284,26 @@ func findAllTypeIdentifiers(node *sitter.Node, content []byte) []string {
 	walk(node)
 	return identifiers
 }
+
+func AppendValidElems[T Element](dst []Element, src []T) []Element {
+	for _, v := range src { // 这里 v 是 T，不是切片
+		if IsValidElement(v) {
+			dst = append(dst, v) // 隐式转换 T → Element
+		} else {
+			// TODO 打印到日志
+			fmt.Printf("┌─ %s  %s\n│  %s\n└─ %v  scope=%s\n",
+			v.GetType(), v.GetName(), v.GetPath(), v.GetRange(), v.GetScope())
+		}
+	}
+	return dst
+}
+func ToElements[T Element](in []T) []Element {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]Element, len(in))
+	for i, v := range in {
+		out[i] = v // 直接赋值，合法无歧义
+	}
+	return out
+}

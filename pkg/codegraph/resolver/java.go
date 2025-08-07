@@ -136,15 +136,18 @@ func (j *JavaResolver) resolveClass(ctx context.Context, element *Class, rc *Res
 				// owner 可能是包名，也可能是嵌套类的上层类调用
 				owner := strings.Join(parts[:len(parts)-1], types.Dot)
 				parent := parts[len(parts)-1]
-				imports = append(imports, &Import{
-					BaseElement: &BaseElement{
-						Name:  owner,
-						Path:  element.BaseElement.Path,
-						Scope: types.ScopePackage,
-						Type:  types.ElementTypeImport,
-						Range: element.BaseElement.Range,
-					},
-				})
+				if owner != types.EmptyString {
+					imports = append(imports, &Import{
+						BaseElement: &BaseElement{
+							Name:  owner,
+							Path:  element.BaseElement.Path,
+							Scope: types.ScopePackage,
+							Type:  types.ElementTypeImport,
+							Range: element.BaseElement.Range,
+						},
+					})
+				}
+
 				refs = append(refs, NewReference(element, &cap.Node, parent, owner))
 				if elemType == types.ElementTypeClassExtends {
 					element.SuperClasses = append(element.SuperClasses, parent)
@@ -190,7 +193,7 @@ func (j *JavaResolver) resolveVariable(ctx context.Context, element *Variable, r
 			// 处理 int a=10,b,c=0的情况，a,b,c分别对应一个cap
 			elem := &Variable{
 				BaseElement: &BaseElement{
-					Name:  content,
+					Name:  content, // 暂时用于填充字段
 					Path:  element.BaseElement.Path,
 					Type:  types.ElementTypeVariable,
 					Scope: types.ScopeClass,
@@ -211,7 +214,7 @@ func (j *JavaResolver) resolveVariable(ctx context.Context, element *Variable, r
 			elems = append(elems, elem)
 		case types.ElementTypeLocalVariableName, types.ElementTypeFieldName, types.ElementTypeEnumConstantName:
 			// 用于处理这种 String managerName = "DefaultManager", managerVersion
-			elems[len(elems)-1].BaseElement.Name = CleanParam(content)
+			elems[len(elems)-1].BaseElement.Name = content
 		case types.ElementTypeLocalVariableType, types.ElementTypeFieldType:
 			// 左侧的类型声明
 			//1. 标准类型 设置为primitive_type
@@ -246,15 +249,9 @@ func (j *JavaResolver) resolveVariable(ctx context.Context, element *Variable, r
 		}
 	}
 	var elements []Element
-	for _, v := range elems {
-		elements = append(elements, v)
-	}
-	for _, r := range refs {
-		elements = append(elements, r)
-	}
-	for _, i := range imports {
-		elements = append(elements, i)
-	}
+	elements = AppendValidElems(elements, elems)
+	elements = AppendValidElems(elements, refs)
+	elements = AppendValidElems(elements, imports)
 	return elements, nil
 }
 
@@ -283,15 +280,18 @@ func (j *JavaResolver) resolveInterface(ctx context.Context, element *Interface,
 				// owner 可能是包名，也可能是嵌套类的上层类调用
 				owner := strings.Join(parts[:len(parts)-1], types.Dot)
 				parent := parts[len(parts)-1]
-				imports = append(imports, &Import{
-					BaseElement: &BaseElement{
-						Name:  owner,
-						Path:  element.BaseElement.Path,
-						Scope: types.ScopePackage,
-						Type:  types.ElementTypeImport,
-						Range: element.BaseElement.Range,
-					},
-				})
+				if owner != types.EmptyString {
+					imports = append(imports, &Import{
+						BaseElement: &BaseElement{
+							Name:  owner,
+							Path:  element.BaseElement.Path,
+							Scope: types.ScopePackage,
+							Type:  types.ElementTypeImport,
+							Range: element.BaseElement.Range,
+						},
+					})
+				}
+
 				element.SuperInterfaces = append(element.SuperInterfaces, parent)
 				refs = append(refs, NewReference(element, &cap.Node, parent, owner))
 			}
@@ -327,6 +327,7 @@ func (j *JavaResolver) resolveCall(ctx context.Context, element *Call, rc *Resol
 		case types.ElementTypeClassLiteralType, types.ElementTypeCastExpressionType, types.ElementTypeInstanceofExpressionType,
 			types.ElementTypeArrayCreationType, types.ElementTypeNewExpressionType:
 			typs := findAllTypes(&cap.Node, rc.SourceFile.Content)
+			// 不一定都是type_identifier，也可能是全是基础类型
 			for i, typ := range typs {
 				parts := strings.Split(typ, types.Dot)
 				owner := strings.Join(parts[:len(parts)-1], types.Dot)
@@ -347,7 +348,6 @@ func (j *JavaResolver) resolveCall(ctx context.Context, element *Call, rc *Resol
 					element.Owner = owner
 					continue
 				}
-				// 理论上只有没有多的情况，因为class literal的类型是固定的
 				refs = append(refs, NewReference(element, &cap.Node, realTyp, owner))
 			}
 		case types.ElementTypeCallArguments, types.ElementTypeNewExpressionArgs:
@@ -361,13 +361,10 @@ func (j *JavaResolver) resolveCall(ctx context.Context, element *Call, rc *Resol
 		}
 	}
 	element.BaseElement.Scope = types.ScopeFunction
-	elements := []Element{element}
-	for _, r := range refs {
-		elements = append(elements, r)
-	}
-	for _, i := range imports {
-		elements = append(elements, i)
-	}
+	var elements []Element
+	elements = AppendValidElems(elements, []Element{element})
+	elements = AppendValidElems(elements, refs)
+	elements = AppendValidElems(elements, imports)
 	return elements, nil
 }
 
@@ -437,27 +434,6 @@ func parseSingleParameter(paramStr string) Parameter {
 	}
 }
 
-func parseLocalVariableValue(node *sitter.Node, content []byte) string {
-	for i := uint(0); i < node.ChildCount(); i++ {
-		child := node.Child(i)
-		switch types.ToNodeKind(child.Kind()) {
-		case types.NodeKindTypeIdentifier:
-			// new Person("Alice", 30);
-			// new HashMap<>()
-			return child.Utf8Text(content)
-
-		case types.NodeKindScopedTypeIdentifier:
-			// new com.example.test.Person("Alice", 30);
-			return child.Utf8Text(content)
-		case types.NodeKindQualifiedIdentifier:
-			// in = Outer::Inner{8}
-			return child.ChildByFieldName("name").Utf8Text(content)
-		}
-
-	}
-	return types.EmptyString
-}
-
 // getScopeFromModifiers 根据Java访问修饰符确定作用域
 // 参数：
 //   - modifiers: 包含修饰符的字符串，可能包含多个修饰符如 "public static final"
@@ -525,7 +501,7 @@ func parseLocalVariableType(node *sitter.Node, content []byte) []string {
 	case types.NodeKindBooleanType:
 		// 接收 boolean
 		return []string{types.PrimitiveType}
-	case types.NodeKindTypeIdentifier,types.NodeKindScopedTypeIdentifier:
+	case types.NodeKindTypeIdentifier, types.NodeKindScopedTypeIdentifier:
 		// 接收类名
 		return []string{node.Utf8Text(content)}
 	case types.NodeKindArrayType:
@@ -600,7 +576,7 @@ func parseGenericType(node *sitter.Node, content []byte) []string {
 			case types.NodeKindScopedTypeIdentifier:
 				// 只会解析出来一个superType
 				result = append(result, child.Utf8Text(content))
-			case types.NodeKindGenericType, types.NodeKindTypeArguments, types.NodeKindWildcard,types.NodeKindArrayType:
+			case types.NodeKindGenericType, types.NodeKindTypeArguments, types.NodeKindWildcard, types.NodeKindArrayType:
 				walk(child)
 			}
 		}

@@ -115,6 +115,12 @@
   )
 )@definition.function
 
+;;函数重载
+(function_signature
+  name: (identifier) @definition.function.name
+  parameters: (formal_parameters)? @definition.function.parameters
+  return_type:(type_annotation)? @definition.function.return_type
+)@definition.function
 ;;-----------------------------方法定义--------------------------
 
 ;; 类方法
@@ -152,6 +158,11 @@
   (implements_clause)? @definition.class.implements
   ) @definition.class
 
+;;namespace_import
+(internal_module
+  name:(identifier) @namespace.name
+) @namespace
+
 ;;-----------------------------方法调用--------------------------
 ;; method call
 (call_expression
@@ -166,4 +177,14 @@
 
 (new_expression
   constructor:[(member_expression)(identifier)]@call.struct
+)
+
+;;类型操作符keyof
+(index_type_query
+  (type_identifier) @call.struct
+)
+
+;;类型操作符typeof
+(type_query
+  [(member_expression)(identifier)]@call.struct
 )
