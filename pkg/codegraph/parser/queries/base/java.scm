@@ -51,10 +51,10 @@
 ) @definition.method
 
 ;; Constructor declarations
-(constructor_declaration
-  name: (identifier) @definition.constructor.name
-  parameters: (formal_parameters) @definition.constructor.parameters
-  ) @definition.constructor
+;;(constructor_declaration
+;;  name: (identifier) @definition.constructor.name
+;;  parameters: (formal_parameters) @definition.constructor.parameters
+;;  ) @definition.constructor
 
 
 
@@ -87,7 +87,7 @@
 ;; -------------------------------- Initializer/Assignment expression --------------------------------
 ;; 方法调用
 (method_invocation
-  object: (_) @call.method.owner
+  object: (_)? @call.method.owner
   name: (identifier) @call.method.name
   arguments: (argument_list) @call.method.arguments
   ) @call.method
@@ -117,8 +117,16 @@
     (type_identifier)
     (scoped_type_identifier)
     (generic_type)
-    (array_type)
   ] @call.cast.type
+) @call.cast
+
+(cast_expression
+  type: (array_type
+    [  ;; 过滤基础类型，但是没有过滤基础类型类
+      (type_identifier)
+      (scoped_type_identifier)
+      (generic_type)
+    ] @call.cast.type)
 ) @call.cast
 
 ;; a instanceof Parent

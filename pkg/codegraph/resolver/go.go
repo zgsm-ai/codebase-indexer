@@ -463,22 +463,22 @@ func (r *GoResolver) resolveCall(ctx context.Context, element *Call, rc *Resolve
 			refPathMap := extractReferencePath(&capture.Node, rc.SourceFile.Content)
 			element.BaseElement.Name = refPathMap["property"]
 			element.Owner = refPathMap["object"]
-		case types.ElementTypeStructCallType:
-			for i := uint(0); i < capture.Node.ChildCount(); i++ {
-				child := capture.Node.Child(i)
-				if child == nil {
-					continue
-				}
-				if child.Kind() == string(types.NodeKindTypeElem) {
-					if isPrimitiveType(child.Utf8Text(rc.SourceFile.Content)) {
-					} else {
-						node := child.Child(0)
-						refPathMap := extractReferencePath(node, rc.SourceFile.Content)
-						ref := NewReference(element, child, refPathMap["property"], refPathMap["object"])
-						elements = append(elements, ref)
-					}
-				}
-			}
+		// case types.ElementTypeStructCallType:
+		// 	for i := uint(0); i < capture.Node.ChildCount(); i++ {
+		// 		child := capture.Node.Child(i)
+		// 		if child == nil {
+		// 			continue
+		// 		}
+		// 		if child.Kind() == string(types.NodeKindTypeElem) {
+		// 			if isPrimitiveType(child.Utf8Text(rc.SourceFile.Content)) {
+		// 			} else {
+		// 				node := child.Child(0)
+		// 				refPathMap := extractReferencePath(node, rc.SourceFile.Content)
+		// 				ref := NewReference(element, child, refPathMap["property"], refPathMap["object"])
+		// 				elements = append(elements, ref)
+		// 			}
+		// 		}
+		// 	}
 		}
 		element.Scope = types.ScopeFunction
 	}

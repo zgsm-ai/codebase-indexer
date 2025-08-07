@@ -71,7 +71,7 @@ func TestIndexGoProjects(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			err = indexer.IndexWorkspace(context.Background(), tc.Path)
+			_,  err = indexer.IndexWorkspace(context.Background(), tc.Path)
 			assert.NoError(t, err)
 			summary, err := indexer.GetSummary(context.Background(), tc.Path)
 			assert.NoError(t, err)

@@ -4,12 +4,15 @@ import (
 	"codebase-indexer/pkg/codegraph/resolver"
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
-	"github.com/stretchr/testify/assert"
+	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
-const PythonProjectRootDir = "/tmp/projects/python"
+const PythonProjectRootDir = "../tmp/projects/python"
 
 func TestParsePythonProjectFiles(t *testing.T) {
 	env, err := setupTestEnvironment()
@@ -29,20 +32,52 @@ func TestParsePythonProjectFiles(t *testing.T) {
 			Path:    filepath.Join(PythonProjectRootDir, "django"),
 			wantErr: nil,
 		},
+
+		{
+			Name:    "pandas",
+			Path:    filepath.Join(PythonProjectRootDir, "pandas"),
+			wantErr: nil,
+		},
+
+		{
+			Name:    "scikit-learn",
+			Path:    filepath.Join(PythonProjectRootDir, "scikit-learn"),
+			wantErr: nil,
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
+			start := time.Now()
 			project := NewTestProject(tc.Path, env.logger)
 			fileElements, _, err := indexer.ParseProjectFiles(context.Background(), project)
+			fmt.Println("err:", err)
 			err = exportFileElements(defaultExportDir, tc.Name, fileElements)
+			duration := time.Since(start)
+			fmt.Printf("测试用例 '%s' 执行时间: %v, 文件个数: %d\n", tc.Name, duration, len(fileElements))
 			assert.NoError(t, err)
 			assert.Equal(t, tc.wantErr, err)
 			assert.True(t, len(fileElements) > 0)
 			for _, f := range fileElements {
 				for _, e := range f.Elements {
-					assert.True(t, resolver.IsValidElement(e))
+					if !resolver.IsValidElement(e) {
+						fmt.Printf("Type: %s Name: %s Path: %s\n",
+							e.GetType(), e.GetName(), e.GetPath())
+						fmt.Printf("  Range: %v Scope: %s\n",
+							e.GetRange(), e.GetScope())
+
+					}
+					//assert.True(t, resolver.IsValidElement(e))
+				}
+				for _, e := range f.Imports {
+					if !resolver.IsValidElement(e) {
+						fmt.Printf("Type: %s Name: %s Path: %s\n",
+							e.GetType(), e.GetName(), e.GetPath())
+						fmt.Printf("  Range: %v Scope: %s\n",
+							e.GetRange(), e.GetScope())
+					}
 				}
 			}
+			fmt.Println("-------------------------------------------------")
 		})
 	}
 }

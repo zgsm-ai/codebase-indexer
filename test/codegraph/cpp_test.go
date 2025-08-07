@@ -32,16 +32,16 @@ func TestParseCPPProjectFiles(t *testing.T) {
 			Path:    filepath.Join(CPPProjectRootDir, "grpc"),
 			wantErr: nil,
 		},
-		//{
-		//	Name:    "protobuf",
-		//	Path:    filepath.Join(CPPProjectRootDir, "protobuf"),
-		//	wantErr: nil,
-		//},
-		//{
-		//	Name:    "whisper.cpp",
-		//	Path:    filepath.Join(CPPProjectRootDir, "whisper.cpp"),
-		//	wantErr: nil,
-		//},
+		{
+			Name:    "protobuf",
+			Path:    filepath.Join(CPPProjectRootDir, "protobuf"),
+			wantErr: nil,
+		},
+		{
+			Name:    "whisper.cpp",
+			Path:    filepath.Join(CPPProjectRootDir, "whisper.cpp"),
+			wantErr: nil,
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {

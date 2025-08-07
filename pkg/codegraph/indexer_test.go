@@ -252,7 +252,7 @@ func TestIndexer_IndexWorkspace(t *testing.T) {
 	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, visitPattern)
 
 	// 测试 IndexWorkspace - 索引整个工作区
-	err := indexer.IndexWorkspace(context.Background(), env.workspaceDir)
+	_,err := indexer.IndexWorkspace(context.Background(), env.workspaceDir)
 	assert.NoError(t, err)
 
 	// 验证存储状态 - 确保索引数量与文件数量一致
@@ -279,7 +279,7 @@ func TestIndexer_IndexProjectFilesWhenProjectHasIndex(t *testing.T) {
 	assert.NoError(t, err)
 
 	// 步骤1: 先索引工作区（排除 mocks 目录）
-	err = indexer.IndexWorkspace(env.ctx, env.workspaceDir)
+	_,err = indexer.IndexWorkspace(env.ctx, env.workspaceDir)
 	assert.NoError(t, err)
 
 	// 步骤2: 获取测试文件并创建路径键映射
@@ -401,7 +401,7 @@ func TestIndexer_QueryElements(t *testing.T) {
 	assert.NoError(t, err)
 
 	// 步骤1: 索引整个工作区
-	err = indexer.IndexWorkspace(env.ctx, env.workspaceDir)
+	_,err = indexer.IndexWorkspace(env.ctx, env.workspaceDir)
 	assert.NoError(t, err)
 
 	// 步骤2: 获取测试文件
@@ -436,7 +436,7 @@ func TestIndexer_QuerySymbols_WithExistFile(t *testing.T) {
 	assert.NoError(t, err)
 
 	// 步骤1: 索引整个工作区
-	err = indexer.IndexWorkspace(env.ctx, env.workspaceDir)
+	_,err = indexer.IndexWorkspace(env.ctx, env.workspaceDir)
 	assert.NoError(t, err)
 
 	// 步骤2: 准备测试文件和符号名称
@@ -472,7 +472,7 @@ func TestIndexer_IndexWorkspace_NotExists(t *testing.T) {
 	nonExistentWorkspace := filepath.Join(tempDir, "non_existent_workspace")
 
 	// 步骤2: 尝试索引不存在的工作区，应该返回错误
-	err := indexer.IndexWorkspace(env.ctx, nonExistentWorkspace)
+	_,err := indexer.IndexWorkspace(env.ctx, nonExistentWorkspace)
 	assert.ErrorContains(t, err, "not exists")
 }
 
