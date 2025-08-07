@@ -141,13 +141,13 @@ func (ts *TypeScriptResolver) resolveClass(ctx context.Context, element *Class, 
 		nodeCaptureName := rc.CaptureNames[capture.Index]
 		content := capture.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(nodeCaptureName) {
-		case types.ElementTypeClass, types.ElementTypeEnum:
+		case types.ElementTypeClass, types.ElementTypeEnum, types.ElementTypeNamespace:
 			if isExportStatement(&capture.Node) {
 				element.Scope = types.ScopePackage
 			} else {
 				element.Scope = types.ScopeFile
 			}
-		case types.ElementTypeClassName, types.ElementTypeEnumName:
+		case types.ElementTypeClassName, types.ElementTypeEnumName, types.ElementTypeNamespaceName:
 			element.BaseElement.Name = CleanParam(content)
 		case types.ElementTypeClassExtends:
 			element.SuperClasses = append(element.SuperClasses, content)
@@ -172,7 +172,6 @@ func (ts *TypeScriptResolver) resolveClass(ctx context.Context, element *Class, 
 }
 
 func (ts *TypeScriptResolver) resolveVariable(ctx context.Context, element *Variable, rc *ResolveContext) ([]Element, error) {
-	// 初始化JS解析器（如果尚未初始化）
 	if ts.jsResolver == nil {
 		ts.jsResolver = &JavaScriptResolver{}
 	}
@@ -324,9 +323,6 @@ func (ts *TypeScriptResolver) resolveInterface(ctx context.Context, element *Int
 }
 
 func (ts *TypeScriptResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
-	if ts.jsResolver == nil {
-		ts.jsResolver = &JavaScriptResolver{}
-	}
 	// 处理为import而不是call
 	if isRequireCallCapture(rc) {
 		return ts.jsResolver.handleRequireCall(rc)
@@ -364,43 +360,34 @@ func (ts *TypeScriptResolver) resolveCall(ctx context.Context, element *Call, rc
 	return elements, nil
 }
 
+var primitiveTypesMap = map[string]struct{}{
+	// 布尔型
+	"boolean": {}, "bool": {},
+	// 数值型
+	"number": {}, "int": {}, "float": {}, "double": {}, "integer": {}, "bigint": {},
+	// 字符串型
+	"string": {}, "char": {},
+	// 特殊类型
+	"null": {}, "undefined": {}, "symbol": {}, "void": {}, "never": {},
+	// 通用类型
+	"any": {}, "unknown": {}, "object": {}, "Object": {},
+	// 数组与元组
+	"Array": {}, "[]": {}, "tuple": {}, "Tuple": {},
+	// 函数类型
+	"Function": {}, "Promise": {},
+	// 内置对象类型
+	"Date": {}, "RegExp": {}, "Map": {}, "Set": {}, "WeakMap": {}, "WeakSet": {},
+}
+
 // 检查TypeScript类型字符串是否包含基本类型
 func isTypeScriptPrimitiveType(typeName string) bool {
 	// 清理类型名称
 	cleanType := strings.TrimPrefix(strings.TrimPrefix(typeName, "[]"), "*")
-
-	// TypeScript基本数据类型列表
-	primitiveTypes := []string{
-		// 布尔型
-		"boolean", "bool", "true", "false",
-
-		// 数值型
-		"number", "int", "float", "double", "integer", "bigint", "number",
-
-		// 字符串型
-		"string", "char",
-
-		// 特殊类型
-		"null", "undefined", "symbol", "void", "never",
-
-		// 通用类型
-		"any", "unknown", "object", "Object",
-
-		// 数组与元组
-		"Array", "[]", "tuple", "Tuple",
-
-		// 函数类型
-		"Function", "=>", "Promise",
-
-		// 内置对象类型
-		"Date", "RegExp", "Map", "Set", "WeakMap", "WeakSet",
-	}
-
 	// 将输入类型转为小写进行比较
 	lowerType := strings.ToLower(cleanType)
 
 	// 检查是否包含任何基本类型名称
-	for _, primType := range primitiveTypes {
+	for primType := range primitiveTypesMap {
 		if strings.Contains(lowerType, strings.ToLower(primType)) {
 			return true
 		}
@@ -531,6 +518,9 @@ func parseTypeScriptClassBody(node *sitter.Node, content []byte, className strin
 				int32(memberNode.StartPosition().Column),
 				int32(memberNode.EndPosition().Row),
 				int32(memberNode.EndPosition().Column),
+			}
+			if method != nil {
+				class.Methods = append(class.Methods, method)
 			}
 		//解析类属性使用
 		case types.NodeKindPublicFieldDefinition:
