@@ -61,9 +61,9 @@
 
 ;; Enum Assignment
 (enum_assignment
-  name: (property_identifier) @definition.enum.constant.name
-  value: (_)? @definition.enum.constant.value
-  ) @definition.enum.constant
+  name: (property_identifier) @definition.enum.name
+  value: (_)? @definition.enum.value
+  ) @definition.enum
 
 ;;解构变量
 (variable_declarator
@@ -83,9 +83,9 @@
 
 ;; Enum declarations
 (enum_declaration
-  name: (identifier) @definition.enum.constant.name
+  name: (identifier) @definition.enum.name
   body: (_)
-  ) @definition.enum.constant
+  ) @definition.enum
 
 ;;-----------------------------函数定义--------------------------
 

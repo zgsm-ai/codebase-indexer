@@ -141,14 +141,14 @@ func (ts *TypeScriptResolver) resolveClass(ctx context.Context, element *Class, 
 		nodeCaptureName := rc.CaptureNames[capture.Index]
 		content := capture.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(nodeCaptureName) {
-		case types.ElementTypeClass:
+		case types.ElementTypeClass, types.ElementTypeEnum:
 			if isExportStatement(&capture.Node) {
 				element.Scope = types.ScopePackage
 			} else {
 				element.Scope = types.ScopeFile
 			}
-		case types.ElementTypeClassName:
-			element.BaseElement.Name = content
+		case types.ElementTypeClassName, types.ElementTypeEnumName:
+			element.BaseElement.Name = CleanParam(content)
 		case types.ElementTypeClassExtends:
 			element.SuperClasses = append(element.SuperClasses, content)
 		case types.ElementTypeClassImplements:
@@ -157,7 +157,7 @@ func (ts *TypeScriptResolver) resolveClass(ctx context.Context, element *Class, 
 				if child != nil && child.Kind() == string(types.NodeKindTypeIdentifier) {
 					element.SuperInterfaces = append(element.SuperInterfaces, child.Utf8Text(rc.SourceFile.Content))
 				}
-			}
+			} //枚举字段
 		}
 	}
 	cls, references := parseTypeScriptClassBody(&rootCapure.Node, rc.SourceFile.Content, element.BaseElement.Name, element.Path)
@@ -266,11 +266,6 @@ func (ts *TypeScriptResolver) resolveVariable(ctx context.Context, element *Vari
 				}
 				elements = append(elements, ref)
 			}
-		//枚举字段
-		case types.ElementTypeEnumConstantName:
-			element.BaseElement.Name = CleanParam(content)
-			element.Scope = determineVariableScope(&capture.Node)
-			element.VariableType = []string{types.PrimitiveType}
 		}
 	}
 	elements = append(elements, element)
@@ -536,9 +531,6 @@ func parseTypeScriptClassBody(node *sitter.Node, content []byte, className strin
 				int32(memberNode.StartPosition().Column),
 				int32(memberNode.EndPosition().Row),
 				int32(memberNode.EndPosition().Column),
-			}
-			if method != nil {
-				class.Methods = append(class.Methods, method)
 			}
 		//解析类属性使用
 		case types.NodeKindPublicFieldDefinition:

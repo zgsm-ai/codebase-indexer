@@ -105,6 +105,7 @@ const (
 	ElementTypeFunctionOwner            ElementType = "call.function.owner"
 	ElementTypeFunctionArguments        ElementType = "call.function.arguments"
 	ElementTypeStructCall               ElementType = "call.struct"
+	ElementTypeStructCallType           ElementType = "call.struct.type"
 	ElementTypeFunctionDeclaration      ElementType = "declaration.function"
 	ElementTypeMethod                   ElementType = "definition.method"
 	ElementTypeMethodModifier           ElementType = "definition.method.modifier"
@@ -222,6 +223,7 @@ var TypeMappings = map[string]ElementType{
 	string(ElementTypeComment):                  ElementTypeComment,
 	string(ElementTypeAnnotation):               ElementTypeAnnotation,
 	string(ElementTypeStructCall):               ElementTypeStructCall,
+	string(ElementTypeStructCallType):           ElementTypeStructCallType,
 	string(ElementTypeNewExpression):            ElementTypeNewExpression,
 	string(ElementTypeNewExpressionType):        ElementTypeNewExpressionType,
 	string(ElementTypeNewExpressionOwner):       ElementTypeNewExpressionOwner,
