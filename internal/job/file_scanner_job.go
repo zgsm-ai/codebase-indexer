@@ -54,7 +54,6 @@ func (j *FileScanJob) Start() {
 		for {
 			select {
 			case <-j.ctx.Done():
-				j.logger.Info("file scan job stopped")
 				return
 			case <-ticker.C:
 				j.scanWorkspaces()
@@ -83,7 +82,7 @@ func (j *FileScanJob) scanWorkspaces() {
 	}
 
 	if len(workspaces) == 0 {
-		j.logger.Info("no active workspaces found")
+		j.logger.Debug("no active workspaces found")
 		return
 	}
 

@@ -125,6 +125,8 @@ func (m *SQLiteManager) createWorkspacesTable() string {
 		embedding_failed_file_paths TEXT NOT NULL DEFAULT '',
         codegraph_file_num INTEGER NOT NULL DEFAULT 0,
         codegraph_ts INTEGER NOT NULL DEFAULT 0,
+		codegraph_message VARCHAR(255) NOT NULL DEFAULT '',
+		codegraph_failed_file_paths TEXT NOT NULL DEFAULT '',
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -147,8 +149,8 @@ func (m *SQLiteManager) createEventsTable() string {
         source_file_path VARCHAR(500) NOT NULL DEFAULT '',
         target_file_path VARCHAR(500) NOT NULL DEFAULT '',
 		sync_id VARCHAR(100) NOT NULL DEFAULT '',
-		embedding_status TINYINT NOT NULL DEFAULT 0,
-		codegraph_status TINYINT NOT NULL DEFAULT 0,
+		embedding_status TINYINT NOT NULL DEFAULT 1,
+		codegraph_status TINYINT NOT NULL DEFAULT 1,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     );

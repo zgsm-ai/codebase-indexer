@@ -78,11 +78,11 @@ func (d *Daemon) Start() {
 	// }()
 
 	// Start sync task
-	d.wg.Add(1)
-	go func() {
-		defer d.wg.Done()
-		d.scheduler.Start(d.ctx)
-	}()
+	// d.wg.Add(1)
+	// go func() {
+	// 	defer d.wg.Done()
+	// 	d.scheduler.Start(d.ctx)
+	// }()
 
 	// Start config check task
 	d.wg.Add(1)

@@ -19,11 +19,12 @@ type FileScanService interface {
 
 // fileScanService 工作区扫描服务实现
 type fileScanService struct {
-	workspaceRepo repository.WorkspaceRepository
-	eventRepo     repository.EventRepository
-	fileScanner   repository.ScannerInterface
-	storage       repository.StorageInterface
-	logger        logger.Logger
+	workspaceRepo         repository.WorkspaceRepository
+	eventRepo             repository.EventRepository
+	fileScanner           repository.ScannerInterface
+	storage               repository.StorageInterface
+	codebaseEmbeddingRepo repository.EmbeddingFileRepository
+	logger                logger.Logger
 }
 
 // NewFileScanService 创建工作区扫描服务
@@ -32,14 +33,16 @@ func NewFileScanService(
 	eventRepo repository.EventRepository,
 	fileScanner repository.ScannerInterface,
 	storage repository.StorageInterface,
+	codebaseEmbeddingRepo repository.EmbeddingFileRepository,
 	logger logger.Logger,
 ) FileScanService {
 	return &fileScanService{
-		workspaceRepo: workspaceRepo,
-		eventRepo:     eventRepo,
-		fileScanner:   fileScanner,
-		storage:       storage,
-		logger:        logger,
+		workspaceRepo:         workspaceRepo,
+		eventRepo:             eventRepo,
+		fileScanner:           fileScanner,
+		storage:               storage,
+		codebaseEmbeddingRepo: codebaseEmbeddingRepo,
+		logger:                logger,
 	}
 }
 
@@ -72,14 +75,30 @@ func (ws *fileScanService) DetectFileChanges(workspace *model.Workspace) ([]*mod
 
 	// 获取上次保存的哈希树
 	// 生成codebaseId
-	codebaseId := fmt.Sprintf("%s_%x", workspace.WorkspaceName, []byte(workspace.WorkspacePath))
+	codebaseId := utils.GenerateCodebaseID(workspace.WorkspacePath)
 	codebaseConfig, err := ws.storage.GetCodebaseConfig(codebaseId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get codebase config: %w", err)
 	}
 
+	// 更新哈希树
+	codebaseConfig.HashTree = currentHashTree
+	err = ws.storage.SaveCodebaseConfig(codebaseConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to save codebase config: %w", err)
+	}
+
+	codebaseEmbeddingId := utils.GenerateCodebaseEmbeddingID(workspace.WorkspacePath)
+	codebaseEmbeddingConfig, err := ws.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseEmbeddingId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get codebase embedding config: %w", err)
+	}
+
 	// 计算文件变更
-	changes := ws.fileScanner.CalculateFileChanges(currentHashTree, codebaseConfig.HashTree)
+	changes := ws.fileScanner.CalculateFileChanges(currentHashTree, codebaseEmbeddingConfig.HashTree)
+	if len(changes) == 0 {
+		return nil, nil
+	}
 
 	// 在生成新事件后，查询工作区内所有现有事件
 	existingEvents, err := ws.eventRepo.GetEventsByWorkspaceForDeduplication(workspace.WorkspacePath)
@@ -102,38 +121,34 @@ func (ws *fileScanService) DetectFileChanges(workspace *model.Workspace) ([]*mod
 	// 生成事件并进行去重处理
 	var events []*model.Event
 	for _, change := range changes {
+		filePth := change.Path
 		event := &model.Event{
 			WorkspacePath:  workspace.WorkspacePath,
 			EventType:      ws.MapFileStatusToEventType(change.Status),
-			SourceFilePath: change.Path,
-			TargetFilePath: change.Path,
+			SourceFilePath: filePth,
+			TargetFilePath: filePth,
 		}
 
 		// 检查是否已存在相同路径的事件
-		if existingEvent, exists := eventPathMap[change.Path]; exists {
+		if existingEvent, exists := eventPathMap[filePth]; exists {
 			// 更新现有事件
 			err := ws.updateExistingEvent(existingEvent, event)
 			if err != nil {
-				ws.logger.Error("failed to update existing event for path %s: %v", change.Path, err)
+				ws.logger.Error("failed to update existing event for path %s: %v", filePth, err)
 				continue
 			}
 			events = append(events, existingEvent)
 		} else {
 			// 创建新事件
+			event.EmbeddingStatus = model.EmbeddingStatusInit
+			event.CodegraphStatus = model.CodegraphStatusSuccess
 			err := ws.eventRepo.CreateEvent(event)
 			if err != nil {
-				ws.logger.Error("failed to create event for path %s: %v", change.Path, err)
+				ws.logger.Error("failed to create event for path %s: %v", filePth, err)
 				continue
 			}
 			events = append(events, event)
 		}
-	}
-
-	// 更新哈希树
-	codebaseConfig.HashTree = currentHashTree
-	err = ws.storage.SaveCodebaseConfig(codebaseConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to save codebase config: %w", err)
 	}
 
 	return events, nil
@@ -156,8 +171,7 @@ func (ws *fileScanService) MapFileStatusToEventType(status string) string {
 // UpdateWorkspaceStats 更新工作区统计信息
 func (ws *fileScanService) UpdateWorkspaceStats(workspace *model.Workspace) error {
 	// 获取当前文件数量
-	// 生成codebaseId
-	codebaseId := fmt.Sprintf("%s_%x", workspace.WorkspaceName, []byte(workspace.WorkspacePath))
+	codebaseId := utils.GenerateCodebaseID(workspace.WorkspacePath)
 	codebaseConfig, err := ws.storage.GetCodebaseConfig(codebaseId)
 	if err != nil {
 		return fmt.Errorf("failed to get codebase config: %w", err)
@@ -165,9 +179,10 @@ func (ws *fileScanService) UpdateWorkspaceStats(workspace *model.Workspace) erro
 	fileNum := len(codebaseConfig.HashTree)
 
 	// 更新工作区文件数量
-	updateWorkspace := model.Workspace{WorkspacePath: workspace.WorkspacePath, FileNum: fileNum}
-
-	// 更新工作区信息
+	updateWorkspace := model.Workspace{
+		WorkspacePath: workspace.WorkspacePath,
+		FileNum:       fileNum,
+	}
 	err = ws.workspaceRepo.UpdateWorkspace(&updateWorkspace)
 	if err != nil {
 		return fmt.Errorf("failed to update workspace: %w", err)
@@ -182,16 +197,19 @@ func (ws *fileScanService) handleEventsWithoutDeduplication(changes []*utils.Fil
 
 	var events []*model.Event
 	for _, change := range changes {
+		filePth := change.Path
 		event := &model.Event{
-			WorkspacePath:  workspace.WorkspacePath,
-			EventType:      ws.MapFileStatusToEventType(change.Status),
-			SourceFilePath: change.Path,
-			TargetFilePath: change.Path,
+			WorkspacePath:   workspace.WorkspacePath,
+			EventType:       ws.MapFileStatusToEventType(change.Status),
+			SourceFilePath:  filePth,
+			TargetFilePath:  filePth,
+			EmbeddingStatus: model.EmbeddingStatusInit,
+			CodegraphStatus: model.CodegraphStatusSuccess,
 		}
 
 		err := ws.eventRepo.CreateEvent(event)
 		if err != nil {
-			ws.logger.Error("failed to create event for path %s: %v", change.Path, err)
+			ws.logger.Error("failed to create event for path %s: %v", filePth, err)
 			continue
 		}
 
@@ -203,7 +221,9 @@ func (ws *fileScanService) handleEventsWithoutDeduplication(changes []*utils.Fil
 
 // updateExistingEvent 更新现有事件的信息
 func (ws *fileScanService) updateExistingEvent(existingEvent, newEvent *model.Event) error {
-	if existingEvent.EmbeddingStatus == model.EmbeddingStatusBuilding || existingEvent.EmbeddingStatus == model.EmbeddingStatusUploading {
+	if existingEvent.EmbeddingStatus == model.EmbeddingStatusBuilding ||
+		existingEvent.EmbeddingStatus == model.EmbeddingStatusUploading ||
+		existingEvent.CodegraphStatus == model.CodegraphStatusBuilding {
 		if newEvent.EventType == existingEvent.EventType {
 			return nil
 		}
@@ -213,7 +233,14 @@ func (ws *fileScanService) updateExistingEvent(existingEvent, newEvent *model.Ev
 
 	ws.logger.Info("update existing event for path: %s, type: %s, embedding status: %s", existingEvent.SourceFilePath, newEvent.EventType, existingEvent.EmbeddingStatus)
 	// 更新事件类型和其他必要信息
-	updateEvent := &model.Event{ID: existingEvent.ID, EventType: newEvent.EventType}
+	updateEvent := &model.Event{
+		ID:              existingEvent.ID,
+		EventType:       newEvent.EventType,
+		TargetFilePath:  newEvent.TargetFilePath,
+		EmbeddingStatus: model.EmbeddingStatusInit,
+		CodegraphStatus: model.CodegraphStatusSuccess,
+	}
+
 	// 调用 repository 更新事件
 	return ws.eventRepo.UpdateEvent(updateEvent)
 }

@@ -121,7 +121,7 @@ func main() {
 	codebaseService := service.NewCodebaseService(appLogger)
 	schedulerService := service.NewScheduler(syncRepo, scanRepo, storageManager, appLogger)
 	extensionService := service.NewExtensionService(storageManager, syncRepo, scanRepo, workspaceRepo, eventRepo, codebaseEmbeddingRepo, codebaseService, appLogger)
-	fileScanService := service.NewFileScanService(workspaceRepo, eventRepo, scanRepo, storageManager, appLogger)
+	fileScanService := service.NewFileScanService(workspaceRepo, eventRepo, scanRepo, storageManager, codebaseEmbeddingRepo, appLogger)
 	uploadService := service.NewUploadService(schedulerService, syncRepo, appLogger, syncServiceConfig)
 	embeddingProcessService := service.NewEmbeddingProcessService(workspaceRepo, eventRepo, codebaseEmbeddingRepo, uploadService, appLogger)
 	embeddingStatusService := service.NewEmbeddingStatusService(codebaseEmbeddingRepo, workspaceRepo, eventRepo, appLogger)
@@ -187,7 +187,7 @@ func main() {
 
 	appLogger.Info("application started successfully")
 	// appLogger.Info("gRPC server listening on %s", *grpcServer)
-	appLogger.Info("HTTP server listening on %s", *httpServer)
+	// appLogger.Info("HTTP server listening on %s", *httpServer)
 	if *enableSwagger {
 		appLogger.Info("swagger documentation available at http://localhost%s/docs", *httpServer)
 	}

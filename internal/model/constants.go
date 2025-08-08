@@ -20,12 +20,13 @@ const (
 
 // EventType 事件类型常量
 const (
-	EventTypeUnknown       = "unknown"
-	EventTypeAddFile       = "add_file"       // 创建文件事件
-	EventTypeModifyFile    = "modify_file"    // 更新文件事件
-	EventTypeDeleteFile    = "delete_file"    // 删除文件事件
-	EventTypeRenameFile    = "rename_file"    // 移动文件事件
-	EventTypeOpenWorkspace = "open_workspace" // 打开工作区事件
+	EventTypeUnknown        = "unknown"
+	EventTypeAddFile        = "add_file"        // 创建文件事件
+	EventTypeModifyFile     = "modify_file"     // 更新文件事件
+	EventTypeDeleteFile     = "delete_file"     // 删除文件事件
+	EventTypeRenameFile     = "rename_file"     // 移动文件事件
+	EventTypeOpenWorkspace  = "open_workspace"  // 打开工作区事件
+	EventTypeCloseWorkspace = "close_workspace" // 关闭工作区事件
 )
 
 const True = "true"

@@ -29,12 +29,12 @@ type EmbeddingFileRepo struct {
 // NewEmbeddingFileRepo creates a new configuration manager
 func NewEmbeddingFileRepo(workspaceDir string, logger logger.Logger) (EmbeddingFileRepository, error) {
 	if workspaceDir == "" || strings.Contains(workspaceDir, "\x00") {
-		return nil, fmt.Errorf("invalid codebase directory path")
+		return nil, fmt.Errorf("invalid codebase embedding directory path")
 	}
 
 	// Try to create directory to verify write permission
 	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create codebase directory: %v", err)
+		return nil, fmt.Errorf("failed to create codebase embedding directory: %v", err)
 	}
 
 	// Initialize codebaseConfigs map
@@ -83,7 +83,7 @@ func (s *EmbeddingFileRepo) GetCodebaseEmbeddingConfig(codebaseId string) (*conf
 func (s *EmbeddingFileRepo) loadAllConfigs() {
 	files, err := os.ReadDir(s.codebasePath)
 	if err != nil {
-		s.logger.Error("failed to read codebase directory: %v", err)
+		s.logger.Error("failed to read codebase embedding directory: %v", err)
 		return
 	}
 
@@ -94,7 +94,7 @@ func (s *EmbeddingFileRepo) loadAllConfigs() {
 
 		config, err := s.loadCodebaseConfig(file.Name())
 		if err != nil {
-			s.logger.Error("failed to load codebase file %s: %v", file.Name(), err)
+			s.logger.Error("failed to load codebase embedding file %s: %v", file.Name(), err)
 			continue
 		}
 		s.codebaseConfigs[file.Name()] = config
@@ -103,7 +103,7 @@ func (s *EmbeddingFileRepo) loadAllConfigs() {
 
 // loadCodebaseConfig loads a codebase configuration file
 func (s *EmbeddingFileRepo) loadCodebaseConfig(codebaseId string) (*config.CodebaseEmbeddingConfig, error) {
-	s.logger.Info("loading codebase file content: %s", codebaseId)
+	s.logger.Info("loading codebase embedding file content: %s", codebaseId)
 
 	s.rwMutex.RLock()
 	defer s.rwMutex.RUnlock()
@@ -113,22 +113,22 @@ func (s *EmbeddingFileRepo) loadCodebaseConfig(codebaseId string) (*config.Codeb
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("codebase file does not exist: %s", filePath)
+			return nil, fmt.Errorf("codebase embedding file does not exist: %s", filePath)
 		}
-		return nil, fmt.Errorf("failed to read codebase file: %v", err)
+		return nil, fmt.Errorf("failed to read codebase embedding file: %v", err)
 	}
 
 	var config config.CodebaseEmbeddingConfig
 	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse codebase file: %v", err)
+		return nil, fmt.Errorf("failed to parse codebase embedding file: %v", err)
 	}
 
 	if config.CodebaseId != codebaseId {
-		return nil, fmt.Errorf("codebaseId mismatch: expected %s, got %s",
+		return nil, fmt.Errorf("codebase embedding Id mismatch: expected %s, got %s",
 			codebaseId, config.CodebaseId)
 	}
 
-	s.logger.Info("codebase file loaded successfully")
+	s.logger.Info("codebase embedding file loaded successfully, path: %s", filePath)
 
 	return &config, nil
 }
@@ -138,7 +138,7 @@ func (s *EmbeddingFileRepo) SaveCodebaseEmbeddingConfig(config *config.CodebaseE
 	if config == nil {
 		return fmt.Errorf("codebase config is empty: %v", config)
 	}
-	s.logger.Info("saving codebase config: %s", config.CodebasePath)
+	s.logger.Info("saving codebase embedding config: %s", config.CodebasePath)
 
 	s.rwMutex.Lock()
 	defer s.rwMutex.Unlock()
@@ -155,13 +155,13 @@ func (s *EmbeddingFileRepo) SaveCodebaseEmbeddingConfig(config *config.CodebaseE
 
 	// Atomically update in-memory configuration
 	s.codebaseConfigs[config.CodebaseId] = config
-	s.logger.Info("codebase config saved successfully, path: %s", filePath)
+	s.logger.Info("codebase embedding config saved successfully, path: %s", filePath)
 	return nil
 }
 
 // DeleteCodebaseEmbeddingConfig deletes codebase configuration
 func (s *EmbeddingFileRepo) DeleteCodebaseEmbeddingConfig(codebaseId string) error {
-	s.logger.Info("deleting codebase config: %s", codebaseId)
+	s.logger.Info("deleting codebase embedding config: %s", codebaseId)
 
 	filePath := filepath.Join(s.codebasePath, codebaseId)
 
@@ -173,7 +173,7 @@ func (s *EmbeddingFileRepo) DeleteCodebaseEmbeddingConfig(codebaseId string) err
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		if exists {
 			delete(s.codebaseConfigs, codebaseId)
-			s.logger.Info("codebase config deleted: %s (memory only)", codebaseId)
+			s.logger.Info("codebase embedding config deleted: %s (memory only)", codebaseId)
 		}
 		return nil
 	}
@@ -185,9 +185,9 @@ func (s *EmbeddingFileRepo) DeleteCodebaseEmbeddingConfig(codebaseId string) err
 	// Only delete in-memory config after file deletion succeeds
 	if exists {
 		delete(s.codebaseConfigs, codebaseId)
-		s.logger.Info("codebase config deleted: %s (file and memory)", filePath)
+		s.logger.Info("codebase embedding config deleted: %s (file and memory)", filePath)
 	} else {
-		s.logger.Info("codebase file deleted: %s (file only)", filePath)
+		s.logger.Info("codebase embedding file deleted: %s (file only)", filePath)
 	}
 	return nil
 }

@@ -396,10 +396,10 @@ func (h *ExtensionHandler) TriggerIndex(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("index build trigger request: Workspace=%s, Path=%s, Type=%s", req.Workspace, req.Path, req.Type)
+	h.logger.Info("index build trigger request: Workspace=%s, Type=%s", req.Workspace, req.Type)
 
 	// 调用service层处理业务逻辑
-	err := h.extensionService.TriggerIndex(c.Request.Context(), req.Workspace)
+	err := h.extensionService.TriggerIndex(c.Request.Context(), req.Workspace, req.Type)
 	if err != nil {
 		h.logger.Error("failed to trigger index: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.TriggerIndexResponse{
