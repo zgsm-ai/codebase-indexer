@@ -152,12 +152,8 @@ func (js *JavaScriptResolver) resolveClass(ctx context.Context, element *Class, 
 	cls, references := parseJavaScriptClassBody(&rootCapure.Node, rc.SourceFile.Content, element.BaseElement.Name)
 	element.Fields = cls.Fields
 	element.Methods = cls.Methods
-
 	// 收集所有引用元素
-	for _, ref := range references {
-		elements = append(elements, ref)
-	}
-
+	elements = append(elements, references...)
 	return elements, nil
 }
 
@@ -166,23 +162,9 @@ func (js *JavaScriptResolver) resolveVariable(ctx context.Context, element *Vari
 		JavaScript中变量都没有类型，Variable元素的VariableType为空
 	*/
 	elements := []Element{}
-	var variableName string
 	rootCapure := rc.Match.Captures[0]
 	rootCaptureName := rc.CaptureNames[rootCapure.Index]
 	updateRootElement(element, &rootCapure, rootCaptureName, rc.SourceFile.Content)
-	// 首先获取变量名
-	for _, capture := range rc.Match.Captures {
-		if capture.Node.IsMissing() || capture.Node.IsError() {
-			continue
-		}
-		nodeCaptureName := rc.CaptureNames[capture.Index]
-		content := capture.Node.Utf8Text(rc.SourceFile.Content)
-
-		if types.ToElementType(nodeCaptureName) == types.ElementTypeVariableName {
-			variableName = string(content)
-			break
-		}
-	}
 	// 检查是否为解构赋值
 	if isDestructuringPattern(&rootCapure.Node) {
 		// 添加handleDestructuringWithPath函数，传递元素路径
@@ -204,7 +186,6 @@ func (js *JavaScriptResolver) resolveVariable(ctx context.Context, element *Vari
 		captureType := types.ToElementType(nodeCaptureName)
 		if capture.Node.Kind() == string(types.NodeKindVariableDeclarator) {
 			valueNode := capture.Node.ChildByFieldName("value")
-
 			if isImportExpression(valueNode, rc.SourceFile.Content) {
 				return []Element{}, nil
 			}
@@ -216,7 +197,7 @@ func (js *JavaScriptResolver) resolveVariable(ctx context.Context, element *Vari
 			// 根据父节点判断变量作用域
 			element.Scope = determineVariableScope(&capture.Node)
 		case types.ElementTypeVariableName:
-			element.BaseElement.Name = variableName
+			element.BaseElement.Name = capture.Node.Utf8Text(rc.SourceFile.Content)
 		}
 	}
 	elements = append(elements, element)
@@ -230,9 +211,9 @@ func (js *JavaScriptResolver) resolveInterface(ctx context.Context, element *Int
 
 func (js *JavaScriptResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
 	// 处理为import而不是call
-	if isRequireCallCapture(rc) {
-		return js.handleRequireCall(rc)
-	}
+	// if isRequireCallCapture(rc) {
+	// 	return js.handleRequireCall(element, rc)
+	// }
 	elements := []Element{element}
 	rootCapture := rc.Match.Captures[0]
 	updateRootElement(element, &rootCapture, rc.CaptureNames[rootCapture.Index], rc.SourceFile.Content)
@@ -632,14 +613,11 @@ func (js *JavaScriptResolver) handleDestructuringWithPath(node *sitter.Node, con
 	// 获取左侧解构模式和右侧引用值
 	nameNode := node.ChildByFieldName("name")
 	valueNode := findRightNode(node)
-
 	if nameNode == nil || valueNode == nil {
 		return elements, nil
 	}
-
 	// 获取作用域
 	scope := determineVariableScope(node)
-
 	// 处理左侧变量
 	nodeKind := types.ToNodeKind(nameNode.Kind())
 	if nodeKind == types.NodeKindArrayPattern || nodeKind == types.NodeKindObjectPattern {
@@ -649,10 +627,17 @@ func (js *JavaScriptResolver) handleDestructuringWithPath(node *sitter.Node, con
 			if identifierNode.Kind() == string(types.Identifier) || identifierNode.Kind() == string(types.NodeKindShorthandPropertyIdentifierPattern) {
 				varName = identifierNode.Utf8Text(content)
 			} else if identifierNode.Kind() == string(types.NodeKindPairPattern) {
-				keyNode := identifierNode.ChildByFieldName("key")
-				if keyNode != nil {
-					varName = keyNode.Utf8Text(content)
+				valueNode := identifierNode.ChildByFieldName("value")
+				if valueNode.Kind() == string(types.Identifier) {
+					elements = append(elements, createVariableElement(valueNode.Utf8Text(content), scope, element))
 				}
+				for i := uint(0); i < valueNode.ChildCount(); i++ {
+					childNode := valueNode.Child(i)
+					if childNode.Kind() == string(types.NodeKindShorthandPropertyIdentifierPattern) || childNode.Kind() == string(types.Identifier) {
+						elements = append(elements, createVariableElement(childNode.Utf8Text(content), scope, element))
+					}
+				}
+				continue
 			} else if identifierNode.Kind() == string(types.NodeKindRestPattern) {
 				idNode := identifierNode.Child(1)
 				if idNode != nil {
@@ -1022,15 +1007,15 @@ func isRequireCallCapture(rc *ResolveContext) bool {
 }
 
 // handleRequireCall 将require函数调用处理为import
-func (js *JavaScriptResolver) handleRequireCall(rc *ResolveContext) ([]Element, error) {
+func (js *JavaScriptResolver) handleRequireCall(element *Call, rc *ResolveContext) ([]Element, error) {
 	// 创建import元素
 	importElement := &Import{
 		BaseElement: &BaseElement{
 			Type:  types.ElementTypeImport,
 			Scope: types.ScopeFile,
+			Path:  element.Path,
 		},
 	}
-
 	rootCapture := rc.Match.Captures[0]
 
 	// 查找require调用的参数(模块路径)
@@ -1151,9 +1136,9 @@ func isRequireImport(node *sitter.Node, content []byte) bool {
 	if node == nil {
 		return false
 	}
-	if node.Kind() == string(types.NodeKindIdentifier) && node.Utf8Text(content) == "require" {
-		return true
-	}
+	// if node.Kind() == string(types.NodeKindIdentifier) && node.Utf8Text(content) == "require" {
+	// 	return true
+	// }
 	return false
 }
 

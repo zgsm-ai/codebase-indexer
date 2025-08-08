@@ -4,7 +4,6 @@ import (
 	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/resolver"
 	"codebase-indexer/pkg/codegraph/types"
-	"fmt"
 )
 
 type FileElementTable struct {
@@ -17,7 +16,6 @@ type FileElementTable struct {
 
 func newRootElement(elementTypeValue string, rootIndex uint32) resolver.Element {
 	elementType := types.ToElementType(elementTypeValue)
-	
 	base := resolver.NewBaseElement(rootIndex)
 	switch elementType {
 	case types.ElementTypePackage:
@@ -105,9 +103,8 @@ func newRootElement(elementTypeValue string, rootIndex uint32) resolver.Element 
 		base.Type = types.ElementTypeVariable
 		return &resolver.Variable{BaseElement: base}
 	default:
-		fmt.Println("elementType", elementType)
-		fmt.Println("elementTypeValue", elementTypeValue)
-		base.Type = types.ElementTypeUndefined
+		// base.Type = types.ElementTypeUndefined
+		base.Type = types.ElementType(elementTypeValue)
 		return base
 	}
 }

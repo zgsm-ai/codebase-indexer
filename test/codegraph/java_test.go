@@ -27,11 +27,11 @@ func TestParseJavaProjectFiles(t *testing.T) {
 		Path    string
 		wantErr error
 	}{
-		// {
-		// 	Name:    "hadoop",
-		// 	Path:    filepath.Join(JavaProjectRootDir, "hadoop"),
-		// 	wantErr: nil,
-		// },
+		{
+			Name:    "hadoop",
+			Path:    filepath.Join(JavaProjectRootDir, "hadoop"),
+			wantErr: nil,
+		},
 		{
 			Name:    "mall",
 			Path:    filepath.Join(JavaProjectRootDir, "mall"),

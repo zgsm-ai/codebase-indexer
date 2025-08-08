@@ -146,6 +146,7 @@ func (p *SourceFileParser) processNode(
 		Match:        match,
 		CaptureNames: captureNames,
 		SourceFile:   sourceFile,
+		Logger:       p.logger,
 	}
 	elements, err := p.resolverManager.Resolve(ctx, rootElement, resolveCtx)
 	if err != nil {

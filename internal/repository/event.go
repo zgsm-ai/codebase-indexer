@@ -93,7 +93,7 @@ func (r *eventRepository) CreateEvent(event *model.Event) error {
 func (r *eventRepository) GetEventByID(id int64) (*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path, 
-			embedding_status, codegraph_status, created_at, updated_at
+			embedding_status, codegraph_status, sync_id, created_at, updated_at
 		FROM events 
 		WHERE id = ?
 	`
@@ -111,6 +111,7 @@ func (r *eventRepository) GetEventByID(id int64) (*model.Event, error) {
 		&event.TargetFilePath,
 		&event.EmbeddingStatus,
 		&event.CodegraphStatus,
+		&event.SyncId,
 		&createdAt,
 		&updatedAt,
 	)
@@ -133,7 +134,7 @@ func (r *eventRepository) GetEventByID(id int64) (*model.Event, error) {
 func (r *eventRepository) GetEventsByWorkspace(workspacePath string, limit int, isDesc bool) ([]*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path, 
-			embedding_status, codegraph_status, created_at, updated_at
+			embedding_status, codegraph_status, sync_id, created_at, updated_at
 		FROM events 
 		WHERE workspace_path = ?
 		ORDER BY created_at %s
@@ -164,6 +165,7 @@ func (r *eventRepository) GetEventsByWorkspace(workspacePath string, limit int, 
 			&event.TargetFilePath,
 			&event.EmbeddingStatus,
 			&event.CodegraphStatus,
+			&event.SyncId,
 			&createdAt,
 			&updatedAt,
 		)
@@ -185,7 +187,7 @@ func (r *eventRepository) GetEventsByWorkspace(workspacePath string, limit int, 
 func (r *eventRepository) GetEventsByType(eventType string, limit int, isDesc bool) ([]*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path,
-			codegraph_status, embedding_status, created_at, updated_at
+			codegraph_status, embedding_status, sync_id, created_at, updated_at
 		FROM events
 		WHERE event_type = ?
 		ORDER BY created_at %s
@@ -218,6 +220,7 @@ func (r *eventRepository) GetEventsByType(eventType string, limit int, isDesc bo
 			&event.TargetFilePath,
 			&event.CodegraphStatus,
 			&event.EmbeddingStatus,
+			&event.SyncId,
 			&createdAt,
 			&updatedAt,
 		)
@@ -239,7 +242,7 @@ func (r *eventRepository) GetEventsByType(eventType string, limit int, isDesc bo
 func (r *eventRepository) GetEventsByWorkspaceAndType(workspacePath, eventType string, limit int, isDesc bool) ([]*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path, 
-			codegraph_status, embedding_status, created_at, updated_at
+			codegraph_status, embedding_status, sync_id, created_at, updated_at
 		FROM events 
 		WHERE workspace_path = ? AND event_type = ?
 		ORDER BY created_at %s
@@ -270,6 +273,7 @@ func (r *eventRepository) GetEventsByWorkspaceAndType(workspacePath, eventType s
 			&event.TargetFilePath,
 			&event.CodegraphStatus,
 			&event.EmbeddingStatus,
+			&event.SyncId,
 			&createdAt,
 			&updatedAt,
 		)
@@ -291,7 +295,7 @@ func (r *eventRepository) GetEventsByWorkspaceAndType(workspacePath, eventType s
 func (r *eventRepository) GetEventsByWorkspaceAndEmbeddingStatus(workspacePath string, limit int, isDesc bool, statuses []int) ([]*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path,
-			codegraph_status, embedding_status, created_at, updated_at
+			codegraph_status, embedding_status, sync_id, created_at, updated_at
 		FROM events
 		WHERE workspace_path = ?
 	`
@@ -342,6 +346,7 @@ func (r *eventRepository) GetEventsByWorkspaceAndEmbeddingStatus(workspacePath s
 			&event.TargetFilePath,
 			&event.CodegraphStatus,
 			&event.EmbeddingStatus,
+			&event.SyncId,
 			&createdAt,
 			&updatedAt,
 		)
@@ -363,7 +368,7 @@ func (r *eventRepository) GetEventsByWorkspaceAndEmbeddingStatus(workspacePath s
 func (r *eventRepository) GetEventsByTypeAndEmbeddingStatus(eventType string, limit int, isDesc bool, statuses []int) ([]*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path,
-			codegraph_status, embedding_status, created_at, updated_at
+			codegraph_status, embedding_status, sync_id, created_at, updated_at
 		FROM events
 		WHERE event_type = ?
 	`
@@ -414,6 +419,7 @@ func (r *eventRepository) GetEventsByTypeAndEmbeddingStatus(eventType string, li
 			&event.TargetFilePath,
 			&event.CodegraphStatus,
 			&event.EmbeddingStatus,
+			&event.SyncId,
 			&createdAt,
 			&updatedAt,
 		)
@@ -436,7 +442,7 @@ func (r *eventRepository) GetEventsByTypeAndStatusAndWorkspaces(eventType string
 	isDesc bool, embeddingStatuses []int, codegraphStatuses []int) ([]*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path,
-			codegraph_status, embedding_status, created_at, updated_at
+			codegraph_status, embedding_status, sync_id, created_at, updated_at
 		FROM events
 		WHERE event_type = ?
 	`
@@ -516,6 +522,7 @@ func (r *eventRepository) GetEventsByTypeAndStatusAndWorkspaces(eventType string
 			&event.TargetFilePath,
 			&event.CodegraphStatus,
 			&event.EmbeddingStatus,
+			&event.SyncId,
 			&createdAt,
 			&updatedAt,
 		)
@@ -573,6 +580,12 @@ func (r *eventRepository) UpdateEvent(event *model.Event) error {
 	if event.CodegraphStatus != 0 {
 		setClauses = append(setClauses, "codegraph_status = ?")
 		args = append(args, event.CodegraphStatus)
+	}
+
+	// 检查sync_id是否为非默认值
+	if event.SyncId != "" {
+		setClauses = append(setClauses, "sync_id = ?")
+		args = append(args, event.SyncId)
 	}
 
 	// 如果没有需要更新的字段，直接返回
@@ -635,7 +648,7 @@ func (r *eventRepository) DeleteEvent(id int64) error {
 func (r *eventRepository) GetRecentEvents(workspacePath string, limit int) ([]*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path, 
-			codegraph_status, embedding_status, created_at, updated_at
+			codegraph_status, embedding_status, sync_id, created_at, updated_at
 		FROM events 
 		WHERE workspace_path = ?
 		ORDER BY created_at DESC
@@ -662,6 +675,7 @@ func (r *eventRepository) GetRecentEvents(workspacePath string, limit int) ([]*m
 			&event.TargetFilePath,
 			&event.CodegraphStatus,
 			&event.EmbeddingStatus,
+			&event.SyncId,
 			&createdAt,
 			&updatedAt,
 		)
@@ -687,7 +701,7 @@ func (r *eventRepository) GetEventsByWorkspaceForDeduplication(workspacePath str
 
 	for {
 		query := `
-			SELECT id, workspace_path, event_type, source_file_path, target_file_path, created_at
+			SELECT id, workspace_path, event_type, source_file_path, target_file_path, embedding_status, codegraph_status, sync_id, created_at, updated_at
 			FROM events
 			WHERE workspace_path = ?
 			ORDER BY created_at DESC
@@ -703,7 +717,7 @@ func (r *eventRepository) GetEventsByWorkspaceForDeduplication(workspacePath str
 		var batchEvents []*model.Event
 		for rows.Next() {
 			var event model.Event
-			var createdAt time.Time
+			var createdAt, updatedAt time.Time
 
 			err := rows.Scan(
 				&event.ID,
@@ -711,7 +725,11 @@ func (r *eventRepository) GetEventsByWorkspaceForDeduplication(workspacePath str
 				&event.EventType,
 				&event.SourceFilePath,
 				&event.TargetFilePath,
+				&event.EmbeddingStatus,
+				&event.CodegraphStatus,
+				&event.SyncId,
 				&createdAt,
+				&updatedAt,
 			)
 			if err != nil {
 				rows.Close()
@@ -720,6 +738,7 @@ func (r *eventRepository) GetEventsByWorkspaceForDeduplication(workspacePath str
 			}
 
 			event.CreatedAt = createdAt
+			event.UpdatedAt = updatedAt
 			batchEvents = append(batchEvents, &event)
 		}
 		rows.Close()
@@ -782,7 +801,7 @@ func (r *eventRepository) GetEventsCountByType(eventTypes []string) (int64, erro
 func (r *eventRepository) GetLatestEventByWorkspaceAndSourcePath(workspacePath, sourceFilePath string) (*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path,
-			codegraph_status, embedding_status, created_at, updated_at
+			codegraph_status, embedding_status, sync_id, created_at, updated_at
 		FROM events
 		WHERE workspace_path = ? AND source_file_path = ?
 		ORDER BY created_at DESC
@@ -802,6 +821,7 @@ func (r *eventRepository) GetLatestEventByWorkspaceAndSourcePath(workspacePath, 
 		&event.TargetFilePath,
 		&event.CodegraphStatus,
 		&event.EmbeddingStatus,
+		&event.SyncId,
 		&createdAt,
 		&updatedAt,
 	)

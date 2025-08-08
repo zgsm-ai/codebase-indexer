@@ -324,9 +324,9 @@ func (ts *TypeScriptResolver) resolveInterface(ctx context.Context, element *Int
 
 func (ts *TypeScriptResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
 	// 处理为import而不是call
-	if isRequireCallCapture(rc) {
-		return ts.jsResolver.handleRequireCall(rc)
-	}
+	// if isRequireCallCapture(rc) {
+	// 	return ts.jsResolver.handleRequireCall(rc)
+	// }
 	elements := []Element{element}
 	rootCapture := rc.Match.Captures[0]
 	updateRootElement(element, &rootCapture, rc.CaptureNames[rootCapture.Index], rc.SourceFile.Content)

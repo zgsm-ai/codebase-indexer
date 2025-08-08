@@ -124,7 +124,7 @@ func main() {
 	fileScanService := service.NewFileScanService(workspaceRepo, eventRepo, scanRepo, storageManager, codebaseEmbeddingRepo, appLogger)
 	uploadService := service.NewUploadService(schedulerService, syncRepo, appLogger, syncServiceConfig)
 	embeddingProcessService := service.NewEmbeddingProcessService(workspaceRepo, eventRepo, codebaseEmbeddingRepo, uploadService, appLogger)
-	embeddingStatusService := service.NewEmbeddingStatusService(codebaseEmbeddingRepo, workspaceRepo, eventRepo, appLogger)
+	embeddingStatusService := service.NewEmbeddingStatusService(codebaseEmbeddingRepo, workspaceRepo, eventRepo, syncRepo, appLogger)
 
 	// 创建存储
 	codegraphStore, err := store.NewLevelDBStorage(utils.IndexDir, appLogger)

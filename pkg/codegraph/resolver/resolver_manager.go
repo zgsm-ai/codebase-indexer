@@ -3,6 +3,7 @@ package resolver
 import (
 	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/types"
+	"codebase-indexer/pkg/logger"
 	"context"
 	"fmt"
 
@@ -14,6 +15,7 @@ type ResolveContext struct {
 	Match        *treesitter.QueryMatch
 	CaptureNames []string // 通过Match.Capture.Index获取captureName
 	SourceFile   *types.SourceFile
+	Logger       logger.Logger
 }
 
 // 解析器管理器

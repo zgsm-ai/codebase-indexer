@@ -36,11 +36,8 @@ func (py *PythonResolver) resolveImport(ctx context.Context, element *Import, rc
 			element.Alias = content
 		}
 	}
-	// 处理类导入
-	elements := []Element{element}
 	element.BaseElement.Scope = types.ScopePackage
-	return elements, nil
-
+	return []Element{element}, nil
 }
 
 func (py *PythonResolver) resolvePackage(ctx context.Context, element *Package, rc *ResolveContext) ([]Element, error) {
@@ -72,7 +69,6 @@ func (py *PythonResolver) resolveFunction(ctx context.Context, element *Function
 }
 
 func (py *PythonResolver) resolveMethod(ctx context.Context, element *Method, rc *ResolveContext) ([]Element, error) {
-	//TODO implement me
 	rootCap := rc.Match.Captures[0]
 	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
 	for _, cap := range rc.Match.Captures {
@@ -88,10 +84,8 @@ func (py *PythonResolver) resolveMethod(ctx context.Context, element *Method, rc
 		case types.ElementTypeMethodOwner:
 			element.Owner = content
 		case types.ElementTypeMethodParameters:
+			// 保留了self参数
 			element.Declaration.Parameters = parsePyFuncParams(&cap.Node, rc.SourceFile.Content)
-			// if len(element.Declaration.Parameters) > 0 && element.Declaration.Parameters[0].Name == "self" {
-			// 	element.Declaration.Parameters=element.Declaration.Parameters[1:]
-			// }
 		case types.ElementTypeMethodReturnType:
 			element.Declaration.ReturnType = collectPyTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
 		}
@@ -103,6 +97,7 @@ func (py *PythonResolver) resolveMethod(ctx context.Context, element *Method, rc
 func (py *PythonResolver) resolveClass(ctx context.Context, element *Class, rc *ResolveContext) ([]Element, error) {
 	rootCap := rc.Match.Captures[0]
 	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
+	var refs []*Reference
 	for _, cap := range rc.Match.Captures {
 		captureName := rc.CaptureNames[cap.Index]
 		if cap.Node.IsMissing() || cap.Node.IsError() {
@@ -114,9 +109,16 @@ func (py *PythonResolver) resolveClass(ctx context.Context, element *Class, rc *
 			element.BaseElement.Name = content
 		case types.ElementTypeClassExtends:
 			element.SuperClasses = collectPyTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
+			for _, typ := range element.SuperClasses {
+				refs = append(refs, NewReference(element, &cap.Node, typ, types.EmptyString))
+			}
 		}
 	}
-	return []Element{element}, nil
+	elements := []Element{element}
+	for _, r := range refs {
+		elements = append(elements, r)
+	}
+	return elements, nil
 }
 
 func (py *PythonResolver) resolveVariable(ctx context.Context, element *Variable, rc *ResolveContext) ([]Element, error) {
@@ -137,12 +139,9 @@ func (py *PythonResolver) resolveVariable(ctx context.Context, element *Variable
 			for _, typ := range element.VariableType {
 				refs = append(refs, NewReference(element, &cap.Node, typ, types.EmptyString))
 			}
-			// TODO 考虑枚举字段、类的字段，用scm来做
+			// TODO 类的字段，用scm来做
 		}
 	}
-	// fmt.Println("variable",element.BaseElement.Name)
-	// fmt.Println("variable type",element.VariableType)
-	// fmt.Println("----------------------------------------")
 	elements := []Element{element}
 	for _, r := range refs {
 		elements = append(elements, r)
@@ -164,7 +163,6 @@ func (py *PythonResolver) resolveCall(ctx context.Context, element *Call, rc *Re
 		if cap.Node.IsMissing() || cap.Node.IsError() {
 			continue
 		}
-		// content := cap.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(captureName) {
 		case types.ElementTypeFunctionCallName:
 			nameOrTypes := collectPyTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
@@ -172,11 +170,12 @@ func (py *PythonResolver) resolveCall(ctx context.Context, element *Call, rc *Re
 				// Dict[str, int] 考虑将类型抛出去
 				for _, typ := range nameOrTypes {
 					// TODO 过滤官方标准类型
+					// ref里面是会有函数名的
 					refs = append(refs, NewReference(element, &cap.Node, typ, types.EmptyString))
 				}
 			}
+			// 第一个作为函数名
 			element.BaseElement.Name = nameOrTypes[0]
-			//fmt.Println("call.function.name",element.BaseElement.Name)
 		case types.ElementTypeFunctionArguments:
 			args := getArgs(&cap.Node, rc.SourceFile.Content)
 			for _, arg := range args {

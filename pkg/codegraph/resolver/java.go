@@ -15,7 +15,6 @@ type JavaResolver struct {
 var _ ElementResolver = &JavaResolver{}
 
 func (j *JavaResolver) Resolve(ctx context.Context, element Element, rc *ResolveContext) ([]Element, error) {
-	//复用resolve函数
 	return resolve(ctx, j, element, rc)
 }
 
@@ -249,9 +248,15 @@ func (j *JavaResolver) resolveVariable(ctx context.Context, element *Variable, r
 		}
 	}
 	var elements []Element
-	elements = AppendValidElems(elements, elems)
-	elements = AppendValidElems(elements, refs)
-	elements = AppendValidElems(elements, imports)
+	for _, e := range elems {
+		elements = append(elements, e)
+	}
+	for _, r := range refs {
+		elements = append(elements, r)
+	}
+	for _, i := range imports {
+		elements = append(elements, i)
+	}
 	return elements, nil
 }
 
@@ -362,9 +367,13 @@ func (j *JavaResolver) resolveCall(ctx context.Context, element *Call, rc *Resol
 	}
 	element.BaseElement.Scope = types.ScopeFunction
 	var elements []Element
-	elements = AppendValidElems(elements, []Element{element})
-	elements = AppendValidElems(elements, refs)
-	elements = AppendValidElems(elements, imports)
+	elements = append(elements, element)
+	for _, r := range refs {
+		elements = append(elements, r)
+	}
+	for _, i := range imports {
+		elements = append(elements, i)
+	}
 	return elements, nil
 }
 

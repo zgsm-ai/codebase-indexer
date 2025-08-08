@@ -172,12 +172,6 @@ func (c *CppResolver) resolveVariable(ctx context.Context, element *Variable, rc
 			element.BaseElement.Name = CleanParam(content)
 			element.VariableType = []string{types.PrimitiveType}
 			element.BaseElement.Scope = types.ScopeClass
-			// case types.ElementTypeVariableValue, types.ElementTypeFieldValue:
-			// 有可能是字面量，也有可能是类和结构体的创建，和方法调用
-			// 只能处理一个 new 的创建
-			// 字面量不处理，方法调用由resolveCall处理，只处理类的创建
-			// val := parseLocalVariableValue(&cap.Node, rc.SourceFile.Content)
-			// refs = append(refs, NewReference(element, &cap.Node, val, types.EmptyString))
 		}
 	}
 	elems := []Element{element}
