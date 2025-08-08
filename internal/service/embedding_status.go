@@ -33,12 +33,14 @@ func NewEmbeddingStatusService(
 	codebaseEmbeddingRepo repository.EmbeddingFileRepository,
 	workspaceRepo repository.WorkspaceRepository,
 	eventRepo repository.EventRepository,
+	syncer repository.SyncInterface,
 	logger logger.Logger,
 ) EmbeddingStatusService {
 	return &embeddingStatusService{
 		codebaseEmbeddingRepo: codebaseEmbeddingRepo,
 		workspaceRepo:         workspaceRepo,
 		eventRepo:             eventRepo,
+		syncer:                syncer,
 		logger:                logger,
 	}
 }

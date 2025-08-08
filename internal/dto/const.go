@@ -4,8 +4,9 @@ package dto
 const (
 	EmbeddingStatusPending = "pending"
 	EmbeddingProcessing    = "processing"
-	EmbeddingComplete      = "complete"
+	EmbeddingComplete      = "completed"
 	EmbeddingFailed        = "failed"
+	EmbeddingUnsupported   = "unsupported"
 )
 
 // 索引构建状态常量
