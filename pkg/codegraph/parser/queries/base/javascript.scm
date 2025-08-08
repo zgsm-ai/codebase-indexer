@@ -19,6 +19,38 @@
   source: (string)* @import.source
   ) @import
 
+;;import函数
+(variable_declarator
+  name:(identifier) @import.name
+  (call_expression
+    function:(import)@import.declaration
+    arguments:(arguments(string)@import.source)
+  )
+)@import
+
+;;import函数 - 带await的动态导入
+(variable_declarator
+  name:(identifier) @import.name
+  value:(await_expression
+    (call_expression
+      function:(import)@import.declaration
+      arguments:(arguments(string)@import.source)
+    )
+  )
+)@import
+
+(variable_declarator
+  name:(identifier)@import.name
+  value:(arrow_function
+    body:(call_expression
+      function:(import) @import.declaration
+      arguments:(arguments
+        (string)@import.source
+      )
+    )
+  )
+)@import
+
 ;;-----------------------------函数定义--------------------------
 ;; Function declarations
 (function_declaration
