@@ -64,7 +64,7 @@
   name: [(array_pattern 
           (identifier) @variable.name)
           (object_pattern 
-          (shorthand_property_identifier_pattern) @variable.name)]
+          [(shorthand_property_identifier_pattern)(pair_pattern)] @variable.name)]
   ) @variable
 
 ;;-----------------------------类声明--------------------------

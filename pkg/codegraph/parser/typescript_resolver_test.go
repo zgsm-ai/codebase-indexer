@@ -213,7 +213,7 @@ func TestTypeScriptResolver_ResolveVariable(t *testing.T) {
 				{BaseElement: &resolver.BaseElement{Name: "itemId", Type: types.ElementTypeVariable}, VariableType: []string{"primitive_type"}},
 				{BaseElement: &resolver.BaseElement{Name: "items", Type: types.ElementTypeVariable}, VariableType: []string{"primitive_type"}},
 				{BaseElement: &resolver.BaseElement{Name: "dictionary", Type: types.ElementTypeVariable}, VariableType: []string{"primitive_type"}},
-				{BaseElement: &resolver.BaseElement{Name: "name", Type: types.ElementTypeVariable}, VariableType: []string{"Person"}},
+				{BaseElement: &resolver.BaseElement{Name: "personName", Type: types.ElementTypeVariable}, VariableType: []string{"Person"}},
 				{BaseElement: &resolver.BaseElement{Name: "age", Type: types.ElementTypeVariable}, VariableType: []string{"Person"}},
 				{BaseElement: &resolver.BaseElement{Name: "first", Type: types.ElementTypeVariable}, VariableType: []string{"primitive_type"}},
 				{BaseElement: &resolver.BaseElement{Name: "second", Type: types.ElementTypeVariable}, VariableType: []string{"primitive_type"}},
@@ -678,7 +678,7 @@ func TestTypeScriptResolver_ResolveInterface(t *testing.T) {
 					BaseElement: &resolver.BaseElement{Name: "Repository", Type: types.ElementTypeInterface},
 					Methods: []*resolver.Declaration{
 						{Name: "getAll", ReturnType: []string{"primitive_type"}},
-						{Name: "getById", Parameters: []resolver.Parameter{{Name: "id", Type: []string{"primitive_type"}}}, ReturnType: []string{": T"}},
+						{Name: "getById", Parameters: []resolver.Parameter{{Name: "id", Type: []string{"primitive_type"}}}, ReturnType: []string{"T"}},
 						{Name: "save", Parameters: []resolver.Parameter{{Name: "item", Type: []string{"T"}}}, ReturnType: []string{"primitive_type"}},
 					},
 				},
@@ -895,8 +895,8 @@ func TestTypeScriptResolver_ResolveClass(t *testing.T) {
 				{
 					BaseElement: &resolver.BaseElement{Name: "Person", Type: types.ElementTypeClass},
 					Fields: []*resolver.Field{
-						{Name: "name", Type: "string"},
-						{Name: "age", Type: "number"},
+						{Name: "name", Type: "primitive_type"},
+						{Name: "age", Type: "primitive_type"},
 					},
 					Methods: []*resolver.Method{
 						{Declaration: resolver.Declaration{Name: "constructor", Modifier: "public"}},
@@ -907,21 +907,21 @@ func TestTypeScriptResolver_ResolveClass(t *testing.T) {
 					BaseElement:  &resolver.BaseElement{Name: "Employee", Type: types.ElementTypeClass},
 					SuperClasses: []string{"Person"},
 					Fields: []*resolver.Field{
-						{Name: "employeeId", Type: "number", Modifier: "private"},
-						{Name: "department", Type: "string", Modifier: "protected"},
-						{Name: "role", Type: "string", Modifier: "public"},
-						{Name: "startDate", Type: "Date", Modifier: ""},
+						{Name: "employeeId", Type: "primitive_type", Modifier: "private"},
+						{Name: "department", Type: "primitive_type", Modifier: "protected"},
+						{Name: "role", Type: "primitive_type", Modifier: "public"},
+						{Name: "startDate", Type: "primitive_type", Modifier: ""},
 					},
 					Methods: []*resolver.Method{
 						{Declaration: resolver.Declaration{Name: "constructor", Modifier: "public"}},
 						{Declaration: resolver.Declaration{Name: "greet", Modifier: "public", ReturnType: []string{"primitive_type"}}},
-						{Declaration: resolver.Declaration{Name: "createManager", Modifier: "public", ReturnType: []string{": Employee"}}},
+						{Declaration: resolver.Declaration{Name: "createManager", Modifier: "public", ReturnType: []string{"Employee"}}},
 					},
 				},
 				{
 					BaseElement: &resolver.BaseElement{Name: "Document", Type: types.ElementTypeClass},
 					Fields: []*resolver.Field{
-						{Name: "content", Type: "string"},
+						{Name: "content", Type: "primitive_type"},
 					},
 					Methods: []*resolver.Method{
 						{Declaration: resolver.Declaration{Name: "constructor", Modifier: "public"}},
