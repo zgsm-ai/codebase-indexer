@@ -39,6 +39,11 @@ type Indexer struct {
 	logger              logger.Logger
 }
 
+const (
+	defaultConcurrency = 2
+	defaultBatchSize   = 10
+)
+
 // TODO 多子项目、多语言支持。monorepo, 不光通过语言隔离、还要通过子项目隔离。
 
 // NewCodeIndexer 创建新的代码索引器
@@ -51,6 +56,12 @@ func NewCodeIndexer(
 	config IndexerConfig,
 	logger logger.Logger,
 ) *Indexer {
+	if config.MaxConcurrency <= 0 {
+		config.MaxConcurrency = defaultConcurrency
+	}
+	if config.BatchSize <= 0 {
+		config.BatchSize = defaultBatchSize
+	}
 	return &Indexer{
 		parser:              parser,
 		analyzer:            analyzer,
@@ -95,13 +106,12 @@ func (i *Indexer) IndexWorkspace(ctx context.Context, workspacePath string) (*ty
 
 	i.logger.Info("index_workspace %s index workspace finish, cost %d ms, visit %d files, "+
 		"parsed %d files successfully, failed %d files", workspacePath, time.Since(workspaceStart).Milliseconds(),
-		taskMetrics.TotalFiles, taskMetrics.TotalFiles-taskMetrics.TotalFailedFiles)
+		taskMetrics.TotalFiles, taskMetrics.TotalFiles-taskMetrics.TotalFailedFiles, taskMetrics.TotalFailedFiles)
 	return taskMetrics, nil
 }
 
 // indexProject 索引单个项目
 func (i *Indexer) indexProject(ctx context.Context, workspacePath string, project *workspace.Project) (*types.IndexTaskMetrics, []error) {
-
 	// todo 并发、批量处理
 	// 阶段0：收集要处理的源码文件（可并发）
 	// 阶段1：解析 （可并发）
@@ -144,14 +154,15 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 	var mux sync.Mutex
 	var parsedFilesCnt int
 	for m := 0; m < totalFiles; {
-		batch := utils.Min(totalFiles-m-1, i.config.BatchSize)
+		batch := utils.Min(totalFiles-m, i.config.BatchSize)
+		batchStart, batchEnd := m, m+batch
 		err := taskPool.Submit(ctx, func(ctx context.Context, taskId uint64) {
-			batchStart := time.Now()
-			i.logger.Debug("index_project task-%d start to parse source files, batch [%d:%d], total %d, batch_size %d",
-				taskId, m, m+batch, totalFiles, batch)
+			batchStartTime := time.Now()
+			i.logger.Debug("index_project task-%d start, batch [%d:%d]/%d, batch_size %d",
+				taskId, batchStart, batchEnd, totalFiles, batch)
 			// 解析
 			elementTables, err := func() ([]*parser.FileElementTable, error) {
-				elementTables, metrics, err := i.parseFiles(ctx, sourceFiles[m:m+batch])
+				elementTables, metrics, err := i.parseFiles(ctx, sourceFiles[batchStart:batchEnd])
 				mux.Lock()
 				defer mux.Unlock()
 				parsedFilesCnt += len(elementTables)
@@ -162,8 +173,8 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 			if len(elementTables) == 0 {
 				return
 			}
-			i.logger.Debug("index_project task-%d batch [%d:%d] parse files. cost %d ms", taskId,
-				m, m+batch, time.Since(batchStart).Milliseconds())
+			i.logger.Debug("index_project task-%d batch [%d:%d]/%d parse files end, cost %d ms", taskId,
+				batchStart, batchEnd, totalFiles, time.Since(batchStartTime).Milliseconds())
 			// 检查elements，剔除不合法的，并打印日志
 			i.checkElementTables(elementTables)
 
@@ -172,8 +183,8 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 			if err = i.analyzer.SaveSymbolDefinitions(ctx, projectUuid, elementTables); err != nil {
 				errs = append(errs, err)
 			}
-			i.logger.Debug("index_project task-%d batch [%d:%d] save symbols. cost %d ms", taskId,
-				m, m+batch, time.Since(symbolStart).Milliseconds())
+			i.logger.Debug("index_project task-%d batch [%d:%d]/%d save symbols end, cost %d ms", taskId,
+				batchStart, batchEnd, totalFiles, time.Since(symbolStart).Milliseconds())
 
 			// 预处理 import
 			if err := i.preprocessImports(ctx, elementTables, project); err != nil {
@@ -186,13 +197,13 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 			if err = i.storage.BatchSave(ctx, projectUuid, workspace.FileElementTables(protoElementTables)); err != nil {
 				errs = append(errs, err)
 				projectMetrics.TotalFailedFiles += batch
-				projectMetrics.FailedFilePaths = append(projectMetrics.FailedFilePaths, sourceFiles[m:m+batch]...)
+				projectMetrics.FailedFilePaths = append(projectMetrics.FailedFilePaths, sourceFiles[batchStart:batchEnd]...)
 			}
-			i.logger.Debug("index_project task-%d batch [%d:%d] save element_tables. cost %d ms", taskId,
-				m, m+batch, time.Since(batchStart).Milliseconds())
+			i.logger.Debug("index_project task-%d batch [%d:%d]/%d save element_tables end, cost %d ms", taskId,
+				batchStart, batchEnd, totalFiles, time.Since(batchStartTime).Milliseconds())
 
-			i.logger.Debug("index_project task-%d batch [%d:%d] end. cost %d ms", taskId,
-				m, m+batch, time.Since(batchStart).Milliseconds())
+			i.logger.Debug("index_project task-%d batch [%d:%d]/%d end, cost %d ms", taskId,
+				batchStart, batchEnd, totalFiles, time.Since(batchStartTime).Milliseconds())
 
 		})
 		if err != nil {
@@ -226,6 +237,10 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 	iter := i.storage.Iter(ctx, projectUuid)
 	defer iter.Close()
 	for iter.Next() {
+		// 遍历 element_table
+		if !store.IsElementPathKey(iter.Key()) {
+			continue
+		}
 		var elementTable codegraphpb.FileElementTable
 		if err = store.UnmarshalValue(iter.Value(), &elementTable); err != nil {
 			errs = append(errs, fmt.Errorf("index_project unmarshal element_table err:%w", err))
@@ -246,13 +261,15 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 			errs = append(errs, err)
 			return projectMetrics, errs
 		}
-		if elementTablesCnt%updateBatch == 0 {
-			i.logger.Debug("index_project start to update workspace ")
+		if elementTablesCnt > 0 && elementTablesCnt%updateBatch == 0 {
+			updateStart := time.Now()
 			if err = i.workspaceRepository.UpdateCodegraphInfo(workspacePath, elementTablesCnt+previousNum,
 				time.Now().Unix()); err != nil {
 				i.logger.Error("index_project update workspace %s codegraph successful file num %d/%d, err:%v",
 					workspacePath, elementTablesCnt, parsedFilesCnt, err)
 			}
+			i.logger.Debug("index_project start to updated workspace %s successful, file num %d/%d, update_batch %d, cost %d ms",
+				workspacePath, elementTablesCnt+previousNum, parsedFilesCnt, updateBatch, time.Since(updateStart).Milliseconds())
 		}
 		elementTablesCnt++
 	}
@@ -264,8 +281,8 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 			workspacePath, elementTablesCnt, parsedFilesCnt, err)
 	}
 
-	i.logger.Info("index_project project %s analyze dependency end, analyzed %d elements, cost %d ms.",
-		project.Path, time.Since(analyzeStart).Milliseconds())
+	i.logger.Info("index_project project %s analyze dependency end, analyzed %d/%d element tables, cost %d ms.",
+		project.Path, elementTablesCnt, parsedFilesCnt, time.Since(analyzeStart).Milliseconds())
 
 	i.logger.Info("index_project: finish %s, cost %d ms, processed %d files.", project.Path,
 		time.Since(projectStart).Milliseconds(), elementTablesCnt)

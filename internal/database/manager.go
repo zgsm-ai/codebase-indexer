@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"os"
 	"path/filepath"
 	"sync"
 
@@ -42,6 +43,11 @@ func (m *SQLiteManager) Initialize() error {
 
 	// 构建数据库文件路径
 	dbPath := filepath.Join(m.config.DataDir, m.config.DatabaseName)
+
+	// 创建数据目录
+	if err := os.MkdirAll(m.config.DataDir, 0755); err != nil {
+		return err
+	}
 
 	// 打开数据库连接
 	db, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=on&_journal_mode=WAL")

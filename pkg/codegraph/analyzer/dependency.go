@@ -237,6 +237,7 @@ func (da *DependencyAnalyzer) findReferredElement(ctx context.Context,
 	if err = store.UnmarshalValue(value, symbolDefs); err != nil {
 		return nil, err
 	}
+	//TODO 有问题
 
 	// 同名的所有定义
 	for _, def := range symbolDefs.Definitions {

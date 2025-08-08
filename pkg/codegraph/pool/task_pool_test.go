@@ -1,6 +1,7 @@
 package pool
 
 import (
+	"codebase-indexer/pkg/logger"
 	"context"
 	"sync"
 	"sync/atomic"
@@ -10,14 +11,18 @@ import (
 
 // 测试正常提交和执行任务
 func TestTaskPool_NormalExecution(t *testing.T) {
-	pool := NewTaskPool(2)
+	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
+	if err != nil {
+		panic(err)
+	}
+	pool := NewTaskPool(2, newLogger)
 	defer pool.Close()
 
 	var counter int32
 	taskCount := 5
 
 	for i := 0; i < taskCount; i++ {
-		err := pool.Submit(context.Background(), func(ctx context.Context) {
+		err := pool.Submit(context.Background(), func(ctx context.Context, taskId uint64) {
 			atomic.AddInt32(&counter, 1)
 		})
 		if err != nil {
@@ -34,11 +39,15 @@ func TestTaskPool_NormalExecution(t *testing.T) {
 
 // 测试任务在等待执行时被取消
 func TestTaskPool_CancelBeforeExecution(t *testing.T) {
-	pool := NewTaskPool(1) // 只启动一个工作者，确保任务会排队
+	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
+	if err != nil {
+		panic(err)
+	}
+	pool := NewTaskPool(1, newLogger) // 只启动一个工作者，确保任务会排队
 	defer pool.Close()
 
 	// 第一个任务会占用工作者
-	err := pool.Submit(context.Background(), func(ctx context.Context) {
+	err = pool.Submit(context.Background(), func(ctx context.Context, taskId uint64) {
 		time.Sleep(200 * time.Millisecond) // 长时间运行
 	})
 	if err != nil {
@@ -50,7 +59,7 @@ func TestTaskPool_CancelBeforeExecution(t *testing.T) {
 	cancel() // 立即取消
 
 	// 这个任务会进入队列，然后被取消
-	err = pool.Submit(ctx, func(ctx context.Context) {
+	err = pool.Submit(ctx, func(ctx context.Context, taskId uint64) {
 		// 这个任务不应该执行
 		t.Error("Cancelled task was executed")
 	})
@@ -63,7 +72,11 @@ func TestTaskPool_CancelBeforeExecution(t *testing.T) {
 
 // 测试任务执行过程中超时
 func TestTaskPool_TaskTimeout(t *testing.T) {
-	pool := NewTaskPool(2)
+	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
+	if err != nil {
+		panic(err)
+	}
+	pool := NewTaskPool(2, newLogger)
 	defer pool.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -71,7 +84,7 @@ func TestTaskPool_TaskTimeout(t *testing.T) {
 
 	var timedOut bool
 
-	err := pool.Submit(ctx, func(ctx context.Context) {
+	err = pool.Submit(ctx, func(ctx context.Context, taskId uint64) {
 		// 模拟长时间运行的任务
 		select {
 		case <-time.After(200 * time.Millisecond):
@@ -95,7 +108,11 @@ func TestTaskPool_TaskTimeout(t *testing.T) {
 
 // 测试任务执行过程中被取消
 func TestTaskPool_TaskCancelDuringExecution(t *testing.T) {
-	pool := NewTaskPool(2)
+	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
+	if err != nil {
+		panic(err)
+	}
+	pool := NewTaskPool(2, newLogger)
 	defer pool.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -104,7 +121,7 @@ func TestTaskPool_TaskCancelDuringExecution(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	err := pool.Submit(ctx, func(ctx context.Context) {
+	err = pool.Submit(ctx, func(ctx context.Context, taskId uint64) {
 		wg.Done() // 通知任务已开始执行
 		// 等待取消信号
 		select {
@@ -131,10 +148,14 @@ func TestTaskPool_TaskCancelDuringExecution(t *testing.T) {
 
 // 测试关闭任务池后无法提交任务
 func TestTaskPool_SubmitAfterClose(t *testing.T) {
-	pool := NewTaskPool(2)
+	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
+	if err != nil {
+		panic(err)
+	}
+	pool := NewTaskPool(2, newLogger)
 	pool.Close()
 
-	err := pool.Submit(context.Background(), func(ctx context.Context) {})
+	err = pool.Submit(context.Background(), func(ctx context.Context, taskId uint64) {})
 	if err == nil {
 		t.Error("Expected submission to fail but no error was returned")
 	}
@@ -146,7 +167,11 @@ func TestTaskPool_SubmitAfterClose(t *testing.T) {
 
 // 测试并发提交任务
 func TestTaskPool_ConcurrentSubmit(t *testing.T) {
-	pool := NewTaskPool(5)
+	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
+	if err != nil {
+		panic(err)
+	}
+	pool := NewTaskPool(5, newLogger)
 	defer pool.Close()
 
 	var counter int32
@@ -164,7 +189,7 @@ func TestTaskPool_ConcurrentSubmit(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < taskCount/submitters; i++ {
-				err := pool.Submit(ctx, func(ctx context.Context) {
+				err := pool.Submit(ctx, func(ctx context.Context, taskId uint64) {
 					atomic.AddInt32(&counter, 1)
 					time.Sleep(1 * time.Millisecond) // 模拟轻微工作
 				})
@@ -187,7 +212,11 @@ func TestTaskPool_ConcurrentSubmit(t *testing.T) {
 // 测试最大并发限制
 func TestTaskPool_MaxConcurrency(t *testing.T) {
 	maxConcurrency := 3
-	pool := NewTaskPool(maxConcurrency)
+	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
+	if err != nil {
+		panic(err)
+	}
+	pool := NewTaskPool(maxConcurrency, newLogger)
 	defer pool.Close()
 
 	var current int32
@@ -197,7 +226,7 @@ func TestTaskPool_MaxConcurrency(t *testing.T) {
 	wg.Add(taskCount)
 
 	for i := 0; i < taskCount; i++ {
-		err := pool.Submit(context.Background(), func(ctx context.Context) {
+		err := pool.Submit(context.Background(), func(ctx context.Context, taskId uint64) {
 			defer wg.Done()
 
 			// 增加当前并发数

@@ -152,6 +152,16 @@ func (c *CodegraphProcessor) ProcessOpenWorkspaceEvent(ctx context.Context, even
 		}
 		return err
 	}
+	// 更新进度为0，成功后再更新总进度。
+	err = c.workspaceRepo.UpdateCodegraphInfo(event.WorkspacePath, 0, time.Now().Unix())
+	if err != nil {
+		c.logger.Error("codegraph failed to process open_workspace event event, workspace %s reset successful file num failed, err:%v",
+			event.WorkspacePath, err)
+		if err = c.updateEventFinally(event, err); err != nil {
+			return fmt.Errorf("codegraph update open_workspace event err: %w", err)
+		}
+		return err
+	}
 
 	if !fileInfo.IsDir {
 		c.logger.Error("codegraph open_workspace event, %s is file, not process.",
@@ -161,11 +171,12 @@ func (c *CodegraphProcessor) ProcessOpenWorkspaceEvent(ctx context.Context, even
 		}
 		return nil
 	}
-
+	// todo open_workspace过程中会更新进度，其余事件结束更新进度。
 	_, err = c.indexer.IndexWorkspace(ctx, event.WorkspacePath)
 	if err = c.updateEventFinally(event, err); err != nil {
 		return fmt.Errorf("codegraph update modify event %d err: %w", event.ID, err)
 	}
+
 	return nil
 }
 

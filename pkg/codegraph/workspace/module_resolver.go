@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"codebase-indexer/pkg/codegraph/utils"
 	"codebase-indexer/pkg/logger"
 	"context"
 	"encoding/json"
@@ -27,7 +28,7 @@ func newModuleResolver(logger logger.Logger) *moduleResolver {
 // ResolveProjectModules 解析项目的模块信息，递归多层处理，适应子项目、子模块的场景
 func (mr *moduleResolver) ResolveProjectModules(ctx context.Context, project *Project, path string, maxDepth int) error {
 	if maxDepth == 0 {
-		mr.logger.Info("module_resolver project path %s modules info resolve end.", path)
+		mr.logger.Debug("module_resolver project path %s modules info resolve end.", path)
 		return nil
 	}
 	if project == nil {
@@ -41,13 +42,13 @@ func (mr *moduleResolver) ResolveProjectModules(ctx context.Context, project *Pr
 		return nil
 	}
 
-	mr.logger.Info("module_resolver start to resolve project path %s modules info.", path)
+	mr.logger.Debug("module_resolver start to resolve project path %s modules info.", path)
 
 	// 解析Go模块
 	goModules, err := mr.resolveGoModules(ctx, path)
 	if err != nil {
 		mr.logger.Debug("module_resolver project path %s resolve go module err: %v", path, err)
-	} else {
+	} else if len(goModules) > 0 {
 		project.GoModules = append(project.GoModules, goModules...)
 		mr.logger.Debug("module_resolver project path %s resolved go modules: %v", path, goModules)
 	}
@@ -56,7 +57,7 @@ func (mr *moduleResolver) ResolveProjectModules(ctx context.Context, project *Pr
 	javaPrefixes, err := mr.resolveJavaPackagePrefixes(ctx, path)
 	if err != nil {
 		mr.logger.Debug("module_resolver project path %s resolve java package prefixes err: %v", path, err)
-	} else {
+	} else if len(javaPrefixes) > 0 {
 		project.JavaPackagePrefix = append(project.JavaPackagePrefix, javaPrefixes...)
 		mr.logger.Debug("module_resolver project path %s resolved java package prefixes: %v", path, javaPrefixes)
 	}
@@ -65,16 +66,16 @@ func (mr *moduleResolver) ResolveProjectModules(ctx context.Context, project *Pr
 	pythonPackages, err := mr.resolvePythonPackages(ctx, path)
 	if err != nil {
 		mr.logger.Debug("module_resolver project path %s resolved python packages err: %v", path, err)
-	} else {
+	} else if len(pythonPackages) > 0 {
 		project.PythonPackages = append(project.PythonPackages, pythonPackages...)
-		mr.logger.Debug("module_resolver project path %s resolved python packages: %v", pythonPackages)
+		mr.logger.Debug("module_resolver project path %s resolved python packages: %v", path, pythonPackages)
 	}
 
 	// 解析C/C++头文件路径
 	cppIncludes, err := mr.resolveCppIncludes(ctx, path)
 	if err != nil {
 		mr.logger.Debug("module_resolver project path %s resolved c/cpp head dirEntries err: %v", path, err)
-	} else {
+	} else if len(cppIncludes) > 0 {
 		project.CppIncludes = append(project.CppIncludes, cppIncludes...)
 		mr.logger.Debug("module_resolver project path %s resolved c/cpp head dirEntries: %v", path, cppIncludes)
 	}
@@ -83,7 +84,7 @@ func (mr *moduleResolver) ResolveProjectModules(ctx context.Context, project *Pr
 	jsPackages, err := mr.resolveJsPackages(ctx, path)
 	if err != nil {
 		mr.logger.Debug("module_resolver project path %s resolved ts/js package err: %v", path, err)
-	} else {
+	} else if len(jsPackages) > 0 {
 		project.JsPackages = append(project.JsPackages, jsPackages...)
 		mr.logger.Debug("module_resolver project path %s resolved ts/js package err: %v", path, cppIncludes)
 	}
@@ -97,6 +98,10 @@ func (mr *moduleResolver) ResolveProjectModules(ctx context.Context, project *Pr
 	for _, f := range dirEntries {
 		if f.IsDir() {
 			subPath := filepath.Join(path, f.Name())
+			if utils.IsHiddenFile(subPath) {
+				mr.logger.Debug("module_resolver %s is hidden dir, skip.", subPath)
+				continue
+			}
 			if err = mr.ResolveProjectModules(ctx, project, subPath, maxDepth-1); err != nil {
 				mr.logger.Debug("module_resolver project path %s resolve err:%v", subPath, err)
 			}
@@ -123,8 +128,8 @@ func (mr *moduleResolver) resolveJavaPackagePrefixes(ctx context.Context, projec
 	if _, err := os.Stat(pomPath); err == nil {
 		pomPrefixes, err := mr.parsePomXML(pomPath)
 		if err != nil {
-			mr.logger.Error("解析pom.xml失败: %v", err)
-		} else {
+			mr.logger.Error("module_resolver resolve pom.xml err: %v", err)
+		} else if len(pomPrefixes) > 0 {
 			prefixes = append(prefixes, pomPrefixes...)
 		}
 	}
@@ -134,8 +139,8 @@ func (mr *moduleResolver) resolveJavaPackagePrefixes(ctx context.Context, projec
 	if _, err := os.Stat(javaSrcPath); err == nil {
 		dirPrefixes, err := mr.inferJavaPrefixFromDir(javaSrcPath)
 		if err != nil {
-			mr.logger.Error("从目录结构推断Java包前缀失败: %v", err)
-		} else {
+			mr.logger.Error("module_resolver resolve java package prefix err: %v", err)
+		} else if len(dirPrefixes) > 0 {
 			prefixes = append(prefixes, dirPrefixes...)
 		}
 	}
@@ -148,12 +153,12 @@ func (mr *moduleResolver) resolveJavaPackagePrefixes(ctx context.Context, projec
 func (mr *moduleResolver) parsePomXML(pomPath string) ([]string, error) {
 	data, err := os.ReadFile(pomPath)
 	if err != nil {
-		return nil, fmt.Errorf("读取pom.xml文件失败: %v", err)
+		return nil, fmt.Errorf("module_resolver read pom.xml err: %v", err)
 	}
 
 	var pom PomXML
 	if err := xml.Unmarshal(data, &pom); err != nil {
-		return nil, fmt.Errorf("解析pom.xml文件失败: %v", err)
+		return nil, fmt.Errorf("module_resolver parse pom.xml err: %v", err)
 	}
 
 	var prefixes []string
@@ -254,8 +259,8 @@ func (mr *moduleResolver) resolvePythonPackages(ctx context.Context, projectPath
 	if _, err := os.Stat(setupPyPath); err == nil {
 		setupPackages, err := mr.parseSetupPy(setupPyPath)
 		if err != nil {
-			mr.logger.Error("解析setup.py失败: %v", err)
-		} else {
+			mr.logger.Error("module_resolver parse setup.py err: %v", err)
+		} else if len(setupPackages) > 0 {
 			packages = append(packages, setupPackages...)
 		}
 	}
@@ -265,8 +270,8 @@ func (mr *moduleResolver) resolvePythonPackages(ctx context.Context, projectPath
 	if _, err := os.Stat(pyprojectPath); err == nil {
 		pyprojectPackages, err := mr.parsePyProjectToml(pyprojectPath)
 		if err != nil {
-			mr.logger.Error("解析pyproject.toml失败: %v", err)
-		} else {
+			mr.logger.Error("module_resolver parse pyproject.toml err: %v", err)
+		} else if len(pyprojectPackages) > 0 {
 			packages = append(packages, pyprojectPackages...)
 		}
 	}
@@ -274,8 +279,8 @@ func (mr *moduleResolver) resolvePythonPackages(ctx context.Context, projectPath
 	// 3. 从项目目录结构查找Python包
 	dirPackages, err := mr.findPythonPackages(projectPath)
 	if err != nil {
-		mr.logger.Error("从目录结构查找Python包失败: %v", err)
-	} else {
+		mr.logger.Error("module_resolver find python packages err: %v", err)
+	} else if len(dirPackages) > 0 {
 		packages = append(packages, dirPackages...)
 	}
 
@@ -289,7 +294,7 @@ func (mr *moduleResolver) parseSetupPy(setupPyPath string) ([]string, error) {
 	// 这里使用简化的方法，只读取文件内容并尝试提取包名
 	data, err := os.ReadFile(setupPyPath)
 	if err != nil {
-		return nil, fmt.Errorf("读取setup.py文件失败: %v", err)
+		return nil, fmt.Errorf("module_resolver read setup.py err: %v", err)
 	}
 
 	content := string(data)
@@ -328,7 +333,7 @@ func (mr *moduleResolver) parseSetupPy(setupPyPath string) ([]string, error) {
 func (mr *moduleResolver) parsePyProjectToml(pyprojectPath string) ([]string, error) {
 	data, err := os.ReadFile(pyprojectPath)
 	if err != nil {
-		return nil, fmt.Errorf("读取pyproject.toml文件失败: %v", err)
+		return nil, fmt.Errorf("module_resolver read pyproject.toml err: %v", err)
 	}
 
 	var pyproject PyProjectToml
@@ -438,7 +443,7 @@ func (mr *moduleResolver) resolveCppIncludes(ctx context.Context, projectPath st
 		if _, err := os.Stat(dirPath); err == nil {
 			relIncludes, err := mr.findCppHeadersInDir(projectPath, dirPath)
 			if err != nil {
-				mr.logger.Error("查找目录 %s 中的C/C++头文件失败: %v", dir, err)
+				mr.logger.Error("module_resolver find %s c/cpp head files err: %v", dir, err)
 			} else {
 				includes = append(includes, relIncludes...)
 			}
@@ -448,8 +453,8 @@ func (mr *moduleResolver) resolveCppIncludes(ctx context.Context, projectPath st
 	// 检查项目根目录下的头文件
 	rootIncludes, err := mr.findCppHeadersInDir(projectPath, projectPath)
 	if err != nil {
-		mr.logger.Error("查找项目根目录中的C/C++头文件失败: %v", err)
-	} else {
+		mr.logger.Error("module_resolver find %s c/cpp head files err: %v", err)
+	} else if len(rootIncludes) > 0 {
 		includes = append(includes, rootIncludes...)
 	}
 
@@ -514,8 +519,8 @@ func (mr *moduleResolver) resolveJsPackages(ctx context.Context, projectPath str
 	if _, err := os.Stat(packageJsonPath); err == nil {
 		jsonPackages, err := mr.parsePackageJson(packageJsonPath)
 		if err != nil {
-			mr.logger.Error("解析package.json失败: %v", err)
-		} else {
+			mr.logger.Error("module_resolver parse package.json err: %v", err)
+		} else if len(jsonPackages) > 0 {
 			packages = append(packages, jsonPackages...)
 		}
 	}
@@ -523,8 +528,8 @@ func (mr *moduleResolver) resolveJsPackages(ctx context.Context, projectPath str
 	// 2. 从项目目录结构查找JavaScript/TypeScript包
 	dirPackages, err := mr.findJsPackages(projectPath)
 	if err != nil {
-		mr.logger.Error("从目录结构查找JavaScript/TypeScript包失败: %v", err)
-	} else {
+		mr.logger.Error("module_resolver find js/ts package err: %v", err)
+	} else if len(dirPackages) > 0 {
 		packages = append(packages, dirPackages...)
 	}
 
@@ -536,12 +541,12 @@ func (mr *moduleResolver) resolveJsPackages(ctx context.Context, projectPath str
 func (mr *moduleResolver) parsePackageJson(packageJsonPath string) ([]string, error) {
 	data, err := os.ReadFile(packageJsonPath)
 	if err != nil {
-		return nil, fmt.Errorf("读取package.json文件失败: %v", err)
+		return nil, fmt.Errorf("module_resolver read package.json file err: %v", err)
 	}
 
 	var packageJson PackageJSON
 	if err := json.Unmarshal(data, &packageJson); err != nil {
-		return nil, fmt.Errorf("解析package.json文件失败: %v", err)
+		return nil, fmt.Errorf("module_resolver parse package.json file err: %v", err)
 	}
 
 	var packages []string
@@ -616,13 +621,13 @@ func (mr *moduleResolver) resolveGoModules(ctx context.Context, projectPath stri
 	if _, err := os.Stat(goModPath); err == nil {
 		data, err := os.ReadFile(goModPath)
 		if err != nil {
-			return nil, fmt.Errorf("读取go.mod文件失败: %v", err)
+			return nil, fmt.Errorf("module_resover parse go.mod file err: %v", err)
 		}
 
 		modulePath := modfile.ModulePath(data)
 		if modulePath != "" {
 			modules = append(modules, modulePath)
-			mr.logger.Info("解析到Go模块: %s", modulePath)
+			mr.logger.Debug("module_resolver resolved go module: %s", modulePath)
 		}
 	}
 

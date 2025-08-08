@@ -67,6 +67,8 @@ func IsValidElementType(e Element) bool {
 	case *Call:
 		return element.Type == types.ElementTypeFunctionCall ||
 			element.Type == types.ElementTypeMethodCall
+	case *Reference:
+		return element.Type == types.ElementTypeReference
 	default:
 		return false
 	}

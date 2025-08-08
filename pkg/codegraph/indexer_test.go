@@ -1,6 +1,10 @@
 package codegraph
 
 import (
+	"codebase-indexer/internal/config"
+	"codebase-indexer/internal/database"
+	"codebase-indexer/internal/model"
+	"codebase-indexer/internal/repository"
 	packageclassifier "codebase-indexer/pkg/codegraph/analyzer/package_classifier"
 	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/types"
@@ -35,6 +39,7 @@ type testEnvironment struct {
 	storageDir         string
 	logger             logger.Logger
 	storage            store.GraphStorage
+	repository         repository.WorkspaceRepository
 	workspaceReader    *workspace.WorkspaceReader
 	sourceFileParser   *parser.SourceFileParser
 	dependencyAnalyzer *analyzer.DependencyAnalyzer
@@ -71,6 +76,16 @@ func setupTestEnvironment(t *testing.T) *testEnvironment {
 	// 获取测试工作区目录
 	workspaceDir, err := filepath.Abs("../../")
 	assert.NoError(t, err)
+	// repository
+	// Initialize database manager
+	dbConfig := config.DefaultDatabaseConfig()
+	dbManager := database.NewSQLiteManager(dbConfig, newLogger)
+	err = dbManager.Initialize()
+	if err != nil {
+		panic(err)
+	}
+	// Initialize repositories
+	workspaceRepo := repository.NewWorkspaceRepository(dbManager, newLogger)
 
 	return &testEnvironment{
 		ctx:                ctx,
@@ -78,6 +93,7 @@ func setupTestEnvironment(t *testing.T) *testEnvironment {
 		storageDir:         storageDir,
 		logger:             newLogger,
 		storage:            storage,
+		repository:         workspaceRepo,
 		workspaceReader:    workspaceReader,
 		sourceFileParser:   sourceFileParser,
 		dependencyAnalyzer: dependencyAnalyzer,
@@ -105,6 +121,7 @@ func createTestIndexer(env *testEnvironment, visitPattern *types.VisitPattern) *
 		env.dependencyAnalyzer,
 		env.workspaceReader,
 		env.storage,
+		env.repository,
 		IndexerConfig{VisitPattern: visitPattern},
 		env.logger,
 	)
@@ -246,15 +263,35 @@ func TestIndexer_IndexWorkspace(t *testing.T) {
 	// 设置测试环境
 	env := setupTestEnvironment(t)
 
+	workspaceModel, err := env.repository.GetWorkspaceByPath(env.workspaceDir)
+	if workspaceModel == nil {
+		// 初始化workspace
+		err := env.repository.CreateWorkspace(&model.Workspace{
+			WorkspaceName: "codebase-indexer",
+			WorkspacePath: env.workspaceDir,
+			Active:        "true",
+			FileNum:       100,
+		})
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		// 置为 0
+		err := env.repository.UpdateCodegraphInfo(env.workspaceDir, 0, time.Now().Unix())
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	// 创建测试索引器
 	indexer := createTestIndexer(env, testVisitPattern)
 
+	// 测试 IndexWorkspace - 索引整个工作区
+	_, err = indexer.IndexWorkspace(context.Background(), env.workspaceDir)
+	assert.NoError(t, err)
+
 	// 查找工作区中的项目
 	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, testVisitPattern)
-
-	// 测试 IndexWorkspace - 索引整个工作区
-	_, err := indexer.IndexWorkspace(context.Background(), env.workspaceDir)
-	assert.NoError(t, err)
 
 	// 验证存储状态 - 确保索引数量与文件数量一致
 	validateStorageState(t, env.ctx, env.workspaceReader, env.storage, env.workspaceDir, projects, testVisitPattern)
