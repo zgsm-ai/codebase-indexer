@@ -85,7 +85,8 @@ func createTestIndexer(env *testEnvironment, visitPattern types.VisitPattern) *c
 		env.dependencyAnalyzer,
 		env.workspaceReader,
 		env.storage,
-		codegraph.IndexerConfig{VisitPattern: visitPattern},
+		nil,
+		codegraph.IndexerConfig{VisitPattern: &visitPattern},
 		env.logger,
 	)
 }

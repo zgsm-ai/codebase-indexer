@@ -18,28 +18,32 @@ type ElementResolver interface {
 	resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error)
 }
 
-func resolve(ctx context.Context, b ElementResolver, element Element, rc *ResolveContext) ([]Element, error) {
+func resolve(ctx context.Context, b ElementResolver, element Element, rc *ResolveContext) (elems []Element, err error) {
 	switch element := element.(type) {
 	case *Import:
-		return b.resolveImport(ctx, element, rc)
+		elems, err = b.resolveImport(ctx, element, rc)
 	case *Package:
-		return b.resolvePackage(ctx, element, rc)
+		elems, err = b.resolvePackage(ctx, element, rc)
 	case *Function:
-		return b.resolveFunction(ctx, element, rc)
+		elems, err = b.resolveFunction(ctx, element, rc)
 	case *Method:
-		return b.resolveMethod(ctx, element, rc)
+		elems, err = b.resolveMethod(ctx, element, rc)
 	case *Class:
-		return b.resolveClass(ctx, element, rc)
+		elems, err = b.resolveClass(ctx, element, rc)
 	case *Variable:
-		return b.resolveVariable(ctx, element, rc)
+		elems, err = b.resolveVariable(ctx, element, rc)
 	case *Interface:
-		return b.resolveInterface(ctx, element, rc)
+		elems, err = b.resolveInterface(ctx, element, rc)
 	case *Call:
-		return b.resolveCall(ctx, element, rc)
+		elems, err = b.resolveCall(ctx, element, rc )
 	default:
-		fmt.Println("element_resolver not supported element", element.GetType(), "Range:", element.GetRange())
-		return nil, fmt.Errorf("element_resover not supported element %v", element)
+		rootCap := rc.Match.Captures[0]
+		updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
+		err = fmt.Errorf("[resolver] unsupported element: type=%s | path=%s | range=%v ",
+			element.GetType(), element.GetPath(), element.GetRange())
+		return nil, err
 	}
+	return FilterValidElems(elems, rc.Logger), err
 }
 
 // IsValidElement 检查必须字段

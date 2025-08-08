@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"codebase-indexer/pkg/codegraph/types"
+	"codebase-indexer/pkg/logger"
 	"fmt"
 	"regexp"
 	"strings"
@@ -285,25 +286,40 @@ func findAllTypeIdentifiers(node *sitter.Node, content []byte) []string {
 	return identifiers
 }
 
-func AppendValidElems[T Element](dst []Element, src []T) []Element {
-	for _, v := range src { // 这里 v 是 T，不是切片
+func FilterValidElems(elems []Element, logger logger.Logger) []Element {
+	var validElems []Element
+	for _, v := range elems {
 		if IsValidElement(v) {
-			dst = append(dst, v) // 隐式转换 T → Element
+			validElems = append(validElems, v)
 		} else {
-			// TODO 打印到日志
-			fmt.Printf("┌─ %s  %s\n│  %s\n└─ %v  scope=%s\n",
-			v.GetType(), v.GetName(), v.GetPath(), v.GetRange(), v.GetScope())
+			// 格式化输出，空值显示为 <empty>
+			name := v.GetName()
+			if name == types.EmptyString {
+				name = "<empty>"
+			}
+			elemType := v.GetType()
+			if elemType == types.EmptyString {
+				elemType = "<empty>"
+			}
+			path := v.GetPath()
+			if path == types.EmptyString {
+				path = "<empty>"
+			}
+			scope := v.GetScope()
+			if scope == types.EmptyString {
+				scope = "<empty>"
+			}
+			
+			logger.Warn(
+				"INVALID ELEMENT | type=%s | name=%s | path=%s | range=%v | scope=%s",
+				elemType,
+				name,
+				path,
+				v.GetRange(),
+				scope,
+			)
+
 		}
 	}
-	return dst
-}
-func ToElements[T Element](in []T) []Element {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]Element, len(in))
-	for i, v := range in {
-		out[i] = v // 直接赋值，合法无歧义
-	}
-	return out
+	return validElems
 }

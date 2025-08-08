@@ -71,11 +71,7 @@ func TestIndexGoProjects(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-<<<<<<< HEAD
-			_, err = indexer.IndexWorkspace(context.Background(), tc.Path)
-=======
 			_,  err = indexer.IndexWorkspace(context.Background(), tc.Path)
->>>>>>> origin/main
 			assert.NoError(t, err)
 			summary, err := indexer.GetSummary(context.Background(), tc.Path)
 			assert.NoError(t, err)
@@ -125,7 +121,7 @@ func TestWalkProjectCostTime(t *testing.T) {
 					tt.logic(t, env, walkCtx)
 				}
 				return nil
-			}, types.WalkOptions{IgnoreError: true, VisitPattern: types.VisitPattern{ExcludeDirs: excludeDir, IncludeExts: []string{".go"}}})
+			}, types.WalkOptions{IgnoreError: true, VisitPattern: &types.VisitPattern{ExcludeDirs: excludeDir, IncludeExts: []string{".go"}}})
 			assert.NoError(t, err)
 			t.Logf("%s cost %d ms, %d files, avg %.2f ms/file", tt.name, time.Since(start).Milliseconds(), fileCnt,
 				float32(time.Since(start).Milliseconds())/float32(fileCnt))

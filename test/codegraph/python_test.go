@@ -44,13 +44,17 @@ func TestParsePythonProjectFiles(t *testing.T) {
 			Path:    filepath.Join(PythonProjectRootDir, "scikit-learn"),
 			wantErr: nil,
 		},
+		{
+			Name:    "airflow",
+			Path:    filepath.Join(PythonProjectRootDir, "airflow"),
+			wantErr: nil,
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			start := time.Now()
 			project := NewTestProject(tc.Path, env.logger)
 			fileElements, _, err := indexer.ParseProjectFiles(context.Background(), project)
-			fmt.Println("err:", err)
 			err = exportFileElements(defaultExportDir, tc.Name, fileElements)
 			duration := time.Since(start)
 			fmt.Printf("测试用例 '%s' 执行时间: %v, 文件个数: %d\n", tc.Name, duration, len(fileElements))
