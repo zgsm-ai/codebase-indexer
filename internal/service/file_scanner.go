@@ -231,7 +231,7 @@ func (ws *fileScanService) updateExistingEvent(existingEvent, newEvent *model.Ev
 		return ws.eventRepo.CreateEvent(newEvent)
 	}
 
-	ws.logger.Info("update existing event for path: %s, type: %s, embedding status: %s", existingEvent.SourceFilePath, newEvent.EventType, existingEvent.EmbeddingStatus)
+	ws.logger.Info("update existing event for path: %s, type: %s, embedding status: %s", existingEvent.SourceFilePath, newEvent.EventType, model.EmbeddingStatusInitStr)
 	// 更新事件类型和其他必要信息
 	updateEvent := &model.Event{
 		ID:              existingEvent.ID,

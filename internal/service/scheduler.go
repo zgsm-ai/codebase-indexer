@@ -399,7 +399,7 @@ func (s *Scheduler) CreateChangesZip(config *config.CodebaseConfig, changes []*u
 		return "", err
 	}
 
-	zipPath := filepath.Join(zipDir, config.CodebaseId+"-"+time.Now().Format("20060102150405")+".zip")
+	zipPath := filepath.Join(zipDir, config.CodebaseId+"-"+time.Now().Format("20060102150405.000000")+".zip")
 	zipFile, err := os.Create(zipPath)
 	if err != nil {
 		return "", err
@@ -450,7 +450,7 @@ func (s *Scheduler) CreateChangesZip(config *config.CodebaseConfig, changes []*u
 		return "", err
 	}
 
-	metadataFilePath := ".shenma_sync/" + time.Now().Format("20060102150405")
+	metadataFilePath := ".shenma_sync/" + time.Now().Format("20060102150405.000000")
 	metadataWriter, err := zipWriter.Create(metadataFilePath)
 	if err != nil {
 		return "", err
@@ -563,7 +563,7 @@ func (s *Scheduler) CreateSingleFileZip(config *config.CodebaseConfig, fileStatu
 		return "", err
 	}
 
-	zipPath := filepath.Join(zipDir, config.CodebaseId+"-"+time.Now().Format("20060102150405")+".zip")
+	zipPath := filepath.Join(zipDir, config.CodebaseId+"-"+time.Now().Format("20060102150405.000000")+".zip")
 	zipFile, err := os.Create(zipPath)
 	if err != nil {
 		return "", err
@@ -571,9 +571,11 @@ func (s *Scheduler) CreateSingleFileZip(config *config.CodebaseConfig, fileStatu
 
 	// 确保清理临时ZIP文件
 	cleanup := func() {
-		if _, statErr := os.Stat(zipPath); statErr == nil {
-			_ = os.Remove(zipPath)
-			s.logger.Info("temp zip file deleted successfully: %s", zipPath)
+		if err != nil {
+			if _, statErr := os.Stat(zipPath); statErr == nil {
+				_ = os.Remove(zipPath)
+				s.logger.Info("temp zip file deleted successfully: %s", zipPath)
+			}
 		}
 	}
 	defer cleanup()
@@ -610,7 +612,7 @@ func (s *Scheduler) CreateSingleFileZip(config *config.CodebaseConfig, fileStatu
 		return "", err
 	}
 
-	metadataFilePath := ".shenma_sync/" + time.Now().Format("20060102150405")
+	metadataFilePath := ".shenma_sync/" + time.Now().Format("20060102150405.000000")
 	metadataWriter, err := zipWriter.Create(metadataFilePath)
 	if err != nil {
 		return "", err

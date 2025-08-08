@@ -135,8 +135,20 @@ func (us *uploadService) UploadFileWithRetry(workspacePath string, filePath stri
 
 func (us *uploadService) DeleteFileWithRetry(workspacePath string, filePath string, maxRetries int) (string, error) {
 	fileStatus := &utils.FileStatus{
-		Path:   filepath.Join(workspacePath, filePath),
+		Path:   filePath,
 		Status: utils.FILE_STATUS_DELETED,
+	}
+
+	// 6. 获取上传令牌
+	tokenReq := dto.UploadTokenReq{
+		ClientId:     us.config.ClientId,
+		CodebasePath: workspacePath,
+		CodebaseName: filepath.Base(workspacePath),
+	}
+
+	tokenResp, err := us.syncer.FetchUploadToken(tokenReq)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch upload token: %w", err)
 	}
 
 	// 4. 创建临时的 codebase 配置
@@ -164,17 +176,6 @@ func (us *uploadService) DeleteFileWithRetry(workspacePath string, filePath stri
 			}
 		}
 	}()
-
-	// 6. 获取上传令牌
-	tokenReq := dto.UploadTokenReq{
-		ClientId:     us.config.ClientId,
-		CodebasePath: workspacePath,
-	}
-
-	tokenResp, err := us.syncer.FetchUploadToken(tokenReq)
-	if err != nil {
-		return "", fmt.Errorf("failed to fetch upload token: %w", err)
-	}
 
 	// 7. 上传文件
 	requestId, err := utils.GenerateUUID()
@@ -222,9 +223,20 @@ func (us *uploadService) uploadSingleFile(workspacePath string, filePath string)
 
 	// TODO：获取文件哈希值
 
+	// 6. 获取上传令牌
+	tokenReq := dto.UploadTokenReq{
+		ClientId:     us.config.ClientId,
+		CodebasePath: workspacePath,
+		CodebaseName: filepath.Base(workspacePath),
+	}
+	tokenResp, err := us.syncer.FetchUploadToken(tokenReq)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch upload token: %w", err)
+	}
+
 	// 3. 创建文件变更对象
 	fileStatus := &utils.FileStatus{
-		Path:   fullPath,
+		Path:   filePath,
 		Status: utils.FILE_STATUS_MODIFIED,
 	}
 
@@ -254,23 +266,13 @@ func (us *uploadService) uploadSingleFile(workspacePath string, filePath string)
 		}
 	}()
 
-	// 6. 获取上传令牌
-	tokenReq := dto.UploadTokenReq{
-		ClientId:     us.config.ClientId,
-		CodebasePath: workspacePath,
-	}
-
-	tokenResp, err := us.syncer.FetchUploadToken(tokenReq)
-	if err != nil {
-		return "", fmt.Errorf("failed to fetch upload token: %w", err)
-	}
-
 	// 7. 上传文件
 	requestId, err := utils.GenerateUUID()
 	if err != nil {
 		us.logger.Warn("failed to generate upload request ID, using timestamp: %v", err)
-		requestId = time.Now().Format("20060102150405000")
+		requestId = time.Now().Format("20060102150405.000")
 	}
+	us.logger.Info("upload request ID: %s", requestId)
 	uploadReq := dto.UploadReq{
 		ClientId:     us.config.ClientId,
 		CodebasePath: workspacePath,
@@ -491,7 +493,6 @@ func (us *uploadService) RenameFileWithRetry(workspacePath string, oldFilePath s
 
 // renameSingleFile 单文件重命名算法
 func (us *uploadService) renameSingleFile(workspacePath string, oldFilePath string, newFilePath string) (string, error) {
-	oldFullPath := filepath.Join(workspacePath, oldFilePath)
 	// 2. 验证新文件路径的目录是否存在
 	newFullPath := filepath.Join(workspacePath, newFilePath)
 	newDir := filepath.Dir(newFullPath)
@@ -512,8 +513,8 @@ func (us *uploadService) renameSingleFile(workspacePath string, oldFilePath stri
 
 	// 4. 创建文件重命名对象
 	fileStatus := &utils.FileStatus{
-		Path:       oldFullPath,
-		TargetPath: newFullPath,
+		Path:       oldFilePath,
+		TargetPath: newFilePath,
 		Status:     utils.FILE_STATUS_RENAME,
 	}
 
@@ -547,6 +548,7 @@ func (us *uploadService) renameSingleFile(workspacePath string, oldFilePath stri
 	tokenReq := dto.UploadTokenReq{
 		ClientId:     us.config.ClientId,
 		CodebasePath: workspacePath,
+		CodebaseName: filepath.Base(workspacePath),
 	}
 
 	tokenResp, err := us.syncer.FetchUploadToken(tokenReq)

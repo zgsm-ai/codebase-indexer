@@ -575,6 +575,12 @@ func (r *eventRepository) UpdateEvent(event *model.Event) error {
 		args = append(args, event.CodegraphStatus)
 	}
 
+	// 检查sync_id是否为非默认值
+	if event.SyncId != "" {
+		setClauses = append(setClauses, "sync_id = ?")
+		args = append(args, event.SyncId)
+	}
+
 	// 如果没有需要更新的字段，直接返回
 	if len(setClauses) == 0 {
 		return nil

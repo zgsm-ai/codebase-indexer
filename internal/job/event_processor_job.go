@@ -46,6 +46,9 @@ func (j *EventProcessorJob) Start() {
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
 
+		// 立即执行一次事件处理
+		j.embeddingProcessWorkspaces()
+
 		for {
 			select {
 			case <-j.ctx.Done():

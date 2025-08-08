@@ -10,12 +10,30 @@ const (
 	EmbeddingStatusSuccess      = 6 // 构建成功
 )
 
+// EmbeddingStatus 语义构建状态常量字符串
+const (
+	EmbeddingStatusInitStr         = "init"
+	EmbeddingStatusUploadingStr    = "uploading"
+	EmbeddingStatusBuildingStr     = "building"
+	EmbeddingStatusUploadFailedStr = "uploadFailed"
+	EmbeddingStatusBuildFailedStr  = "buildFailed"
+	EmbeddingStatusSuccessStr      = "success"
+)
+
 // CodegraphStatus 代码构建状态常量
 const (
 	CodegraphStatusInit     = 1 // 初始化
 	CodegraphStatusBuilding = 2 // 构建中
 	CodegraphStatusFailed   = 3 // 构建失败
 	CodegraphStatusSuccess  = 4 // 构建成功
+)
+
+// CodegraphStatusStr 代码构建状态常量字符串
+const (
+	CodegraphStatusInitStr     = "init"
+	CodegraphStatusBuildingStr = "building"
+	CodegraphStatusFailedStr   = "failed"
+	CodegraphStatusSuccessStr  = "success"
 )
 
 // EventType 事件类型常量
@@ -30,3 +48,37 @@ const (
 )
 
 const True = "true"
+
+func GetEmbeddingStatusString(status int) string {
+	switch status {
+	case EmbeddingStatusInit:
+		return EmbeddingStatusInitStr
+	case EmbeddingStatusUploading:
+		return EmbeddingStatusUploadingStr
+	case EmbeddingStatusBuilding:
+		return EmbeddingStatusBuildingStr
+	case EmbeddingStatusUploadFailed:
+		return EmbeddingStatusUploadFailedStr
+	case EmbeddingStatusBuildFailed:
+		return EmbeddingStatusBuildFailedStr
+	case EmbeddingStatusSuccess:
+		return EmbeddingStatusSuccessStr
+	default:
+		return "unknown"
+	}
+}
+
+func GetCodegraphStatusString(status int) string {
+	switch status {
+	case CodegraphStatusInit:
+		return CodegraphStatusInitStr
+	case CodegraphStatusBuilding:
+		return CodegraphStatusBuildingStr
+	case CodegraphStatusFailed:
+		return CodegraphStatusFailedStr
+	case CodegraphStatusSuccess:
+		return CodegraphStatusSuccessStr
+	default:
+		return "unknown"
+	}
+}
