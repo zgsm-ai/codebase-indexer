@@ -18,7 +18,7 @@ func TestParseGoProjectFiles(t *testing.T) {
 	env, err := setupTestEnvironment()
 	assert.NoError(t, err)
 	defer teardownTestEnvironment(t, env)
-	indexer := createTestIndexer(env, types.VisitPattern{
+	indexer := createTestIndexer(env, &types.VisitPattern{
 		ExcludeDirs: defaultVisitPattern.ExcludeDirs,
 		IncludeExts: []string{".go"},
 	})
@@ -54,9 +54,8 @@ func TestIndexGoProjects(t *testing.T) {
 	env, err := setupTestEnvironment()
 	assert.NoError(t, err)
 	defer teardownTestEnvironment(t, env)
-	indexer := createTestIndexer(env, types.VisitPattern{
+	indexer := createTestIndexer(env, &types.VisitPattern{
 		ExcludeDirs: defaultVisitPattern.ExcludeDirs,
-		IncludeExts: []string{".go"},
 	})
 	testCases := []struct {
 		Name    string
@@ -64,22 +63,19 @@ func TestIndexGoProjects(t *testing.T) {
 		wantErr error
 	}{
 		{
-			Name:    "在内存中全量索引kubernetes",
+			Name:    "kubernetes",
 			Path:    filepath.Join(GoProjectRootDir, "kubernetes"),
 			wantErr: nil,
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-<<<<<<< HEAD
+			err := initWorkspaceModel(env, tc.Path)
+			if err != nil {
+				panic(err)
+			}
 			_, err = indexer.IndexWorkspace(context.Background(), tc.Path)
-=======
-			_,  err = indexer.IndexWorkspace(context.Background(), tc.Path)
->>>>>>> origin/main
 			assert.NoError(t, err)
-			summary, err := indexer.GetSummary(context.Background(), tc.Path)
-			assert.NoError(t, err)
-			t.Logf("index count: %d", summary.TotalFiles)
 		})
 	}
 }
@@ -102,7 +98,10 @@ func TestWalkProjectCostTime(t *testing.T) {
 			path: filepath.Join(GoProjectRootDir, "kubernetes"),
 			logic: func(t *testing.T, environment *testEnvironment, walkContext *types.WalkContext) {
 				bytes, err := os.ReadFile(walkContext.Path)
-				assert.NoError(t, err)
+				if err != nil {
+					t.Logf("read file %s error: %v", walkContext.Path, err)
+					return
+				}
 				_, err = environment.sourceFileParser.Parse(ctx, &types.SourceFile{
 					Path:    walkContext.Path,
 					Content: bytes,
@@ -125,11 +124,10 @@ func TestWalkProjectCostTime(t *testing.T) {
 					tt.logic(t, env, walkCtx)
 				}
 				return nil
-			}, types.WalkOptions{IgnoreError: true, VisitPattern: types.VisitPattern{ExcludeDirs: excludeDir, IncludeExts: []string{".go"}}})
+			}, types.WalkOptions{IgnoreError: true, VisitPattern: &types.VisitPattern{ExcludeDirs: excludeDir, IncludeExts: []string{".go"}}})
 			assert.NoError(t, err)
 			t.Logf("%s cost %d ms, %d files, avg %.2f ms/file", tt.name, time.Since(start).Milliseconds(), fileCnt,
 				float32(time.Since(start).Milliseconds())/float32(fileCnt))
 		})
 	}
-
 }

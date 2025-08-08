@@ -263,31 +263,15 @@ func TestIndexer_IndexWorkspace(t *testing.T) {
 	// 设置测试环境
 	env := setupTestEnvironment(t)
 
-	workspaceModel, err := env.repository.GetWorkspaceByPath(env.workspaceDir)
-	if workspaceModel == nil {
-		// 初始化workspace
-		err := env.repository.CreateWorkspace(&model.Workspace{
-			WorkspaceName: "codebase-indexer",
-			WorkspacePath: env.workspaceDir,
-			Active:        "true",
-			FileNum:       100,
-		})
-		if err != nil {
-			panic(err)
-		}
-	} else {
-		// 置为 0
-		err := env.repository.UpdateCodegraphInfo(env.workspaceDir, 0, time.Now().Unix())
-		if err != nil {
-			panic(err)
-		}
+	if err := initWorkspaceModel(env); err != nil {
+		panic(err)
 	}
 
 	// 创建测试索引器
 	indexer := createTestIndexer(env, testVisitPattern)
 
 	// 测试 IndexWorkspace - 索引整个工作区
-	_, err = indexer.IndexWorkspace(context.Background(), env.workspaceDir)
+	_, err := indexer.IndexWorkspace(context.Background(), env.workspaceDir)
 	assert.NoError(t, err)
 
 	// 查找工作区中的项目
@@ -298,6 +282,29 @@ func TestIndexer_IndexWorkspace(t *testing.T) {
 
 	// 清理测试环境
 	teardownTestEnvironment(t, env, projects)
+}
+
+func initWorkspaceModel(env *testEnvironment) error {
+	workspaceModel, err := env.repository.GetWorkspaceByPath(env.workspaceDir)
+	if workspaceModel == nil {
+		// 初始化workspace
+		err := env.repository.CreateWorkspace(&model.Workspace{
+			WorkspaceName: "codebase-indexer",
+			WorkspacePath: env.workspaceDir,
+			Active:        "true",
+			FileNum:       100,
+		})
+		if err != nil {
+			return err
+		}
+	} else {
+		// 置为 0
+		err := env.repository.UpdateCodegraphInfo(env.workspaceDir, 0, time.Now().Unix())
+		if err != nil {
+			return err
+		}
+	}
+	return err
 }
 
 func TestIndexer_IndexProjectFilesWhenProjectHasIndex(t *testing.T) {

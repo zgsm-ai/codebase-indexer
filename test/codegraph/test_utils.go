@@ -1,6 +1,10 @@
 package codegraph
 
 import (
+	"codebase-indexer/internal/config"
+	"codebase-indexer/internal/database"
+	"codebase-indexer/internal/model"
+	"codebase-indexer/internal/repository"
 	"codebase-indexer/pkg/codegraph"
 	"codebase-indexer/pkg/codegraph/analyzer"
 	packageclassifier "codebase-indexer/pkg/codegraph/analyzer/package_classifier"
@@ -33,6 +37,7 @@ type testEnvironment struct {
 	storageDir         string
 	logger             logger.Logger
 	storage            store.GraphStorage
+	repository         repository.WorkspaceRepository
 	workspaceReader    *workspace.WorkspaceReader
 	sourceFileParser   *parser.SourceFileParser
 	dependencyAnalyzer *analyzer.DependencyAnalyzer
@@ -66,12 +71,22 @@ func setupTestEnvironment() (*testEnvironment, error) {
 	// 创建依赖分析器
 	dependencyAnalyzer := analyzer.NewDependencyAnalyzer(newLogger, packageClassifier, workspaceReader, storage)
 
+	dbConfig := config.DefaultDatabaseConfig()
+	dbManager := database.NewSQLiteManager(dbConfig, newLogger)
+	err = dbManager.Initialize()
+	if err != nil {
+		panic(err)
+	}
+	// Initialize repositories
+	workspaceRepo := repository.NewWorkspaceRepository(dbManager, newLogger)
+
 	return &testEnvironment{
 		ctx:                ctx,
 		cancel:             cancel,
 		storageDir:         storageDir,
 		logger:             newLogger,
 		storage:            storage,
+		repository:         workspaceRepo,
 		workspaceReader:    workspaceReader,
 		sourceFileParser:   sourceFileParser,
 		dependencyAnalyzer: dependencyAnalyzer,
@@ -79,13 +94,18 @@ func setupTestEnvironment() (*testEnvironment, error) {
 }
 
 // createTestIndexer 创建测试用的索引器
-func createTestIndexer(env *testEnvironment, visitPattern types.VisitPattern) *codegraph.Indexer {
+func createTestIndexer(env *testEnvironment, visitPattern *types.VisitPattern) *codegraph.Indexer {
 	return codegraph.NewCodeIndexer(
 		env.sourceFileParser,
 		env.dependencyAnalyzer,
 		env.workspaceReader,
 		env.storage,
-		codegraph.IndexerConfig{VisitPattern: visitPattern},
+		env.repository,
+		codegraph.IndexerConfig{VisitPattern: visitPattern, BatchSize: 2, MaxConcurrency: 2},
+		// 2,2, 300s， 20% cpu ,500MB内存占用；
+		// 2
+
+		// 100,10 156s ,  70% cpu , 500MB内存占用；
 		env.logger,
 	)
 }
@@ -133,4 +153,27 @@ func exportFileElements(path string, project string, elements []*parser.FileElem
 		return err
 	}
 	return nil
+}
+
+func initWorkspaceModel(env *testEnvironment, workspaceDir string) error {
+	workspaceModel, err := env.repository.GetWorkspaceByPath(workspaceDir)
+	if workspaceModel == nil {
+		// 初始化workspace
+		err := env.repository.CreateWorkspace(&model.Workspace{
+			WorkspaceName: "codebase-indexer",
+			WorkspacePath: workspaceDir,
+			Active:        "true",
+			FileNum:       100,
+		})
+		if err != nil {
+			return err
+		}
+	} else {
+		// 置为 0
+		err := env.repository.UpdateCodegraphInfo(workspaceDir, 0, time.Now().Unix())
+		if err != nil {
+			return err
+		}
+	}
+	return err
 }

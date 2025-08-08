@@ -18,7 +18,7 @@ func TestParsePythonProjectFiles(t *testing.T) {
 	env, err := setupTestEnvironment()
 	assert.NoError(t, err)
 	defer teardownTestEnvironment(t, env)
-	indexer := createTestIndexer(env, types.VisitPattern{
+	indexer := createTestIndexer(env, &types.VisitPattern{
 		ExcludeDirs: defaultVisitPattern.ExcludeDirs,
 		IncludeExts: []string{".py"},
 	})

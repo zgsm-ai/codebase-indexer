@@ -39,8 +39,9 @@ func NewDependencyAnalyzer(logger logger.Logger,
 }
 
 func (da *DependencyAnalyzer) Analyze(ctx context.Context,
-	projectUuid string, fileElementTables []*codegraphpb.FileElementTable) error {
+	projectUuid string, fileElementTables []*codegraphpb.FileElementTable) ([]*codegraphpb.FileElementTable, error) {
 
+	updatedElementTables := append([]*codegraphpb.FileElementTable{}, fileElementTables...)
 	// 迭代符号表，去解析依赖关系。 需要区分跨文件依赖、当前文件引用。
 	// 优先根据名字做匹配，匹配到多个，再根据作用域、导入、包、别名等信息进行二次过滤。
 	for _, fileTable := range fileElementTables {
@@ -65,7 +66,12 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context,
 				}
 
 				for _, d := range foundElements {
-					bindRelation(&RichElement{Element: e, Path: currentPath}, d,
+					toElement, foundTable := da.findElementTable(ctx, projectUuid, d, fileTable)
+					if foundTable != nil {
+						updatedElementTables = append(updatedElementTables, foundTable)
+					}
+
+					bindRelation(&RichElement{Element: e, Path: currentPath}, toElement,
 						codegraphpb.RelationType_RELATION_TYPE_REFERENCE,
 						codegraphpb.RelationType_RELATION_TYPE_DEFINITION)
 				}
@@ -82,7 +88,11 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context,
 				}
 
 				for _, d := range foundElements {
-					bindRelation(&RichElement{Element: e, Path: currentPath}, d,
+					toElement, foundTable := da.findElementTable(ctx, projectUuid, d, fileTable)
+					if foundTable != nil {
+						updatedElementTables = append(updatedElementTables, foundTable)
+					}
+					bindRelation(&RichElement{Element: e, Path: currentPath}, toElement,
 						codegraphpb.RelationType_RELATION_TYPE_REFERENCE,
 						codegraphpb.RelationType_RELATION_TYPE_DEFINITION)
 				}
@@ -104,7 +114,11 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context,
 							continue
 						}
 						for _, d := range foundElements {
-							bindRelation(&RichElement{Element: e, Path: currentPath}, d,
+							toElement, foundTable := da.findElementTable(ctx, projectUuid, d, fileTable)
+							if foundTable != nil {
+								updatedElementTables = append(updatedElementTables, foundTable)
+							}
+							bindRelation(&RichElement{Element: e, Path: currentPath}, toElement,
 								codegraphpb.RelationType_RELATION_TYPE_INHERIT,
 								codegraphpb.RelationType_RELATION_TYPE_SUPER_CLASS)
 						}
@@ -125,7 +139,11 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context,
 							continue
 						}
 						for _, d := range foundElements {
-							bindRelation(&RichElement{Element: e, Path: currentPath}, d,
+							toElement, foundTable := da.findElementTable(ctx, projectUuid, d, fileTable)
+							if foundTable != nil {
+								updatedElementTables = append(updatedElementTables, foundTable)
+							}
+							bindRelation(&RichElement{Element: e, Path: currentPath}, toElement,
 								codegraphpb.RelationType_RELATION_TYPE_IMPLEMENT,
 								codegraphpb.RelationType_RELATION_TYPE_SUPER_INTERFACE)
 						}
@@ -149,7 +167,11 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context,
 							continue
 						}
 						for _, d := range foundElements {
-							bindRelation(&RichElement{Element: e, Path: currentPath}, d,
+							toElement, foundTable := da.findElementTable(ctx, projectUuid, d, fileTable)
+							if foundTable != nil {
+								updatedElementTables = append(updatedElementTables, foundTable)
+							}
+							bindRelation(&RichElement{Element: e, Path: currentPath}, toElement,
 								codegraphpb.RelationType_RELATION_TYPE_IMPLEMENT,
 								codegraphpb.RelationType_RELATION_TYPE_SUPER_INTERFACE)
 						}
@@ -159,7 +181,35 @@ func (da *DependencyAnalyzer) Analyze(ctx context.Context,
 		}
 	}
 
-	return nil
+	return updatedElementTables, nil
+}
+
+func (da *DependencyAnalyzer) findElementTable(ctx context.Context, projectUuid string, d *RichElement,
+	fromTable *codegraphpb.FileElementTable) (*RichElement, *codegraphpb.FileElementTable) {
+	// 找到d 对应的fileElementTable，和它真实的element，进行更新
+	var dFileTable codegraphpb.FileElementTable
+	found := false
+	bytes, err := da.store.Get(ctx, projectUuid, store.ElementPathKey{Path: d.Path, Language: lang.Language(fromTable.Language)})
+	toElement := d
+	if err != nil {
+		da.logger.Debug("dependency_analyze get referred element %s file_element_table err:%v", d.Path, err)
+	} else {
+		if err := store.UnmarshalValue(bytes, &dFileTable); err != nil {
+			da.logger.Debug("dependency_analyze unmarshal referred element %s file_element_table err:%v", d.Path, err)
+		} else {
+			for _, element := range dFileTable.Elements {
+				if element.Name == d.Name && utils.SliceEqual(element.Range, d.Range) {
+					toElement = &RichElement{Element: element, Path: d.Path}
+					found = true
+					break
+				}
+			}
+		}
+	}
+	if found {
+		return toElement, &dFileTable
+	}
+	return toElement, nil
 }
 
 // SaveSymbolDefinitions 保存符号定义位置

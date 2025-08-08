@@ -172,9 +172,11 @@ func FileElementTablesToProto(fileElementTables []*parser.FileElementTable) []*c
 			Path:      ft.Path,
 			Language:  string(ft.Language),
 			Timestamp: time.Now().Unix(),
-			Package:   &codegraphpb.Package{Name: ft.Package.Name, Range: ft.Package.Range},
 			Elements:  make([]*codegraphpb.Element, len(ft.Elements)),
 			Imports:   make([]*codegraphpb.Import, len(ft.Imports)),
+		}
+		if ft.Package != nil {
+			pft.Package = &codegraphpb.Package{Name: ft.Package.Name, Range: ft.Package.Range}
 		}
 
 		for i, imp := range ft.Imports {

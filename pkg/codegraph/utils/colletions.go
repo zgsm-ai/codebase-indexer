@@ -26,3 +26,15 @@ func SliceToString(slice []int32) string {
 	}
 	return strings.Join(strs, ",")
 }
+
+func SliceEqual(a, b []int32) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
