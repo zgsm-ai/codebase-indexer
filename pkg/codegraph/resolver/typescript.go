@@ -588,10 +588,10 @@ func parseTypeScriptMethodNode(node *sitter.Node, content []byte, className stri
 				continue
 			}
 			parameter := Parameter{
-				Name: string(patternNode.Utf8Text(content)),
+				Name: patternNode.Utf8Text(content),
 				Type: []string{},
 			}
-			typeContent := strings.TrimPrefix(string(patternType.Utf8Text(content)), types.Colon)
+			typeContent := strings.TrimPrefix(patternType.Utf8Text(content), types.Colon)
 			typeContent = strings.TrimSpace(typeContent)
 			if isTypeScriptPrimitiveType(typeContent) {
 				parameter.Type = []string{types.PrimitiveType}
@@ -604,7 +604,7 @@ func parseTypeScriptMethodNode(node *sitter.Node, content []byte, className stri
 	// 查找返回类型
 	returnNode := node.ChildByFieldName("return_type")
 	if returnNode != nil {
-		returnContent := string(returnNode.Utf8Text(content))
+		returnContent := returnNode.Utf8Text(content)
 		if isTypeScriptPrimitiveType(returnContent) {
 			method.ReturnType = []string{types.PrimitiveType}
 		} else {
@@ -679,7 +679,7 @@ func parseTypeScriptPropertySignatureNode(node *sitter.Node, content []byte) (*F
 		return field, ref, method
 	}
 
-	typeContent := strings.TrimPrefix(string(typeNode.Utf8Text(content)), types.Colon)
+	typeContent := strings.TrimPrefix(typeNode.Utf8Text(content), types.Colon)
 	typeContent = strings.TrimSpace(typeContent)
 	if isTypeScriptPrimitiveType(typeContent) {
 		field.Type = types.PrimitiveType
@@ -836,7 +836,12 @@ func parseRequiredParameterNode(paramNode *sitter.Node, content []byte) Paramete
 			}
 			if restIdNode != nil {
 				paramName = restIdNode.Utf8Text(content)
+			} else {
+				// 如果找不到标识符节点，使用整个模式节点的文本
+				paramName = patternNode.Utf8Text(content)
 			}
+		} else {
+			// 普通参数
 			paramName = patternNode.Utf8Text(content)
 		}
 	}
@@ -872,7 +877,7 @@ func isNodeDelimiter(node *sitter.Node) bool {
 // parseReturnTypeNode 解析类型节点
 func parseReturnTypeNode(node *sitter.Node, content []byte) []string {
 	// 获取类型文本
-	typeText := string(node.Utf8Text(content))
+	typeText := node.Utf8Text(content)
 	typeText = strings.TrimPrefix(typeText, types.Colon)
 	typeText = strings.TrimSpace(typeText)
 	typeText = strings.TrimPrefix(typeText, types.EmailAt)
