@@ -3,6 +3,7 @@ package pool
 import (
 	"codebase-indexer/pkg/logger"
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -160,7 +161,7 @@ func TestTaskPool_SubmitAfterClose(t *testing.T) {
 		t.Error("Expected submission to fail but no error was returned")
 	}
 
-	if err != ErrPoolClosed {
+	if !errors.Is(err, ErrPoolClosed) {
 		t.Errorf("Expected error mismatch, got: %v", err)
 	}
 }
