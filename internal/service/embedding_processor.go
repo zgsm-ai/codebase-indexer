@@ -1,12 +1,11 @@
 package service
 
 import (
-	"crypto/md5"
 	"fmt"
-	"path/filepath"
 
 	"codebase-indexer/internal/model"
 	"codebase-indexer/internal/repository"
+	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/logger"
 )
 
@@ -72,34 +71,28 @@ func (ep *embeddingProcessService) ProcessAddFileEvent(event *model.Event) error
 	ep.logger.Info("processing add file event: %s", event.SourceFilePath)
 
 	// 更新事件状态为上传中
-	originalStatus := event.EmbeddingStatus
-	event.EmbeddingStatus = model.EmbeddingStatusUploading
-	err := ep.eventRepo.UpdateEvent(event)
+	updateEvent := model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusUploading}
+	err := ep.eventRepo.UpdateEvent(&updateEvent)
 	if err != nil {
-		event.EmbeddingStatus = originalStatus
-		ep.logger.Error("failed to update event status to uploading for add file event %d: %v", event.ID, err)
-		return fmt.Errorf("failed to update event status: %w", err)
+		return fmt.Errorf("failed to update event status to uploading: %w", err)
 	}
 
 	// 调用上报逻辑进行上报
 	syncId, err := ep.uploadService.UploadFileWithRetry(event.WorkspacePath, event.SourceFilePath, 3)
 	if err != nil {
 		// 上报失败，更新事件状态为上报失败
-		event.EmbeddingStatus = model.EmbeddingStatusUploadFailed
-		updateErr := ep.eventRepo.UpdateEvent(event)
+		updateEvent := model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusUploadFailed}
+		updateErr := ep.eventRepo.UpdateEvent(&updateEvent)
 		if updateErr != nil {
-			ep.logger.Error("failed to update event status to upload failed for add file event %d: %v", event.ID, updateErr)
+			return fmt.Errorf("failed to update event status to uploadFailed: %w", updateErr)
 		}
-		ep.logger.Error("failed to upload modified file %s: %v", event.SourceFilePath, err)
-		return fmt.Errorf("failed to upload modified file: %w", err)
+		return fmt.Errorf("failed to upload add file %s: %w", event.SourceFilePath, err)
 	}
 
-	event.EmbeddingStatus = model.EmbeddingStatusBuilding
-	event.SyncId = syncId
-	err = ep.eventRepo.UpdateEvent(event)
+	updateEvent = model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusBuilding, SyncId: syncId}
+	err = ep.eventRepo.UpdateEvent(&updateEvent)
 	if err != nil {
-		ep.logger.Error("failed to update event status to building for add file event %d: %v", event.ID, err)
-		return fmt.Errorf("failed to update event status: %w", err)
+		return fmt.Errorf("failed to update event status to building: %w", err)
 	}
 
 	return nil
@@ -110,34 +103,28 @@ func (ep *embeddingProcessService) ProcessModifyFileEvent(event *model.Event) er
 	ep.logger.Info("processing modify file event: %s", event.SourceFilePath)
 
 	// 更新事件状态为上传中
-	originalStatus := event.EmbeddingStatus
-	event.EmbeddingStatus = model.EmbeddingStatusUploading
-	err := ep.eventRepo.UpdateEvent(event)
+	updateEvent := model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusUploading}
+	err := ep.eventRepo.UpdateEvent(&updateEvent)
 	if err != nil {
-		event.EmbeddingStatus = originalStatus
-		ep.logger.Error("failed to update event status to uploading for modify file event %d: %v", event.ID, err)
-		return fmt.Errorf("failed to update event status: %w", err)
+		return fmt.Errorf("failed to update event status to uploading: %w", err)
 	}
 
 	// 调用上报逻辑进行上报
 	syncId, err := ep.uploadService.UploadFileWithRetry(event.WorkspacePath, event.SourceFilePath, 3)
 	if err != nil {
 		// 上报失败，更新事件状态为上报失败
-		event.EmbeddingStatus = model.EmbeddingStatusUploadFailed
-		updateErr := ep.eventRepo.UpdateEvent(event)
+		updateEvent := model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusUploadFailed}
+		updateErr := ep.eventRepo.UpdateEvent(&updateEvent)
 		if updateErr != nil {
-			ep.logger.Error("failed to update event status to upload failed for modify file event %d: %v", event.ID, updateErr)
+			return fmt.Errorf("failed to update event status to upload failed: %w", updateErr)
 		}
-		ep.logger.Error("failed to upload modified file %s: %v", event.SourceFilePath, err)
-		return fmt.Errorf("failed to upload modified file: %w", err)
+		return fmt.Errorf("failed to upload modified file %s: %w", event.SourceFilePath, err)
 	}
 
-	event.EmbeddingStatus = model.EmbeddingStatusBuilding
-	event.SyncId = syncId
-	err = ep.eventRepo.UpdateEvent(event)
+	updateEvent = model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusBuilding, SyncId: syncId}
+	err = ep.eventRepo.UpdateEvent(&updateEvent)
 	if err != nil {
-		ep.logger.Error("failed to update event status to building for delete file event %d: %v", event.ID, err)
-		return fmt.Errorf("failed to update event status: %w", err)
+		return fmt.Errorf("failed to update event status to building: %w", err)
 	}
 
 	return nil
@@ -148,35 +135,28 @@ func (ep *embeddingProcessService) ProcessDeleteFileEvent(event *model.Event) er
 	ep.logger.Info("processing delete file event: %s", event.SourceFilePath)
 
 	// 更新事件状态为构建中
-	originalStatus := event.EmbeddingStatus
-	event.EmbeddingStatus = model.EmbeddingStatusBuilding
-	err := ep.eventRepo.UpdateEvent(event)
+	updateEvent := model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusBuilding}
+	err := ep.eventRepo.UpdateEvent(&updateEvent)
 	if err != nil {
-		// 恢复原始状态
-		event.EmbeddingStatus = originalStatus
-		ep.logger.Error("failed to update event status to building for delete file event %d: %v", event.ID, err)
-		return fmt.Errorf("failed to update event status: %w", err)
+		return fmt.Errorf("failed to update event status to building: %w", err)
 	}
 
 	// 调用上报删除逻辑进行上报
 	syncId, err := ep.uploadService.DeleteFileWithRetry(event.WorkspacePath, event.SourceFilePath, 3)
 	if err != nil {
 		// 上报失败，更新事件状态为上报失败
-		event.EmbeddingStatus = model.EmbeddingStatusUploadFailed
-		updateErr := ep.eventRepo.UpdateEvent(event)
+		updateEvent := model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusUploadFailed}
+		updateErr := ep.eventRepo.UpdateEvent(&updateEvent)
 		if updateErr != nil {
-			ep.logger.Error("failed to update event status to upload failed for delete file event %d: %v", event.ID, updateErr)
+			return fmt.Errorf("failed to update event status to upload failed: %w", updateErr)
 		}
-		ep.logger.Error("failed to delete file %s: %v", event.SourceFilePath, err)
-		return fmt.Errorf("failed to delete file: %w", err)
+		return fmt.Errorf("failed to upload delete file %s: %w", event.SourceFilePath, err)
 	}
 
-	event.EmbeddingStatus = model.EmbeddingStatusBuilding
-	event.SyncId = syncId
-	err = ep.eventRepo.UpdateEvent(event)
+	updateEvent = model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusBuilding, SyncId: syncId}
+	err = ep.eventRepo.UpdateEvent(&updateEvent)
 	if err != nil {
-		ep.logger.Error("failed to update event status to building for delete file event %d: %v", event.ID, err)
-		return fmt.Errorf("failed to update event status: %w", err)
+		return fmt.Errorf("failed to update event status to building: %w", err)
 	}
 
 	return nil
@@ -187,34 +167,28 @@ func (ep *embeddingProcessService) ProcessRenameFileEvent(event *model.Event) er
 	ep.logger.Info("processing rename file event: %s -> %s", event.SourceFilePath, event.TargetFilePath)
 
 	// 更新事件状态为上传中
-	originalStatus := event.EmbeddingStatus
-	event.EmbeddingStatus = model.EmbeddingStatusUploading
-	err := ep.eventRepo.UpdateEvent(event)
+	updateEvent := model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusUploading}
+	err := ep.eventRepo.UpdateEvent(&updateEvent)
 	if err != nil {
-		event.EmbeddingStatus = originalStatus
-		ep.logger.Error("failed to update event status to uploading for rename file event %d: %v", event.ID, err)
-		return fmt.Errorf("failed to update event status: %w", err)
+		return fmt.Errorf("failed to update event status to uploading: %w", err)
 	}
 
 	// 调用上报逻辑进行上报
 	syncId, err := ep.uploadService.UploadFileWithRetry(event.WorkspacePath, event.TargetFilePath, 3)
 	if err != nil {
 		// 上报失败，更新事件状态为上报失败
-		event.EmbeddingStatus = model.EmbeddingStatusUploadFailed
-		updateErr := ep.eventRepo.UpdateEvent(event)
+		updateEvent := model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusUploadFailed}
+		updateErr := ep.eventRepo.UpdateEvent(&updateEvent)
 		if updateErr != nil {
-			ep.logger.Error("failed to update event status to upload failed for rename file event %d: %v", event.ID, updateErr)
+			return fmt.Errorf("failed to update event status to upload failed: %w", updateErr)
 		}
-		ep.logger.Error("failed to upload renamed file %s: %v", event.TargetFilePath, err)
-		return fmt.Errorf("failed to upload renamed file: %w", err)
+		return fmt.Errorf("failed to upload renamed file %s->%s: %w", event.SourceFilePath, event.TargetFilePath, err)
 	}
 
-	event.EmbeddingStatus = model.EmbeddingStatusBuilding
-	event.SyncId = syncId
-	err = ep.eventRepo.UpdateEvent(event)
+	updateEvent = model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusBuilding, SyncId: syncId}
+	err = ep.eventRepo.UpdateEvent(&updateEvent)
 	if err != nil {
-		ep.logger.Error("failed to update event status to building for rename file event %d: %v", event.ID, err)
-		return fmt.Errorf("failed to update event status: %w", err)
+		return fmt.Errorf("failed to update event status to building: %w", err)
 	}
 
 	return nil
@@ -262,22 +236,21 @@ func (ep *embeddingProcessService) ProcessEmbeddingEvents(workspacePaths []strin
 	}
 
 	// 获取待处理的添加文件事件
-	events, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(model.EventTypeAddFile, workspacePaths, 10, false, targetStatuses, nil)
+	addEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(model.EventTypeAddFile, workspacePaths, 10, false, targetStatuses, nil)
 	if err != nil {
-		ep.logger.Error("failed to get add file events: %v", err)
 		return fmt.Errorf("failed to get add file events: %w", err)
 	}
 
 	// 处理添加文件事件
-	for _, event := range events {
+	for _, event := range addEvents {
 		err = ep.ProcessAddFileEvent(event)
 		if err != nil {
 			ep.logger.Error("failed to process add file event: %v", err)
 			continue
 		}
-		err = ep.ProcessDeleteFileEvent(event)
+		err = ep.CleanWorkspaceFilePath(event)
 		if err != nil {
-			ep.logger.Error("failed to process delete file event: %v", err)
+			ep.logger.Error("failed to clean workspace filepath %s: %v", event.SourceFilePath, err)
 			continue
 		}
 	}
@@ -285,7 +258,6 @@ func (ep *embeddingProcessService) ProcessEmbeddingEvents(workspacePaths []strin
 	// 获取修改文件事件
 	modifyEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(model.EventTypeModifyFile, workspacePaths, 10, false, targetStatuses, nil)
 	if err != nil {
-		ep.logger.Error("failed to get modify file events: %v", err)
 		return fmt.Errorf("failed to get modify file events: %w", err)
 	}
 
@@ -296,9 +268,9 @@ func (ep *embeddingProcessService) ProcessEmbeddingEvents(workspacePaths []strin
 			ep.logger.Error("failed to process modify file event: %v", err)
 			continue
 		}
-		err = ep.ProcessDeleteFileEvent(event)
+		err = ep.CleanWorkspaceFilePath(event)
 		if err != nil {
-			ep.logger.Error("failed to process delete file event: %v", err)
+			ep.logger.Error("failed to clean workspace filepath %s: %v", event.SourceFilePath, err)
 			continue
 		}
 	}
@@ -306,7 +278,6 @@ func (ep *embeddingProcessService) ProcessEmbeddingEvents(workspacePaths []strin
 	// 获取重命名文件事件
 	renameEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(model.EventTypeRenameFile, workspacePaths, 10, false, targetStatuses, nil)
 	if err != nil {
-		ep.logger.Error("failed to get rename file events: %v", err)
 		return fmt.Errorf("failed to get rename file events: %w", err)
 	}
 
@@ -317,9 +288,9 @@ func (ep *embeddingProcessService) ProcessEmbeddingEvents(workspacePaths []strin
 			ep.logger.Error("failed to process rename file event: %v", err)
 			continue
 		}
-		err = ep.ProcessDeleteFileEvent(event)
+		err = ep.CleanWorkspaceFilePath(event)
 		if err != nil {
-			ep.logger.Error("failed to process delete file event: %v", err)
+			ep.logger.Error("failed to clean workspace filepath %s: %v", event.SourceFilePath, err)
 			continue
 		}
 	}
@@ -327,7 +298,6 @@ func (ep *embeddingProcessService) ProcessEmbeddingEvents(workspacePaths []strin
 	// 获取删除文件事件
 	deleteEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(model.EventTypeDeleteFile, workspacePaths, 10, false, targetStatuses, nil)
 	if err != nil {
-		ep.logger.Error("failed to get delete file events: %v", err)
 		return fmt.Errorf("failed to get delete file events: %w", err)
 	}
 
@@ -338,9 +308,9 @@ func (ep *embeddingProcessService) ProcessEmbeddingEvents(workspacePaths []strin
 			ep.logger.Error("failed to process delete file event: %v", err)
 			continue
 		}
-		err = ep.ProcessDeleteFileEvent(event)
+		err = ep.CleanWorkspaceFilePath(event)
 		if err != nil {
-			ep.logger.Error("failed to process delete file event: %v", err)
+			ep.logger.Error("failed to clean workspace filepath %s: %v", event.SourceFilePath, err)
 			continue
 		}
 	}
@@ -352,14 +322,11 @@ func (ep *embeddingProcessService) ProcessEmbeddingEvents(workspacePaths []strin
 func (ep *embeddingProcessService) CleanWorkspaceFilePath(event *model.Event) error {
 	ep.logger.Info("cleaning workspace filepath for event: %s, workspace: %s", event.SourceFilePath, event.WorkspacePath)
 
-	workspaceName := filepath.Base(event.WorkspacePath)
-	codebaseEmbeddingId := fmt.Sprintf("%s_%x_embedding", workspaceName, md5.Sum([]byte(event.WorkspacePath)))
-
 	// 获取 codebase embedding 配置
+	codebaseEmbeddingId := utils.GenerateCodebaseEmbeddingID(event.WorkspacePath)
 	codebaseConfig, err := ep.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseEmbeddingId)
 	if err != nil {
-		ep.logger.Error("failed to get codebase embedding config for workspace %s: %v", event.WorkspacePath, err)
-		return fmt.Errorf("failed to get codebase embedding config: %w", err)
+		return fmt.Errorf("failed to get codebase embedding config for workspace %s: %w", event.WorkspacePath, err)
 	}
 
 	// 根据事件类型处理不同的文件路径
@@ -375,6 +342,7 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePath(event *model.Event) er
 	}
 
 	// 从 HashTree 中删除对应的文件路径记录
+	// TODO: 判断是否为目录，是则删除目录下所有文件的记录
 	updated := false
 	for _, filePath := range filePaths {
 		if _, exists := codebaseConfig.HashTree[filePath]; exists {
@@ -391,11 +359,14 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePath(event *model.Event) er
 			return fmt.Errorf("failed to save codebase embedding config: %w", err)
 		}
 		embeddingFileNum := len(codebaseConfig.HashTree)
-		updateWorkspace := model.Workspace{WorkspacePath: event.WorkspacePath, FileNum: embeddingFileNum}
+		updateWorkspace := model.Workspace{
+			WorkspacePath: event.WorkspacePath,
+			FileNum:       embeddingFileNum,
+		}
 		err = ep.workspaceRepo.UpdateWorkspace(&updateWorkspace)
 		if err != nil {
-			ep.logger.Error("failed to update workspace: %v", err)
-			return fmt.Errorf("failed to update workspace: %w", err)
+			ep.logger.Error("failed to update workspace file num: %v", err)
+			return fmt.Errorf("failed to update workspace file num: %w", err)
 		}
 		ep.logger.Info("workspace filepath cleaned successfully for event: %s", event.SourceFilePath)
 	} else {
@@ -416,8 +387,7 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePaths(events []*model.Event
 
 	for _, event := range events {
 		// 根据事件类型处理不同的文件路径
-		workspaceName := filepath.Base(event.WorkspacePath)
-		codebaseEmbeddingId := fmt.Sprintf("%s_%x_embedding", workspaceName, md5.Sum([]byte(event.WorkspacePath)))
+		codebaseEmbeddingId := utils.GenerateCodebaseEmbeddingID(event.WorkspacePath)
 		switch event.EventType {
 		case model.EventTypeAddFile, model.EventTypeModifyFile, model.EventTypeDeleteFile:
 			if codebaseEmbeddingFilePaths[codebaseEmbeddingId] == nil {
@@ -462,7 +432,10 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePaths(events []*model.Event
 				continue
 			}
 			embeddingFileNum := len(codebaseEmbeddingConfig.HashTree)
-			updateWorkspace := model.Workspace{WorkspacePath: codebaseEmbeddingConfig.CodebasePath, FileNum: embeddingFileNum}
+			updateWorkspace := model.Workspace{
+				WorkspacePath: codebaseEmbeddingConfig.CodebasePath,
+				FileNum:       embeddingFileNum,
+			}
 			err := ep.workspaceRepo.UpdateWorkspace(&updateWorkspace)
 			if err != nil {
 				ep.logger.Error("failed to update workspace: %v", err)

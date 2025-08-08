@@ -287,11 +287,6 @@ type TriggerIndexRequest struct {
 	// example: G:\projects\codebase-indexer
 	Workspace string `json:"workspace" binding:"required"`
 
-	// 构建路径
-	// required: true
-	// example: G:\projects\codebase-indexer\api\
-	Path string `json:"path" binding:"required"`
-
 	// 索引类型
 	// required: true
 	// enum: codegraph,embedding,all

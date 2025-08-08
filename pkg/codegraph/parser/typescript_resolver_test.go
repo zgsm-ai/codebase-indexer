@@ -413,6 +413,26 @@ func TestTypeScriptResolver_ResolveFunction(t *testing.T) {
 					},
 				},
 				{
+					BaseElement: &resolver.BaseElement{Name: "process", Type: types.ElementTypeFunction},
+					Declaration: resolver.Declaration{
+						Name: "process",
+						Parameters: []resolver.Parameter{
+							{Name: "value", Type: []string{"primitive_type"}},
+						},
+						ReturnType: []string{"primitive_type"},
+					},
+				},
+				{
+					BaseElement: &resolver.BaseElement{Name: "process", Type: types.ElementTypeFunction},
+					Declaration: resolver.Declaration{
+						Name: "process",
+						Parameters: []resolver.Parameter{
+							{Name: "value", Type: []string{"primitive_type"}},
+						},
+						ReturnType: []string{"primitive_type"},
+					},
+				},
+				{
 					BaseElement: &resolver.BaseElement{Name: "multiply", Type: types.ElementTypeFunction},
 					Declaration: resolver.Declaration{
 						Name: "multiply",

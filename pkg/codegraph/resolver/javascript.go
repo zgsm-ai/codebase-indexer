@@ -108,7 +108,7 @@ func (js *JavaScriptResolver) resolveMethod(ctx context.Context, element *Method
 			element.BaseElement.Name = content
 			element.Declaration.Name = content
 		case types.ElementTypeMethodParameters:
-			parseJavaScriptMethodParameters(element, capture.Node, rc.SourceFile.Content)
+			parseJavaScriptParameters(element, capture.Node, rc.SourceFile.Content)
 		}
 	}
 	ownerNode := findMethodOwner(&rootCap.Node)
@@ -266,36 +266,33 @@ func (js *JavaScriptResolver) resolveCall(ctx context.Context, element *Call, rc
 	return elements, nil
 }
 
-// parseJavaScriptMethodParameters 解析JavaScript方法参数
-func parseJavaScriptMethodParameters(element *Method, paramsNode sitter.Node, content []byte) {
-	element.Parameters = make([]Parameter, 0)
+type ParameterSetter interface {
+	SetParameters([]Parameter)
+}
+
+// 为 Function 和 Method 实现这个接口
+func (f *Function) SetParameters(params []Parameter) {
+	f.Parameters = params
+}
+
+func (m *Method) SetParameters(params []Parameter) {
+	m.Parameters = params
+}
+
+// 通用的参数解析函数
+func parseJavaScriptParameters(element ParameterSetter, paramsNode sitter.Node, content []byte) {
+	parameters := make([]Parameter, 0)
 	for i := uint(0); i < paramsNode.ChildCount(); i++ {
 		child := paramsNode.Child(i)
 		if child != nil && child.Kind() == types.Identifier {
-			paramNode := child
-			paramName := paramNode.Utf8Text(content)
-			element.Parameters = append(element.Parameters, Parameter{
+			paramName := child.Utf8Text(content)
+			parameters = append(parameters, Parameter{
 				Name: paramName,
 				Type: nil, // JavaScript作为动态语言，参数类型通常无法从语法中直接获取
 			})
 		}
 	}
-}
-
-// parseJavaScriptParameters 解析JavaScript函数参数
-func parseJavaScriptParameters(element *Function, paramsNode sitter.Node, content []byte) {
-	element.Parameters = make([]Parameter, 0)
-	for i := uint(0); i < paramsNode.ChildCount(); i++ {
-		child := paramsNode.Child(i)
-		if child != nil && child.Kind() == types.Identifier {
-			paramNode := child
-			paramName := paramNode.Utf8Text(content)
-			element.Parameters = append(element.Parameters, Parameter{
-				Name: paramName,
-				Type: nil,
-			})
-		}
-	}
+	element.SetParameters(parameters)
 }
 
 // extractModifiers 从函数或方法声明中提取修饰符
@@ -452,11 +449,10 @@ func parseJavaScriptMethodNode(node *sitter.Node, content []byte, className stri
 	method.Type = types.ElementTypeMethod
 
 	// 检查修饰符
-	if strings.Contains(node.Utf8Text(content), "static") {
-		method.Declaration.Modifier = "static " + method.Declaration.Modifier
-	}
-	if strings.Contains(node.Utf8Text(content), "async") {
-		method.Declaration.Modifier = "async " + method.Declaration.Modifier
+	methodContent := node.Utf8Text(content)
+	extractedModifiers := extractModifiers(methodContent)
+	if extractedModifiers != types.EmptyString {
+		method.Declaration.Modifier = extractedModifiers + types.Space + method.Declaration.Modifier
 	}
 
 	return method
@@ -848,7 +844,7 @@ func extractReferencePath(node *sitter.Node, content []byte) map[string]string {
 
 	// 如果是标识符，直接返回名称
 	if node.Kind() == string(types.NodeKindIdentifier) {
-		result["property"] = string(node.Utf8Text(content))
+		result["property"] = node.Utf8Text(content)
 		return result
 	}
 
@@ -860,7 +856,7 @@ func extractReferencePath(node *sitter.Node, content []byte) map[string]string {
 		if objectNode != nil && propertyNode != nil {
 			// 获取属性名（最右侧部分）
 			propertyText := propertyNode.Utf8Text(content)
-			result["property"] = string(propertyText)
+			result["property"] = propertyText
 
 			// 获取对象部分（左侧部分）
 			// 如果对象是另一个成员表达式，则需要递归处理
@@ -874,7 +870,7 @@ func extractReferencePath(node *sitter.Node, content []byte) map[string]string {
 				}
 			} else {
 				// 简单对象，直接获取文本
-				result["object"] = string(objectNode.Utf8Text(content))
+				result["object"] = objectNode.Utf8Text(content)
 			}
 
 			return result
@@ -889,25 +885,25 @@ func extractReferencePath(node *sitter.Node, content []byte) map[string]string {
 			if constructorNode.Kind() == string(types.NodeKindMemberExpression) {
 				return extractReferencePath(constructorNode, content)
 			} else {
-				result["property"] = string(constructorNode.Utf8Text(content))
+				result["property"] = constructorNode.Utf8Text(content)
 				return result
 			}
 		}
 	}
 
 	if node.Kind() == string(types.NodeKindTypeIdentifier) {
-		result["property"] = string(node.Utf8Text(content))
+		result["property"] = node.Utf8Text(content)
 		return result
 	}
 
 	if node.Kind() == string(types.NodeKindQualifiedType) {
 		propertyNode := node.ChildByFieldName("name")
 		if propertyNode != nil {
-			result["property"] = string(propertyNode.Utf8Text(content))
+			result["property"] = propertyNode.Utf8Text(content)
 		}
 		objectNode := node.ChildByFieldName("package")
 		if objectNode != nil {
-			result["object"] = string(objectNode.Utf8Text(content))
+			result["object"] = objectNode.Utf8Text(content)
 		}
 	}
 
@@ -915,7 +911,7 @@ func extractReferencePath(node *sitter.Node, content []byte) map[string]string {
 		for i := uint(0); i < node.ChildCount(); i++ {
 			childNode := node.Child(i)
 			if childNode != nil {
-				result["property"] = string(childNode.Utf8Text(content))
+				result["property"] = childNode.Utf8Text(content)
 			}
 		}
 	}
@@ -1022,7 +1018,7 @@ func isRequireCallCapture(rc *ResolveContext) bool {
 		return false
 	}
 
-	return funcNode.Kind() == string(types.NodeKindIdentifier) && string(funcNode.Utf8Text(rc.SourceFile.Content)) == "require"
+	return funcNode.Kind() == string(types.NodeKindIdentifier) && funcNode.Utf8Text(rc.SourceFile.Content) == "require"
 }
 
 // handleRequireCall 将require函数调用处理为import
@@ -1044,7 +1040,7 @@ func (js *JavaScriptResolver) handleRequireCall(rc *ResolveContext) ([]Element, 
 			argNode := argsNode.Child(i)
 			if argNode != nil && argNode.Kind() == "string" {
 				// 去除引号
-				importElement.Source = strings.Trim(string(argNode.Utf8Text(rc.SourceFile.Content)), "'\"")
+				importElement.Source = strings.Trim(argNode.Utf8Text(rc.SourceFile.Content), "'\"")
 				break
 			}
 		}
@@ -1063,7 +1059,7 @@ func (js *JavaScriptResolver) handleRequireCall(rc *ResolveContext) ([]Element, 
 			// 找到变量声明，获取变量名
 			nameNode := parent.ChildByFieldName("name")
 			if nameNode != nil {
-				importElement.Name = string(nameNode.Utf8Text(rc.SourceFile.Content))
+				importElement.Name = nameNode.Utf8Text(rc.SourceFile.Content)
 				importElement.BaseElement.Name = importElement.Name
 				break
 			}
@@ -1101,7 +1097,7 @@ func isImportExpression(valueNode *sitter.Node, content []byte) bool {
 
 		if callNode != nil {
 			funcNode := callNode.ChildByFieldName("function")
-			if funcNode != nil && string(funcNode.Utf8Text(content)) == "import" {
+			if funcNode != nil && funcNode.Utf8Text(content) == "import" {
 				return true
 			}
 		}
@@ -1111,7 +1107,7 @@ func isImportExpression(valueNode *sitter.Node, content []byte) bool {
 	// 情况2: 直接import(...)
 	if valueNode.Kind() == string(types.NodeKindCallExpression) {
 		funcNode := valueNode.ChildByFieldName("function")
-		if funcNode != nil && string(funcNode.Utf8Text(content)) == "import" {
+		if funcNode != nil && funcNode.Utf8Text(content) == "import" {
 			return true
 		}
 		return false
@@ -1128,7 +1124,7 @@ func isImportExpression(valueNode *sitter.Node, content []byte) bool {
 		// 检查当前节点
 		if node.Kind() == string(types.NodeKindCallExpression) {
 			funcNode := node.ChildByFieldName("function")
-			if funcNode != nil && string(funcNode.Utf8Text(content)) == "import" {
+			if funcNode != nil && funcNode.Utf8Text(content) == "import" {
 				return true
 			}
 		}
@@ -1155,7 +1151,7 @@ func isRequireImport(node *sitter.Node, content []byte) bool {
 	if node == nil {
 		return false
 	}
-	if node.Kind() == string(types.NodeKindIdentifier) && string(node.Utf8Text(content)) == "require" {
+	if node.Kind() == string(types.NodeKindIdentifier) && node.Utf8Text(content) == "require" {
 		return true
 	}
 	return false
@@ -1185,7 +1181,7 @@ func isArrowFunctionImport(node *sitter.Node, content []byte) bool {
 	if funcNode == nil {
 		return false
 	}
-	return string(funcNode.Utf8Text(content)) == "import"
+	return funcNode.Utf8Text(content) == "import"
 }
 
 // isExportStatement 检查节点是否为export语句

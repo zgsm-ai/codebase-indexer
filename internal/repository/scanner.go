@@ -112,13 +112,20 @@ func (s *FileScanner) LoadIgnoreRules(codebasePath string) *gitignore.GitIgnore 
 	fileIngoreRules := s.scannerConfig.FileIgnorePatterns
 	folderIgnoreRules := s.scannerConfig.FolderIgnorePatterns
 	currentIgnoreRules := append(fileIngoreRules, folderIgnoreRules...)
-	compiledIgnore := gitignore.CompileIgnoreLines(currentIgnoreRules...)
 
 	// Read and merge .gitignore file
 	gitignoreRules := s.loadGitignore(codebasePath)
 	if len(gitignoreRules) > 0 {
-		compiledIgnore = gitignore.CompileIgnoreLines(append(gitignoreRules, currentIgnoreRules...)...)
+		currentIgnoreRules = append(gitignoreRules, currentIgnoreRules...)
 	}
+
+	// Read and merge .coignore file
+	coignoreRules := s.loadCoignore(codebasePath)
+	if len(coignoreRules) > 0 {
+		currentIgnoreRules = append(coignoreRules, currentIgnoreRules...)
+	}
+
+	compiledIgnore := gitignore.CompileIgnoreLines(currentIgnoreRules...)
 
 	return compiledIgnore
 }
@@ -167,6 +174,23 @@ func (s *FileScanner) loadGitignore(codebasePath string) []string {
 		}
 	} else {
 		s.logger.Warn("Failed to read .gitignore file: %v", err)
+	}
+	return ignores
+}
+
+func (s *FileScanner) loadCoignore(codebasePath string) []string {
+	var ignores []string
+	ignoreFilePath := filepath.Join(codebasePath, ".coignore")
+	if content, err := os.ReadFile(ignoreFilePath); err == nil {
+		for _, line := range bytes.Split(content, []byte{'\n'}) {
+			// Skip empty lines and comments
+			trimmedLine := bytes.TrimSpace(line)
+			if len(trimmedLine) > 0 && !bytes.HasPrefix(trimmedLine, []byte{'#'}) {
+				ignores = append(ignores, string(trimmedLine))
+			}
+		}
+	} else {
+		s.logger.Warn("Failed to read .coignore file: %v", err)
 	}
 	return ignores
 }

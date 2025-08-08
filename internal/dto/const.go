@@ -15,3 +15,10 @@ const (
 	ProcessStatusSuccess = "success"
 	ProcessStatusFailed  = "failed"
 )
+
+// 索引构建类型常量
+const (
+	IndexTypeEmbedding = "embedding"
+	IndexTypeCodegraph = "codegraph"
+	IndexTypeAll       = "all"
+)

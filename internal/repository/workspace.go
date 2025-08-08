@@ -84,7 +84,8 @@ func (r *workspaceRepository) CreateWorkspace(workspace *model.Workspace) error 
 func (r *workspaceRepository) GetWorkspaceByPath(path string) (*model.Workspace, error) {
 	query := `
 		SELECT id, workspace_name, workspace_path, active, file_num, 
-			embedding_file_num, embedding_ts, codegraph_file_num, codegraph_ts, 
+			embedding_file_num, embedding_ts, embedding_message, embedding_failed_file_paths,
+			codegraph_file_num, codegraph_ts, codegraph_message, codegraph_failed_file_paths,
 			created_at, updated_at
 		FROM workspaces 
 		WHERE workspace_path = ?
@@ -103,8 +104,12 @@ func (r *workspaceRepository) GetWorkspaceByPath(path string) (*model.Workspace,
 		&workspace.FileNum,
 		&workspace.EmbeddingFileNum,
 		&workspace.EmbeddingTs,
+		&workspace.EmbeddingMessage,
+		&workspace.EmbeddingFailedFilePaths,
 		&workspace.CodegraphFileNum,
 		&workspace.CodegraphTs,
+		&workspace.CodegraphMessage,
+		&workspace.CodegraphFailedFilePaths,
 		&createdAt,
 		&updatedAt,
 	)
@@ -127,7 +132,8 @@ func (r *workspaceRepository) GetWorkspaceByPath(path string) (*model.Workspace,
 func (r *workspaceRepository) GetWorkspaceByID(id int64) (*model.Workspace, error) {
 	query := `
 		SELECT id, workspace_name, workspace_path, active, file_num, 
-			embedding_file_num, embedding_ts, codegraph_file_num, codegraph_ts, 
+			embedding_file_num, embedding_ts, embedding_message, embedding_failed_file_paths,
+			codegraph_file_num, codegraph_ts, codegraph_message, codegraph_failed_file_paths,
 			created_at, updated_at
 		FROM workspaces 
 		WHERE id = ?
@@ -146,8 +152,12 @@ func (r *workspaceRepository) GetWorkspaceByID(id int64) (*model.Workspace, erro
 		&workspace.FileNum,
 		&workspace.EmbeddingFileNum,
 		&workspace.EmbeddingTs,
+		&workspace.EmbeddingMessage,
+		&workspace.EmbeddingFailedFilePaths,
 		&workspace.CodegraphFileNum,
 		&workspace.CodegraphTs,
+		&workspace.CodegraphMessage,
+		&workspace.CodegraphFailedFilePaths,
 		&createdAt,
 		&updatedAt,
 	)
@@ -179,7 +189,7 @@ func (r *workspaceRepository) UpdateWorkspace(workspace *model.Workspace) error 
 	}
 
 	// 检查active是否为非默认值（bool的默认值是false）
-	if workspace.Active != "true" && workspace.Active != "false" {
+	if workspace.Active == "true" || workspace.Active == "false" {
 		setClauses = append(setClauses, "active = ?")
 		args = append(args, workspace.Active)
 	}
@@ -244,7 +254,8 @@ func (r *workspaceRepository) UpdateWorkspace(workspace *model.Workspace) error 
 	}
 
 	// 添加updated_at字段
-	setClauses = append(setClauses, "updated_at = CURRENT_TIMESTAMP")
+	setClauses = append(setClauses, "updated_at = ?")
+	args = append(args, time.Now())
 
 	// 构建完整查询
 	query := fmt.Sprintf("UPDATE workspaces SET %s WHERE workspace_path = ?", strings.Join(setClauses, ", "))
@@ -296,7 +307,8 @@ func (r *workspaceRepository) DeleteWorkspace(path string) error {
 func (r *workspaceRepository) ListWorkspaces() ([]*model.Workspace, error) {
 	query := `
 		SELECT id, workspace_name, workspace_path, active, file_num, 
-			embedding_file_num, embedding_ts, codegraph_file_num, codegraph_ts, 
+			embedding_file_num, embedding_ts, embedding_message, embedding_failed_file_paths,
+			codegraph_file_num, codegraph_ts, codegraph_message, codegraph_failed_file_paths,
 			created_at, updated_at
 		FROM workspaces 
 		ORDER BY created_at DESC
@@ -322,15 +334,19 @@ func (r *workspaceRepository) ListWorkspaces() ([]*model.Workspace, error) {
 			&workspace.FileNum,
 			&workspace.EmbeddingFileNum,
 			&workspace.EmbeddingTs,
+			&workspace.EmbeddingMessage,
+			&workspace.EmbeddingFailedFilePaths,
 			&workspace.CodegraphFileNum,
 			&workspace.CodegraphTs,
+			&workspace.CodegraphMessage,
+			&workspace.CodegraphFailedFilePaths,
 			&createdAt,
 			&updatedAt,
 		)
 
 		if err != nil {
-			r.logger.Error("Failed to scan workspace row: %v", err)
-			return nil, fmt.Errorf("failed to scan workspace row: %w", err)
+			r.logger.Error("[DB]Failed to scan workspaces table row: %v", err)
+			return nil, err
 		}
 
 		workspace.CreatedAt = createdAt
@@ -345,10 +361,11 @@ func (r *workspaceRepository) ListWorkspaces() ([]*model.Workspace, error) {
 func (r *workspaceRepository) GetActiveWorkspaces() ([]*model.Workspace, error) {
 	query := `
 		SELECT id, workspace_name, workspace_path, active, file_num, 
-			embedding_file_num, embedding_ts, codegraph_file_num, codegraph_ts, 
+			embedding_file_num, embedding_ts, embedding_message, embedding_failed_file_paths,
+			codegraph_file_num, codegraph_ts, codegraph_message, codegraph_failed_file_paths,
 			created_at, updated_at
 		FROM workspaces 
-		WHERE active = 1
+		WHERE active = "true"
 		ORDER BY created_at DESC
 	`
 
@@ -372,15 +389,19 @@ func (r *workspaceRepository) GetActiveWorkspaces() ([]*model.Workspace, error) 
 			&workspace.FileNum,
 			&workspace.EmbeddingFileNum,
 			&workspace.EmbeddingTs,
+			&workspace.EmbeddingMessage,
+			&workspace.EmbeddingFailedFilePaths,
 			&workspace.CodegraphFileNum,
 			&workspace.CodegraphTs,
+			&workspace.CodegraphMessage,
+			&workspace.CodegraphFailedFilePaths,
 			&createdAt,
 			&updatedAt,
 		)
 
 		if err != nil {
-			r.logger.Error("Failed to scan workspace row: %v", err)
-			return nil, fmt.Errorf("failed to scan workspace row: %w", err)
+			r.logger.Error("[DB]Failed to scan workspaces table row: %v", err)
+			return nil, err
 		}
 
 		workspace.CreatedAt = createdAt
@@ -395,11 +416,11 @@ func (r *workspaceRepository) GetActiveWorkspaces() ([]*model.Workspace, error) 
 func (r *workspaceRepository) UpdateEmbeddingInfo(path string, fileNum int, timestamp int64) error {
 	query := `
 		UPDATE workspaces 
-		SET embedding_file_num = ?, embedding_ts = ?, updated_at = CURRENT_TIMESTAMP
+		SET embedding_file_num = ?, embedding_ts = ?, updated_at = ?
 		WHERE workspace_path = ?
 	`
 
-	result, err := r.db.GetDB().Exec(query, fileNum, timestamp, path)
+	result, err := r.db.GetDB().Exec(query, fileNum, timestamp, time.Now(), path)
 	if err != nil {
 		r.logger.Error("Failed to update embedding info: %v", err)
 		return fmt.Errorf("failed to update embedding info: %w", err)
@@ -422,11 +443,11 @@ func (r *workspaceRepository) UpdateEmbeddingInfo(path string, fileNum int, time
 func (r *workspaceRepository) UpdateCodegraphInfo(path string, fileNum int, timestamp int64) error {
 	query := `
 		UPDATE workspaces 
-		SET codegraph_file_num = ?, codegraph_ts = ?, updated_at = CURRENT_TIMESTAMP
+		SET codegraph_file_num = ?, codegraph_ts = ?, updated_at = ?
 		WHERE workspace_path = ?
 	`
 
-	result, err := r.db.GetDB().Exec(query, fileNum, timestamp, path)
+	result, err := r.db.GetDB().Exec(query, fileNum, timestamp, time.Now(), path)
 	if err != nil {
 		r.logger.Error("Failed to update codegraph info: %v", err)
 		return fmt.Errorf("failed to update codegraph info: %w", err)

@@ -2,7 +2,6 @@ package job
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
@@ -38,7 +37,7 @@ func NewEventProcessorJob(
 
 // Start 启动事件处理任务
 func (j *EventProcessorJob) Start() {
-	j.logger.Info("starting event embedding job")
+	j.logger.Info("starting event processor job")
 
 	j.wg.Add(1)
 	go func() {
@@ -54,10 +53,7 @@ func (j *EventProcessorJob) Start() {
 				return
 			case <-ticker.C:
 				// 处理事件
-				err := j.embeddingProcessWorkspaces()
-				if err != nil {
-					j.logger.Error("failed to process workspaces events: %v", err)
-				}
+				j.embeddingProcessWorkspaces()
 				// 短暂休眠避免CPU占用过高
 				time.Sleep(1 * time.Second)
 			}
@@ -71,7 +67,6 @@ func (j *EventProcessorJob) Start() {
 		for {
 			select {
 			case <-j.ctx.Done():
-				j.logger.Info("event codegraph job stopped")
 				return
 			default:
 				err := j.codegraphProcessWorkSpaces()
@@ -87,22 +82,23 @@ func (j *EventProcessorJob) Start() {
 
 // Stop 停止事件处理任务
 func (j *EventProcessorJob) Stop() {
-	j.logger.Info("stopping event embedding job...")
+	j.logger.Info("stopping event processor job...")
 	j.cancel()
 	j.wg.Wait()
-	j.logger.Info("event embedding job stopped")
+	j.logger.Info("event processor job stopped")
 }
 
-func (j *EventProcessorJob) embeddingProcessWorkspaces() error {
+func (j *EventProcessorJob) embeddingProcessWorkspaces() {
 	// 获取活跃工作区
 	workspaces, err := j.embedding.ProcessActiveWorkspaces()
 	if err != nil {
-		return err
+		j.logger.Error("failed to scan active workspaces: %v", err)
+		return
 	}
 
 	if len(workspaces) == 0 {
 		j.logger.Debug("no active workspaces found")
-		return nil
+		return
 	}
 
 	workspackePaths := make([]string, len(workspaces))
@@ -110,8 +106,10 @@ func (j *EventProcessorJob) embeddingProcessWorkspaces() error {
 		workspackePaths[i] = workspace.WorkspacePath
 	}
 
-	j.logger.Info("processing workspaces events: %s", strings.Join(workspackePaths, ", "))
-	return j.embedding.ProcessEmbeddingEvents(workspackePaths)
+	err = j.embedding.ProcessEmbeddingEvents(workspackePaths)
+	if err != nil {
+		j.logger.Error("failed to process embedding events: %v", err)
+	}
 }
 
 func (j *EventProcessorJob) codegraphProcessWorkSpaces() error {

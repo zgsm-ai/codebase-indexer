@@ -65,13 +65,14 @@ func (r *eventRepository) CreateEvent(event *model.Event) error {
 		VALUES (?, ?, ?, ?, ?, ?)
 	`
 
+	nowTime := time.Now()
 	result, err := r.db.GetDB().Exec(query,
 		event.WorkspacePath,
 		event.EventType,
 		event.SourceFilePath,
 		event.TargetFilePath,
-		event.CreatedAt,
-		event.UpdatedAt,
+		nowTime,
+		nowTime,
 	)
 	if err != nil {
 		r.logger.Error("Failed to create event: %v", err)
@@ -580,7 +581,9 @@ func (r *eventRepository) UpdateEvent(event *model.Event) error {
 	}
 
 	// 添加updated_at字段
-	setClauses = append(setClauses, "updated_at = CURRENT_TIMESTAMP")
+	setClauses = append(setClauses, "updated_at = ?")
+	nowTime := time.Now()
+	args = append(args, nowTime)
 
 	// 构建完整查询
 	query := fmt.Sprintf("UPDATE events SET %s WHERE id = ?", strings.Join(setClauses, ", "))
@@ -804,11 +807,8 @@ func (r *eventRepository) GetLatestEventByWorkspaceAndSourcePath(workspacePath, 
 	)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil // 没有找到记录，返回nil而不是错误
-		}
 		r.logger.Error("Failed to get latest event by workspace and source path: %v", err)
-		return nil, fmt.Errorf("failed to get latest event by workspace and source path: %w", err)
+		return nil, err
 	}
 
 	event.CreatedAt = createdAt

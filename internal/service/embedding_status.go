@@ -1,7 +1,6 @@
 package service
 
 import (
-	"crypto/md5"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -9,6 +8,7 @@ import (
 	"codebase-indexer/internal/dto"
 	"codebase-indexer/internal/model"
 	"codebase-indexer/internal/repository"
+	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/logger"
 )
 
@@ -61,8 +61,6 @@ func (sc *embeddingStatusService) CheckActiveWorkspaces() ([]*model.Workspace, e
 }
 
 func (sc *embeddingStatusService) CheckAllUploadingStatues(workspacePaths []string) error {
-	sc.logger.Info("checking uploading states for workspaces: %v", workspacePaths)
-
 	// 遍历每个工作区
 	for _, workspacePath := range workspacePaths {
 		err := sc.checkWorkspaceUploadingStates(workspacePath)
@@ -71,15 +69,11 @@ func (sc *embeddingStatusService) CheckAllUploadingStatues(workspacePaths []stri
 			continue
 		}
 	}
-
-	sc.logger.Info("checking uploading states completed")
 	return nil
 }
 
 // CheckAllBuildingStates 检查所有building状态
 func (sc *embeddingStatusService) CheckAllBuildingStates(workspacePaths []string) error {
-	sc.logger.Info("checking building states for workspaces: %v", workspacePaths)
-
 	// 遍历每个工作区
 	for _, workspacePath := range workspacePaths {
 		err := sc.checkWorkspaceBuildingStates(workspacePath)
@@ -88,15 +82,11 @@ func (sc *embeddingStatusService) CheckAllBuildingStates(workspacePaths []string
 			continue
 		}
 	}
-
-	sc.logger.Info("checking building states completed")
 	return nil
 }
 
 // checkWorkspaceBuildingStates 检查指定工作区的building状态
 func (sc *embeddingStatusService) checkWorkspaceBuildingStates(workspacePath string) error {
-	sc.logger.Info("checking building states for workspace: %s", workspacePath)
-
 	// 获取指定工作区的building状态events
 	events, err := sc.getBuildingEventsForWorkspace(workspacePath)
 	if err != nil {
@@ -104,7 +94,7 @@ func (sc *embeddingStatusService) checkWorkspaceBuildingStates(workspacePath str
 	}
 
 	if len(events) == 0 {
-		sc.logger.Info("no building events found for workspace: %s", workspacePath)
+		sc.logger.Debug("no building events for workspace: %s", workspacePath)
 		return nil
 	}
 
@@ -124,8 +114,6 @@ func (sc *embeddingStatusService) checkWorkspaceBuildingStates(workspacePath str
 
 // checkWorkspaceUploadingStates 检查指定工作区的uploading状态
 func (sc *embeddingStatusService) checkWorkspaceUploadingStates(workspacePath string) error {
-	sc.logger.Info("checking uploading states for workspace: %s", workspacePath)
-
 	// 获取指定工作区的uploading状态events
 	events, err := sc.getUploadingEventsForWorkspace(workspacePath)
 	if err != nil {
@@ -133,7 +121,7 @@ func (sc *embeddingStatusService) checkWorkspaceUploadingStates(workspacePath st
 	}
 
 	if len(events) == 0 {
-		sc.logger.Info("no uploading events found for workspace: %s", workspacePath)
+		sc.logger.Debug("no uploading events for workspace: %s", workspacePath)
 		return nil
 	}
 
@@ -145,8 +133,8 @@ func (sc *embeddingStatusService) checkWorkspaceUploadingStates(workspacePath st
 		if nowTime.Sub(event.UpdatedAt) < time.Minute*10 {
 			continue
 		}
-		event.EmbeddingStatus = model.EmbeddingStatusUploadFailed
-		err := sc.eventRepo.UpdateEvent(event)
+		updateEvent := &model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusUploadFailed}
+		err := sc.eventRepo.UpdateEvent(updateEvent)
 		if err != nil {
 			sc.logger.Error("failed to update event status: %v", err)
 		}
@@ -204,10 +192,10 @@ func (sc *embeddingStatusService) checkEventBuildStatus(workspacePath string, ev
 	// 当process为failed时，将event的embeddingstatus改为failed
 	if processStatus == dto.EmbeddingFailed {
 		sc.logger.Info("build failed for syncId: %s", event.SyncId)
-		event.EmbeddingStatus = model.EmbeddingStatusBuildFailed
+		updateEvent := &model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusBuildFailed}
 
 		// 更新event记录
-		err := sc.eventRepo.UpdateEvent(event)
+		err := sc.eventRepo.UpdateEvent(updateEvent)
 		if err != nil {
 			return fmt.Errorf("failed to update event: %w", err)
 		}
@@ -253,26 +241,25 @@ func (sc *embeddingStatusService) handleBuildCompletion(workspacePath string, ev
 	}
 
 	// 更新event状态
+	updateEvent := &model.Event{ID: event.ID}
 	if status == dto.EmbeddingComplete {
-		event.EmbeddingStatus = model.EmbeddingStatusSuccess
+		updateEvent.EmbeddingStatus = model.EmbeddingStatusSuccess
 		sc.logger.Info("file %s built successfully for syncId: %s", filePath, event.SyncId)
 	} else if status == dto.EmbeddingFailed {
-		event.EmbeddingStatus = model.EmbeddingStatusBuildFailed
+		updateEvent.EmbeddingStatus = model.EmbeddingStatusBuildFailed
 		sc.logger.Info("file %s failed to build for syncId: %s", filePath, event.SyncId)
 	} else {
 		return nil
 	}
 
 	// 更新event记录
-	err := sc.eventRepo.UpdateEvent(event)
+	err := sc.eventRepo.UpdateEvent(updateEvent)
 	if err != nil {
 		return fmt.Errorf("failed to update event: %w", err)
 	}
 
-	workspaceName := filepath.Base(workspacePath)
-	codebaseId := fmt.Sprintf("%s_%x_embedding", workspaceName, md5.Sum([]byte(workspacePath)))
-
 	// 获取 codebase embedding 配置
+	codebaseId := utils.GenerateCodebaseEmbeddingID(workspacePath)
 	codebaseConfig, err := sc.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseId)
 	if err != nil {
 		sc.logger.Error("failed to get codebase embedding config for workspace %s: %v", workspacePath, err)
@@ -281,6 +268,7 @@ func (sc *embeddingStatusService) handleBuildCompletion(workspacePath string, ev
 	if codebaseConfig.HashTree == nil {
 		codebaseConfig.HashTree = make(map[string]string)
 	}
+	// TODO: 记录上传时filePath的时间戳
 	codebaseConfig.HashTree[filePath] = ""
 	// 保存 codebase embedding 配置
 	err = sc.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseConfig)
@@ -290,7 +278,10 @@ func (sc *embeddingStatusService) handleBuildCompletion(workspacePath string, ev
 	}
 
 	embeddingFileNum := len(codebaseConfig.HashTree)
-	updateWorkspace := model.Workspace{WorkspacePath: workspacePath, FileNum: embeddingFileNum}
+	updateWorkspace := model.Workspace{
+		WorkspacePath: workspacePath,
+		FileNum:       embeddingFileNum,
+	}
 	err = sc.workspaceRepo.UpdateWorkspace(&updateWorkspace)
 	if err != nil {
 		sc.logger.Error("failed to update workspace: %v", err)
