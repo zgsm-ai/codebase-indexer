@@ -148,9 +148,9 @@ func main() {
 	codegraphProcessor := service.NewCodegraphProcessor(workspaceReader, indexer, workspaceRepo, eventRepo, appLogger)
 
 	// Initialize job layer
-	fileScanJob := job.NewFileScanJob(fileScanService, appLogger, 5*time.Minute)
-	eventProcessorJob := job.NewEventProcessorJob(appLogger, embeddingProcessService, codegraphProcessor)
-	statusCheckerJob := job.NewStatusCheckerJob(embeddingStatusService, appLogger, 3*time.Second)
+	fileScanJob := job.NewFileScanJob(fileScanService, storageManager, appLogger, 5*time.Minute)
+	eventProcessorJob := job.NewEventProcessorJob(appLogger, embeddingProcessService, codegraphProcessor, storageManager)
+	statusCheckerJob := job.NewStatusCheckerJob(embeddingStatusService, storageManager, appLogger, 5*time.Second)
 
 	// Initialize handler layer
 	// grpcHandler := handler.NewGRPCHandler(syncRepo, scanRepo, storageManager, schedulerService, appLogger)
@@ -260,6 +260,13 @@ func initDir(appName string) error {
 		return fmt.Errorf("failed to get cache directory: %v", err)
 	}
 	fmt.Printf("cache directory: %s\n", cachePath)
+
+	// Initialize env file path
+	cacheEnvFilePath, err := utils.GetCacheEnvFile(cachePath)
+	if err != nil {
+		return fmt.Errorf("failed to get cache env file: %v", err)
+	}
+	fmt.Printf("cache env file: %s\n", cacheEnvFilePath)
 
 	// Initialize upload temp directory
 	uploadTmpPath, err := utils.GetUploadTmpDir(rootPath)

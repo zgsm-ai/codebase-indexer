@@ -34,13 +34,13 @@ type ExtensionService interface {
 	CheckIgnoreFiles(ctx context.Context, clientID, workspacePath, workspaceName string, filePaths []string) (*CheckIgnoreResult, error)
 
 	// SwitchIndex 切换索引状态
-	SwitchIndex(ctx context.Context, workspacePath, switchStatus string) error
+	SwitchIndex(ctx context.Context, workspacePath, switchStatus, clientID string) error
 
 	// PublishEvents 发布工作区事件
-	PublishEvents(ctx context.Context, workspacePath string, events []dto.WorkspaceEvent) (int, error)
+	PublishEvents(ctx context.Context, workspacePath, clientID string, events []dto.WorkspaceEvent) (int, error)
 
 	// TriggerIndex 触发索引构建
-	TriggerIndex(ctx context.Context, workspacePath, indexType string) error
+	TriggerIndex(ctx context.Context, workspacePath, indexType, clientID string) error
 
 	// GetIndexStatus 获取索引状态
 	GetIndexStatus(ctx context.Context, clientID, workspacePath string) (*dto.IndexStatusResponse, error)
@@ -334,11 +334,19 @@ func (s *extensionService) CheckIgnoreFiles(ctx context.Context, clientID, works
 	}, nil
 }
 
-func (s *extensionService) SwitchIndex(ctx context.Context, workspacePath, switchStatus string) error {
-	// 检查开关状态
-	if switchStatus != "on" && switchStatus != "off" {
-		return fmt.Errorf("invalid switch status: %s", switchStatus)
+func (s *extensionService) SwitchIndex(ctx context.Context, workspacePath, switchStatus, clientID string) error {
+	codebaseEnv := s.storage.GetCodebaseEnv()
+	if codebaseEnv == nil {
+		codebaseEnv = &config.CodebaseEnv{
+			Switch: dto.SwitchOn,
+		}
 	}
+	codebaseEnv.Switch = switchStatus
+	err := s.storage.SaveCodebaseEnv(codebaseEnv)
+	if err != nil {
+		return fmt.Errorf("failed to save codebase env: %v", err)
+	}
+
 	// 检查工作空间是否存在
 	workspace, err := s.workspaceRepo.GetWorkspaceByPath(workspacePath)
 	if err != nil {
@@ -347,7 +355,7 @@ func (s *extensionService) SwitchIndex(ctx context.Context, workspacePath, switc
 
 	// 更新工作空间的索引开关状态
 	active := "false"
-	if switchStatus == "on" {
+	if switchStatus == dto.SwitchOn {
 		active = "true"
 	}
 
@@ -367,18 +375,113 @@ func (s *extensionService) SwitchIndex(ctx context.Context, workspacePath, switc
 
 	if active == "true" {
 		// 创建代码库配置
-		if err := s.createCodebaseConfig(workspacePath); err != nil {
+		if err := s.createCodebaseConfig(workspacePath, clientID); err != nil {
 			s.logger.Error("failed to create codebase config: %v", err)
 		}
 
 		// 创建代码库嵌入配置
-		if err := s.createCodebaseEmbeddingConfig(workspacePath); err != nil {
+		if err := s.createCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
 			s.logger.Error("failed to create codebase embedding config: %v", err)
 		}
 
-		// TODO: 事务处理新增open_worksapce事件，删除其余非进行中状态事件
+		// 事务处理新增open_worksapce事件，删除其余非进行中状态事件
+		// 定义非进行中状态
+		nonProcessingEmbeddingStatuses := []int{
+			model.EmbeddingStatusInit,
+			model.EmbeddingStatusUploadFailed,
+			model.EmbeddingStatusBuildFailed,
+			model.EmbeddingStatusSuccess,
+		}
+
+		nonProcessingCodegraphStatuses := []int{
+			model.CodegraphStatusInit,
+			model.CodegraphStatusFailed,
+			model.CodegraphStatusSuccess,
+		}
+
+		// 获取所有非进行中状态的事件
+		nonProcessingEvents, err := s.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(
+			[]string{},
+			[]string{workspacePath},
+			-1, // 足够大的限制值
+			false,
+			nonProcessingEmbeddingStatuses,
+			nonProcessingCodegraphStatuses,
+		)
+		if err != nil {
+			s.logger.Error("failed to get non-processing open workspace events: %v", err)
+		} else {
+			// 删除所有非进行中状态的事件
+			deleteEventIds := []int64{}
+			for _, event := range nonProcessingEvents {
+				deleteEventIds = append(deleteEventIds, event.ID)
+			}
+			if len(deleteEventIds) > 0 {
+				if err := s.eventRepo.BatchDeleteEvents(deleteEventIds); err != nil {
+					s.logger.Error("failed to batch delete non-processing open workspace events: %v", err)
+				} else {
+					s.logger.Debug("batch deleted %d non-processing open workspace events for workspace: %s", len(deleteEventIds), workspacePath)
+				}
+			}
+		}
+
+		// 创建新的open_workspace事件
+		newOpenWorkspaceEvent := &model.Event{
+			WorkspacePath:   workspacePath,
+			EventType:       model.EventTypeOpenWorkspace,
+			SourceFilePath:  "",
+			TargetFilePath:  "",
+			SyncId:          "",
+			EmbeddingStatus: model.EmbeddingStatusSuccess,
+			CodegraphStatus: model.CodegraphStatusInit,
+		}
+
+		if err := s.eventRepo.CreateEvent(newOpenWorkspaceEvent); err != nil {
+			s.logger.Error("failed to create open workspace event: %v", err)
+		} else {
+			s.logger.Info("created new open workspace event for workspace: %s", workspacePath)
+		}
 	} else {
-		// TODO: 删除非进行中状态事件
+		// 删除非进行中状态事件
+		// 定义非进行中状态
+		nonProcessingEmbeddingStatuses := []int{
+			model.EmbeddingStatusInit,
+			model.EmbeddingStatusUploadFailed,
+			model.EmbeddingStatusBuildFailed,
+			model.EmbeddingStatusSuccess,
+		}
+
+		nonProcessingCodegraphStatuses := []int{
+			model.CodegraphStatusInit,
+			model.CodegraphStatusFailed,
+			model.CodegraphStatusSuccess,
+		}
+
+		// 获取所有非进行中状态的事件
+		nonProcessingEvents, err := s.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(
+			[]string{}, // 空字符串表示所有事件类型
+			[]string{workspacePath},
+			-1, // 足够大的限制值
+			false,
+			nonProcessingEmbeddingStatuses,
+			nonProcessingCodegraphStatuses,
+		)
+		if err != nil {
+			s.logger.Error("failed to get non-processing events for deletion: %v", err)
+		} else {
+			// 删除所有非进行中状态的事件
+			deleteEventIds := []int64{}
+			for _, event := range nonProcessingEvents {
+				deleteEventIds = append(deleteEventIds, event.ID)
+			}
+			if len(deleteEventIds) > 0 {
+				if err := s.eventRepo.BatchDeleteEvents(deleteEventIds); err != nil {
+					s.logger.Error("failed to batch delete non-processing events: %v", err)
+				} else {
+					s.logger.Debug("batch deleted non-processing events for workspace: %s", workspacePath)
+				}
+			}
+		}
 	}
 
 	s.logger.Info("index switch for workspace %s set to %s", workspacePath, switchStatus)
@@ -386,10 +489,10 @@ func (s *extensionService) SwitchIndex(ctx context.Context, workspacePath, switc
 }
 
 // PublishEvents 发布工作区事件
-func (s *extensionService) PublishEvents(ctx context.Context, workspacePath string, events []dto.WorkspaceEvent) (int, error) {
+func (s *extensionService) PublishEvents(ctx context.Context, workspacePath, clientID string, events []dto.WorkspaceEvent) (int, error) {
 	s.logger.Info("publishing %d events for workspace: %s", len(events), workspacePath)
 
-	s.handleWorkspaceEvents(workspacePath, events)
+	s.handleWorkspaceEvents(workspacePath, clientID, events)
 	successCount := s.processEvents(workspacePath, events)
 
 	s.logger.Info("successfully published %d/%d events for workspace: %s",
@@ -451,6 +554,9 @@ func (s *extensionService) tryUpdateExistingEvent(workspacePath string, event dt
 		EmbeddingStatus: model.EmbeddingStatusInit,
 		CodegraphStatus: model.CodegraphStatusInit,
 	}
+	if event.EventType == model.EventTypeOpenWorkspace {
+		updateEvent.EmbeddingStatus = model.EmbeddingStatusSuccess
+	}
 
 	// 更新事件记录
 	if err := s.eventRepo.UpdateEvent(updateEvent); err != nil {
@@ -474,6 +580,9 @@ func (s *extensionService) createNewEvent(workspacePath string, event dto.Worksp
 		EmbeddingStatus: model.EmbeddingStatusInit, // 初始状态
 		CodegraphStatus: model.CodegraphStatusInit, // 初始状态
 	}
+	if event.EventType == model.EventTypeOpenWorkspace {
+		eventModel.EmbeddingStatus = model.EmbeddingStatusSuccess
+	}
 
 	// 保存事件到数据库
 	if err := s.eventRepo.CreateEvent(eventModel); err != nil {
@@ -487,11 +596,11 @@ func (s *extensionService) createNewEvent(workspacePath string, event dto.Worksp
 }
 
 // handleWorkspaceEvents 处理工作区相关事件（打开/关闭工作区）
-func (s *extensionService) handleWorkspaceEvents(workspacePath string, events []dto.WorkspaceEvent) {
+func (s *extensionService) handleWorkspaceEvents(workspacePath, clientID string, events []dto.WorkspaceEvent) {
 	for _, event := range events {
 		switch event.EventType {
 		case model.EventTypeOpenWorkspace:
-			s.handleOpenWorkspaceEvent(workspacePath)
+			s.handleOpenWorkspaceEvent(workspacePath, clientID)
 		case model.EventTypeCloseWorkspace:
 			s.handleCloseWorkspaceEvent(workspacePath)
 		}
@@ -499,7 +608,7 @@ func (s *extensionService) handleWorkspaceEvents(workspacePath string, events []
 }
 
 // handleOpenWorkspaceEvent 处理打开工作区事件
-func (s *extensionService) handleOpenWorkspaceEvent(workspacePath string) {
+func (s *extensionService) handleOpenWorkspaceEvent(workspacePath, clientID string) {
 	// 检查工作区是否已存在
 	_, err := s.workspaceRepo.GetWorkspaceByPath(workspacePath)
 	if err != nil {
@@ -511,12 +620,12 @@ func (s *extensionService) handleOpenWorkspaceEvent(workspacePath string) {
 	}
 
 	// 创建代码库配置
-	if err := s.createCodebaseConfig(workspacePath); err != nil {
+	if err := s.createCodebaseConfig(workspacePath, clientID); err != nil {
 		s.logger.Error("failed to create codebase config: %v", err)
 	}
 
 	// 创建代码库嵌入配置
-	if err := s.createCodebaseEmbeddingConfig(workspacePath); err != nil {
+	if err := s.createCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
 		s.logger.Error("failed to create codebase embedding config: %v", err)
 	}
 }
@@ -577,7 +686,7 @@ func (s *extensionService) deactivateWorkspace(workspacePath string) {
 	}
 }
 
-func (s *extensionService) createCodebaseConfig(workspacePath string) error {
+func (s *extensionService) createCodebaseConfig(workspacePath, clientID string) error {
 	workspaceName := filepath.Base(workspacePath)
 	codebaseID := utils.GenerateCodebaseID(workspacePath)
 
@@ -585,7 +694,7 @@ func (s *extensionService) createCodebaseConfig(workspacePath string) error {
 	if err != nil {
 		// 如果配置不存在，创建新的配置
 		codebaseConfig = &config.CodebaseConfig{
-			ClientID:     "clientID", // TODO: 获取客户端ID
+			ClientID:     clientID,
 			CodebaseId:   codebaseID,
 			CodebaseName: workspaceName,
 			CodebasePath: workspacePath,
@@ -606,7 +715,7 @@ func (s *extensionService) createCodebaseConfig(workspacePath string) error {
 	return nil
 }
 
-func (s *extensionService) createCodebaseEmbeddingConfig(workspacePath string) error {
+func (s *extensionService) createCodebaseEmbeddingConfig(workspacePath, clientID string) error {
 	workspaceName := filepath.Base(workspacePath)
 	codebaseID := utils.GenerateCodebaseEmbeddingID(workspacePath)
 
@@ -617,7 +726,7 @@ func (s *extensionService) createCodebaseEmbeddingConfig(workspacePath string) e
 	}
 
 	codebaseEmbeddingConfig := &config.CodebaseEmbeddingConfig{
-		ClientID:     "clientID", // TODO: 获取客户端ID
+		ClientID:     clientID,
 		CodebaseId:   codebaseID,
 		CodebaseName: workspaceName,
 		CodebasePath: workspacePath,
@@ -635,7 +744,7 @@ func (s *extensionService) createCodebaseEmbeddingConfig(workspacePath string) e
 }
 
 // TriggerIndex 触发索引构建
-func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, indexType string) error {
+func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, indexType, clientID string) error {
 	// 检查工作区是否已存在
 	workspace, err := s.workspaceRepo.GetWorkspaceByPath(workspacePath)
 	if err != nil {
@@ -675,25 +784,48 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 		}
 	}
 
-	if err := s.createCodebaseConfig(workspacePath); err != nil {
+	if err := s.createCodebaseConfig(workspacePath, clientID); err != nil {
 		s.logger.Error("failed to create codebase config: %v", err)
 		return fmt.Errorf("failed to create codebase config: %w", err)
 	}
 
-	if err := s.createCodebaseEmbeddingConfig(workspacePath); err != nil {
+	if err := s.createCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
 		s.logger.Error("failed to create codebase embedding config: %v", err)
 		return fmt.Errorf("failed to create codebase embedding config: %w", err)
 	}
 
-	// TODO: 判断open_workspace事件是否存在，若不存在则创建
+	// 判断open_workspace事件是否存在非进行中状态，若不存在则创建
+	existingOpenEvents, err := s.eventRepo.GetEventsByWorkspaceAndType(workspacePath, []string{model.EventTypeOpenWorkspace}, 1, true)
+	if err != nil {
+		s.logger.Error("failed to get existing open workspace events: %v", err)
+		return fmt.Errorf("failed to get existing open workspace events: %w", err)
+	}
 
-	// 创建打开工作区事件
-	eventModel := &model.Event{
-		WorkspacePath:  workspacePath,
-		EventType:      model.EventTypeOpenWorkspace,
-		SourceFilePath: "",
-		TargetFilePath: "",
-		SyncId:         "", // 暂时为空，后续可以生成
+	shouldCreateEvent := true
+	if len(existingOpenEvents) > 0 {
+		// 检查是否存在非进行中状态的open_workspace事件
+		for _, event := range existingOpenEvents {
+			if event.EmbeddingStatus != model.EmbeddingStatusUploading &&
+				event.EmbeddingStatus != model.EmbeddingStatusBuilding &&
+				event.CodegraphStatus != model.CodegraphStatusBuilding {
+				// 存在非进行中状态的事件，不需要创建新事件
+				shouldCreateEvent = false
+				s.logger.Info("found existing non-processing open workspace event for workspace: %s", workspacePath)
+				break
+			}
+		}
+	}
+
+	var eventModel *model.Event
+	if shouldCreateEvent {
+		// 创建打开工作区事件
+		eventModel = &model.Event{
+			WorkspacePath:  workspacePath,
+			EventType:      model.EventTypeOpenWorkspace,
+			SourceFilePath: "",
+			TargetFilePath: "",
+			SyncId:         "", // 暂时为空，后续可以生成
+		}
 	}
 	switch indexType {
 	case dto.IndexTypeEmbedding:
@@ -707,13 +839,58 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 		eventModel.CodegraphStatus = model.CodegraphStatusInit
 	}
 
-	// 保存事件到数据库
-	if err := s.eventRepo.CreateEvent(eventModel); err != nil {
-		s.logger.Error("failed to create open workspace event: %v", err)
-		return fmt.Errorf("failed to create event: %w", err)
+	if shouldCreateEvent {
+		// 保存事件到数据库
+		if err := s.eventRepo.CreateEvent(eventModel); err != nil {
+			s.logger.Error("failed to create open workspace event: %v", err)
+			return fmt.Errorf("failed to create event: %w", err)
+		}
 	}
 
-	// TODO: 事务处理删除其他非进行中状态事件
+	// 事务处理删除其他非进行中状态事件
+	// 获取所有需要删除的事件ID
+	nonProcessingEmbeddingStatuses := []int{
+		model.EmbeddingStatusInit,
+		model.EmbeddingStatusUploadFailed,
+		model.EmbeddingStatusBuildFailed,
+		model.EmbeddingStatusSuccess,
+	}
+
+	nonProcessingCodegraphStatuses := []int{
+		model.CodegraphStatusInit,
+		model.CodegraphStatusFailed,
+		model.CodegraphStatusSuccess,
+	}
+
+	// 获取所有非进行中状态的事件（排除新创建的事件）
+	eventsToDelete, err := s.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(
+		[]string{},
+		[]string{workspacePath},
+		-1, // 足够大的限制值
+		false,
+		nonProcessingEmbeddingStatuses,
+		nonProcessingCodegraphStatuses,
+	)
+	if err != nil {
+		s.logger.Error("failed to get non-processing events for deletion: %v", err)
+		return fmt.Errorf("failed to get non-processing events: %w", err)
+	}
+
+	// 删除这些事件（跳过新创建的事件）
+	deleteEventIds := []int64{}
+	for _, event := range eventsToDelete {
+		if shouldCreateEvent && event.ID == eventModel.ID {
+			continue // 跳过新创建的事件
+		}
+		deleteEventIds = append(deleteEventIds, event.ID)
+	}
+
+	if len(deleteEventIds) > 0 {
+		if err := s.eventRepo.BatchDeleteEvents(deleteEventIds); err != nil {
+			s.logger.Error("failed to batch delete non-processing events: %v", err)
+			return fmt.Errorf("failed to batch delete non-processing events: %w", err)
+		}
+	}
 
 	s.logger.Info("successfully triggered index build for workspace: %s", workspacePath)
 	return nil

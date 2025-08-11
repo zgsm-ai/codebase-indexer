@@ -155,6 +155,7 @@ func (m *SQLiteManager) createEventsTable() string {
         source_file_path VARCHAR(500) NOT NULL DEFAULT '',
         target_file_path VARCHAR(500) NOT NULL DEFAULT '',
 		sync_id VARCHAR(100) NOT NULL DEFAULT '',
+		file_hash VARCHAR(100) NOT NULL DEFAULT '',
 		embedding_status TINYINT NOT NULL DEFAULT 1,
 		codegraph_status TINYINT NOT NULL DEFAULT 1,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

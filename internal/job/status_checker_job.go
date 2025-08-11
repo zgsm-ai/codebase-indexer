@@ -5,6 +5,9 @@ import (
 	"sync"
 	"time"
 
+	"codebase-indexer/internal/config"
+	"codebase-indexer/internal/dto"
+	"codebase-indexer/internal/repository"
 	"codebase-indexer/internal/service"
 	"codebase-indexer/pkg/logger"
 )
@@ -12,6 +15,7 @@ import (
 // StatusCheckerJob 状态检查任务
 type StatusCheckerJob struct {
 	checker  service.EmbeddingStatusService
+	storage  repository.StorageInterface
 	logger   logger.Logger
 	interval time.Duration
 	ctx      context.Context
@@ -22,12 +26,14 @@ type StatusCheckerJob struct {
 // NewStatusCheckerJob 创建状态检查任务
 func NewStatusCheckerJob(
 	checker service.EmbeddingStatusService,
+	storage repository.StorageInterface,
 	logger logger.Logger,
 	interval time.Duration,
 ) *StatusCheckerJob {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &StatusCheckerJob{
 		checker:  checker,
+		storage:  storage,
 		logger:   logger,
 		interval: interval,
 		ctx:      ctx,
@@ -39,15 +45,14 @@ func NewStatusCheckerJob(
 func (j *StatusCheckerJob) Start() {
 	j.logger.Info("starting status checker job with interval: %v", j.interval)
 
+	// 立即执行一次检查
+	j.checkBuildingStates()
+
 	j.wg.Add(1)
 	go func() {
 		defer j.wg.Done()
-
 		ticker := time.NewTicker(j.interval)
 		defer ticker.Stop()
-
-		// 立即执行一次检查
-		j.checkBuildingStates()
 
 		for {
 			select {
@@ -70,6 +75,27 @@ func (j *StatusCheckerJob) Stop() {
 
 // checkBuildingStates 检查所有building状态
 func (j *StatusCheckerJob) checkBuildingStates() {
+	// 检查上下文是否已取消
+	select {
+	case <-j.ctx.Done():
+		j.logger.Info("context cancelled, skipping status check")
+		return
+	default:
+		// 继续执行
+	}
+
+	// 检查是否关闭codebase
+	codebaseEnv := j.storage.GetCodebaseEnv()
+	if codebaseEnv == nil {
+		codebaseEnv = &config.CodebaseEnv{
+			Switch: dto.SwitchOn,
+		}
+	}
+	if codebaseEnv.Switch == dto.SwitchOff {
+		j.logger.Info("codebase is disabled, skipping status check")
+		return
+	}
+
 	// 获取活跃工作区
 	workspaces, err := j.checker.CheckActiveWorkspaces()
 	if err != nil {
@@ -87,10 +113,28 @@ func (j *StatusCheckerJob) checkBuildingStates() {
 		workspacePaths[i] = workspace.WorkspacePath
 	}
 
+	// 检查上下文是否已取消
+	select {
+	case <-j.ctx.Done():
+		j.logger.Info("context cancelled, skipping embedding process")
+		return
+	default:
+		// 继续执行
+	}
+
 	err = j.checker.CheckAllBuildingStates(workspacePaths)
 	if err != nil {
 		j.logger.Error("failed to check building states: %v", err)
 		return
+	}
+
+	// 检查上下文是否已取消
+	select {
+	case <-j.ctx.Done():
+		j.logger.Info("context cancelled, skipping uploading process")
+		return
+	default:
+		// 继续执行
 	}
 
 	err = j.checker.CheckAllUploadingStatues(workspacePaths)

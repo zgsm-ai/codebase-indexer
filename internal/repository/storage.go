@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"codebase-indexer/internal/config"
+	"codebase-indexer/internal/dto"
+	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/logger"
 )
 
@@ -19,11 +21,15 @@ type StorageInterface interface {
 	GetCodebaseConfig(codebaseId string) (*config.CodebaseConfig, error)
 	SaveCodebaseConfig(config *config.CodebaseConfig) error
 	DeleteCodebaseConfig(codebaseId string) error
+	GetCodebaseEnv() *config.CodebaseEnv
+	SaveCodebaseEnv(codebaseEnv *config.CodebaseEnv) error
 }
 
 type StorageManager struct {
 	codebasePath    string
 	codebaseConfigs map[string]*config.CodebaseConfig // Stores all codebase configurations
+	codebaseEnvPath string
+	codebaseEnv     *config.CodebaseEnv
 	logger          logger.Logger
 	rwMutex         sync.RWMutex
 }
@@ -42,11 +48,13 @@ func NewStorageManager(workspaceDir string, logger logger.Logger) (StorageInterf
 	// Initialize codebaseConfigs map
 	sm := &StorageManager{
 		codebasePath:    workspaceDir,
+		codebaseEnvPath: utils.EnvFile,
 		logger:          logger,
 		codebaseConfigs: make(map[string]*config.CodebaseConfig),
 	}
 
 	sm.loadAllConfigs()
+	sm.loadCodebaseEnv()
 	return sm, nil
 }
 
@@ -79,6 +87,71 @@ func (s *StorageManager) GetCodebaseConfig(codebaseId string) (*config.CodebaseC
 	s.rwMutex.Unlock()
 
 	return config, nil
+}
+
+func (s *StorageManager) GetCodebaseEnv() *config.CodebaseEnv {
+	s.rwMutex.RLock()
+	defer s.rwMutex.RUnlock()
+
+	return s.codebaseEnv
+}
+
+func (s *StorageManager) SaveCodebaseEnv(codebaseEnv *config.CodebaseEnv) error {
+	if codebaseEnv == nil {
+		return fmt.Errorf("codebase env is empty: %v", codebaseEnv)
+	}
+	s.logger.Info("saving codebase env: %s", codebaseEnv)
+
+	s.rwMutex.Lock()
+	defer s.rwMutex.Unlock()
+
+	data, err := json.MarshalIndent(codebaseEnv, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to serialize codebase env: %v", err)
+	}
+
+	if err := os.WriteFile(s.codebaseEnvPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write codebase env file: %v", err)
+	}
+
+	// Atomically update in-memory configuration
+	s.codebaseEnv = codebaseEnv
+	s.logger.Info("codebase env saved successfully, path: %s", s.codebaseEnvPath)
+	return nil
+}
+
+func (s *StorageManager) loadCodebaseEnv() {
+	data, err := os.ReadFile(s.codebaseEnvPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// 文件不存在，创建默认配置
+			s.logger.Info("codebase env file not found, creating with default values")
+			s.codebaseEnv = &config.CodebaseEnv{
+				Switch: dto.SwitchOn, // 默认开启索引功能
+			}
+
+			// 将默认配置写入文件
+			defaultData, err := json.MarshalIndent(s.codebaseEnv, "", "  ")
+			if err != nil {
+				s.logger.Error("failed to marshal default codebase env: %v", err)
+				return
+			}
+
+			if err := os.WriteFile(s.codebaseEnvPath, defaultData, 0644); err != nil {
+				s.logger.Error("failed to create default codebase env file: %v", err)
+				return
+			}
+
+			s.logger.Info("default codebase env file created successfully")
+			return
+		}
+		s.logger.Error("failed to read codebase env file: %v", err)
+		return
+	}
+	if err := json.Unmarshal(data, &s.codebaseEnv); err != nil {
+		s.logger.Error("failed to parse codebase env file: %v", err)
+		return
+	}
 }
 
 // Load all codebase configuration files

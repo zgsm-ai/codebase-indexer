@@ -127,6 +127,7 @@ func (ws *fileScanService) DetectFileChanges(workspace *model.Workspace) ([]*mod
 			EventType:      ws.MapFileStatusToEventType(change.Status),
 			SourceFilePath: filePth,
 			TargetFilePath: filePth,
+			FileHash:       change.Hash,
 		}
 
 		// 检查是否已存在相同路径的事件
@@ -203,6 +204,7 @@ func (ws *fileScanService) handleEventsWithoutDeduplication(changes []*utils.Fil
 			EventType:       ws.MapFileStatusToEventType(change.Status),
 			SourceFilePath:  filePth,
 			TargetFilePath:  filePth,
+			FileHash:        change.Hash,
 			EmbeddingStatus: model.EmbeddingStatusInit,
 			CodegraphStatus: model.CodegraphStatusSuccess,
 		}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/time/rate"
 
 	"codebase-indexer/pkg/logger"
 )
@@ -79,6 +80,22 @@ func SecurityMiddleware() gin.HandlerFunc {
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("X-XSS-Protection", "1; mode=block")
 		c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		c.Next()
+	}
+}
+
+// RateLimitMiddleware 限流中间件
+func RateLimitMiddleware() gin.HandlerFunc {
+	limiter := rate.NewLimiter(rate.Every(time.Second), 100)
+	return func(c *gin.Context) {
+		if !limiter.Allow() {
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+				"success": false,
+				"code":    "429",
+				"message": "too many requests",
+			})
+			return
+		}
 		c.Next()
 	}
 }

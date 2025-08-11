@@ -187,7 +187,7 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 		model.CodegraphStatusInit,
 	}
 	// 1、打开工作区事件
-	openEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(model.EventTypeAddFile, workspacePaths, 10,
+	openEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeAddFile}, workspacePaths, 10,
 		false, nil, codegraphStatuses)
 
 	if err != nil {
@@ -207,7 +207,7 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 	}
 
 	// 2、添加文件事件
-	addEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(model.EventTypeAddFile, workspacePaths, 10,
+	addEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeAddFile}, workspacePaths, 10,
 		false, nil, codegraphStatuses)
 
 	if err != nil {
@@ -227,7 +227,7 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 	}
 
 	// 3、修改文件事件
-	modifyEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(model.EventTypeModifyFile, workspacePaths, 10,
+	modifyEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeModifyFile}, workspacePaths, 10,
 		false, nil, codegraphStatuses)
 
 	if err != nil {
@@ -247,7 +247,7 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 	}
 
 	// 4、删除文件事件
-	deleteEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(model.EventTypeDeleteFile, workspacePaths, 10,
+	deleteEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeDeleteFile}, workspacePaths, 10,
 		false, nil, codegraphStatuses)
 
 	if err != nil {
@@ -267,7 +267,7 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 	}
 
 	// 5、重命名事件
-	renameEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(model.EventTypeRenameFile, workspacePaths, 10,
+	renameEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeRenameFile}, workspacePaths, 10,
 		false, nil, codegraphStatuses)
 
 	if err != nil {

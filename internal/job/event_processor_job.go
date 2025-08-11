@@ -5,6 +5,9 @@ import (
 	"sync"
 	"time"
 
+	"codebase-indexer/internal/config"
+	"codebase-indexer/internal/dto"
+	"codebase-indexer/internal/repository"
 	"codebase-indexer/internal/service"
 	"codebase-indexer/pkg/logger"
 )
@@ -13,6 +16,7 @@ import (
 type EventProcessorJob struct {
 	embedding service.EmbeddingProcessService
 	codegraph service.CodegraphProcessService
+	storage   repository.StorageInterface
 	logger    logger.Logger
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -24,11 +28,13 @@ func NewEventProcessorJob(
 	logger logger.Logger,
 	embedding service.EmbeddingProcessService,
 	codegraph service.CodegraphProcessService,
+	storage repository.StorageInterface,
 ) *EventProcessorJob {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &EventProcessorJob{
 		embedding: embedding,
 		codegraph: codegraph,
+		storage:   storage,
 		logger:    logger,
 		ctx:       ctx,
 		cancel:    cancel,
@@ -39,15 +45,14 @@ func NewEventProcessorJob(
 func (j *EventProcessorJob) Start() {
 	j.logger.Info("starting event processor job")
 
+	// 立即执行一次事件处理
+	j.embeddingProcessWorkspaces()
+
 	j.wg.Add(1)
 	go func() {
 		defer j.wg.Done()
-
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
-
-		// 立即执行一次事件处理
-		j.embeddingProcessWorkspaces()
 
 		for {
 			select {
@@ -57,8 +62,6 @@ func (j *EventProcessorJob) Start() {
 			case <-ticker.C:
 				// 处理事件
 				j.embeddingProcessWorkspaces()
-				// 短暂休眠避免CPU占用过高
-				time.Sleep(1 * time.Second)
 			}
 		}
 	}()
@@ -92,6 +95,27 @@ func (j *EventProcessorJob) Stop() {
 }
 
 func (j *EventProcessorJob) embeddingProcessWorkspaces() {
+	// 检查上下文是否已取消
+	select {
+	case <-j.ctx.Done():
+		j.logger.Info("context cancelled, skipping embedding process")
+		return
+	default:
+		// 继续执行
+	}
+
+	// 检查是否关闭codebase
+	codebaseEnv := j.storage.GetCodebaseEnv()
+	if codebaseEnv == nil {
+		codebaseEnv = &config.CodebaseEnv{
+			Switch: dto.SwitchOn,
+		}
+	}
+	if codebaseEnv.Switch == dto.SwitchOff {
+		j.logger.Info("codebase is disabled, skipping embedding process")
+		return
+	}
+
 	// 获取活跃工作区
 	workspaces, err := j.embedding.ProcessActiveWorkspaces()
 	if err != nil {
@@ -109,13 +133,30 @@ func (j *EventProcessorJob) embeddingProcessWorkspaces() {
 		workspackePaths[i] = workspace.WorkspacePath
 	}
 
-	err = j.embedding.ProcessEmbeddingEvents(workspackePaths)
+	// 在处理事件前再次检查上下文是否已取消
+	select {
+	case <-j.ctx.Done():
+		j.logger.Info("context cancelled, skipping embedding process")
+		return
+	default:
+		// 继续执行
+	}
+
+	err = j.embedding.ProcessEmbeddingEvents(j.ctx, workspackePaths)
 	if err != nil {
 		j.logger.Error("failed to process embedding events: %v", err)
 	}
 }
 
 func (j *EventProcessorJob) codegraphProcessWorkSpaces() error {
+	// 检查上下文是否已取消
+	select {
+	case <-j.ctx.Done():
+		j.logger.Info("context cancelled, skipping codegraph events processing")
+		return j.ctx.Err()
+	default:
+		// 继续执行
+	}
 	// 获取活跃工作区
 	workspaces, err := j.codegraph.ProcessActiveWorkspaces(j.ctx)
 	if err != nil {

@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"codebase-indexer/internal/dto"
@@ -148,7 +149,7 @@ func (sc *embeddingStatusService) checkWorkspaceUploadingStates(workspacePath st
 // getBuildingEventsForWorkspace 获取指定工作区的building状态events
 func (sc *embeddingStatusService) getBuildingEventsForWorkspace(workspacePath string) ([]*model.Event, error) {
 	buildingStatuses := []int{model.EmbeddingStatusBuilding}
-	events, err := sc.eventRepo.GetEventsByWorkspaceAndEmbeddingStatus(workspacePath, 20, true, buildingStatuses)
+	events, err := sc.eventRepo.GetEventsByWorkspaceAndEmbeddingStatus(workspacePath, 5, false, buildingStatuses)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get building events: %w", err)
 	}
@@ -158,7 +159,7 @@ func (sc *embeddingStatusService) getBuildingEventsForWorkspace(workspacePath st
 // getUploadingEventsForWorkspace 获取指定工作区的uploading状态events
 func (sc *embeddingStatusService) getUploadingEventsForWorkspace(workspacePath string) ([]*model.Event, error) {
 	uploadingStatuses := []int{model.EmbeddingStatusUploading}
-	events, err := sc.eventRepo.GetEventsByWorkspaceAndEmbeddingStatus(workspacePath, 20, true, uploadingStatuses)
+	events, err := sc.eventRepo.GetEventsByWorkspaceAndEmbeddingStatus(workspacePath, 5, false, uploadingStatuses)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get uploading events: %w", err)
 	}
@@ -179,6 +180,7 @@ func (sc *embeddingStatusService) checkEventBuildStatus(workspacePath string, ev
 	if err != nil {
 		return fmt.Errorf("failed to fetch file status: %w", err)
 	}
+	sc.logger.Info("file status resp: %v", fileStatusResp)
 
 	fileStatusData := fileStatusResp.Data
 	processStatus := fileStatusData.Process
@@ -235,22 +237,27 @@ func (sc *embeddingStatusService) handleBuildCompletion(workspacePath string, ev
 	}
 	var status string
 	for _, fileItem := range fileStatusList {
-		if fileItem.Path == filePath {
+		fileItemPath := fileItem.Path
+		if runtime.GOOS == "windows" {
+			fileItemPath = filepath.FromSlash(fileItemPath)
+		}
+		if fileItemPath == filePath {
 			status = fileItem.Status
-			sc.logger.Info("file %s status: %s", fileItem.Path, fileItem.Status)
+			sc.logger.Info("file %s status: %s", fileItemPath, fileItem.Status)
 			break
 		}
 	}
 
 	// 更新event状态
 	updateEvent := &model.Event{ID: event.ID}
-	if status == dto.EmbeddingComplete {
+	switch status {
+	case dto.EmbeddingComplete, dto.EmbeddingUnsupported:
 		updateEvent.EmbeddingStatus = model.EmbeddingStatusSuccess
 		sc.logger.Info("file %s built successfully for syncId: %s", filePath, event.SyncId)
-	} else if status == dto.EmbeddingFailed {
+	case dto.EmbeddingFailed:
 		updateEvent.EmbeddingStatus = model.EmbeddingStatusBuildFailed
 		sc.logger.Info("file %s failed to build for syncId: %s", filePath, event.SyncId)
-	} else {
+	default:
 		return nil
 	}
 
@@ -262,27 +269,28 @@ func (sc *embeddingStatusService) handleBuildCompletion(workspacePath string, ev
 
 	// 获取 codebase embedding 配置
 	codebaseId := utils.GenerateCodebaseEmbeddingID(workspacePath)
-	codebaseConfig, err := sc.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseId)
+	codebaseEmbeddingConfig, err := sc.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseId)
 	if err != nil {
 		sc.logger.Error("failed to get codebase embedding config for workspace %s: %v", workspacePath, err)
 		return fmt.Errorf("failed to get codebase embedding config: %w", err)
 	}
-	if codebaseConfig.HashTree == nil {
-		codebaseConfig.HashTree = make(map[string]string)
+	if codebaseEmbeddingConfig.HashTree == nil {
+		codebaseEmbeddingConfig.HashTree = make(map[string]string)
 	}
-	// TODO: 记录上传时filePath的时间戳
-	codebaseConfig.HashTree[filePath] = ""
+
+	codebaseEmbeddingConfig.HashTree[filePath] = event.FileHash
 	// 保存 codebase embedding 配置
-	err = sc.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseConfig)
+	err = sc.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig)
 	if err != nil {
 		sc.logger.Error("failed to save codebase embedding config for workspace %s: %v", workspacePath, err)
 		return fmt.Errorf("failed to save codebase embedding config: %w", err)
 	}
 
-	embeddingFileNum := len(codebaseConfig.HashTree)
+	embeddingFileNum := len(codebaseEmbeddingConfig.HashTree)
 	updateWorkspace := model.Workspace{
-		WorkspacePath: workspacePath,
-		FileNum:       embeddingFileNum,
+		WorkspacePath:    workspacePath,
+		EmbeddingFileNum: embeddingFileNum,
+		EmbeddingTs:      time.Now().Unix(),
 	}
 	err = sc.workspaceRepo.UpdateWorkspace(&updateWorkspace)
 	if err != nil {

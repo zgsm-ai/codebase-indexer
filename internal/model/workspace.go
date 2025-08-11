@@ -29,6 +29,7 @@ type Event struct {
 	SourceFilePath  string    `json:"sourceFilePath" db:"source_file_path"`
 	TargetFilePath  string    `json:"targetFilePath" db:"target_file_path"`
 	SyncId          string    `json:"syncId" db:"sync_id"`
+	FileHash        string    `json:"fileHash" db:"file_hash"`
 	EmbeddingStatus int       `json:"embeddingStatus" db:"embedding_status"`
 	CodegraphStatus int       `json:"codegraphStatus" db:"codegraph_status"`
 	CreatedAt       time.Time `json:"createdAt" db:"created_at"`

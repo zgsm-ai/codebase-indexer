@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,17 +19,17 @@ import (
 // UploadService 文件上传服务接口
 type UploadService interface {
 	// UploadFileWithRetry 带重试的文件上传
-	UploadFileWithRetry(workspacePath string, filePath string, maxRetries int) (string, error)
+	UploadFileWithRetry(workspacePath string, filePath string, status string, maxRetries int) (*utils.FileStatus, error)
 	// DeleteFileWithRetry 带重试的文件删除
-	DeleteFileWithRetry(workspacePath string, filePath string, maxRetries int) (string, error)
+	DeleteFileWithRetry(workspacePath string, filePath string, maxRetries int) (*utils.FileStatus, error)
 	// UploadFilesWithRetry 批量带重试的文件上传
-	UploadFilesWithRetry(workspacePath string, filePaths []string, maxRetries int) ([]string, error)
+	UploadFilesWithRetry(workspacePath string, filePaths []string, status string, maxRetries int) ([]*utils.FileStatus, error)
 	// DeleteFilesWithRetry 批量带重试的文件删除
-	DeleteFilesWithRetry(workspacePath string, filePaths []string, maxRetries int) ([]string, error)
+	DeleteFilesWithRetry(workspacePath string, filePaths []string, maxRetries int) ([]*utils.FileStatus, error)
 	// RenameFileWithRetry 带重试的文件重命名
-	RenameFileWithRetry(workspacePath string, oldFilePath string, newFilePath string, maxRetries int) (string, error)
+	RenameFileWithRetry(workspacePath string, oldFilePath string, newFilePath string, maxRetries int) (*utils.FileStatus, error)
 	// RenameFilesWithRetry 批量带重试的文件重命名
-	RenameFilesWithRetry(workspacePath string, renamePairs []utils.FileRenamePair, maxRetries int) ([]string, error)
+	RenameFilesWithRetry(workspacePath string, renamePairs []utils.FileRenamePair, maxRetries int) ([]*utils.FileStatus, error)
 }
 
 // UploadConfig 上传配置
@@ -44,7 +45,7 @@ type UploadConfig struct {
 var DefaultUploadConfig = UploadConfig{
 	MaxRetries:      3,
 	BaseRetryDelay:  1 * time.Second,
-	FileSizeLimitMB: 100,
+	FileSizeLimitMB: 10,
 	Timeout:         300 * time.Second,
 	EnableRetry:     true,
 }
@@ -90,10 +91,10 @@ func (us *uploadService) GetUploadConfig() *UploadConfig {
 }
 
 // UploadFileWithRetry 带重试的文件上传算法
-func (us *uploadService) UploadFileWithRetry(workspacePath string, filePath string, maxRetries int) (string, error) {
+func (us *uploadService) UploadFileWithRetry(workspacePath string, filePath string, status string, maxRetries int) (*utils.FileStatus, error) {
 	if !us.uploadCfg.EnableRetry {
 		// 如果禁用重试，直接上传一次
-		return us.uploadSingleFile(workspacePath, filePath)
+		return us.uploadSingleFile(workspacePath, filePath, status)
 	}
 
 	// 使用配置中的最大重试次数或传入的参数
@@ -107,10 +108,10 @@ func (us *uploadService) UploadFileWithRetry(workspacePath string, filePath stri
 	for attempt := 1; attempt <= actualMaxRetries; attempt++ {
 		us.logger.Info("uploading file %s (attempt %d/%d)", filePath, attempt, actualMaxRetries)
 
-		requestId, err := us.uploadSingleFile(workspacePath, filePath)
+		fileStatus, err := us.uploadSingleFile(workspacePath, filePath, status)
 		if err == nil {
 			us.logger.Info("file %s uploaded successfully", filePath)
-			return requestId, nil
+			return fileStatus, nil
 		}
 
 		lastErr = err
@@ -130,13 +131,14 @@ func (us *uploadService) UploadFileWithRetry(workspacePath string, filePath stri
 		}
 	}
 
-	return "", fmt.Errorf("failed to upload file %s after %d attempts, last error: %w", filePath, actualMaxRetries, lastErr)
+	return nil, fmt.Errorf("failed to upload file %s after %d attempts, last error: %w", filePath, actualMaxRetries, lastErr)
 }
 
-func (us *uploadService) DeleteFileWithRetry(workspacePath string, filePath string, maxRetries int) (string, error) {
+func (us *uploadService) DeleteFileWithRetry(workspacePath string, filePath string, maxRetries int) (*utils.FileStatus, error) {
 	fileStatus := &utils.FileStatus{
-		Path:   filePath,
-		Status: utils.FILE_STATUS_DELETED,
+		Path:       filePath,
+		TargetPath: filePath,
+		Status:     utils.FILE_STATUS_DELETED,
 	}
 
 	// 6. 获取上传令牌
@@ -148,7 +150,7 @@ func (us *uploadService) DeleteFileWithRetry(workspacePath string, filePath stri
 
 	tokenResp, err := us.syncer.FetchUploadToken(tokenReq)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch upload token: %w", err)
+		return nil, fmt.Errorf("failed to fetch upload token: %w", err)
 	}
 
 	// 4. 创建临时的 codebase 配置
@@ -163,7 +165,7 @@ func (us *uploadService) DeleteFileWithRetry(workspacePath string, filePath stri
 	// 5. 创建ZIP文件
 	zipPath, err := us.scheduler.CreateSingleFileZip(codebaseConfig, fileStatus)
 	if err != nil {
-		return "", fmt.Errorf("failed to create zip file: %w", err)
+		return nil, fmt.Errorf("failed to create zip file: %w", err)
 	}
 
 	// 清理临时文件
@@ -190,38 +192,37 @@ func (us *uploadService) DeleteFileWithRetry(workspacePath string, filePath stri
 		RequestId:    requestId,
 		UploadToken:  tokenResp.Data.Token,
 	}
-
 	err = us.syncer.UploadFile(zipPath, uploadReq)
 	if err != nil {
-		return "", fmt.Errorf("failed to upload file: %w", err)
+		return nil, fmt.Errorf("failed to upload file: %w", err)
 	}
 
+	fileStatus.RequestId = requestId
 	us.logger.Info("file %s uploaded successfully", filePath)
-	return requestId, nil
+	return fileStatus, nil
 }
 
 // uploadSingleFile 单文件上传算法
-func (us *uploadService) uploadSingleFile(workspacePath string, filePath string) (string, error) {
+func (us *uploadService) uploadSingleFile(workspacePath string, filePath string, status string) (*utils.FileStatus, error) {
 	// 1. 验证文件路径
 	fullPath := filepath.Join(workspacePath, filePath)
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-		return "", fmt.Errorf("file does not exist: %s", fullPath)
+		return nil, fmt.Errorf("file does not exist: %s", fullPath)
 	}
-
-	// TODO: 获取workspacePath的函数codebaseConfig
 
 	// 2. 检查文件大小
 	fileInfo, err := os.Stat(fullPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to get file info: %w", err)
+		return nil, fmt.Errorf("failed to get file info: %w", err)
 	}
 
 	fileSizeMB := float64(fileInfo.Size()) / (1024 * 1024)
 	if fileSizeMB > float64(us.uploadCfg.FileSizeLimitMB) {
-		return "", fmt.Errorf("file size %.2fMB exceeds limit %dMB", fileSizeMB, us.uploadCfg.FileSizeLimitMB)
+		return nil, fmt.Errorf("file size %.2fMB exceeds limit %dMB", fileSizeMB, us.uploadCfg.FileSizeLimitMB)
 	}
 
-	// TODO：获取文件哈希值
+	fileTimestamp := fileInfo.ModTime().UnixMilli()
+	us.logger.Info("file timestamp: %d", fileTimestamp)
 
 	// 6. 获取上传令牌
 	tokenReq := dto.UploadTokenReq{
@@ -231,13 +232,14 @@ func (us *uploadService) uploadSingleFile(workspacePath string, filePath string)
 	}
 	tokenResp, err := us.syncer.FetchUploadToken(tokenReq)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch upload token: %w", err)
+		return nil, fmt.Errorf("failed to fetch upload token: %w", err)
 	}
 
 	// 3. 创建文件变更对象
 	fileStatus := &utils.FileStatus{
 		Path:   filePath,
-		Status: utils.FILE_STATUS_MODIFIED,
+		Hash:   strconv.FormatInt(fileTimestamp, 10),
+		Status: status,
 	}
 
 	// 4. 创建临时的 codebase 配置
@@ -252,7 +254,7 @@ func (us *uploadService) uploadSingleFile(workspacePath string, filePath string)
 	// 5. 创建ZIP文件
 	zipPath, err := us.scheduler.CreateSingleFileZip(codebaseConfig, fileStatus)
 	if err != nil {
-		return "", fmt.Errorf("failed to create zip file: %w", err)
+		return nil, fmt.Errorf("failed to create zip file: %w", err)
 	}
 
 	// 清理临时文件
@@ -273,6 +275,7 @@ func (us *uploadService) uploadSingleFile(workspacePath string, filePath string)
 		requestId = time.Now().Format("20060102150405.000")
 	}
 	us.logger.Info("upload request ID: %s", requestId)
+
 	uploadReq := dto.UploadReq{
 		ClientId:     us.config.ClientId,
 		CodebasePath: workspacePath,
@@ -280,16 +283,14 @@ func (us *uploadService) uploadSingleFile(workspacePath string, filePath string)
 		RequestId:    requestId,
 		UploadToken:  tokenResp.Data.Token,
 	}
-
 	err = us.syncer.UploadFile(zipPath, uploadReq)
 	if err != nil {
-		return "", fmt.Errorf("failed to upload file: %w", err)
+		return nil, fmt.Errorf("failed to upload file: %w", err)
 	}
 
-	// TODO: 上传成功后，将文件hash保存到codebaseConfig中
-
+	fileStatus.RequestId = requestId
 	us.logger.Info("file %s uploaded successfully", filePath)
-	return requestId, nil
+	return fileStatus, nil
 }
 
 // isRetryableError 检查错误是否可重试
@@ -364,11 +365,11 @@ func (us *uploadService) retryWithExponentialBackoff(
 }
 
 // UploadFilesWithRetry 批量带重试的文件上传
-func (us *uploadService) UploadFilesWithRetry(workspacePath string, filePaths []string, maxRetries int) ([]string, error) {
+func (us *uploadService) UploadFilesWithRetry(workspacePath string, filePaths []string, status string, maxRetries int) ([]*utils.FileStatus, error) {
 	us.logger.Info("starting batch upload for %d files in workspace %s", len(filePaths), workspacePath)
 
 	if len(filePaths) == 0 {
-		return []string{}, nil
+		return []*utils.FileStatus{}, nil
 	}
 
 	// 使用配置中的最大重试次数或传入的参数
@@ -377,39 +378,39 @@ func (us *uploadService) UploadFilesWithRetry(workspacePath string, filePaths []
 		actualMaxRetries = maxRetries
 	}
 
-	var requestIds []string
+	var fileStatuses []*utils.FileStatus
 	var uploadErrors []error
 
 	for _, filePath := range filePaths {
 		us.logger.Info("uploading file %s", filePath)
 
-		requestId, err := us.UploadFileWithRetry(workspacePath, filePath, actualMaxRetries)
+		fileStatus, err := us.UploadFileWithRetry(workspacePath, filePath, status, actualMaxRetries)
 		if err != nil {
 			us.logger.Error("failed to upload file %s: %v", filePath, err)
 			uploadErrors = append(uploadErrors, fmt.Errorf("failed to upload file %s: %w", filePath, err))
 			continue
 		}
 
-		requestIds = append(requestIds, requestId)
-		us.logger.Info("file %s uploaded successfully with request ID: %s", filePath, requestId)
+		fileStatuses = append(fileStatuses, fileStatus)
+		us.logger.Info("file %s uploaded successfully with request ID: %s", filePath, fileStatus.RequestId)
 	}
 
 	// 如果有上传错误，返回汇总错误
 	if len(uploadErrors) > 0 {
-		return requestIds, fmt.Errorf("batch upload completed with %d errors out of %d files. First error: %w",
+		return []*utils.FileStatus{}, fmt.Errorf("batch upload completed with %d errors out of %d files. First error: %w",
 			len(uploadErrors), len(filePaths), uploadErrors[0])
 	}
 
 	us.logger.Info("batch upload completed successfully for %d files", len(filePaths))
-	return requestIds, nil
+	return fileStatuses, nil
 }
 
 // DeleteFilesWithRetry 批量带重试的文件删除
-func (us *uploadService) DeleteFilesWithRetry(workspacePath string, filePaths []string, maxRetries int) ([]string, error) {
+func (us *uploadService) DeleteFilesWithRetry(workspacePath string, filePaths []string, maxRetries int) ([]*utils.FileStatus, error) {
 	us.logger.Info("starting batch delete for %d files in workspace %s", len(filePaths), workspacePath)
 
 	if len(filePaths) == 0 {
-		return []string{}, nil
+		return []*utils.FileStatus{}, nil
 	}
 
 	// 使用配置中的最大重试次数或传入的参数
@@ -418,35 +419,35 @@ func (us *uploadService) DeleteFilesWithRetry(workspacePath string, filePaths []
 		actualMaxRetries = maxRetries
 	}
 
-	var requestIds []string
+	var fileStatuses []*utils.FileStatus
 	var deleteErrors []error
 
 	for _, filePath := range filePaths {
 		us.logger.Info("deleting file %s", filePath)
 
-		requestId, err := us.DeleteFileWithRetry(workspacePath, filePath, actualMaxRetries)
+		fileStatus, err := us.DeleteFileWithRetry(workspacePath, filePath, actualMaxRetries)
 		if err != nil {
 			us.logger.Error("failed to delete file %s: %v", filePath, err)
 			deleteErrors = append(deleteErrors, fmt.Errorf("failed to delete file %s: %w", filePath, err))
 			continue
 		}
 
-		requestIds = append(requestIds, requestId)
-		us.logger.Info("file %s deleted successfully with request ID: %s", filePath, requestId)
+		fileStatuses = append(fileStatuses, fileStatus)
+		us.logger.Info("file %s deleted successfully with request ID: %s", filePath, fileStatus.RequestId)
 	}
 
 	// 如果有删除错误，返回汇总错误
 	if len(deleteErrors) > 0 {
-		return requestIds, fmt.Errorf("batch delete completed with %d errors out of %d files. First error: %w",
+		return []*utils.FileStatus{}, fmt.Errorf("batch delete completed with %d errors out of %d files. First error: %w",
 			len(deleteErrors), len(filePaths), deleteErrors[0])
 	}
 
 	us.logger.Info("batch delete completed successfully for %d files", len(filePaths))
-	return requestIds, nil
+	return fileStatuses, nil
 }
 
 // RenameFileWithRetry 带重试的文件重命名
-func (us *uploadService) RenameFileWithRetry(workspacePath string, oldFilePath string, newFilePath string, maxRetries int) (string, error) {
+func (us *uploadService) RenameFileWithRetry(workspacePath string, oldFilePath string, newFilePath string, maxRetries int) (*utils.FileStatus, error) {
 	us.logger.Info("starting rename operation from %s to %s in workspace %s", oldFilePath, newFilePath, workspacePath)
 
 	if !us.uploadCfg.EnableRetry {
@@ -465,10 +466,10 @@ func (us *uploadService) RenameFileWithRetry(workspacePath string, oldFilePath s
 	for attempt := 1; attempt <= actualMaxRetries; attempt++ {
 		us.logger.Info("renaming file %s to %s (attempt %d/%d)", oldFilePath, newFilePath, attempt, actualMaxRetries)
 
-		requestId, err := us.renameSingleFile(workspacePath, oldFilePath, newFilePath)
+		fileStatus, err := us.renameSingleFile(workspacePath, oldFilePath, newFilePath)
 		if err == nil {
 			us.logger.Info("file %s renamed to %s successfully", oldFilePath, newFilePath)
-			return requestId, nil
+			return fileStatus, nil
 		}
 
 		lastErr = err
@@ -488,33 +489,36 @@ func (us *uploadService) RenameFileWithRetry(workspacePath string, oldFilePath s
 		}
 	}
 
-	return "", fmt.Errorf("failed to rename file %s to %s after %d attempts, last error: %w", oldFilePath, newFilePath, actualMaxRetries, lastErr)
+	return nil, fmt.Errorf("failed to rename file %s to %s after %d attempts, last error: %w", oldFilePath, newFilePath, actualMaxRetries, lastErr)
 }
 
 // renameSingleFile 单文件重命名算法
-func (us *uploadService) renameSingleFile(workspacePath string, oldFilePath string, newFilePath string) (string, error) {
+func (us *uploadService) renameSingleFile(workspacePath string, oldFilePath string, newFilePath string) (*utils.FileStatus, error) {
 	// 2. 验证新文件路径的目录是否存在
 	newFullPath := filepath.Join(workspacePath, newFilePath)
 	newDir := filepath.Dir(newFullPath)
 	if _, err := os.Stat(newDir); os.IsNotExist(err) {
-		return "", fmt.Errorf("target directory does not exist: %s", newDir)
+		return nil, fmt.Errorf("target directory does not exist: %s", newDir)
 	}
 
 	// 3. 检查文件大小
 	fileInfo, err := os.Stat(newFullPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to get file info: %w", err)
+		return nil, fmt.Errorf("failed to get file info: %w", err)
 	}
 
 	fileSizeMB := float64(fileInfo.Size()) / (1024 * 1024)
 	if fileSizeMB > float64(us.uploadCfg.FileSizeLimitMB) {
-		return "", fmt.Errorf("file size %.2fMB exceeds limit %dMB", fileSizeMB, us.uploadCfg.FileSizeLimitMB)
+		return nil, fmt.Errorf("file size %.2fMB exceeds limit %dMB", fileSizeMB, us.uploadCfg.FileSizeLimitMB)
 	}
+
+	fileTimestamp := fileInfo.ModTime().UnixMilli()
 
 	// 4. 创建文件重命名对象
 	fileStatus := &utils.FileStatus{
 		Path:       oldFilePath,
 		TargetPath: newFilePath,
+		Hash:       strconv.FormatInt(fileTimestamp, 10),
 		Status:     utils.FILE_STATUS_RENAME,
 	}
 
@@ -530,7 +534,7 @@ func (us *uploadService) renameSingleFile(workspacePath string, oldFilePath stri
 	// 6. 创建ZIP文件
 	zipPath, err := us.scheduler.CreateSingleFileZip(codebaseConfig, fileStatus)
 	if err != nil {
-		return "", fmt.Errorf("failed to create zip file: %w", err)
+		return nil, fmt.Errorf("failed to create zip file: %w", err)
 	}
 
 	// 清理临时文件
@@ -553,7 +557,7 @@ func (us *uploadService) renameSingleFile(workspacePath string, oldFilePath stri
 
 	tokenResp, err := us.syncer.FetchUploadToken(tokenReq)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch upload token: %w", err)
+		return nil, fmt.Errorf("failed to fetch upload token: %w", err)
 	}
 
 	// 8. 上传文件
@@ -579,19 +583,20 @@ func (us *uploadService) renameSingleFile(workspacePath string, oldFilePath stri
 
 	err = us.syncer.UploadFile(zipPath, uploadReq)
 	if err != nil {
-		return "", fmt.Errorf("failed to upload rename file: %w", err)
+		return nil, fmt.Errorf("failed to upload rename file: %w", err)
 	}
 
+	fileStatus.RequestId = requestId
 	us.logger.Info("file %s renamed to %s successfully", oldFilePath, newFilePath)
-	return requestId, nil
+	return fileStatus, nil
 }
 
 // RenameFilesWithRetry 批量带重试的文件重命名
-func (us *uploadService) RenameFilesWithRetry(workspacePath string, renamePairs []utils.FileRenamePair, maxRetries int) ([]string, error) {
+func (us *uploadService) RenameFilesWithRetry(workspacePath string, renamePairs []utils.FileRenamePair, maxRetries int) ([]*utils.FileStatus, error) {
 	us.logger.Info("starting batch rename for %d files in workspace %s", len(renamePairs), workspacePath)
 
 	if len(renamePairs) == 0 {
-		return []string{}, nil
+		return []*utils.FileStatus{}, nil
 	}
 
 	// 使用配置中的最大重试次数或传入的参数
@@ -600,29 +605,29 @@ func (us *uploadService) RenameFilesWithRetry(workspacePath string, renamePairs 
 		actualMaxRetries = maxRetries
 	}
 
-	var requestIds []string
+	var fileStatuses []*utils.FileStatus
 	var renameErrors []error
 
 	for _, renamePair := range renamePairs {
 		us.logger.Info("renaming file %s to %s", renamePair.OldFilePath, renamePair.NewFilePath)
 
-		requestId, err := us.RenameFileWithRetry(workspacePath, renamePair.OldFilePath, renamePair.NewFilePath, actualMaxRetries)
+		fileStatus, err := us.RenameFileWithRetry(workspacePath, renamePair.OldFilePath, renamePair.NewFilePath, actualMaxRetries)
 		if err != nil {
 			us.logger.Error("failed to rename file %s to %s: %v", renamePair.OldFilePath, renamePair.NewFilePath, err)
 			renameErrors = append(renameErrors, fmt.Errorf("failed to rename file %s to %s: %w", renamePair.OldFilePath, renamePair.NewFilePath, err))
 			continue
 		}
 
-		requestIds = append(requestIds, requestId)
-		us.logger.Info("file %s renamed to %s successfully with request ID: %s", renamePair.OldFilePath, renamePair.NewFilePath, requestId)
+		fileStatuses = append(fileStatuses, fileStatus)
+		us.logger.Info("file %s renamed to %s successfully with request ID: %s", renamePair.OldFilePath, renamePair.NewFilePath, fileStatus.RequestId)
 	}
 
 	// 如果有重命名错误，返回汇总错误
 	if len(renameErrors) > 0 {
-		return requestIds, fmt.Errorf("batch rename completed with %d errors out of %d files. First error: %w",
+		return []*utils.FileStatus{}, fmt.Errorf("batch rename completed with %d errors out of %d files. First error: %w",
 			len(renameErrors), len(renamePairs), renameErrors[0])
 	}
 
 	us.logger.Info("batch rename completed successfully for %d files", len(renamePairs))
-	return requestIds, nil
+	return fileStatuses, nil
 }

@@ -599,9 +599,10 @@ func (s *Scheduler) CreateSingleFileZip(config *config.CodebaseConfig, fileStatu
 	}
 	metadata.FileList[filePath] = fileStatus.Status
 
-	// 只添加修改的文件到ZIP
-	if fileStatus.Status == utils.FILE_STATUS_MODIFIED {
+	// 只添加新增和修改的文件到ZIP
+	if fileStatus.Status == utils.FILE_STATUS_ADDED || fileStatus.Status == utils.FILE_STATUS_MODIFIED {
 		if err := utils.AddFileToZip(zipWriter, fileStatus.Path, config.CodebasePath); err != nil {
+			// Continue trying to add other files but log error
 			s.logger.Warn("failed to add file to zip: %s, error: %v", fileStatus.Path, err)
 		}
 	}

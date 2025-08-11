@@ -35,3 +35,13 @@ func (m *MockStorageManager) DeleteCodebaseConfig(codebaseId string) error {
 	args := m.Called(codebaseId)
 	return args.Error(0)
 }
+
+func (m *MockStorageManager) GetCodebaseEnv() *config.CodebaseEnv {
+	args := m.Called()
+	return args.Get(0).(*config.CodebaseEnv)
+}
+
+func (m *MockStorageManager) SaveCodebaseEnv(codebaseEnv *config.CodebaseEnv) error {
+	args := m.Called(codebaseEnv)
+	return args.Error(0)
+}

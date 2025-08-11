@@ -431,6 +431,42 @@ func (s *FileScanner) ScanFile(codebasePath, filePath string) (string, error) {
 	return strconv.FormatInt(hash, 10), nil
 }
 
+func (s *FileScanner) IsIgnoreFile(codebasePath, filePath string) (bool, error) {
+	maxFileSizeKB := s.scannerConfig.MaxFileSizeKB
+	maxFileSize := int64(maxFileSizeKB * 1024)
+	ignore := s.LoadIgnoreRules(codebasePath)
+	if ignore == nil {
+		return false, fmt.Errorf("ignore rules not loaded")
+	}
+
+	relPath, err := filepath.Rel(codebasePath, filePath)
+	if err != nil {
+		return false, fmt.Errorf("failed to get relative path: %v", err)
+	}
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		return false, fmt.Errorf("failed to get file info: %v", err)
+	}
+
+	// If directory, append "/" and skip size check
+	checkPath := relPath
+	if fileInfo.IsDir() {
+		checkPath = relPath + "/"
+	} else if fileInfo.Size() > maxFileSize {
+		// For regular files, check size limit
+		fileSizeKB := float64(fileInfo.Size()) / 1024
+		s.logger.Info("file size exceeded limit: %s (%.2fKB)", filePath, fileSizeKB)
+		return true, nil
+	}
+
+	if ignore.MatchesPath(checkPath) {
+		s.logger.Info("ignore file found: %s in codebase %s", checkPath, codebasePath)
+		return true, nil
+	}
+
+	return false, fmt.Errorf("file not ignored")
+}
+
 // Calculate file differences
 func (s *FileScanner) CalculateFileChanges(local, remote map[string]string) []*utils.FileStatus {
 	var changes []*utils.FileStatus

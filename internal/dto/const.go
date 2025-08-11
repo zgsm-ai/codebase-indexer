@@ -23,3 +23,9 @@ const (
 	IndexTypeCodegraph = "codegraph"
 	IndexTypeAll       = "all"
 )
+
+// 索引开关状态常量
+const (
+	SwitchOn  = "on"
+	SwitchOff = "off"
+)

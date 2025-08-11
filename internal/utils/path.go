@@ -14,6 +14,7 @@ var (
 	LogsDir               = "./.zgsm/logs"
 	CacheDir              = "./.zgsm/cache"
 	UploadTmpDir          = "./.zgsm/tmp"
+	EnvFile               = "./.zgsm/cache/env"
 	DbDir                 = "./.zgsm/cache/db"
 	WorkspaceDir          = "./.zgsm/cache/workspace"
 	WorkspaceEmbeddingDir = "./.zgsm/cache/workspaceEmbedding"
@@ -114,6 +115,15 @@ func GetCacheDir(rootPath string) (string, error) {
 	CacheDir = cachePath
 
 	return cachePath, nil
+}
+
+func GetCacheEnvFile(cachePath string) (string, error) {
+	if _, err := os.Stat(cachePath); os.IsNotExist(err) {
+		return "", fmt.Errorf("cache path %s does not exist", cachePath)
+	}
+	envFilePath := filepath.Join(cachePath, "env")
+	EnvFile = envFilePath
+	return envFilePath, nil
 }
 
 // GetUploadTmpDir gets temporary upload directory

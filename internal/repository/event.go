@@ -20,16 +20,15 @@ type EventRepository interface {
 	// GetEventsByWorkspace 根据工作区路径获取事件
 	GetEventsByWorkspace(workspacePath string, limit int, isDesc bool) ([]*model.Event, error)
 	// GetEventsByType 根据事件类型获取事件
-	GetEventsByType(eventType string, limit int, isDesc bool) ([]*model.Event, error)
+	GetEventsByType(eventTypes []string, limit int, isDesc bool) ([]*model.Event, error)
 	// GetEventsByWorkspaceAndType 根据工作区路径和事件类型获取事件
-	GetEventsByWorkspaceAndType(workspacePath, eventType string, limit int, isDesc bool) ([]*model.Event, error)
-	// GetEventsByTypeAndStatus 根据事件类型和状态获取事件
+	GetEventsByWorkspaceAndType(workspacePath string, eventTypes []string, limit int, isDesc bool) ([]*model.Event, error)
 	// GetEventsByWorkspaceAndEmbeddingStatus 根据工作区路径和嵌入状态获取事件
 	GetEventsByWorkspaceAndEmbeddingStatus(workspacePath string, limit int, isDesc bool, statuses []int) ([]*model.Event, error)
 	// GetEventsByTypeAndEmbeddingStatus 根据事件类型和状态获取事件
-	GetEventsByTypeAndEmbeddingStatus(eventType string, limit int, isDesc bool, statuses []int) ([]*model.Event, error)
+	GetEventsByTypeAndEmbeddingStatus(eventTypes []string, limit int, isDesc bool, statuses []int) ([]*model.Event, error)
 	// GetEventsByTypeAndStatusAndWorkspaces 根据事件类型、状态和工作空间路径获取事件
-	GetEventsByTypeAndStatusAndWorkspaces(eventType string, workspacePaths []string, limit int, isDesc bool, embeddingStatuses []int, codegraphStatuses []int) ([]*model.Event, error)
+	GetEventsByTypeAndStatusAndWorkspaces(eventTypes []string, workspacePaths []string, limit int, isDesc bool, embeddingStatuses []int, codegraphStatuses []int) ([]*model.Event, error)
 	// UpdateEvent 更新事件
 	UpdateEvent(event *model.Event) error
 	// DeleteEvent 删除事件
@@ -42,6 +41,10 @@ type EventRepository interface {
 	GetEventsCountByType(eventTypes []string) (int64, error)
 	// GetLatestEventByWorkspaceAndSourcePath 根据工作区路径和源文件路径获取最新记录
 	GetLatestEventByWorkspaceAndSourcePath(workspacePath, sourceFilePath string) (*model.Event, error)
+	// BatchCreateEvents 批量创建事件
+	BatchCreateEvents(events []*model.Event) error
+	// BatchDeleteEvents 批量删除事件
+	BatchDeleteEvents(ids []int64) error
 }
 
 // eventRepository 事件Repository实现
@@ -93,7 +96,7 @@ func (r *eventRepository) CreateEvent(event *model.Event) error {
 func (r *eventRepository) GetEventByID(id int64) (*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path, 
-			embedding_status, codegraph_status, sync_id, created_at, updated_at
+			embedding_status, codegraph_status, sync_id, file_hash, created_at, updated_at
 		FROM events 
 		WHERE id = ?
 	`
@@ -112,6 +115,7 @@ func (r *eventRepository) GetEventByID(id int64) (*model.Event, error) {
 		&event.EmbeddingStatus,
 		&event.CodegraphStatus,
 		&event.SyncId,
+		&event.FileHash,
 		&createdAt,
 		&updatedAt,
 	)
@@ -134,7 +138,7 @@ func (r *eventRepository) GetEventByID(id int64) (*model.Event, error) {
 func (r *eventRepository) GetEventsByWorkspace(workspacePath string, limit int, isDesc bool) ([]*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path, 
-			embedding_status, codegraph_status, sync_id, created_at, updated_at
+			embedding_status, codegraph_status, sync_id, file_hash, created_at, updated_at
 		FROM events 
 		WHERE workspace_path = ?
 		ORDER BY created_at %s
@@ -166,6 +170,7 @@ func (r *eventRepository) GetEventsByWorkspace(workspacePath string, limit int, 
 			&event.EmbeddingStatus,
 			&event.CodegraphStatus,
 			&event.SyncId,
+			&event.FileHash,
 			&createdAt,
 			&updatedAt,
 		)
@@ -184,23 +189,38 @@ func (r *eventRepository) GetEventsByWorkspace(workspacePath string, limit int, 
 }
 
 // GetEventsByType 根据事件类型获取事件
-func (r *eventRepository) GetEventsByType(eventType string, limit int, isDesc bool) ([]*model.Event, error) {
-	query := `
+func (r *eventRepository) GetEventsByType(eventTypes []string, limit int, isDesc bool) ([]*model.Event, error) {
+	// 基础查询语句
+	baseQuery := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path,
-			codegraph_status, embedding_status, sync_id, created_at, updated_at
+			codegraph_status, embedding_status, sync_id, file_hash, created_at, updated_at
 		FROM events
-		WHERE event_type = ?
-		ORDER BY created_at %s
-		LIMIT ?
 	`
 
-	if isDesc {
-		query = fmt.Sprintf(query, "DESC")
-	} else {
-		query = fmt.Sprintf(query, "ASC")
+	args := []interface{}{}
+	whereClause := ""
+
+	// 构造事件类型过滤条件
+	if len(eventTypes) > 0 {
+		placeholders := strings.Repeat("?,", len(eventTypes))
+		placeholders = placeholders[:len(placeholders)-1] // 移除最后一个逗号
+		whereClause = fmt.Sprintf("WHERE event_type IN (%s)", placeholders)
+		for _, eventType := range eventTypes {
+			args = append(args, eventType)
+		}
 	}
 
-	rows, err := r.db.GetDB().Query(query, eventType, limit)
+	// 构造排序条件
+	orderDirection := "ASC"
+	if isDesc {
+		orderDirection = "DESC"
+	}
+
+	// 组装完整查询
+	query := fmt.Sprintf("%s %s ORDER BY created_at %s LIMIT ?", baseQuery, whereClause, orderDirection)
+	args = append(args, limit)
+
+	rows, err := r.db.GetDB().Query(query, args...)
 	if err != nil {
 		r.logger.Error("Failed to get events by type: %v", err)
 		return nil, fmt.Errorf("failed to get events by type: %w", err)
@@ -221,6 +241,7 @@ func (r *eventRepository) GetEventsByType(eventType string, limit int, isDesc bo
 			&event.CodegraphStatus,
 			&event.EmbeddingStatus,
 			&event.SyncId,
+			&event.FileHash,
 			&createdAt,
 			&updatedAt,
 		)
@@ -239,21 +260,38 @@ func (r *eventRepository) GetEventsByType(eventType string, limit int, isDesc bo
 }
 
 // GetEventsByWorkspaceAndType 根据工作区路径和事件类型获取事件
-func (r *eventRepository) GetEventsByWorkspaceAndType(workspacePath, eventType string, limit int, isDesc bool) ([]*model.Event, error) {
-	query := `
-		SELECT id, workspace_path, event_type, source_file_path, target_file_path, 
-			codegraph_status, embedding_status, sync_id, created_at, updated_at
-		FROM events 
-		WHERE workspace_path = ? AND event_type = ?
-		ORDER BY created_at %s
-		LIMIT ?
+func (r *eventRepository) GetEventsByWorkspaceAndType(workspacePath string, eventTypes []string, limit int, isDesc bool) ([]*model.Event, error) {
+	// 基础查询语句
+	baseQuery := `
+		SELECT id, workspace_path, event_type, source_file_path, target_file_path,
+			codegraph_status, embedding_status, sync_id, file_hash, created_at, updated_at
+		FROM events
+		WHERE workspace_path = ?
 	`
-	if isDesc {
-		query = fmt.Sprintf(query, "DESC")
-	} else {
-		query = fmt.Sprintf(query, "ASC")
+
+	args := []interface{}{workspacePath}
+
+	// 构造事件类型过滤条件
+	if len(eventTypes) > 0 {
+		placeholders := strings.Repeat("?,", len(eventTypes))
+		placeholders = placeholders[:len(placeholders)-1] // 移除最后一个逗号
+		baseQuery += fmt.Sprintf(" AND event_type IN (%s)", placeholders)
+		for _, eventType := range eventTypes {
+			args = append(args, eventType)
+		}
 	}
-	rows, err := r.db.GetDB().Query(query, workspacePath, eventType, limit)
+
+	// 构造排序条件
+	orderDirection := "ASC"
+	if isDesc {
+		orderDirection = "DESC"
+	}
+
+	// 组装完整查询
+	query := fmt.Sprintf("%s ORDER BY created_at %s LIMIT ?", baseQuery, orderDirection)
+	args = append(args, limit)
+
+	rows, err := r.db.GetDB().Query(query, args...)
 	if err != nil {
 		r.logger.Error("Failed to get events by workspace and type: %v", err)
 		return nil, fmt.Errorf("failed to get events by workspace and type: %w", err)
@@ -274,6 +312,7 @@ func (r *eventRepository) GetEventsByWorkspaceAndType(workspacePath, eventType s
 			&event.CodegraphStatus,
 			&event.EmbeddingStatus,
 			&event.SyncId,
+			&event.FileHash,
 			&createdAt,
 			&updatedAt,
 		)
@@ -295,7 +334,7 @@ func (r *eventRepository) GetEventsByWorkspaceAndType(workspacePath, eventType s
 func (r *eventRepository) GetEventsByWorkspaceAndEmbeddingStatus(workspacePath string, limit int, isDesc bool, statuses []int) ([]*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path,
-			codegraph_status, embedding_status, sync_id, created_at, updated_at
+			codegraph_status, embedding_status, sync_id, file_hash, created_at, updated_at
 		FROM events
 		WHERE workspace_path = ?
 	`
@@ -347,6 +386,7 @@ func (r *eventRepository) GetEventsByWorkspaceAndEmbeddingStatus(workspacePath s
 			&event.CodegraphStatus,
 			&event.EmbeddingStatus,
 			&event.SyncId,
+			&event.FileHash,
 			&createdAt,
 			&updatedAt,
 		)
@@ -365,15 +405,30 @@ func (r *eventRepository) GetEventsByWorkspaceAndEmbeddingStatus(workspacePath s
 }
 
 // GetEventsByTypeAndEmbeddingStatus 根据事件类型和状态获取事件
-func (r *eventRepository) GetEventsByTypeAndEmbeddingStatus(eventType string, limit int, isDesc bool, statuses []int) ([]*model.Event, error) {
-	query := `
+func (r *eventRepository) GetEventsByTypeAndEmbeddingStatus(eventTypes []string, limit int, isDesc bool, statuses []int) ([]*model.Event, error) {
+	// 基础查询语句
+	baseQuery := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path,
-			codegraph_status, embedding_status, sync_id, created_at, updated_at
+			codegraph_status, embedding_status, sync_id, file_hash, created_at, updated_at
 		FROM events
-		WHERE event_type = ?
 	`
 
-	args := []interface{}{eventType}
+	args := []interface{}{}
+	whereClause := ""
+
+	// 构造事件类型过滤条件
+	if len(eventTypes) > 0 {
+		placeholders := strings.Repeat("?,", len(eventTypes))
+		placeholders = placeholders[:len(placeholders)-1] // 移除最后一个逗号
+		if whereClause == "" {
+			whereClause = fmt.Sprintf("WHERE event_type IN (%s)", placeholders)
+		} else {
+			whereClause += fmt.Sprintf(" AND event_type IN (%s)", placeholders)
+		}
+		for _, eventType := range eventTypes {
+			args = append(args, eventType)
+		}
+	}
 
 	// 如果提供了状态列表，添加状态过滤条件
 	if len(statuses) > 0 {
@@ -384,19 +439,24 @@ func (r *eventRepository) GetEventsByTypeAndEmbeddingStatus(eventType string, li
 			}
 			placeholders += "?"
 		}
-		query += fmt.Sprintf(" AND embedding_status IN (%s)", placeholders)
+		if whereClause == "" {
+			whereClause = fmt.Sprintf("WHERE embedding_status IN (%s)", placeholders)
+		} else {
+			whereClause += fmt.Sprintf(" AND embedding_status IN (%s)", placeholders)
+		}
 		for _, status := range statuses {
 			args = append(args, status)
 		}
 	}
 
-	query += " ORDER BY created_at %s LIMIT ?"
-
+	// 构造排序条件
+	orderDirection := "ASC"
 	if isDesc {
-		query = fmt.Sprintf(query, "DESC")
-	} else {
-		query = fmt.Sprintf(query, "ASC")
+		orderDirection = "DESC"
 	}
+
+	// 组装完整查询
+	query := fmt.Sprintf("%s %s ORDER BY created_at %s LIMIT ?", baseQuery, whereClause, orderDirection)
 	args = append(args, limit)
 
 	rows, err := r.db.GetDB().Query(query, args...)
@@ -420,6 +480,7 @@ func (r *eventRepository) GetEventsByTypeAndEmbeddingStatus(eventType string, li
 			&event.CodegraphStatus,
 			&event.EmbeddingStatus,
 			&event.SyncId,
+			&event.FileHash,
 			&createdAt,
 			&updatedAt,
 		)
@@ -438,16 +499,31 @@ func (r *eventRepository) GetEventsByTypeAndEmbeddingStatus(eventType string, li
 }
 
 // GetEventsByTypeAndStatusAndWorkspaces 根据事件类型、状态和工作空间路径获取事件
-func (r *eventRepository) GetEventsByTypeAndStatusAndWorkspaces(eventType string, workspacePaths []string, limit int,
+func (r *eventRepository) GetEventsByTypeAndStatusAndWorkspaces(eventTypes []string, workspacePaths []string, limit int,
 	isDesc bool, embeddingStatuses []int, codegraphStatuses []int) ([]*model.Event, error) {
+	// 如果limit为-1，表示查询所有记录，使用分批查询
+	if limit == -1 {
+		return r.getAllEventsByTypeAndStatusAndWorkspaces(eventTypes, workspacePaths, isDesc, embeddingStatuses, codegraphStatuses)
+	}
+
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path,
-			codegraph_status, embedding_status, sync_id, created_at, updated_at
+			codegraph_status, embedding_status, sync_id, file_hash, created_at, updated_at
 		FROM events
-		WHERE event_type = ?
 	`
 
-	args := []interface{}{eventType}
+	args := []interface{}{}
+	whereClause := ""
+
+	// 构造事件类型过滤条件
+	if len(eventTypes) > 0 {
+		placeholders := strings.Repeat("?,", len(eventTypes))
+		placeholders = placeholders[:len(placeholders)-1] // 移除最后一个逗号
+		whereClause = fmt.Sprintf("WHERE event_type IN (%s)", placeholders)
+		for _, eventType := range eventTypes {
+			args = append(args, eventType)
+		}
+	}
 
 	// 添加工作空间路径过滤条件
 	if len(workspacePaths) > 0 {
@@ -458,7 +534,11 @@ func (r *eventRepository) GetEventsByTypeAndStatusAndWorkspaces(eventType string
 			}
 			placeholders += "?"
 		}
-		query += fmt.Sprintf(" AND workspace_path IN (%s)", placeholders)
+		if whereClause == "" {
+			whereClause = fmt.Sprintf("WHERE workspace_path IN (%s)", placeholders)
+		} else {
+			whereClause += fmt.Sprintf(" AND workspace_path IN (%s)", placeholders)
+		}
 		for _, path := range workspacePaths {
 			args = append(args, path)
 		}
@@ -473,7 +553,11 @@ func (r *eventRepository) GetEventsByTypeAndStatusAndWorkspaces(eventType string
 			}
 			placeholders += "?"
 		}
-		query += fmt.Sprintf(" AND embedding_status IN (%s)", placeholders)
+		if whereClause == "" {
+			whereClause = fmt.Sprintf("WHERE embedding_status IN (%s)", placeholders)
+		} else {
+			whereClause += fmt.Sprintf(" AND embedding_status IN (%s)", placeholders)
+		}
 		for _, status := range embeddingStatuses {
 			args = append(args, status)
 		}
@@ -487,19 +571,24 @@ func (r *eventRepository) GetEventsByTypeAndStatusAndWorkspaces(eventType string
 			}
 			placeholders += "?"
 		}
-		query += fmt.Sprintf(" AND codegraph_status IN (%s)", placeholders)
+		if whereClause == "" {
+			whereClause = fmt.Sprintf("WHERE codegraph_status IN (%s)", placeholders)
+		} else {
+			whereClause += fmt.Sprintf(" AND codegraph_status IN (%s)", placeholders)
+		}
 		for _, status := range codegraphStatuses {
 			args = append(args, status)
 		}
 	}
 
-	query += " ORDER BY created_at %s LIMIT ?"
-
+	// 构造排序条件
+	orderDirection := "ASC"
 	if isDesc {
-		query = fmt.Sprintf(query, "DESC")
-	} else {
-		query = fmt.Sprintf(query, "ASC")
+		orderDirection = "DESC"
 	}
+
+	// 组装完整查询
+	query = fmt.Sprintf("%s %s ORDER BY created_at %s LIMIT ?", query, whereClause, orderDirection)
 	args = append(args, limit)
 
 	rows, err := r.db.GetDB().Query(query, args...)
@@ -523,6 +612,7 @@ func (r *eventRepository) GetEventsByTypeAndStatusAndWorkspaces(eventType string
 			&event.CodegraphStatus,
 			&event.EmbeddingStatus,
 			&event.SyncId,
+			&event.FileHash,
 			&createdAt,
 			&updatedAt,
 		)
@@ -538,6 +628,155 @@ func (r *eventRepository) GetEventsByTypeAndStatusAndWorkspaces(eventType string
 	}
 
 	return events, nil
+}
+
+// getAllEventsByTypeAndStatusAndWorkspaces 获取所有符合条件的事件（分批查询）
+func (r *eventRepository) getAllEventsByTypeAndStatusAndWorkspaces(eventTypes []string, workspacePaths []string,
+	isDesc bool, embeddingStatuses []int, codegraphStatuses []int) ([]*model.Event, error) {
+	const batchSize = 1000
+	var allEvents []*model.Event
+	offset := 0
+
+	// 构建基础查询条件
+	baseQuery := `
+		SELECT id, workspace_path, event_type, source_file_path, target_file_path,
+			codegraph_status, embedding_status, sync_id, file_hash, created_at, updated_at
+		FROM events
+	`
+
+	args := []interface{}{}
+	whereClause := ""
+
+	// 构造事件类型过滤条件
+	if len(eventTypes) > 0 {
+		placeholders := strings.Repeat("?,", len(eventTypes))
+		placeholders = placeholders[:len(placeholders)-1] // 移除最后一个逗号
+		whereClause = fmt.Sprintf("WHERE event_type IN (%s)", placeholders)
+		for _, eventType := range eventTypes {
+			args = append(args, eventType)
+		}
+	}
+
+	// 添加工作空间路径过滤条件
+	if len(workspacePaths) > 0 {
+		placeholders := ""
+		for i := range workspacePaths {
+			if i > 0 {
+				placeholders += ","
+			}
+			placeholders += "?"
+		}
+		if whereClause == "" {
+			whereClause = fmt.Sprintf("WHERE workspace_path IN (%s)", placeholders)
+		} else {
+			whereClause += fmt.Sprintf(" AND workspace_path IN (%s)", placeholders)
+		}
+		for _, path := range workspacePaths {
+			args = append(args, path)
+		}
+	}
+
+	// 如果提供了状态列表，添加状态过滤条件
+	if len(embeddingStatuses) > 0 {
+		placeholders := ""
+		for i := range embeddingStatuses {
+			if i > 0 {
+				placeholders += ","
+			}
+			placeholders += "?"
+		}
+		if whereClause == "" {
+			whereClause = fmt.Sprintf("WHERE embedding_status IN (%s)", placeholders)
+		} else {
+			whereClause += fmt.Sprintf(" AND embedding_status IN (%s)", placeholders)
+		}
+		for _, status := range embeddingStatuses {
+			args = append(args, status)
+		}
+	}
+
+	if len(codegraphStatuses) > 0 {
+		placeholders := ""
+		for i := range codegraphStatuses {
+			if i > 0 {
+				placeholders += ","
+			}
+			placeholders += "?"
+		}
+		if whereClause == "" {
+			whereClause = fmt.Sprintf("WHERE codegraph_status IN (%s)", placeholders)
+		} else {
+			whereClause += fmt.Sprintf(" AND codegraph_status IN (%s)", placeholders)
+		}
+		for _, status := range codegraphStatuses {
+			args = append(args, status)
+		}
+	}
+
+	// 构造排序条件
+	orderDirection := "ASC"
+	if isDesc {
+		orderDirection = "DESC"
+	}
+
+	for {
+		// 构建分页查询
+		batchArgs := make([]interface{}, len(args))
+		copy(batchArgs, args)
+		query := fmt.Sprintf("%s %s ORDER BY created_at %s LIMIT ? OFFSET ?", baseQuery, whereClause, orderDirection)
+		batchArgs = append(batchArgs, batchSize, offset)
+
+		rows, err := r.db.GetDB().Query(query, batchArgs...)
+		if err != nil {
+			r.logger.Error("Failed to query events batch (offset %d): %v", offset, err)
+			return nil, fmt.Errorf("failed to query events batch (offset %d): %w", offset, err)
+		}
+
+		var batchEvents []*model.Event
+		for rows.Next() {
+			var event model.Event
+			var createdAt, updatedAt time.Time
+
+			err := rows.Scan(
+				&event.ID,
+				&event.WorkspacePath,
+				&event.EventType,
+				&event.SourceFilePath,
+				&event.TargetFilePath,
+				&event.CodegraphStatus,
+				&event.EmbeddingStatus,
+				&event.SyncId,
+				&event.FileHash,
+				&createdAt,
+				&updatedAt,
+			)
+			if err != nil {
+				rows.Close()
+				r.logger.Error("Failed to scan event row (offset %d): %v", offset, err)
+				return nil, fmt.Errorf("failed to scan event row (offset %d): %w", offset, err)
+			}
+
+			event.CreatedAt = createdAt
+			event.UpdatedAt = updatedAt
+			batchEvents = append(batchEvents, &event)
+		}
+		rows.Close()
+
+		if len(batchEvents) == 0 {
+			break
+		}
+
+		allEvents = append(allEvents, batchEvents...)
+		offset += len(batchEvents)
+
+		// 如果返回的记录数小于批次大小，说明已经查询完毕
+		if len(batchEvents) < batchSize {
+			break
+		}
+	}
+
+	r.logger.Info("Retrieved %d events by type, status and workspaces", len(allEvents))
+	return allEvents, nil
 }
 
 // UpdateEvent 更新事件
@@ -586,6 +825,12 @@ func (r *eventRepository) UpdateEvent(event *model.Event) error {
 	if event.SyncId != "" {
 		setClauses = append(setClauses, "sync_id = ?")
 		args = append(args, event.SyncId)
+	}
+
+	// 检查file_hash是否为非默认值
+	if event.FileHash != "" {
+		setClauses = append(setClauses, "file_hash = ?")
+		args = append(args, event.FileHash)
 	}
 
 	// 如果没有需要更新的字段，直接返回
@@ -648,7 +893,7 @@ func (r *eventRepository) DeleteEvent(id int64) error {
 func (r *eventRepository) GetRecentEvents(workspacePath string, limit int) ([]*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path, 
-			codegraph_status, embedding_status, sync_id, created_at, updated_at
+			codegraph_status, embedding_status, sync_id, file_hash, created_at, updated_at
 		FROM events 
 		WHERE workspace_path = ?
 		ORDER BY created_at DESC
@@ -676,6 +921,7 @@ func (r *eventRepository) GetRecentEvents(workspacePath string, limit int) ([]*m
 			&event.CodegraphStatus,
 			&event.EmbeddingStatus,
 			&event.SyncId,
+			&event.FileHash,
 			&createdAt,
 			&updatedAt,
 		)
@@ -701,7 +947,7 @@ func (r *eventRepository) GetEventsByWorkspaceForDeduplication(workspacePath str
 
 	for {
 		query := `
-			SELECT id, workspace_path, event_type, source_file_path, target_file_path, embedding_status, codegraph_status, sync_id, created_at, updated_at
+			SELECT id, workspace_path, event_type, source_file_path, target_file_path, embedding_status, codegraph_status, sync_id, file_hash, created_at, updated_at
 			FROM events
 			WHERE workspace_path = ?
 			ORDER BY created_at DESC
@@ -728,6 +974,7 @@ func (r *eventRepository) GetEventsByWorkspaceForDeduplication(workspacePath str
 				&event.EmbeddingStatus,
 				&event.CodegraphStatus,
 				&event.SyncId,
+				&event.FileHash,
 				&createdAt,
 				&updatedAt,
 			)
@@ -801,7 +1048,7 @@ func (r *eventRepository) GetEventsCountByType(eventTypes []string) (int64, erro
 func (r *eventRepository) GetLatestEventByWorkspaceAndSourcePath(workspacePath, sourceFilePath string) (*model.Event, error) {
 	query := `
 		SELECT id, workspace_path, event_type, source_file_path, target_file_path,
-			codegraph_status, embedding_status, sync_id, created_at, updated_at
+			codegraph_status, embedding_status, sync_id, file_hash, created_at, updated_at
 		FROM events
 		WHERE workspace_path = ? AND source_file_path = ?
 		ORDER BY created_at DESC
@@ -822,6 +1069,7 @@ func (r *eventRepository) GetLatestEventByWorkspaceAndSourcePath(workspacePath, 
 		&event.CodegraphStatus,
 		&event.EmbeddingStatus,
 		&event.SyncId,
+		&event.FileHash,
 		&createdAt,
 		&updatedAt,
 	)
@@ -835,4 +1083,123 @@ func (r *eventRepository) GetLatestEventByWorkspaceAndSourcePath(workspacePath, 
 	event.UpdatedAt = updatedAt
 
 	return &event, nil
+}
+
+// BatchCreateEvents 批量创建事件
+func (r *eventRepository) BatchCreateEvents(events []*model.Event) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	const batchSize = 1000
+	nowTime := time.Now()
+	totalCreated := int64(0)
+
+	// 分批处理
+	for i := 0; i < len(events); i += batchSize {
+		end := i + batchSize
+		if end > len(events) {
+			end = len(events)
+		}
+		batch := events[i:end]
+
+		// 构建批量插入的SQL语句
+		valueStrings := make([]string, 0, len(batch))
+		valueArgs := make([]interface{}, 0, len(batch)*6)
+
+		for _, event := range batch {
+			valueStrings = append(valueStrings, "(?, ?, ?, ?, ?, ?)")
+			valueArgs = append(valueArgs,
+				event.WorkspacePath,
+				event.EventType,
+				event.SourceFilePath,
+				event.TargetFilePath,
+				nowTime,
+				nowTime,
+			)
+		}
+
+		query := fmt.Sprintf("INSERT INTO events (workspace_path, event_type, source_file_path, target_file_path, created_at, updated_at) VALUES %s",
+			strings.Join(valueStrings, ","))
+
+		result, err := r.db.GetDB().Exec(query, valueArgs...)
+		if err != nil {
+			r.logger.Error("Failed to batch create events (batch %d-%d): %v", i+1, end, err)
+			return fmt.Errorf("failed to batch create events (batch %d-%d): %w", i+1, end, err)
+		}
+
+		// 获取最后插入的ID，用于设置事件的ID
+		lastInsertID, err := result.LastInsertId()
+		if err != nil {
+			r.logger.Error("Failed to get last insert ID (batch %d-%d): %v", i+1, end, err)
+			return fmt.Errorf("failed to get last insert ID (batch %d-%d): %w", i+1, end, err)
+		}
+
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			r.logger.Error("Failed to get rows affected (batch %d-%d): %v", i+1, end, err)
+			return fmt.Errorf("failed to get rows affected (batch %d-%d): %w", i+1, end, err)
+		}
+
+		totalCreated += rowsAffected
+
+		// 设置每个事件的ID
+		for j, event := range batch {
+			event.ID = lastInsertID - int64(len(batch)-1-j)
+		}
+
+		r.logger.Info("Successfully created batch %d-%d: %d events", i+1, end, rowsAffected)
+	}
+
+	r.logger.Info("Successfully created total %d events", totalCreated)
+	return nil
+}
+
+// BatchDeleteEvents 批量删除事件
+func (r *eventRepository) BatchDeleteEvents(ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	const batchSize = 1000
+	totalDeleted := int64(0)
+
+	// 分批处理
+	for i := 0; i < len(ids); i += batchSize {
+		end := i + batchSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		batch := ids[i:end]
+
+		// 构建批量删除的SQL语句
+		placeholders := strings.Repeat("?,", len(batch))
+		placeholders = placeholders[:len(placeholders)-1] // 移除最后一个逗号
+
+		query := fmt.Sprintf("DELETE FROM events WHERE id IN (%s)", placeholders)
+
+		// 转换batch为interface{}切片
+		args := make([]interface{}, len(batch))
+		for j, id := range batch {
+			args[j] = id
+		}
+
+		result, err := r.db.GetDB().Exec(query, args...)
+		if err != nil {
+			r.logger.Error("Failed to batch delete events (batch %d-%d): %v", i+1, end, err)
+			return fmt.Errorf("failed to batch delete events (batch %d-%d): %w", i+1, end, err)
+		}
+
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			r.logger.Error("Failed to get rows affected (batch %d-%d): %v", i+1, end, err)
+			return fmt.Errorf("failed to get rows affected (batch %d-%d): %w", i+1, end, err)
+		}
+
+		totalDeleted += rowsAffected
+		r.logger.Info("Successfully deleted batch %d-%d: %d events", i+1, end, rowsAffected)
+	}
+
+	r.logger.Info("Successfully deleted total %d events", totalDeleted)
+	return nil
 }

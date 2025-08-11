@@ -26,6 +26,7 @@ type FileStatus struct {
 	TargetPath string `json:"targetPath"`
 	Hash       string `json:"hash"`
 	Status     string `json:"status"`
+	RequestId  string `json:"requestId"`
 }
 
 // FileRenamePair 文件重命名对
