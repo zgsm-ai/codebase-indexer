@@ -280,64 +280,82 @@ func MarshalExtraData(element resolver.Element) (map[string][]byte, error) {
 	case *resolver.Import, *resolver.Package, *resolver.Variable:
 		// 无需处理的类型
 	case *resolver.Function:
-		// 处理函数共有的参数和返回类型
-		parametersBytes, err := json.Marshal(e.Parameters)
-		if err != nil {
-			errs = append(errs, err)
-		} else {
-			extraData[keyParameters] = parametersBytes
+		if len(e.Parameters) > 0 {
+			// 处理函数共有的参数和返回类型
+			parametersBytes, err := json.Marshal(e.Parameters)
+			if err != nil {
+				errs = append(errs, err)
+			} else {
+				extraData[keyParameters] = parametersBytes
+			}
 		}
 
-		returnTypeBytes, err := json.Marshal(e.ReturnType)
-		if err != nil {
-			errs = append(errs, err)
-		} else {
-			extraData[keyReturnType] = returnTypeBytes
+		if len(e.ReturnType) > 0 {
+			returnTypeBytes, err := json.Marshal(e.ReturnType)
+			if err != nil {
+				errs = append(errs, err)
+			} else {
+				extraData[keyReturnType] = returnTypeBytes
+			}
 		}
+
 	case *resolver.Method:
 		// 处理方法共有的参数和返回类型
-		parametersBytes, err := json.Marshal(e.Parameters)
-		if err != nil {
-			errs = append(errs, err)
-		} else {
-			extraData[keyParameters] = parametersBytes
+		if len(e.Parameters) > 0 {
+			parametersBytes, err := json.Marshal(e.Parameters)
+			if err != nil {
+				errs = append(errs, err)
+			} else {
+				extraData[keyParameters] = parametersBytes
+			}
 		}
 
-		returnTypeBytes, err := json.Marshal(e.ReturnType)
-		if err != nil {
-			errs = append(errs, err)
-		} else {
-			extraData[keyReturnType] = returnTypeBytes
+		if len(e.ReturnType) > 0 {
+			returnTypeBytes, err := json.Marshal(e.ReturnType)
+			if err != nil {
+				errs = append(errs, err)
+			} else {
+				extraData[keyReturnType] = returnTypeBytes
+			}
 		}
+
 	case *resolver.Class:
-		superClassesBytes, err := json.Marshal(e.SuperClasses)
-		if err != nil {
-			errs = append(errs, err)
-		} else {
-			extraData[keySuperClasses] = superClassesBytes
+		if len(e.SuperClasses) > 0 {
+			superClassesBytes, err := json.Marshal(e.SuperClasses)
+			if err != nil {
+				errs = append(errs, err)
+			} else {
+				extraData[keySuperClasses] = superClassesBytes
+			}
 		}
 
-		superInterfacesBytes, err := json.Marshal(e.SuperInterfaces)
-		if err != nil {
-			errs = append(errs, err)
-		} else {
-			extraData[keySuperInterfaces] = superInterfacesBytes
+		if len(e.SuperInterfaces) > 0 {
+			superInterfacesBytes, err := json.Marshal(e.SuperInterfaces)
+			if err != nil {
+				errs = append(errs, err)
+			} else {
+				extraData[keySuperInterfaces] = superInterfacesBytes
+			}
 		}
 
 	case *resolver.Interface:
-		superInterfacesBytes, err := json.Marshal(e.SuperInterfaces)
-		if err != nil {
-			errs = append(errs, err)
-		} else {
-			extraData[keySuperInterfaces] = superInterfacesBytes
+		if len(e.SuperInterfaces) > 0 {
+			superInterfacesBytes, err := json.Marshal(e.SuperInterfaces)
+			if err != nil {
+				errs = append(errs, err)
+			} else {
+				extraData[keySuperInterfaces] = superInterfacesBytes
+			}
 		}
 
 	case *resolver.Call:
-		parametersBytes, err := json.Marshal(e.Parameters)
-		if err != nil {
-			errs = append(errs, err)
-		} else {
-			extraData[keyParameters] = parametersBytes
+		if len(e.Parameters) > 0 {
+			parametersBytes, err := json.Marshal(e.Parameters)
+			if err != nil {
+				errs = append(errs, err)
+			} else {
+				extraData[keyParameters] = parametersBytes
+			}
 		}
 	}
 

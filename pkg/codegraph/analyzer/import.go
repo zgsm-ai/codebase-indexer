@@ -25,7 +25,7 @@ func (da *DependencyAnalyzer) PreprocessImports(ctx context.Context,
 	for _, imp := range imports {
 		// TODO 过滤掉标准库、第三方库等非项目的库
 		if i := da.processImportByLanguage(imp, language, projectInfo); i != nil {
-			imports = append(imports, i)
+			processedImports = append(processedImports, i)
 		}
 	}
 

@@ -4,6 +4,7 @@ import (
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
 	"fmt"
+	"regexp"
 )
 
 type ElementResolver interface {
@@ -35,7 +36,7 @@ func resolve(ctx context.Context, b ElementResolver, element Element, rc *Resolv
 	case *Interface:
 		elems, err = b.resolveInterface(ctx, element, rc)
 	case *Call:
-		elems, err = b.resolveCall(ctx, element, rc )
+		elems, err = b.resolveCall(ctx, element, rc)
 	default:
 		rootCap := rc.Match.Captures[0]
 		updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
@@ -48,8 +49,9 @@ func resolve(ctx context.Context, b ElementResolver, element Element, rc *Resolv
 
 // IsValidElement 检查必须字段
 func IsValidElement(e Element) bool {
-	return e.GetName() != types.EmptyString && e.GetType() != types.EmptyString &&
+	return IsValidIdentifier(e.GetName()) && e.GetType() != types.EmptyString &&
 		e.GetPath() != types.EmptyString && len(e.GetRange()) == 4 && IsValidElementType(e)
+
 }
 
 func IsValidElementType(e Element) bool {
@@ -76,4 +78,14 @@ func IsValidElementType(e Element) bool {
 	default:
 		return false
 	}
+}
+
+func IsValidIdentifier(name string) bool {
+	// 正则表达式：^[a-zA-Z_][a-zA-Z0-9_]*$
+	// 表示：以字母或下划线开头，后面跟字母、数字或下划线
+	if name == types.EmptyString {
+		return false
+	}
+	re := regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+	return re.MatchString(name)
 }

@@ -1932,7 +1932,7 @@ func (i *Indexer) processFilesInBatches(ctx context.Context, params *BatchProces
 	// 优化：添加资源监控点，并在处理大量文件时触发GC
 	i.logResourceUsage("after_batch_processing")
 	if totalFiles > 500 {
-		runtime.GC() // 手动触发GC，减少内存压力
+		// runtime.GC() // 手动触发GC，减少内存压力
 		i.logResourceUsage("after_gc")
 	}
 
