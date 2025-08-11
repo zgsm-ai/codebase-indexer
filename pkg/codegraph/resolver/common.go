@@ -16,7 +16,7 @@ func findIdentifierNode(node *sitter.Node) *sitter.Node {
 		return nil
 	}
 	// 检查当前节点是否为identifier类型
-	if node.Kind() == types.Identifier {
+	if node.Kind() == types.Identifier || node.Kind() == string(types.NodeKindTypeIdentifier) {
 		return node
 	}
 
@@ -120,6 +120,14 @@ func CleanParam(param string) string {
 	param = strings.TrimSpace(param)
 	reSpaces := regexp.MustCompile(`\s+`)
 	param = reSpaces.ReplaceAllString(param, " ")
+
+	// 11. 去除{}符号
+	reBrace := regexp.MustCompile(`\{|\}`)
+	param = reBrace.ReplaceAllString(param, "")
+
+	// 12. 去除""
+	reQuote := regexp.MustCompile(`"`)
+	param = reQuote.ReplaceAllString(param, "")
 
 	return param
 }
@@ -309,7 +317,7 @@ func FilterValidElems(elems []Element, logger logger.Logger) []Element {
 			if scope == types.EmptyString {
 				scope = "<empty>"
 			}
-			
+
 			logger.Warn(
 				"INVALID ELEMENT | type=%s | name=%s | path=%s | range=%v | scope=%s",
 				elemType,

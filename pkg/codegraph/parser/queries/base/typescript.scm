@@ -78,7 +78,6 @@
 ;;type variable
 (type_alias_declaration
   name: (type_identifier) @variable.name
-  type_parameters: (type_parameters)? @variable.type
 ) @variable
 
 ;; Enum declarations

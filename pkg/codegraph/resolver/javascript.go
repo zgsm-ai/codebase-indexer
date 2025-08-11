@@ -3,6 +3,7 @@ package resolver
 import (
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
+	"regexp"
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -625,7 +626,7 @@ func (js *JavaScriptResolver) handleDestructuringWithPath(node *sitter.Node, con
 			identifierNode := nameNode.Child(i)
 			varName := types.EmptyString
 			if identifierNode.Kind() == string(types.Identifier) || identifierNode.Kind() == string(types.NodeKindShorthandPropertyIdentifierPattern) {
-				varName = identifierNode.Utf8Text(content)
+				varName = CleanParam(identifierNode.Utf8Text(content))
 			} else if identifierNode.Kind() == string(types.NodeKindPairPattern) {
 				valueNode := identifierNode.ChildByFieldName("value")
 				if valueNode.Kind() == string(types.Identifier) {
@@ -641,7 +642,7 @@ func (js *JavaScriptResolver) handleDestructuringWithPath(node *sitter.Node, con
 			} else if identifierNode.Kind() == string(types.NodeKindRestPattern) {
 				idNode := identifierNode.Child(1)
 				if idNode != nil {
-					varName = idNode.Utf8Text(content)
+					varName = CleanParam(idNode.Utf8Text(content))
 				}
 			}
 			if varName != types.EmptyString {
@@ -892,15 +893,54 @@ func extractReferencePath(node *sitter.Node, content []byte) map[string]string {
 		}
 	}
 
-	if node.Kind() == string(types.NodeKindSliceType) || node.Kind() == string(types.NodeKindPointType) {
+	if node.Kind() == string(types.NodeKindSliceType) || node.Kind() == string(types.NodeKindPointType) || node.Kind() == string(types.NodeKindArrayType) {
+		// 检查是否包含泛型子节点
 		for i := uint(0); i < node.ChildCount(); i++ {
-			childNode := node.Child(i)
-			if childNode != nil {
-				result["property"] = childNode.Utf8Text(content)
+			child := node.Child(i)
+			if child.Kind() == string(types.NodeKindGenericType) {
+				// 处理泛型类型：获取基础类型标识符
+				result = extractReferencePath(child, content)
+				return result
+			}
+		}
+		text := node.Utf8Text(content)
+
+		// 清除[]、*字符和数组索引如[100]、[queueCapacity]等
+		cleanText := strings.ReplaceAll(strings.ReplaceAll(text, "[]", ""), "*", "")
+		// 使用正则表达式去除数组索引，包括数字索引[100]和标识符索引[queueCapacity]
+		re := regexp.MustCompile(`\[[^\]]+\]`)
+		cleanText = re.ReplaceAllString(cleanText, "")
+		result["property"] = cleanText
+		// 根据.分割，后面为property，前面为object
+		if strings.Contains(cleanText, types.Dot) {
+			parts := strings.Split(cleanText, types.Dot)
+			if len(parts) >= 2 {
+				result["object"] = strings.Join(parts[:len(parts)-1], types.Dot)
+				result["property"] = parts[len(parts)-1]
 			}
 		}
 	}
 
+	// 处理泛型类型，如 MyType<T, U> 或 *MyType<T, U>
+	if node.Kind() == string(types.NodeKindGenericType) {
+		// 获取基础类型标识符
+		typeIdNode := node.ChildByFieldName("type")
+		if typeIdNode != nil {
+			typeName := typeIdNode.Utf8Text(content)
+			// 根据.分割，后面为property，前面为object
+			if strings.Contains(typeName, types.Dot) {
+				parts := strings.Split(typeName, types.Dot)
+				if len(parts) >= 2 {
+					result["object"] = strings.Join(parts[:len(parts)-1], types.Dot)
+					result["property"] = parts[len(parts)-1]
+				}
+			} else {
+				result["property"] = typeName
+			}
+		}
+	}
+
+	// 处理数组
 	return result
 }
 

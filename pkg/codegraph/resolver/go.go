@@ -85,7 +85,7 @@ func (r *GoResolver) resolveFunction(ctx context.Context, element *Function, rc 
 				element.Scope = analyzeScope(content)
 			case types.ElementTypeFunctionParameters:
 				parameters := strings.Trim(content, "()")
-				if parameters != "" {
+				if parameters != types.EmptyString {
 					element.Parameters = make([]Parameter, 0)
 					// 分析整个参数字符串
 					typeGroups := analyzeParameterGroups(parameters)
@@ -133,7 +133,7 @@ func (r *GoResolver) resolveMethod(ctx context.Context, element *Method, rc *Res
 			if len(parts) >= 1 {
 				// 最后一个部分是类型，可能带*前缀
 				receiverType := parts[len(parts)-1]
-				element.Owner = strings.TrimPrefix(receiverType, "*")
+				element.Owner = strings.TrimPrefix(receiverType, types.Star)
 			}
 		}
 	}
@@ -261,23 +261,21 @@ func (r *GoResolver) resolveClass(ctx context.Context, element *Class, rc *Resol
 	rootCapture := rc.Match.Captures[0]
 	rootCaptureName := rc.CaptureNames[rootCapture.Index]
 	updateRootElement(element, &rootCapture, rootCaptureName, rc.SourceFile.Content)
-	if rc.Match != nil && rc.Match.Captures != nil && len(rc.Match.Captures) > 0 {
-		for _, capture := range rc.Match.Captures {
-			nodeCaptureName := rc.CaptureNames[capture.Index]
-			content := capture.Node.Utf8Text(rc.SourceFile.Content)
-			switch types.ToElementType(nodeCaptureName) {
-			case types.ElementTypeStructName:
-				element.Name = content
-				element.Scope = analyzeScope(content)
-			case types.ElementTypeStructType:
-				// 处理结构体字段
-				newlyFoundReferences, err := r.processStructFields(&capture.Node, element, rc)
-				if err != nil {
-					return nil, err
-				}
-				for _, ref := range newlyFoundReferences {
-					elements = append(elements, ref)
-				}
+	for _, capture := range rc.Match.Captures {
+		nodeCaptureName := rc.CaptureNames[capture.Index]
+		content := capture.Node.Utf8Text(rc.SourceFile.Content)
+		switch types.ToElementType(nodeCaptureName) {
+		case types.ElementTypeStructName:
+			element.Name = content
+			element.Scope = analyzeScope(content)
+		case types.ElementTypeStructType:
+			// 处理结构体字段
+			newlyFoundReferences, err := r.processStructFields(&capture.Node, element, rc)
+			if err != nil {
+				return nil, err
+			}
+			for _, ref := range newlyFoundReferences {
+				elements = append(elements, ref)
 			}
 		}
 	}
@@ -453,7 +451,16 @@ func (r *GoResolver) resolveCall(ctx context.Context, element *Call, rc *Resolve
 						}
 					}
 				case types.NodeKindParenthesizedExpression:
-					element.BaseElement.Name = strings.Trim(CleanParam(funcNode.Utf8Text(rc.SourceFile.Content)), "()")
+					CallName := strings.Trim(CleanParam(funcNode.Utf8Text(rc.SourceFile.Content)), "()")
+					if strings.Contains(CallName, types.Dot) {
+						parts := strings.Split(CallName, types.Dot)
+						if len(parts) >= 2 {
+							element.BaseElement.Name = parts[len(parts)-1]
+							element.Owner = parts[len(parts)-2]
+						}
+					} else {
+						element.BaseElement.Name = CallName
+					}
 					element.Scope = types.ScopeFunction
 				}
 			}
@@ -463,22 +470,22 @@ func (r *GoResolver) resolveCall(ctx context.Context, element *Call, rc *Resolve
 			refPathMap := extractReferencePath(&capture.Node, rc.SourceFile.Content)
 			element.BaseElement.Name = refPathMap["property"]
 			element.Owner = refPathMap["object"]
-		// case types.ElementTypeStructCallType:
-		// 	for i := uint(0); i < capture.Node.ChildCount(); i++ {
-		// 		child := capture.Node.Child(i)
-		// 		if child == nil {
-		// 			continue
-		// 		}
-		// 		if child.Kind() == string(types.NodeKindTypeElem) {
-		// 			if isPrimitiveType(child.Utf8Text(rc.SourceFile.Content)) {
-		// 			} else {
-		// 				node := child.Child(0)
-		// 				refPathMap := extractReferencePath(node, rc.SourceFile.Content)
-		// 				ref := NewReference(element, child, refPathMap["property"], refPathMap["object"])
-		// 				elements = append(elements, ref)
-		// 			}
-		// 		}
-		// 	}
+			// case types.ElementTypeStructCallType:
+			// 	for i := uint(0); i < capture.Node.ChildCount(); i++ {
+			// 		child := capture.Node.Child(i)
+			// 		if child == nil {
+			// 			continue
+			// 		}
+			// 		if child.Kind() == string(types.NodeKindTypeElem) {
+			// 			if isPrimitiveType(child.Utf8Text(rc.SourceFile.Content)) {
+			// 			} else {
+			// 				node := child.Child(0)
+			// 				refPathMap := extractReferencePath(node, rc.SourceFile.Content)
+			// 				ref := NewReference(element, child, refPathMap["property"], refPathMap["object"])
+			// 				elements = append(elements, ref)
+			// 			}
+			// 		}
+			// 	}
 		}
 		element.Scope = types.ScopeFunction
 	}

@@ -249,21 +249,20 @@ func (ts *TypeScriptResolver) resolveVariable(ctx context.Context, element *Vari
 		case types.ElementTypeVariableType:
 			typeContent := strings.TrimPrefix(content, types.Colon)
 			typeContent = strings.TrimSpace(typeContent)
-
 			if isTypeScriptPrimitiveType(typeContent) {
 				element.VariableType = []string{types.PrimitiveType}
-			} else {
+			} else if isValidReferenceName(typeContent) && isValidReferenceName(typeContent) {
 				element.VariableType = []string{typeContent}
 				ref := NewReference(element, &capture.Node, typeContent, "")
 				// 处理带点号的类型名称（如 typescript.go）
 				if strings.Contains(typeContent, types.Dot) {
 					parts := strings.Split(typeContent, types.Dot)
-					if len(parts) == 2 {
-						ref.BaseElement.Name = parts[1]
-						ref.Owner = parts[0]
-					}
+					ref.BaseElement.Name = parts[len(parts)-1]
+					ref.Owner = parts[len(parts)-2]
 				}
 				elements = append(elements, ref)
+			} else {
+				element.VariableType = []string{typeContent}
 			}
 		}
 	}
@@ -571,7 +570,7 @@ func parseTypeScriptMethodNode(node *sitter.Node, content []byte, className stri
 	// 查找方法名
 	nameNode := node.ChildByFieldName("name")
 	if nameNode != nil {
-		methodName := nameNode.Utf8Text(content)
+		methodName := CleanParam(nameNode.Utf8Text(content))
 		method.BaseElement.Name = methodName
 		method.Declaration.Name = methodName
 	}
@@ -640,7 +639,7 @@ func parseTypeScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Refer
 			typeText = strings.TrimPrefix(typeText, types.EmailAt)
 			field.Type = typeText
 
-			if !isTypeScriptPrimitiveType(typeText) {
+			if !isTypeScriptPrimitiveType(typeText) && isValidReferenceName(typeText) {
 				ref = &Reference{
 					BaseElement: &BaseElement{
 						Name: typeText,
@@ -655,9 +654,9 @@ func parseTypeScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Refer
 					},
 				}
 				if strings.Contains(typeText, types.Dot) {
-					parts := strings.SplitN(typeText, types.Dot, 2)
-					ref.BaseElement.Name = parts[1]
-					ref.Owner = parts[0]
+					parts := strings.Split(typeText, types.Dot)
+					ref.BaseElement.Name = parts[len(parts)-1]
+					ref.Owner = parts[len(parts)-2]
 				}
 			}
 		}
@@ -671,7 +670,7 @@ func parseTypeScriptPropertySignatureNode(node *sitter.Node, content []byte) (*F
 
 	nameNode := node.ChildByFieldName("name")
 	if nameNode != nil {
-		field.Name = nameNode.Utf8Text(content)
+		field.Name = CleanParam(nameNode.Utf8Text(content))
 	}
 
 	typeNode := node.ChildByFieldName("type")
@@ -881,10 +880,58 @@ func parseReturnTypeNode(node *sitter.Node, content []byte) []string {
 	typeText = strings.TrimPrefix(typeText, types.Colon)
 	typeText = strings.TrimSpace(typeText)
 	typeText = strings.TrimPrefix(typeText, types.EmailAt)
-
 	if isTypeScriptPrimitiveType(typeText) {
 		return []string{types.PrimitiveType}
 	}
 
 	return []string{typeText}
+}
+
+// 判断reference是否合法的name
+func isValidReferenceName(name string) bool {
+	// 空字符串不合法
+	if name == "" || strings.TrimSpace(name) == "" {
+		return false
+	}
+
+	// 包含空格不合法
+	if strings.Contains(name, " ") || strings.Contains(name, "\t") || strings.Contains(name, "\n") {
+		return false
+	}
+
+	// 包含特殊符号不合法（保留点号和下划线，因为它们在标识符中是合法的）
+	invalidChars := []string{
+		"(", ")", "[", "]", "{", "}",
+		"<", ">", "=", "+", "-", "*", "/", "%",
+		"!", "@", "#", "$", "^", "&", "|", "\\",
+		"?", ":", ";", ",", "'", "\"", "`",
+		"~",
+	}
+
+	for _, char := range invalidChars {
+		if strings.Contains(name, char) {
+			return false
+		}
+	}
+
+	// 不能全部是数字
+	if strings.TrimSpace(name) != "" {
+		allDigits := true
+		for _, r := range name {
+			if !('0' <= r && r <= '9') {
+				allDigits = false
+				break
+			}
+		}
+		if allDigits {
+			return false
+		}
+	}
+
+	// 不能以数字开头（标识符规则）
+	if len(name) > 0 && '0' <= name[0] && name[0] <= '9' {
+		return false
+	}
+
+	return true
 }

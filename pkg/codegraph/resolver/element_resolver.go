@@ -94,6 +94,6 @@ func IsValidIdentifier(name string) bool {
 	if name == types.EmptyString {
 		return false
 	}
-	re := regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+	re := regexp.MustCompile(`^[a-zA-Z_$\-][a-zA-Z0-9_$\-]*$`)
 	return re.MatchString(name)
 }
