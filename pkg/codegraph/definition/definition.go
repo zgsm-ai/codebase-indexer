@@ -20,9 +20,9 @@ type ParseOptions struct {
 	IncludeContent bool
 }
 
-// NeDefinitionParser creates a new generic parser with the given config.
-func NeDefinitionParser() (*DefParser, error) {
-	return &DefParser{}, nil
+// NewDefinitionParser creates a new generic parser with the given config.
+func NewDefinitionParser() *DefParser {
+	return &DefParser{}
 }
 
 // Parse 解析文件结构，返回结构信息（例如函数、结构体、接口、变量、常量等）

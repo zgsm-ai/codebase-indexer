@@ -60,9 +60,17 @@ const maxLineLimit = 500
 const definitionFillContentNodeLimit = 100
 
 // NewCodebaseService 创建新的代码库服务
-func NewCodebaseService(logger logger.Logger) CodebaseService {
+func NewCodebaseService(logger logger.Logger,
+	workspaceReader *workspace.WorkspaceReader,
+	workspaceRepository repository.WorkspaceRepository,
+	fileDefinitionParser *definition.DefParser,
+	indexer *codegraph.Indexer) CodebaseService {
 	return &codebaseService{
-		logger: logger,
+		logger:               logger,
+		workspaceReader:      workspaceReader,
+		workspaceRepository:  workspaceRepository,
+		fileDefinitionParser: fileDefinitionParser,
+		indexer:              indexer,
 	}
 }
 
@@ -263,6 +271,7 @@ func (l *codebaseService) QueryDefinition(ctx context.Context, req *dto.SearchDe
 	}
 
 	nodes, err := l.indexer.QueryDefinitions(ctx, &types.QueryDefinitionOptions{
+		Workspace:   req.CodebasePath,
 		StartLine:   req.StartLine,
 		EndLine:     req.EndLine,
 		FilePath:    req.FilePath,
@@ -411,7 +420,7 @@ func (l *codebaseService) Summarize(ctx context.Context, req *dto.GetIndexSummar
 	// 从数据库获取工作区构建状态
 	workspaceModel, err := l.workspaceRepository.GetWorkspaceByPath(req.CodebasePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get workspace from database by path %s", err)
+		return nil, fmt.Errorf("failed to get workspace from database:%v", err)
 	}
 
 	totalFile := workspaceModel.FileNum

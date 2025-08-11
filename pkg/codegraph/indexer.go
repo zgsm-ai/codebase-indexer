@@ -25,8 +25,8 @@ import (
 )
 
 type IndexerConfig struct {
-	MaxConcurrency int
-	BatchSize      int
+	MaxConcurrency int // TODO 支持环境变量
+	MaxBatchSize   int // TODO 支持环境变量
 	VisitPattern   *types.VisitPattern
 }
 
@@ -105,8 +105,8 @@ const (
 	defaultBatchSize   = 10
 )
 
-// TODO 多子项目、多语言支持。monorepo, 不光通过语言隔离、还要通过子项目隔离。
-
+// TODO 并行度、batch_size、cpu、内存使用优化。
+// TODO resolve_dependency 优化，内存飙升。
 // NewCodeIndexer 创建新的代码索引器
 func NewCodeIndexer(
 	parser *parser.SourceFileParser,
@@ -120,8 +120,8 @@ func NewCodeIndexer(
 	if config.MaxConcurrency <= 0 {
 		config.MaxConcurrency = defaultConcurrency
 	}
-	if config.BatchSize <= 0 {
-		config.BatchSize = defaultBatchSize
+	if config.MaxBatchSize <= 0 {
+		config.MaxBatchSize = defaultBatchSize
 	}
 	return &Indexer{
 		parser:              parser,
@@ -216,7 +216,7 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 	projectUuid := project.Uuid
 
 	i.logger.Info("index_project start to index project：%s, max_concurrency: %d, batch_size: %d",
-		project.Path, i.config.MaxConcurrency, i.config.BatchSize)
+		project.Path, i.config.MaxConcurrency, i.config.MaxBatchSize)
 
 	// 获取工作区信息
 	workspaceModel, err := i.workspaceRepository.GetWorkspaceByPath(workspacePath)
@@ -1756,18 +1756,18 @@ func (i *Indexer) optimizeConcurrencyEnhanced(totalFiles int) int {
 
 // calculateOptimalBatchSize 动态计算最优批处理大小
 func (i *Indexer) calculateOptimalBatchSize(filePaths []string) int {
-	if len(filePaths) <= i.config.BatchSize {
+	if len(filePaths) <= i.config.MaxBatchSize {
 		return len(filePaths)
 	}
 
 	// 基于文件数量动态调整批处理大小
 	if len(filePaths) < 50 {
-		return utils.Max(1, i.config.BatchSize/2)
+		return utils.Max(1, i.config.MaxBatchSize/2)
 	} else if len(filePaths) < 200 {
-		return i.config.BatchSize
+		return i.config.MaxBatchSize
 	} else {
 		// 大量文件时，可以适当增加批处理大小，减少任务调度开销
-		return utils.Min(i.config.BatchSize*2, 50) // 上限50个文件
+		return utils.Min(i.config.MaxBatchSize*2, 50) // 上限50个文件
 	}
 }
 

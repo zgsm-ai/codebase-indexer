@@ -27,12 +27,12 @@ type TreeNode struct {
 }
 
 type FileInfo struct {
-	Name    string    `json:"language"`          // 节点名称
-	Path    string    `json:"path"`              // 节点路径
-	Size    int64     `json:"size,omitempty"`    // 文件大小（仅文件有）
-	ModTime time.Time `json:"modTime,omitempty"` // 修改时间（可选）
-	IsDir   bool      `json:"IsDir"`             // 是否是目录
-	Mode    fs.FileMode
+	Name    string      `json:"name"`  // 节点名称
+	Path    string      `json:"path"`  // 节点路径
+	Size    int64       `json:"-"`     // 文件大小（仅文件有）
+	ModTime time.Time   `json:"-"`     // 修改时间（可选）
+	IsDir   bool        `json:"IsDir"` // 是否是目录
+	Mode    fs.FileMode `json:"-"`
 }
 
 // WalkContext provides context information during directory traversal

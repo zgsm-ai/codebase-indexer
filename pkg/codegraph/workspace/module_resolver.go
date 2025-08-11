@@ -23,7 +23,7 @@ func newModuleResolver(logger logger.Logger) *moduleResolver {
 	return &moduleResolver{
 		logger: logger,
 	}
-}
+} //TODO go.work submodules 解析有问题，其它语言支持。扫描目录优化； 有些只查询projects，不需要解析包，分离；
 
 // ResolveProjectModules 解析项目的模块信息，递归多层处理，适应子项目、子模块的场景
 func (mr *moduleResolver) ResolveProjectModules(ctx context.Context, project *Project, path string, maxDepth int) error {
@@ -37,6 +37,7 @@ func (mr *moduleResolver) ResolveProjectModules(ctx context.Context, project *Pr
 	stat, err := os.Stat(path)
 	if err != nil {
 		mr.logger.Debug("module_resolver resolve project path %s err:%v", err)
+		return nil
 	}
 	if !stat.IsDir() {
 		return nil

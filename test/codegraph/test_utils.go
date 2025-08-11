@@ -101,7 +101,7 @@ func createTestIndexer(env *testEnvironment, visitPattern *types.VisitPattern) *
 		env.workspaceReader,
 		env.storage,
 		env.repository,
-		codegraph.IndexerConfig{VisitPattern: visitPattern, BatchSize: 2, MaxConcurrency: 2},
+		codegraph.IndexerConfig{VisitPattern: visitPattern, MaxBatchSize: 100, MaxConcurrency: 10},
 		// 2,2, 300s， 20% cpu ,500MB内存占用；
 		// 2
 

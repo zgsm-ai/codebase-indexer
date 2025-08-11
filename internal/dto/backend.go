@@ -89,11 +89,11 @@ type DirectoryNode struct {
 }
 
 type DirectoryData struct {
-	CodebaseId    string            `json:"codebaseId"`
-	Name          string            `json:"name"`
+	//CodebaseId    string            `json:"codebaseId"`
+	//Name          string            `json:"name"`
 	RootPath      string            `json:"rootPath"`
-	TotalFiles    int               `json:"totalFiles"`
-	TotalSize     int64             `json:"totalSize"`
+	TotalFiles    int               `json:"-"`
+	TotalSize     int64             `json:"-"`
 	DirectoryTree []*types.TreeNode `json:"directoryTree"`
 }
 

@@ -2,6 +2,7 @@
 package main
 
 import (
+	"codebase-indexer/pkg/codegraph/definition"
 	"context"
 	"flag"
 	"fmt"
@@ -118,9 +119,7 @@ func main() {
 	syncRepo := repository.NewHTTPSync(syncServiceConfig, appLogger)
 
 	// Initialize service layer
-	codebaseService := service.NewCodebaseService(appLogger)
 	schedulerService := service.NewScheduler(syncRepo, scanRepo, storageManager, appLogger)
-	extensionService := service.NewExtensionService(storageManager, syncRepo, scanRepo, workspaceRepo, eventRepo, codebaseEmbeddingRepo, codebaseService, appLogger)
 	fileScanService := service.NewFileScanService(workspaceRepo, eventRepo, scanRepo, storageManager, codebaseEmbeddingRepo, appLogger)
 	uploadService := service.NewUploadService(schedulerService, syncRepo, appLogger, syncServiceConfig)
 	embeddingProcessService := service.NewEmbeddingProcessService(workspaceRepo, eventRepo, codebaseEmbeddingRepo, uploadService, appLogger)
@@ -142,6 +141,10 @@ func main() {
 
 	indexer := codegraph.NewCodeIndexer(sourceFileParser, dependencyAnalyzer, workspaceReader, codegraphStore,
 		workspaceRepo, codegraph.IndexerConfig{VisitPattern: workspace.DefaultVisitPattern}, appLogger) //todo 文件忽略列表
+
+	codebaseService := service.NewCodebaseService(appLogger, workspaceReader, workspaceRepo, definition.NewDefinitionParser(), indexer)
+	extensionService := service.NewExtensionService(storageManager, syncRepo, scanRepo, workspaceRepo, eventRepo, codebaseEmbeddingRepo, codebaseService, appLogger)
+
 	codegraphProcessor := service.NewCodegraphProcessor(workspaceReader, indexer, workspaceRepo, eventRepo, appLogger)
 
 	// Initialize job layer
