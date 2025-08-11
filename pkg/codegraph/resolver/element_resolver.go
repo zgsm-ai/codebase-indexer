@@ -49,7 +49,15 @@ func resolve(ctx context.Context, b ElementResolver, element Element, rc *Resolv
 
 // IsValidElement 检查必须字段
 func IsValidElement(e Element) bool {
-	return IsValidIdentifier(e.GetName()) && e.GetType() != types.EmptyString &&
+	_, isElement := e.(*Import)
+	_, isPackage := e.(*Package)
+	isValidName := false
+	if !isElement && !isPackage {
+		isValidName = IsValidIdentifier(e.GetName())
+	} else {
+		isValidName = true
+	}
+	return isValidName && e.GetType() != types.EmptyString &&
 		e.GetPath() != types.EmptyString && len(e.GetRange()) == 4 && IsValidElementType(e)
 
 }
