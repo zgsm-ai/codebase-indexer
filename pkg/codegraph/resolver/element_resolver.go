@@ -19,6 +19,10 @@ type ElementResolver interface {
 	resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error)
 }
 
+var (
+	identifierRegex = regexp.MustCompile(`^[a-zA-Z_$\-][a-zA-Z0-9_$\-]*$`)
+)
+
 func resolve(ctx context.Context, b ElementResolver, element Element, rc *ResolveContext) (elems []Element, err error) {
 	switch element := element.(type) {
 	case *Import:
@@ -94,6 +98,5 @@ func IsValidIdentifier(name string) bool {
 	if name == types.EmptyString {
 		return false
 	}
-	re := regexp.MustCompile(`^[a-zA-Z_$\-][a-zA-Z0-9_$\-]*$`)
-	return re.MatchString(name)
+	return identifierRegex.MatchString(name)
 }

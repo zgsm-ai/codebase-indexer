@@ -9,6 +9,11 @@ import (
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
+// 包级别的正则表达式，只编译一次
+var (
+	arrayIndexRegex = regexp.MustCompile(`\[[^\]]+\]`)
+)
+
 type JavaScriptResolver struct {
 }
 
@@ -908,8 +913,7 @@ func extractReferencePath(node *sitter.Node, content []byte) map[string]string {
 		// 清除[]、*字符和数组索引如[100]、[queueCapacity]等
 		cleanText := strings.ReplaceAll(strings.ReplaceAll(text, "[]", ""), "*", "")
 		// 使用正则表达式去除数组索引，包括数字索引[100]和标识符索引[queueCapacity]
-		re := regexp.MustCompile(`\[[^\]]+\]`)
-		cleanText = re.ReplaceAllString(cleanText, "")
+		cleanText = arrayIndexRegex.ReplaceAllString(cleanText, "")
 		result["property"] = cleanText
 		// 根据.分割，后面为property，前面为object
 		if strings.Contains(cleanText, types.Dot) {

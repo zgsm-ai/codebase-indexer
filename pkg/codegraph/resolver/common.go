@@ -10,6 +10,22 @@ import (
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
+// 包级别的正则表达式，只编译一次
+var (
+	commentRegex      = regexp.MustCompile(`/\*.*?\*/`)
+	attrRegex         = regexp.MustCompile(`\[\[.*?\]\]`)
+	keywordsRegex     = regexp.MustCompile(`\b(const|volatile|mutable|__?restrict)\b`)
+	ptrRefRegex       = regexp.MustCompile(`[*&]+`)
+	atAnnotationRegex = regexp.MustCompile(`@\w+\s+`)
+	superRegex        = regexp.MustCompile(`super|extends`)
+	questionRegex     = regexp.MustCompile(`\?`)
+	structRegex       = regexp.MustCompile(`struct\s+(\w+)\s*\{`)
+	typePrefixRegex   = regexp.MustCompile(`\b(struct|enum|union)\b\s*`)
+	spacesRegex       = regexp.MustCompile(`\s+`)
+	braceRegex        = regexp.MustCompile(`\{|\}`)
+	quoteRegex        = regexp.MustCompile(`"`)
+)
+
 // findIdentifierNode 递归遍历语法树节点，查找类型为"identifier"的节点
 func findIdentifierNode(node *sitter.Node) *sitter.Node {
 	if node == nil {
@@ -74,60 +90,48 @@ func updateRootElement(
 func CleanParam(param string) string {
 
 	// 1. 清理注释
-	reComment := regexp.MustCompile(`/\*.*?\*/`)
-	param = reComment.ReplaceAllString(param, "")
+	param = commentRegex.ReplaceAllString(param, "")
 
 	// 2. 去除属性标记 [[...]]
-	reAttr := regexp.MustCompile(`\[\[.*?\]\]`)
-	param = reAttr.ReplaceAllString(param, "")
+	param = attrRegex.ReplaceAllString(param, "")
 
 	// 3. 去除关键字修饰符
-	reKeywords := regexp.MustCompile(`\b(const|volatile|mutable|__?restrict)\b`)
-	param = reKeywords.ReplaceAllString(param, "")
+	param = keywordsRegex.ReplaceAllString(param, "")
 
 	// 4. 去除指针和引用符号
-	rePtrRef := regexp.MustCompile(`[*&]+`)
-	param = rePtrRef.ReplaceAllString(param, "")
+	param = ptrRefRegex.ReplaceAllString(param, "")
 
 	// 5. 清理 @注解
-	reAt := regexp.MustCompile(`@\w+\s+`)
-	param = reAt.ReplaceAllString(param, "")
+	param = atAnnotationRegex.ReplaceAllString(param, "")
 
 	// 6. super/extends
-	reSuper := regexp.MustCompile(`super|extends`)
-	param = reSuper.ReplaceAllString(param, "")
+	param = superRegex.ReplaceAllString(param, "")
 
 	// 7. 清理问号
-	reQuestion := regexp.MustCompile(`\?`)
-	param = reQuestion.ReplaceAllString(param, "")
+	param = questionRegex.ReplaceAllString(param, "")
 
 	// 8. 去除这种情况 struct TempPoint {
 	// int tx, ty;
 	// } temp_pt = {10, 20};
 	// 直接提取结构体名字
-	reStruct := regexp.MustCompile(`struct\s+(\w+)\s*\{`)
-	matches := reStruct.FindAllStringSubmatch(param, -1)
+	matches := structRegex.FindAllStringSubmatch(param, -1)
 
 	if len(matches) > 0 {
 		param = matches[0][1]
 	}
 
 	// 9. 过滤类型里的 struct、enum、union 关键字
-	reTypePrefix := regexp.MustCompile(`\b(struct|enum|union)\b\s*`)
-	param = reTypePrefix.ReplaceAllString(param, "")
+	param = typePrefixRegex.ReplaceAllString(param, "")
 
 	// 10. 清理多余空白
 	param = strings.TrimSpace(param)
-	reSpaces := regexp.MustCompile(`\s+`)
-	param = reSpaces.ReplaceAllString(param, " ")
+	param = spacesRegex.ReplaceAllString(param, " ")
 
 	// 11. 去除{}符号
-	reBrace := regexp.MustCompile(`\{|\}`)
-	param = reBrace.ReplaceAllString(param, "")
+	param = braceRegex.ReplaceAllString(param, "")
 
 	// 12. 去除""
-	reQuote := regexp.MustCompile(`"`)
-	param = reQuote.ReplaceAllString(param, "")
+	param = quoteRegex.ReplaceAllString(param, "")
 
 	return param
 }
