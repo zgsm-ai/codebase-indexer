@@ -566,13 +566,19 @@ func parseTypeScriptMethodNode(node *sitter.Node, content []byte, className stri
 	} else {
 		method.Declaration.Modifier = types.ModifierPublic
 	}
-
 	// 查找方法名
 	nameNode := node.ChildByFieldName("name")
 	if nameNode != nil {
 		methodName := CleanParam(nameNode.Utf8Text(content))
-		method.BaseElement.Name = methodName
-		method.Declaration.Name = methodName
+		if strings.Contains(methodName, types.Dot) {
+			parts := strings.Split(methodName, types.Dot)
+			methodName = parts[len(parts)-1]
+			// method.Owner = parts[len(parts)-2]
+		}
+		if methodName != types.EmptyString {
+			method.BaseElement.Name = methodName
+			method.Declaration.Name = methodName
+		}
 	}
 
 	// 查找方法参数
@@ -677,7 +683,6 @@ func parseTypeScriptPropertySignatureNode(node *sitter.Node, content []byte) (*F
 	if typeNode == nil {
 		return field, ref, method
 	}
-
 	typeContent := strings.TrimPrefix(typeNode.Utf8Text(content), types.Colon)
 	typeContent = strings.TrimSpace(typeContent)
 	if isTypeScriptPrimitiveType(typeContent) {
