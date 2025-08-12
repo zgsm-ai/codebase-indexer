@@ -24,6 +24,7 @@ var (
 	spacesRegex       = regexp.MustCompile(`\s+`)
 	braceRegex        = regexp.MustCompile(`\{|\}`)
 	quoteRegex        = regexp.MustCompile(`"`)
+	brackets          = regexp.MustCompile(`\[|\]`)
 )
 
 // findIdentifierNode 递归遍历语法树节点，查找类型为"identifier"的节点
@@ -134,6 +135,8 @@ func CleanParam(param string) string {
 	// 12. 去除""
 	param = quoteRegex.ReplaceAllString(param, "")
 
+	// 13. 去除[]
+	param = brackets.ReplaceAllString(param, "")
 	return param
 }
 func updateElementRange(element Element, capture *sitter.QueryCapture) {
@@ -223,7 +226,7 @@ func findFirstIdentifier(node *sitter.Node, content []byte) string {
 			switch types.ToNodeKind(child.Kind()) {
 			case types.NodeKindIdentifier:
 				identifier = StripSpaces(child.Utf8Text(content))
-				return 
+				return
 			default:
 				// 递归查找类型中的标识符
 				walk(child)
