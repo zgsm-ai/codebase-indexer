@@ -332,46 +332,47 @@ const maxLayerLimit = 5
 
 func (l *codebaseService) QueryRelation(ctx context.Context, req *dto.SearchRelationRequest) (resp *dto.RelationData, err error) {
 
+	return nil, fmt.Errorf("api not implemented")
 	// 参数验证
-	if req.ClientId == types.EmptyString {
-		return nil, errs.NewMissingParamError("clientId")
-	}
-	if req.CodebasePath == types.EmptyString {
-		return nil, errs.NewMissingParamError("codebasePath")
-	}
-	if req.MaxLayer <= 0 {
-		req.MaxLayer = 1
-	}
-
-	if req.MaxLayer > maxLayerLimit {
-		return nil, errs.NewInvalidParamErr("maxLayer", fmt.Sprintf("参数maxLayer非法，最大值为%d", maxLayerLimit))
-	}
-
-	if req.FilePath == types.EmptyString {
-		return nil, errs.NewMissingParamError("filePath")
-	}
-
-	nodes, err := l.indexer.QueryRelations(ctx, &types.QueryRelationOptions{
-		Workspace:      req.CodebasePath,
-		FilePath:       req.FilePath,
-		StartLine:      req.StartLine,
-		EndLine:        req.EndLine,
-		SymbolName:     req.SymbolName,
-		IncludeContent: req.IncludeContent,
-		MaxLayer:       req.MaxLayer,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// 填充content，控制层数和节点数
-	if err = l.fillContent(ctx, nodes, relationFillContentLayerLimit, relationFillContentLayerNodeLimit); err != nil {
-		l.logger.Error("fill graph query contents err:%v", err)
-	}
-
-	return &dto.RelationData{
-		List: nodes,
-	}, nil
+	//if req.ClientId == types.EmptyString {
+	//	return nil, errs.NewMissingParamError("clientId")
+	//}
+	//if req.CodebasePath == types.EmptyString {
+	//	return nil, errs.NewMissingParamError("codebasePath")
+	//}
+	//if req.MaxLayer <= 0 {
+	//	req.MaxLayer = 1
+	//}
+	//
+	//if req.MaxLayer > maxLayerLimit {
+	//	return nil, errs.NewInvalidParamErr("maxLayer", fmt.Sprintf("参数maxLayer非法，最大值为%d", maxLayerLimit))
+	//}
+	//
+	//if req.FilePath == types.EmptyString {
+	//	return nil, errs.NewMissingParamError("filePath")
+	//}
+	//
+	//nodes, err := l.indexer.QueryRelations(ctx, &types.QueryRelationOptions{
+	//	Workspace:      req.CodebasePath,
+	//	FilePath:       req.FilePath,
+	//	StartLine:      req.StartLine,
+	//	EndLine:        req.EndLine,
+	//	SymbolName:     req.SymbolName,
+	//	IncludeContent: req.IncludeContent,
+	//	MaxLayer:       req.MaxLayer,
+	//})
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//// 填充content，控制层数和节点数
+	//if err = l.fillContent(ctx, nodes, relationFillContentLayerLimit, relationFillContentLayerNodeLimit); err != nil {
+	//	l.logger.Error("fill graph query contents err:%v", err)
+	//}
+	//
+	//return &dto.RelationData{
+	//	List: nodes,
+	//}, nil
 }
 
 func (l *codebaseService) fillContent(ctx context.Context, nodes []*types.GraphNode, layerLimit, layerNodeLimit int) error {

@@ -7,15 +7,16 @@ import "pkg/codegraph/proto/types.proto";
 option go_package = "pkg/codegraph/proto/codegraphpb;codegraphpb";
 
 // SymbolDefinition 符号定义
-message SymbolDefinition {
+message SymbolOccurrence {
   string name = 1;
   string language = 2;
-  repeated Definition definitions = 3;
+  repeated Occurrence occurrences = 3;
 }
 
 // Definition 定义详情
-message Definition {
+message Occurrence {
   string path = 1;
   repeated int32 range = 2;
   ElementType element_type = 3;
+  RelationType relation_type = 4;
 }

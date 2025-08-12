@@ -19,6 +19,7 @@ type GraphStorage interface {
 	BatchSave(ctx context.Context, projectUuid string, values Entries) error
 	Put(ctx context.Context, projectUuid string, entry *Entry) error
 	Get(ctx context.Context, projectUuid string, key Key) ([]byte, error)
+	Exists(ctx context.Context, projectUuid string, key Key) (bool, error)
 	Delete(ctx context.Context, projectUuid string, key Key) error
 	DeleteAll(ctx context.Context, projectUuid string) error
 	Iter(ctx context.Context, projectUuid string) Iterator

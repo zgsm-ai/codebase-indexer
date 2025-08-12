@@ -3,10 +3,8 @@ package codegraph
 import (
 	"codebase-indexer/internal/repository"
 	"codebase-indexer/pkg/codegraph/analyzer"
-	cache2 "codebase-indexer/pkg/codegraph/cache"
 	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/parser"
-	"codebase-indexer/pkg/codegraph/pool"
 	"codebase-indexer/pkg/codegraph/proto"
 	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
 	"codebase-indexer/pkg/codegraph/resolver"
@@ -20,7 +18,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -66,6 +63,7 @@ type BatchProcessingParams struct {
 	ProjectUuid   string
 	SourceFiles   []string
 	TotalFiles    int
+	PreviousNum   int
 	Project       *workspace.Project
 	WorkspacePath string
 	Concurrency   int
@@ -98,16 +96,16 @@ type DependencyAnalysisResult struct {
 
 // ProgressInfo 进度信息
 type ProgressInfo struct {
-	ElementTablesCount int
-	ParsedFilesCnt     int
-	PreviousNum        int
-	WorkspacePath      string
+	Total         int
+	Processed     int
+	PreviousNum   int
+	WorkspacePath string
 }
 
 const (
 	defaultConcurrency = 1
 	defaultBatchSize   = 10
-	defaultMaxFiles    = 10000
+	defaultMaxFiles    = 50000
 	defaultMaxProjects = 3
 )
 
@@ -232,6 +230,7 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 		TotalFiles:    totalFiles,
 		Project:       project,
 		WorkspacePath: workspacePath,
+		PreviousNum:   previousNum,
 		Concurrency:   i.config.MaxConcurrency,
 		BatchSize:     i.config.MaxBatchSize,
 	}
@@ -256,29 +255,29 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 		return batchResult.ProjectMetrics, allErrs
 	}
 
-	// sleep 5 秒，gc
-	// 阶段4：依赖分析
-	dependencyParams := &DependencyAnalysisParams{
-		ProjectUuid:    projectUuid,
-		ParsedFilesCnt: batchResult.ParsedFilesCount,
-		WorkspacePath:  workspacePath,
-		PreviousNum:    previousNum,
-		BatchSize:      i.config.MaxBatchSize,
-	}
-
-	dependencyResult, err := i.processDependencyAnalysis(ctx, dependencyParams)
-	if err != nil {
-		allErrs = append(allErrs, err)
-		return batchResult.ProjectMetrics, allErrs
-	}
-
-	allErrs = append(allErrs, dependencyResult.Errors...)
-
-	i.logger.Debug("index_project project %s analyze dependency end, analyzed %d/%d element tables, cost %d ms.",
-		project.Path, dependencyResult.ElementTablesCount, batchResult.ParsedFilesCount, dependencyResult.Duration.Milliseconds())
+	//// sleep 5 秒，gc
+	//// 阶段4：依赖分析
+	//dependencyParams := &DependencyAnalysisParams{
+	//	ProjectUuid:    projectUuid,
+	//	Processed: batchResult.ParsedFilesCount,
+	//	WorkspacePath:  workspacePath,
+	//	PreviousNum:    previousNum,
+	//	BatchSize:      i.config.MaxBatchSize,
+	//}
+	//
+	//dependencyResult, err := i.processDependencyAnalysis(ctx, dependencyParams)
+	//if err != nil {
+	//	allErrs = append(allErrs, err)
+	//	return batchResult.ProjectMetrics, allErrs
+	//}
+	//
+	//allErrs = append(allErrs, dependencyResult.Errors...)
+	//
+	//i.logger.Debug("index_project project %s analyze dependency end, analyzed %d/%d element tables, cost %d ms.",
+	//	project.Path, dependencyResult.Total, batchResult.ParsedFilesCount, dependencyResult.Duration.Milliseconds())
 
 	i.logger.Info("index_project %s finish, cost %d ms, processed %d files.", project.Path,
-		time.Since(projectStart).Milliseconds(), dependencyResult.ElementTablesCount)
+		time.Since(projectStart).Milliseconds(), batchResult.ParsedFilesCount)
 
 	return batchResult.ProjectMetrics, allErrs
 }
@@ -383,20 +382,13 @@ func (i *Indexer) removeIndexByFilePaths(ctx context.Context, projectUuid string
 	for _, v := range deleteFileTables {
 		deletePaths[v.Path] = nil
 	}
-	// 2. 收集关系
-	referredElements := i.collectRelations(deleteFileTables)
 
-	// 3. 清理关系
-	if err = i.cleanupRelations(ctx, projectUuid, referredElements, deletePaths); err != nil {
-		return fmt.Errorf("cleanup references failed: %w", err)
-	}
-
-	// 4. 清理符号定义
-	if err = i.cleanupSymbolDefinitions(ctx, projectUuid, deleteFileTables, deletePaths); err != nil {
+	// 2. 清理符号定义
+	if err = i.cleanupSymbolOccurrences(ctx, projectUuid, deleteFileTables, deletePaths); err != nil {
 		return fmt.Errorf("cleanup symbol definitions failed: %w", err)
 	}
 
-	// 5. 删除path索引
+	// 3. 删除path索引
 	if err = i.deleteFileIndexes(ctx, projectUuid, filePaths); err != nil {
 		return fmt.Errorf("delete file indexes failed: %w", err)
 	}
@@ -481,69 +473,8 @@ func (i *Indexer) searchFileElementTablesByPathPrefix(ctx context.Context, proje
 	return tables, errs
 }
 
-// collectRelations 收集引用元素
-func (i *Indexer) collectRelations(fileTables []*codegraphpb.FileElementTable) []*codegraphpb.Relation {
-	var relations []*codegraphpb.Relation
-
-	for _, ft := range fileTables {
-		for _, e := range ft.Elements {
-			if len(e.GetRelations()) == 0 {
-				continue
-			}
-			relations = append(relations, e.Relations...)
-		}
-	}
-
-	return relations
-}
-
-// cleanupRelations 清理引用关系
-func (i *Indexer) cleanupRelations(ctx context.Context, projectUuid string,
-	relations []*codegraphpb.Relation, deletedPaths map[string]interface{}) error {
-	var errs []error
-
-	for _, ref := range relations {
-		language, err := lang.InferLanguage(ref.ElementPath)
-		if err != nil {
-			continue
-		}
-		key := store.ElementPathKey{Language: language, Path: ref.ElementPath}
-
-		refTable, err := i.getFileElementTableByPath(ctx, projectUuid, ref.ElementPath)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-
-		// 移除与该符号相关的relation
-		for _, e := range refTable.Elements {
-			var newRelations []*codegraphpb.Relation
-			for _, r := range e.GetRelations() {
-				// 如果relation指向待删除的符号，则跳过
-				if _, ok := deletedPaths[r.ElementPath]; ok {
-					continue
-				}
-				newRelations = append(newRelations, r)
-			}
-			e.Relations = newRelations
-		}
-
-		key = store.ElementPathKey{Language: language, Path: refTable.Path}
-		// 保存更新后的文件表
-		if err = i.storage.Put(ctx, projectUuid, &store.Entry{Key: key, Value: refTable}); err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	if len(errs) > 0 {
-		return errors.Join(errs...)
-	}
-
-	return nil
-}
-
-// cleanupSymbolDefinitions 清理符号定义
-func (i *Indexer) cleanupSymbolDefinitions(ctx context.Context, projectUuid string,
+// cleanupSymbolOccurrences 清理符号定义
+func (i *Indexer) cleanupSymbolOccurrences(ctx context.Context, projectUuid string,
 	deleteFileTables []*codegraphpb.FileElementTable, deletedPaths map[string]interface{}) error {
 	var errs []error
 
@@ -556,20 +487,20 @@ func (i *Indexer) cleanupSymbolDefinitions(ctx context.Context, projectUuid stri
 					errs = append(errs, err)
 					continue
 				}
-				symDefs := new(codegraphpb.SymbolDefinition)
+				symDefs := new(codegraphpb.SymbolOccurrence)
 				if err = store.UnmarshalValue(sym, symDefs); err != nil {
-					return fmt.Errorf("unmarshal symbolDefinition error:%w", err)
+					return fmt.Errorf("unmarshal SymbolOccurrence error:%w", err)
 				}
 
-				newSymDefs := &codegraphpb.SymbolDefinition{
+				newSymDefs := &codegraphpb.SymbolOccurrence{
 					Name:        e.GetName(),
-					Definitions: make([]*codegraphpb.Definition, 0),
+					Occurrences: make([]*codegraphpb.Occurrence, 0),
 				}
-				for _, d := range symDefs.Definitions {
+				for _, d := range symDefs.Occurrences {
 					if _, ok := deletedPaths[d.Path]; ok {
 						continue
 					}
-					newSymDefs.Definitions = append(newSymDefs.Definitions, d)
+					newSymDefs.Occurrences = append(newSymDefs.Occurrences, d)
 				}
 				// 保存更新后的文件表
 				if err := i.storage.Put(ctx, projectUuid, &store.Entry{Key: store.SymbolNameKey{Language: language,
@@ -694,26 +625,15 @@ func (i *Indexer) indexProjectFiles(ctx context.Context, projectUuid string, fil
 	}
 
 	// 保存本地符号表
-	if err := i.analyzer.SaveSymbolDefinitions(ctx, projectUuid, fileTables); err != nil {
+	if err := i.analyzer.SaveSymbolOccurrences(ctx, projectUuid, fileTables); err != nil {
 		return fmt.Errorf("save symbol definitions error: %w", err)
 	}
 
-	cache := cache2.NewLRUCache[*codegraphpb.FileElementTable](i.config.MaxBatchSize)
-	defer cache.Purge()
-
 	// 转换为 proto
 	protoElementTables := proto.FileElementTablesToProto(fileTables)
-	for _, table := range protoElementTables {
-		// 依赖分析
-		updatedTables, err := i.analyzer.Analyze(ctx, projectUuid, table, cache)
-		if err != nil {
-			return fmt.Errorf("analyze dependency error: %w", err)
-		}
-
-		// 关系索引存储
-		if err := i.storage.BatchSave(ctx, projectUuid, workspace.FileElementTables(updatedTables)); err != nil {
-			return fmt.Errorf("batch save error: %w", err)
-		}
+	// 关系索引存储
+	if err := i.storage.BatchSave(ctx, projectUuid, workspace.FileElementTables(protoElementTables)); err != nil {
+		return fmt.Errorf("batch save error: %w", err)
 	}
 
 	return nil
@@ -765,7 +685,7 @@ func (i *Indexer) QueryElements(ctx context.Context, workspacePath string, fileP
 }
 
 // QuerySymbols 查询symbols
-func (i *Indexer) QuerySymbols(ctx context.Context, workspacePath string, filePath string, symbolNames []string) ([]*codegraphpb.SymbolDefinition, error) {
+func (i *Indexer) QuerySymbols(ctx context.Context, workspacePath string, filePath string, symbolNames []string) ([]*codegraphpb.SymbolOccurrence, error) {
 	i.logger.Info("query_symbols start to query workspace %s file %s symbols: %v", workspacePath, filePath, symbolNames)
 
 	projects := i.workspaceReader.FindProjects(ctx, workspacePath, workspace.DefaultVisitPattern)
@@ -773,7 +693,7 @@ func (i *Indexer) QuerySymbols(ctx context.Context, workspacePath string, filePa
 		return nil, fmt.Errorf("no project found in workspace %s", workspacePath)
 	}
 
-	var results []*codegraphpb.SymbolDefinition
+	var results []*codegraphpb.SymbolOccurrence
 	var errs []error
 
 	// 找到文件路径对应的项目
@@ -799,7 +719,7 @@ func (i *Indexer) QuerySymbols(ctx context.Context, workspacePath string, filePa
 		}
 
 		if symbolDef != nil {
-			sd := new(codegraphpb.SymbolDefinition)
+			sd := new(codegraphpb.SymbolOccurrence)
 			if err = store.UnmarshalValue(symbolDef, sd); err != nil {
 				errs = append(errs, err)
 				continue
@@ -894,108 +814,108 @@ func (i *Indexer) checkElementTables(elementTables []*parser.FileElementTable) {
 		len(elementTables), total, filtered, time.Since(start).Milliseconds())
 }
 
-// QueryRelations 实现查询接口
-func (b *Indexer) QueryRelations(ctx context.Context, opts *types.QueryRelationOptions) ([]*types.GraphNode, error) {
-
-	filePath := opts.FilePath
-	// TODO projectUuid
-	project, err := b.workspaceReader.GetProjectByFilePath(ctx, opts.Workspace, filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get project by file: %s, err: %w", filePath, err)
-	}
-	projectUuid := project.Uuid
-
-	language, err := lang.InferLanguage(filePath)
-	if err != nil {
-		return nil, lang.ErrUnSupportedLanguage
-	}
-
-	exists, err := b.storage.ExistsProject(projectUuid)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check project %s index store, err:%v", projectUuid, err)
-	}
-	if !exists {
-		return nil, fmt.Errorf("project %s index not exists", projectUuid)
-	}
-
-	startTime := time.Now()
-	defer func() {
-		b.logger.Info("QueryRelations execution time: %d ms", time.Since(startTime).Milliseconds())
-	}()
-
-	// 1. 获取文档
-	var fileElementTable codegraphpb.FileElementTable
-	fileTableBytes, err := b.storage.Get(ctx, projectUuid, store.ElementPathKey{Language: language, Path: filePath})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get file %s element_table, err: %v", filePath, err)
-	}
-	if err = store.UnmarshalValue(fileTableBytes, &fileElementTable); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal file %s element_table value, err: %v", filePath, err)
-	}
-
-	if err != nil {
-		b.logger.Error("Failed to get document: %v", err)
-		return nil, err
-	}
-
-	var res []*types.GraphNode
-	var foundSymbols []*codegraphpb.Element
-
-	// Find root symbols based on query options
-	if opts.SymbolName != types.EmptyString {
-		foundSymbols = b.querySymbolsByNameAndLine(&fileElementTable, opts)
-		b.logger.Debug("Found %d symbols by name and line", len(foundSymbols))
-	} else {
-		foundSymbols = b.querySymbolsByPosition(ctx, &fileElementTable, opts)
-		b.logger.Debug("Found %d symbols by position", len(foundSymbols))
-	}
-
-	// Check if any root symbols were found
-	if len(foundSymbols) == 0 {
-		return nil, fmt.Errorf("symbol not found: name %s startLine %d in document %s", opts.SymbolName, opts.StartLine, opts.FilePath)
-	}
-
-	// root
-	// 找定义节点，以定义节点为根节点进行深度遍历
-	for _, s := range foundSymbols {
-		// 如果当前Symbol 就是定义，加入
-		if s.IsDefinition {
-			res = append(res, &types.GraphNode{
-				FilePath:   fileElementTable.Path,
-				SymbolName: s.Name,
-				Position:   types.ToPosition(s.Range),
-				NodeType:   string(types.NodeTypeDefinition),
-			})
-			continue
-		}
-		// 不是定义节点，找它的relation中的定义节点
-		relations := s.Relations
-		if len(relations) == 0 {
-			continue
-		}
-		for _, r := range relations {
-			if r.RelationType == codegraphpb.RelationType_RELATION_TYPE_DEFINITION {
-				// 定义节点，加入root
-				res = append(res, &types.GraphNode{
-					FilePath:   r.ElementPath,
-					SymbolName: r.ElementName,
-					Position:   types.ToPosition(r.Range),
-					NodeType:   string(types.NodeTypeDefinition),
-				})
-			}
-		}
-	}
-
-	b.logger.Debug("Found %d root nodes", len(res))
-
-	// Build the rest of the tree recursively
-	// We need to build children for the root nodes found
-	for _, rootNode := range res {
-		// Pass the corresponding original symbol proto to the recursive function
-		b.buildChildrenRecursive(ctx, projectUuid, language, rootNode, opts.MaxLayer)
-	}
-	return res, nil
-}
+//// QueryRelations 实现查询接口
+//func (b *Indexer) QueryRelations(ctx context.Context, opts *types.QueryRelationOptions) ([]*types.GraphNode, error) {
+//
+//	filePath := opts.FilePath
+//	// TODO projectUuid
+//	project, err := b.workspaceReader.GetProjectByFilePath(ctx, opts.Workspace, filePath)
+//	if err != nil {
+//		return nil, fmt.Errorf("failed to get project by file: %s, err: %w", filePath, err)
+//	}
+//	projectUuid := project.Uuid
+//
+//	language, err := lang.InferLanguage(filePath)
+//	if err != nil {
+//		return nil, lang.ErrUnSupportedLanguage
+//	}
+//
+//	exists, err := b.storage.ExistsProject(projectUuid)
+//	if err != nil {
+//		return nil, fmt.Errorf("failed to check project %s index store, err:%v", projectUuid, err)
+//	}
+//	if !exists {
+//		return nil, fmt.Errorf("project %s index not exists", projectUuid)
+//	}
+//
+//	startTime := time.Now()
+//	defer func() {
+//		b.logger.Info("QueryRelations execution time: %d ms", time.Since(startTime).Milliseconds())
+//	}()
+//
+//	// 1. 获取文档
+//	var fileElementTable codegraphpb.FileElementTable
+//	fileTableBytes, err := b.storage.Get(ctx, projectUuid, store.ElementPathKey{Language: language, Path: filePath})
+//	if err != nil {
+//		return nil, fmt.Errorf("failed to get file %s element_table, err: %v", filePath, err)
+//	}
+//	if err = store.UnmarshalValue(fileTableBytes, &fileElementTable); err != nil {
+//		return nil, fmt.Errorf("failed to unmarshal file %s element_table value, err: %v", filePath, err)
+//	}
+//
+//	if err != nil {
+//		b.logger.Error("Failed to get document: %v", err)
+//		return nil, err
+//	}
+//
+//	var res []*types.GraphNode
+//	var foundSymbols []*codegraphpb.Element
+//
+//	// Find root symbols based on query options
+//	if opts.SymbolName != types.EmptyString {
+//		foundSymbols = b.querySymbolsByNameAndLine(&fileElementTable, opts)
+//		b.logger.Debug("Found %d symbols by name and line", len(foundSymbols))
+//	} else {
+//		foundSymbols = b.querySymbolsByPosition(ctx, &fileElementTable, opts)
+//		b.logger.Debug("Found %d symbols by position", len(foundSymbols))
+//	}
+//
+//	// Check if any root symbols were found
+//	if len(foundSymbols) == 0 {
+//		return nil, fmt.Errorf("symbol not found: name %s startLine %d in document %s", opts.SymbolName, opts.StartLine, opts.FilePath)
+//	}
+//
+//	// root
+//	// 找定义节点，以定义节点为根节点进行深度遍历
+//	for _, s := range foundSymbols {
+//		// 如果当前Symbol 就是定义，加入
+//		if s.IsDefinition {
+//			res = append(res, &types.GraphNode{
+//				FilePath:   fileElementTable.Path,
+//				SymbolName: s.Name,
+//				Position:   types.ToPosition(s.Range),
+//				NodeType:   string(types.NodeTypeDefinition),
+//			})
+//			continue
+//		}
+//		// 不是定义节点，找它的relation中的定义节点
+//		relations := s.Relations
+//		if len(relations) == 0 {
+//			continue
+//		}
+//		for _, r := range relations {
+//			if r.RelationType == codegraphpb.RelationType_RELATION_TYPE_DEFINITION {
+//				// 定义节点，加入root
+//				res = append(res, &types.GraphNode{
+//					FilePath:   r.ElementPath,
+//					SymbolName: r.ElementName,
+//					Position:   types.ToPosition(r.Range),
+//					NodeType:   string(types.NodeTypeDefinition),
+//				})
+//			}
+//		}
+//	}
+//
+//	b.logger.Debug("Found %d root nodes", len(res))
+//
+//	// Build the rest of the tree recursively
+//	// We need to build children for the root nodes found
+//	for _, rootNode := range res {
+//		// Pass the corresponding original symbol proto to the recursive function
+//		b.buildChildrenRecursive(ctx, projectUuid, language, rootNode, opts.MaxLayer)
+//	}
+//	return res, nil
+//}
 
 // querySymbolsByPosition 按位置查询 occurrence
 func (i *Indexer) querySymbolsByPosition(ctx context.Context, fileTable *codegraphpb.FileElementTable,
@@ -1044,91 +964,92 @@ func (i *Indexer) querySymbolsByNameAndLine(doc *codegraphpb.FileElementTable, o
 	return nodes
 }
 
-// buildChildrenRecursive recursively builds the child nodes for a given GraphNode and its corresponding Symbol.
-func (i *Indexer) buildChildrenRecursive(ctx context.Context, projectUuid string,
-	language lang.Language, node *types.GraphNode, maxLayer int) {
-	if maxLayer <= 0 || node == nil {
-		i.logger.Debug("buildChildrenRecursive stopped: maxLayer=%d, node is nil=%v", maxLayer, node == nil)
-		return
-	}
-	maxLayer-- // 防止死递归
-
-	startTime := time.Now()
-	defer func() {
-		i.logger.Debug("buildChildrenRecursive for node %s took %v", node.SymbolName, time.Since(startTime))
-	}()
-
-	symbolPath := node.FilePath
-	symbolName := node.SymbolName
-	position := node.Position
-
-	// 根据path和position，定义到 symbol，从而找到它的relation
-	var elementTable codegraphpb.FileElementTable
-	fileTableBytes, err := i.storage.Get(ctx, projectUuid, store.ElementPathKey{
-		Language: language, Path: symbolPath})
-	if err != nil {
-		i.logger.Error("query_definitions failed to get fileTable by def: %s, err: %v", err)
-		return
-	}
-
-	if err = store.UnmarshalValue(fileTableBytes, &elementTable); err != nil {
-		i.logger.Error("Failed to unmarshal fileTable by path: %s, err:%v", symbolPath, err)
-		return
-	}
-
-	if err != nil {
-		i.logger.Debug("Failed to find elementTable for path %s: %v", symbolPath, err)
-		return
-	}
-
-	symbol := i.findSymbolInDocByRange(&elementTable, types.ToRange(position))
-	if symbol == nil {
-		i.logger.Debug("Symbol not found in elementTable: path %s, name %s", symbolPath, symbolName)
-		return
-	}
-
-	var referenceChildren []*types.GraphNode
-
-	// 找到symbol 的relation. 只有定义的symbol 有reference，引用节点的relation是定义节点
-	if len(symbol.Relations) > 0 {
-		for _, r := range symbol.Relations {
-			if r.RelationType == codegraphpb.RelationType_RELATION_TYPE_REFERENCE {
-				// 引用节点，加入node的children
-				referenceChildren = append(referenceChildren, &types.GraphNode{
-					FilePath:   r.ElementPath,
-					SymbolName: r.ElementName,
-					Position:   types.ToPosition(r.Range),
-					NodeType:   string(types.NodeTypeReference),
-				})
-			}
-		}
-		i.logger.Debug("Found %d reference relations for symbol %s", len(referenceChildren), symbolName)
-	}
-
-	if len(referenceChildren) == 0 {
-		// 如果references 为空，说明当前 node 是引用节点， 找到它所属的函数/类/结构体的definition节点，再找引用
-		foundDefSymbol := i.findReferenceSymbolBelonging(&elementTable, symbol)
-		if foundDefSymbol != nil {
-			referenceChildren = append(referenceChildren, &types.GraphNode{
-				FilePath:   elementTable.Path,
-				SymbolName: foundDefSymbol.Name,
-				Position:   types.ToPosition(foundDefSymbol.Range),
-				NodeType:   string(types.NodeTypeDefinition),
-			})
-		} else {
-			i.logger.Debug("failed to find reference symbol %s belongs to", symbolName)
-		}
-
-	}
-
-	//当前节点的子节点
-	node.Children = referenceChildren
-
-	// 继续递归
-	for _, ch := range referenceChildren {
-		i.buildChildrenRecursive(ctx, projectUuid, language, ch, maxLayer)
-	}
-}
+//
+//// buildChildrenRecursive recursively builds the child nodes for a given GraphNode and its corresponding Symbol.
+//func (i *Indexer) buildChildrenRecursive(ctx context.Context, projectUuid string,
+//	language lang.Language, node *types.GraphNode, maxLayer int) {
+//	if maxLayer <= 0 || node == nil {
+//		i.logger.Debug("buildChildrenRecursive stopped: maxLayer=%d, node is nil=%v", maxLayer, node == nil)
+//		return
+//	}
+//	maxLayer-- // 防止死递归
+//
+//	startTime := time.Now()
+//	defer func() {
+//		i.logger.Debug("buildChildrenRecursive for node %s took %v", node.SymbolName, time.Since(startTime))
+//	}()
+//
+//	symbolPath := node.FilePath
+//	symbolName := node.SymbolName
+//	position := node.Position
+//
+//	// 根据path和position，定义到 symbol，从而找到它的relation
+//	var elementTable codegraphpb.FileElementTable
+//	fileTableBytes, err := i.storage.Get(ctx, projectUuid, store.ElementPathKey{
+//		Language: language, Path: symbolPath})
+//	if err != nil {
+//		i.logger.Error("query_definitions failed to get fileTable by def: %s, err: %v", err)
+//		return
+//	}
+//
+//	if err = store.UnmarshalValue(fileTableBytes, &elementTable); err != nil {
+//		i.logger.Error("Failed to unmarshal fileTable by path: %s, err:%v", symbolPath, err)
+//		return
+//	}
+//
+//	if err != nil {
+//		i.logger.Debug("Failed to find elementTable for path %s: %v", symbolPath, err)
+//		return
+//	}
+//
+//	symbol := i.findSymbolInDocByRange(&elementTable, types.ToRange(position))
+//	if symbol == nil {
+//		i.logger.Debug("Symbol not found in elementTable: path %s, name %s", symbolPath, symbolName)
+//		return
+//	}
+//
+//	var referenceChildren []*types.GraphNode
+//
+//	// 找到symbol 的relation. 只有定义的symbol 有reference，引用节点的relation是定义节点
+//	if len(symbol.Relations) > 0 {
+//		for _, r := range symbol.Relations {
+//			if r.RelationType == codegraphpb.RelationType_RELATION_TYPE_REFERENCE {
+//				// 引用节点，加入node的children
+//				referenceChildren = append(referenceChildren, &types.GraphNode{
+//					FilePath:   r.ElementPath,
+//					SymbolName: r.ElementName,
+//					Position:   types.ToPosition(r.Range),
+//					NodeType:   string(types.NodeTypeReference),
+//				})
+//			}
+//		}
+//		i.logger.Debug("Found %d reference relations for symbol %s", len(referenceChildren), symbolName)
+//	}
+//
+//	if len(referenceChildren) == 0 {
+//		// 如果references 为空，说明当前 node 是引用节点， 找到它所属的函数/类/结构体的definition节点，再找引用
+//		foundDefSymbol := i.findReferenceSymbolBelonging(&elementTable, symbol)
+//		if foundDefSymbol != nil {
+//			referenceChildren = append(referenceChildren, &types.GraphNode{
+//				FilePath:   elementTable.Path,
+//				SymbolName: foundDefSymbol.Name,
+//				Position:   types.ToPosition(foundDefSymbol.Range),
+//				NodeType:   string(types.NodeTypeDefinition),
+//			})
+//		} else {
+//			i.logger.Debug("failed to find reference symbol %s belongs to", symbolName)
+//		}
+//
+//	}
+//
+//	//当前节点的子节点
+//	node.Children = referenceChildren
+//
+//	// 继续递归
+//	for _, ch := range referenceChildren {
+//		i.buildChildrenRecursive(ctx, projectUuid, language, ch, maxLayer)
+//	}
+//}
 
 func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefinitionOptions) ([]*types.Definition, error) {
 	filePath := options.FilePath
@@ -1164,6 +1085,7 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 
 	snippet := options.CodeSnippet
 
+	var currentImports []*codegraphpb.Import
 	// 根据代码片段中的标识符名模糊搜索
 	if len(snippet) > 0 {
 		// 调用tree_sitter 解析，获取所有的标识符及位置
@@ -1191,8 +1113,16 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 		if filteredImps, err := i.analyzer.PreprocessImports(ctx, language, project, imports); err == nil {
 			imports = filteredImps
 		}
+		for _, imp := range imports {
+			currentImports = append(currentImports, &codegraphpb.Import{
+				Name:   imp.Name,
+				Alias:  imp.Alias,
+				Source: imp.Source,
+				Range:  imp.Range,
+			})
+		}
 
-		// 根据所找到的call 的name + imports， 去模糊匹配symbol
+		// 根据所找到的call 的name + currentImports， 去模糊匹配symbol
 		symDefs, err := i.searchSymbolNames(ctx, projectUuid, callNames, imports)
 		if err != nil {
 			return nil, fmt.Errorf("failed to search function/method call names: %w", err)
@@ -1232,11 +1162,11 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 		}
 
 		foundSymbols = i.findSymbolInDocByLineRange(ctx, &fileTable, queryStartLine, queryEndLine)
-
+		currentImports = fileTable.Imports
 	}
 
 	// 去重, 如果range 出现过，则剔除
-	existedDefs := make(map[string]bool)
+	//existedDefs := make(map[string]bool)
 	// 遍历，封装结果，取定义
 	for _, s := range foundSymbols {
 		// 本身是定义
@@ -1252,21 +1182,30 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 			})
 			continue
 		} else { // 引用
-			for _, r := range s.Relations {
-				// 引用的 relation 是定义
-				if r.RelationType == codegraphpb.RelationType_RELATION_TYPE_DEFINITION {
-					// 如果已经访问过，就跳过
-					if isSymbolExists(r.ElementPath, r.Range, existedDefs) {
-						continue
+			// 加载定义
+			bytes, err := i.storage.Get(ctx, projectUuid, store.SymbolNameKey{Name: s.GetName(),
+				Language: language})
+			if err == nil {
+				var exist codegraphpb.SymbolOccurrence
+				if err = store.UnmarshalValue(bytes, &exist); err == nil {
+					filtered := i.analyzer.FilterByImports(filePath, currentImports, exist.Occurrences)
+					if len(filtered) == 0 {
+						// 防止全部过滤掉
+						filtered = exist.Occurrences
 					}
-					existedDefs[symbolMapKey(r.ElementPath, r.Range)] = true
-					// 引用节点，加入node的children
-					res = append(res, &types.Definition{
-						Path:  r.ElementPath,
-						Name:  r.ElementName,
-						Range: r.Range,
-					})
+					for _, o := range filtered {
+						res = append(res, &types.Definition{
+							Path:  o.Path,
+							Name:  s.Name,
+							Range: o.Range,
+						})
+					}
+				} else {
+					i.logger.Debug("query_definitions unmarshal symbol occurrence err:%v", err)
 				}
+
+			} else if !errors.Is(err, store.ErrKeyNotFound) {
+				i.logger.Debug("query_definitions get symbol occurrence err:%v", err)
 			}
 		}
 	}
@@ -1277,12 +1216,12 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 const eachSymbolKeepResult = 2
 
 func (i *Indexer) searchSymbolNames(ctx context.Context, projectUuid string, names []string, imports []*resolver.Import) (
-	[]*codegraphpb.Definition, error) {
+	[]*codegraphpb.Occurrence, error) {
 
 	start := time.Now()
 	// 去重
 	names = utils.DeDuplicate(names)
-	foundKeys := make(map[string][]*codegraphpb.Definition)
+	foundKeys := make(map[string][]*codegraphpb.Occurrence)
 
 	iter := i.storage.Iter(ctx, projectUuid)
 	defer iter.Close()
@@ -1310,19 +1249,19 @@ func (i *Indexer) searchSymbolNames(ctx context.Context, projectUuid string, nam
 		}
 
 		item := iter.Value()
-		var keyset codegraphpb.SymbolDefinition
+		var keyset codegraphpb.SymbolOccurrence
 		if err := store.UnmarshalValue(item, &keyset); err != nil {
 			return nil, fmt.Errorf("failed to deserialize document: %w", err)
 		}
 
-		if len(keyset.Definitions) == 0 {
+		if len(keyset.Occurrences) == 0 {
 			continue
 		}
 
 		if _, ok := foundKeys[matchName]; !ok {
-			foundKeys[matchName] = make([]*codegraphpb.Definition, 0)
+			foundKeys[matchName] = make([]*codegraphpb.Occurrence, 0)
 		}
-		foundKeys[matchName] = append(foundKeys[matchName], keyset.Definitions...)
+		foundKeys[matchName] = append(foundKeys[matchName], keyset.Occurrences...)
 	}
 
 	// TODO 同一个name可能检索出多条数据，再根据import 过滤一遍。 namespace 要么用. 要么用/ 得判断
@@ -1331,7 +1270,7 @@ func (i *Indexer) searchSymbolNames(ctx context.Context, projectUuid string, nam
 		total += len(v)
 	}
 
-	filteredResult := make([]*codegraphpb.Definition, 0, total)
+	filteredResult := make([]*codegraphpb.Occurrence, 0, total)
 
 	if len(imports) > 0 {
 		for _, v := range foundKeys {
@@ -1498,42 +1437,12 @@ func (i *Indexer) RenameIndexes(ctx context.Context, workspacePath string, sourc
 			i.logger.Debug("rename_index save new index %s err:%v ", newPath, err)
 		}
 
-		// 更新引用
-		relations := i.collectRelations([]*codegraphpb.FileElementTable{st})
-		// 将引用节点中当前节点的路径进行更新，将引用的路径
-		for _, r := range relations {
-			fileTable, err := i.getFileElementTableByPath(ctx, sourceProjectUuid, r.ElementPath)
-			if err != nil {
-				i.logger.Debug("rename_index get FileElementTable by path %s err:%v", r.ElementPath, err)
-				continue
-			}
-			for _, e := range fileTable.Elements {
-				if len(e.GetRelations()) == 0 {
-					continue
-				}
-				for _, relation := range e.GetRelations() {
-					if relation.ElementPath == oldPath {
-						relation.ElementPath = newPath
-					}
-				}
-			}
-			// 保存
-			if err = i.storage.Put(ctx, sourceProjectUuid, &store.Entry{
-				Key: store.ElementPathKey{
-					Language: lang.Language(fileTable.Language),
-					Path:     fileTable.Path},
-				Value: fileTable,
-			}); err != nil {
-				i.logger.Debug("rename_index save FileElementTable %s err:%v", r.ElementPath, err)
-			}
-		}
-
 		// 更新符号定义，找到相关符号，将它的path由old改为new
 		for _, e := range st.Elements {
 			if !e.IsDefinition {
 				continue
 			}
-			symbolDefinition, err := i.getSymbolDefinitionByName(ctx, sourceProjectUuid, lang.Language(oldLanguage), e.Name)
+			SymbolOccurrence, err := i.getSymbolOccurrenceByName(ctx, sourceProjectUuid, lang.Language(oldLanguage), e.Name)
 			if err != nil {
 				i.logger.Debug("rename_index get symbol definition by name %s %s err:%v", oldLanguage, e.Name, err)
 				continue
@@ -1541,8 +1450,8 @@ func (i *Indexer) RenameIndexes(ctx context.Context, workspacePath string, sourc
 
 			// 语言相同则更新，语言不同，则删除新增
 			sameLanguage := oldLanguage == string(newLanguage)
-			definitions := make([]*codegraphpb.Definition, 0, len(symbolDefinition.Definitions))
-			for _, d := range symbolDefinition.Definitions {
+			definitions := make([]*codegraphpb.Occurrence, 0, len(SymbolOccurrence.Occurrences))
+			for _, d := range SymbolOccurrence.Occurrences {
 				if d.Path == oldPath {
 					if sameLanguage {
 						d.Path = newPath
@@ -1554,18 +1463,18 @@ func (i *Indexer) RenameIndexes(ctx context.Context, workspacePath string, sourc
 			// 保存
 			if err = i.storage.Put(ctx, sourceProjectUuid, &store.Entry{
 				Key: store.SymbolNameKey{
-					Language: lang.Language(symbolDefinition.Language),
-					Name:     symbolDefinition.Name},
-				Value: symbolDefinition,
+					Language: lang.Language(SymbolOccurrence.Language),
+					Name:     SymbolOccurrence.Name},
+				Value: SymbolOccurrence,
 			}); err != nil {
-				i.logger.Debug("rename_index save symbolDefinition %s err:%v", e.Name, err)
+				i.logger.Debug("rename_index save SymbolOccurrence %s err:%v", e.Name, err)
 			}
 			// 不同语言，保存新的
 			if !sameLanguage {
-				newSymbolDefiniton := &codegraphpb.SymbolDefinition{
+				newSymbolDefinition := &codegraphpb.SymbolOccurrence{
 					Name:     e.Name,
 					Language: string(newLanguage),
-					Definitions: []*codegraphpb.Definition{
+					Occurrences: []*codegraphpb.Occurrence{
 						{
 							Path:        newPath,
 							Range:       e.Range,
@@ -1575,11 +1484,11 @@ func (i *Indexer) RenameIndexes(ctx context.Context, workspacePath string, sourc
 				}
 				if err = i.storage.Put(ctx, sourceProjectUuid, &store.Entry{
 					Key: store.SymbolNameKey{
-						Language: lang.Language(symbolDefinition.Language),
-						Name:     symbolDefinition.Name},
-					Value: newSymbolDefiniton,
+						Language: lang.Language(SymbolOccurrence.Language),
+						Name:     SymbolOccurrence.Name},
+					Value: newSymbolDefinition,
 				}); err != nil {
-					i.logger.Debug("rename_index save symbolDefinition %s err:%v", e.Name, err)
+					i.logger.Debug("rename_index save SymbolOccurrence %s err:%v", e.Name, err)
 				}
 			}
 
@@ -1606,16 +1515,16 @@ func (i *Indexer) getFileElementTableByPath(ctx context.Context, projectUuid str
 }
 
 // getFileElementTableByPath 通过路径获取FileElementTable
-func (i *Indexer) getSymbolDefinitionByName(ctx context.Context, projectUuid string,
-	language lang.Language, symbolName string) (*codegraphpb.SymbolDefinition, error) {
+func (i *Indexer) getSymbolOccurrenceByName(ctx context.Context, projectUuid string,
+	language lang.Language, symbolName string) (*codegraphpb.SymbolOccurrence, error) {
 
 	bytes, err := i.storage.Get(ctx, projectUuid, store.SymbolNameKey{Language: language, Name: symbolName})
 	if err != nil {
 		return nil, err
 	}
-	var symbolDefinition codegraphpb.SymbolDefinition
-	err = store.UnmarshalValue(bytes, &symbolDefinition)
-	return &symbolDefinition, err
+	var SymbolOccurrence codegraphpb.SymbolOccurrence
+	err = store.UnmarshalValue(bytes, &SymbolOccurrence)
+	return &SymbolOccurrence, err
 }
 
 // parseFilesOptimized 优化版本的文件解析函数，减少内存分配
@@ -1692,11 +1601,11 @@ func symbolMapKey(filePath string, ranges []int32) string {
 }
 
 // processBatch 处理单个批次的文件
-func (i *Indexer) processBatch(ctx context.Context, taskID uint64, params *BatchProcessParams) (*BatchProcessResult, error) {
+func (i *Indexer) processBatch(ctx context.Context, batchId int, params *BatchProcessParams) (*BatchProcessResult, error) {
 	batchStartTime := time.Now()
 
 	i.logger.Debug("index_project task-%d start, batch [%d:%d]/%d, batch_size %d",
-		taskID, params.BatchStart, params.BatchEnd, params.TotalFiles, params.BatchSize)
+		batchId, params.BatchStart, params.BatchEnd, params.TotalFiles, params.BatchSize)
 
 	// 解析文件
 	elementTables, metrics, err := i.parseFiles(ctx, params.SourceFiles)
@@ -1712,7 +1621,7 @@ func (i *Indexer) processBatch(ctx context.Context, taskID uint64, params *Batch
 		}, nil
 	}
 
-	i.logger.Debug("index_project task-%d batch [%d:%d]/%d parse files end, cost %d ms", taskID,
+	i.logger.Debug("index_project task-%d batch [%d:%d]/%d parse files end, cost %d ms", batchId,
 		params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(batchStartTime).Milliseconds())
 
 	// 检查elements，剔除不合法的，并打印日志
@@ -1720,10 +1629,12 @@ func (i *Indexer) processBatch(ctx context.Context, taskID uint64, params *Batch
 
 	// 项目符号表存储
 	symbolStart := time.Now()
-	if err = i.analyzer.SaveSymbolDefinitions(ctx, params.ProjectUuid, elementTables); err != nil {
+
+	if err = i.analyzer.SaveSymbolOccurrences(ctx, params.ProjectUuid, elementTables); err != nil {
 		return nil, fmt.Errorf("save symbol definitions failed: %w", err)
 	}
-	i.logger.Debug("index_project task-%d batch [%d:%d]/%d save symbols end, cost %d ms", taskID,
+
+	i.logger.Debug("index_project task-%d batch [%d:%d]/%d save symbols end, cost %d ms", batchId,
 		params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(symbolStart).Milliseconds())
 
 	// 预处理 import
@@ -1745,10 +1656,10 @@ func (i *Indexer) processBatch(ctx context.Context, taskID uint64, params *Batch
 	elementTables = nil
 	protoElementTables = nil
 
-	i.logger.Debug("index_project task-%d batch [%d:%d]/%d save element_tables end, cost %d ms", taskID,
+	i.logger.Debug("index_project task-%d batch [%d:%d]/%d save element_tables end, cost %d ms", batchId,
 		params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(batchSaveStart).Milliseconds())
 
-	i.logger.Debug("index_project task-%d batch [%d:%d]/%d end, cost %d ms", taskID,
+	i.logger.Debug("index_project task-%d batch [%d:%d]/%d end, cost %d ms", batchId,
 		params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(batchStartTime).Milliseconds())
 
 	return &BatchProcessResult{
@@ -1798,19 +1709,15 @@ func (i *Indexer) processParseInBatches(ctx context.Context, params *BatchProces
 		FailedFilePaths: make([]string, 0, totalFiles/4), // 预估失败文件数约为文件数的25%
 	}
 
-	// 创建任务池
-	taskPool := pool.NewTaskPool(params.Concurrency, i.logger)
-	defer taskPool.Close()
+	var processedFilesCnt int
 
-	var mux sync.Mutex
-	var parsedFilesCnt int
-
+	var batchId int
 	// 处理批次
 	for m := 0; m < totalFiles; {
 		batch := utils.Min(totalFiles-m, params.BatchSize)
 		batchStart, batchEnd := m, m+batch
 		sourceFilesBatch := params.SourceFiles[batchStart:batchEnd]
-
+		batchId++
 		// 构建批处理参数
 		batchParams := &BatchProcessParams{
 			ProjectUuid: params.ProjectUuid,
@@ -1823,21 +1730,34 @@ func (i *Indexer) processParseInBatches(ctx context.Context, params *BatchProces
 		}
 
 		// 提交任务
-		err := taskPool.Submit(ctx, func(ctx context.Context, taskID uint64) {
+		err := func(ctx context.Context, taskID int) error {
+			batchStartTime := time.Now()
 			result, err := i.processBatch(ctx, taskID, batchParams)
 			if err != nil {
 				i.logger.Debug("index_project process batch err:%v", err)
-				return
+				return fmt.Errorf("process batch err:%w", err)
 			}
 
-			// 更新统计信息
-			mux.Lock()
-			parsedFilesCnt += result.ElementTablesCnt
+			processedFilesCnt += result.ElementTablesCnt
 			projectMetrics.TotalFailedFiles += result.Metrics.TotalFailedFiles
 			projectMetrics.FailedFilePaths = append(projectMetrics.FailedFilePaths, result.Metrics.FailedFilePaths...)
-			mux.Unlock()
-		})
+			//TODO 更新进度
+			batchUpdateStart := time.Now()
+			if err := i.updateProgress(ctx, &ProgressInfo{
+				Total:         totalFiles,
+				Processed:     processedFilesCnt,
+				PreviousNum:   params.PreviousNum,
+				WorkspacePath: params.WorkspacePath,
+			}); err != nil {
+				return fmt.Errorf("update progress failed: %w", err)
+			}
 
+			i.logger.Debug("update workspace %s successful, file num %d/%d, cost %d ms, batch %d cost %d ms",
+				params.WorkspacePath, processedFilesCnt+params.PreviousNum,
+				processedFilesCnt, time.Since(batchUpdateStart).Milliseconds(), batch,
+				time.Since(batchStartTime).Milliseconds())
+			return nil
+		}(ctx, batchId)
 		if err != nil {
 			i.logger.Debug("index_project submit task err:%v", err)
 		}
@@ -1845,97 +1765,22 @@ func (i *Indexer) processParseInBatches(ctx context.Context, params *BatchProces
 		m += batch
 	}
 
-	// 等待所有任务完成
-	taskPool.Wait()
+	// 最终更新进度
+	// 最终更新
+	if err := i.updateProgress(ctx, &ProgressInfo{
+		Total:         totalFiles,
+		Processed:     processedFilesCnt,
+		PreviousNum:   params.PreviousNum,
+		WorkspacePath: params.WorkspacePath,
+	}); err != nil {
+		i.logger.Debug("index_project update progress failed: %v", err)
+	}
 
 	return &BatchProcessingResult{
-		ParsedFilesCount: parsedFilesCnt,
+		ParsedFilesCount: processedFilesCnt,
 		ProjectMetrics:   projectMetrics,
 		Errors:           errs,
 		Duration:         time.Since(startTime),
-	}, nil
-}
-
-// processDependencyAnalysis 处理依赖分析
-func (i *Indexer) processDependencyAnalysis(ctx context.Context, params *DependencyAnalysisParams) (*DependencyAnalysisResult, error) {
-	startTime := time.Now()
-	var errs []error
-
-	// 更新进度，更新10次
-	updateTimes := 10
-	updateBatch := (params.ParsedFilesCnt + updateTimes - 1) / updateTimes
-
-	elementTablesCnt := 0
-	i.logger.Debug("index_project project %s start to process dependency analysis, total files %d", params.ProjectUuid, params.ParsedFilesCnt)
-	// 迭代进行依赖分析
-	iter := i.storage.Iter(ctx, params.ProjectUuid)
-	defer iter.Close()
-	// TODO 增加一个缓存
-	cache := cache2.NewLRUCache[*codegraphpb.FileElementTable](int(0.5 * float64(i.config.MaxBatchSize)))
-	defer cache.Purge()
-
-	batchUpdateStart := time.Now()
-	for iter.Next() {
-		// 遍历 element_table
-		if !store.IsElementPathKey(iter.Key()) {
-			continue
-		}
-
-		var elementTable codegraphpb.FileElementTable
-		if err := store.UnmarshalValue(iter.Value(), &elementTable); err != nil {
-			errs = append(errs, fmt.Errorf("unmarshal element_table err:%w", err))
-			continue
-		}
-
-		// 依赖分析
-		updatedTables, err := i.analyzer.Analyze(ctx, params.ProjectUuid, &elementTable, cache)
-		if err != nil {
-			i.logger.Debug("index_project analyze element_table err:%v", err)
-			continue
-		}
-
-		// TODO 没发生更新，则不需要存储
-		if err := i.storage.BatchSave(ctx, params.ProjectUuid,
-			workspace.FileElementTables(updatedTables)); err != nil {
-			i.logger.Debug("index_project batch save element_table err:%v", err)
-			continue
-		}
-
-		// 更新进度
-		if elementTablesCnt > 0 && elementTablesCnt%updateBatch == 0 {
-			updateStartTime := time.Now()
-			if err := i.updateProgress(ctx, &ProgressInfo{
-				ElementTablesCount: elementTablesCnt,
-				ParsedFilesCnt:     params.ParsedFilesCnt,
-				PreviousNum:        params.PreviousNum,
-				WorkspacePath:      params.WorkspacePath,
-			}); err != nil {
-				errs = append(errs, err)
-			}
-			i.logger.Debug("update workspace %s successful, file num %d/%d, cost %d ms, batch %d cost %d ms",
-				params.WorkspacePath, elementTablesCnt+params.PreviousNum,
-				params.ParsedFilesCnt, time.Since(updateStartTime).Milliseconds(),
-				updateBatch, time.Since(batchUpdateStart).Milliseconds())
-			batchUpdateStart = time.Now()
-		}
-
-		elementTablesCnt++
-	}
-
-	// 最终更新
-	if err := i.updateProgress(ctx, &ProgressInfo{
-		ElementTablesCount: elementTablesCnt,
-		ParsedFilesCnt:     params.ParsedFilesCnt,
-		PreviousNum:        params.PreviousNum,
-		WorkspacePath:      params.WorkspacePath,
-	}); err != nil {
-		errs = append(errs, err)
-	}
-
-	return &DependencyAnalysisResult{
-		ElementTablesCount: elementTablesCnt,
-		Errors:             errs,
-		Duration:           time.Since(startTime),
 	}, nil
 }
 
@@ -1943,9 +1788,9 @@ func (i *Indexer) processDependencyAnalysis(ctx context.Context, params *Depende
 func (i *Indexer) updateProgress(ctx context.Context, progress *ProgressInfo) error {
 
 	if err := i.workspaceRepository.UpdateCodegraphInfo(progress.WorkspacePath,
-		progress.ElementTablesCount+progress.PreviousNum, time.Now().Unix()); err != nil {
+		progress.Total+progress.PreviousNum, time.Now().Unix()); err != nil {
 		i.logger.Error("update workspace %s codegraph successful file num %d/%d, err:%v",
-			progress.WorkspacePath, progress.ElementTablesCount, progress.ParsedFilesCnt, err)
+			progress.WorkspacePath, progress.Total, progress.Processed, err)
 		return err
 	}
 

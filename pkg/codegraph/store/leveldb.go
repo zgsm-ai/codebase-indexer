@@ -248,6 +248,21 @@ func (s *LevelDBStorage) Get(ctx context.Context, projectUuid string, key Key) (
 
 	return data, nil
 }
+func (s *LevelDBStorage) Exists(ctx context.Context, projectUuid string, key Key) (bool, error) {
+	if err := utils.CheckContext(ctx); err != nil {
+		return false, fmt.Errorf("context cancelled: %w", err)
+	}
+
+	db, err := s.getDB(projectUuid)
+	if err != nil {
+		return false, fmt.Errorf("failed to get database: %w", err)
+	}
+	keyStr, err := key.Get()
+	if err != nil {
+		return false, err
+	}
+	return db.Has([]byte(keyStr), nil)
+}
 
 // Delete deletes data by key
 func (s *LevelDBStorage) Delete(ctx context.Context, projectUuid string, key Key) error {

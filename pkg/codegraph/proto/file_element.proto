@@ -36,25 +36,5 @@ message Element {
   bool is_definition = 2;
   ElementType element_type = 3;
   repeated int32 range = 4;
-  repeated Relation relations = 5;
   map<string, bytes> extra_data = 6;
-}
-
-// Relation 关系定义
-message Relation {
-  string element_name = 1;
-  string element_path = 2;
-  repeated int32 range = 3;
-  RelationType relation_type = 4;
-}
-
-
-enum RelationType {
-  RELATION_TYPE_UNDEFINED = 0;
-  RELATION_TYPE_DEFINITION = 1;
-  RELATION_TYPE_REFERENCE = 2;
-  RELATION_TYPE_INHERIT = 3;
-  RELATION_TYPE_IMPLEMENT = 4;
-  RELATION_TYPE_SUPER_CLASS = 5;
-  RELATION_TYPE_SUPER_INTERFACE = 6;
 }

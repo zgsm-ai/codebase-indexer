@@ -22,29 +22,29 @@ const (
 )
 
 // SymbolDefinition 符号定义
-type SymbolDefinition struct {
+type SymbolOccurrence struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Language      string                 `protobuf:"bytes,2,opt,name=language,proto3" json:"language,omitempty"`
-	Definitions   []*Definition          `protobuf:"bytes,3,rep,name=definitions,proto3" json:"definitions,omitempty"`
+	Occurrences   []*Occurrence          `protobuf:"bytes,3,rep,name=occurrences,proto3" json:"occurrences,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SymbolDefinition) Reset() {
-	*x = SymbolDefinition{}
+func (x *SymbolOccurrence) Reset() {
+	*x = SymbolOccurrence{}
 	mi := &file_pkg_codegraph_proto_symbol_definition_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SymbolDefinition) String() string {
+func (x *SymbolOccurrence) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SymbolDefinition) ProtoMessage() {}
+func (*SymbolOccurrence) ProtoMessage() {}
 
-func (x *SymbolDefinition) ProtoReflect() protoreflect.Message {
+func (x *SymbolOccurrence) ProtoReflect() protoreflect.Message {
 	mi := &file_pkg_codegraph_proto_symbol_definition_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -56,56 +56,57 @@ func (x *SymbolDefinition) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SymbolDefinition.ProtoReflect.Descriptor instead.
-func (*SymbolDefinition) Descriptor() ([]byte, []int) {
+// Deprecated: Use SymbolOccurrence.ProtoReflect.Descriptor instead.
+func (*SymbolOccurrence) Descriptor() ([]byte, []int) {
 	return file_pkg_codegraph_proto_symbol_definition_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *SymbolDefinition) GetName() string {
+func (x *SymbolOccurrence) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *SymbolDefinition) GetLanguage() string {
+func (x *SymbolOccurrence) GetLanguage() string {
 	if x != nil {
 		return x.Language
 	}
 	return ""
 }
 
-func (x *SymbolDefinition) GetDefinitions() []*Definition {
+func (x *SymbolOccurrence) GetOccurrences() []*Occurrence {
 	if x != nil {
-		return x.Definitions
+		return x.Occurrences
 	}
 	return nil
 }
 
 // Definition 定义详情
-type Definition struct {
+type Occurrence struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
 	Range         []int32                `protobuf:"varint,2,rep,packed,name=range,proto3" json:"range,omitempty"`
 	ElementType   ElementType            `protobuf:"varint,3,opt,name=element_type,json=elementType,proto3,enum=codegraphpb.ElementType" json:"element_type,omitempty"`
+	RelationType  RelationType           `protobuf:"varint,4,opt,name=relation_type,json=relationType,proto3,enum=codegraphpb.RelationType" json:"relation_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Definition) Reset() {
-	*x = Definition{}
+func (x *Occurrence) Reset() {
+	*x = Occurrence{}
 	mi := &file_pkg_codegraph_proto_symbol_definition_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Definition) String() string {
+func (x *Occurrence) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Definition) ProtoMessage() {}
+func (*Occurrence) ProtoMessage() {}
 
-func (x *Definition) ProtoReflect() protoreflect.Message {
+func (x *Occurrence) ProtoReflect() protoreflect.Message {
 	mi := &file_pkg_codegraph_proto_symbol_definition_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -117,30 +118,37 @@ func (x *Definition) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Definition.ProtoReflect.Descriptor instead.
-func (*Definition) Descriptor() ([]byte, []int) {
+// Deprecated: Use Occurrence.ProtoReflect.Descriptor instead.
+func (*Occurrence) Descriptor() ([]byte, []int) {
 	return file_pkg_codegraph_proto_symbol_definition_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *Definition) GetPath() string {
+func (x *Occurrence) GetPath() string {
 	if x != nil {
 		return x.Path
 	}
 	return ""
 }
 
-func (x *Definition) GetRange() []int32 {
+func (x *Occurrence) GetRange() []int32 {
 	if x != nil {
 		return x.Range
 	}
 	return nil
 }
 
-func (x *Definition) GetElementType() ElementType {
+func (x *Occurrence) GetElementType() ElementType {
 	if x != nil {
 		return x.ElementType
 	}
 	return ElementType_UNDEFINED
+}
+
+func (x *Occurrence) GetRelationType() RelationType {
+	if x != nil {
+		return x.RelationType
+	}
+	return RelationType_RELATION_UNDEFINED
 }
 
 var File_pkg_codegraph_proto_symbol_definition_proto protoreflect.FileDescriptor
@@ -148,15 +156,16 @@ var File_pkg_codegraph_proto_symbol_definition_proto protoreflect.FileDescriptor
 const file_pkg_codegraph_proto_symbol_definition_proto_rawDesc = "" +
 	"\n" +
 	"+pkg/codegraph/proto/symbol_definition.proto\x12\vcodegraphpb\x1a\x1fpkg/codegraph/proto/types.proto\"}\n" +
-	"\x10SymbolDefinition\x12\x12\n" +
+	"\x10SymbolOccurrence\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\blanguage\x18\x02 \x01(\tR\blanguage\x129\n" +
-	"\vdefinitions\x18\x03 \x03(\v2\x17.codegraphpb.DefinitionR\vdefinitions\"s\n" +
+	"\voccurrences\x18\x03 \x03(\v2\x17.codegraphpb.OccurrenceR\voccurrences\"\xb3\x01\n" +
 	"\n" +
-	"Definition\x12\x12\n" +
+	"Occurrence\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x14\n" +
 	"\x05range\x18\x02 \x03(\x05R\x05range\x12;\n" +
-	"\felement_type\x18\x03 \x01(\x0e2\x18.codegraphpb.ElementTypeR\velementTypeB-Z+pkg/codegraph/proto/codegraphpb;codegraphpbb\x06proto3"
+	"\felement_type\x18\x03 \x01(\x0e2\x18.codegraphpb.ElementTypeR\velementType\x12>\n" +
+	"\rrelation_type\x18\x04 \x01(\x0e2\x19.codegraphpb.RelationTypeR\frelationTypeB-Z+pkg/codegraph/proto/codegraphpb;codegraphpbb\x06proto3"
 
 var (
 	file_pkg_codegraph_proto_symbol_definition_proto_rawDescOnce sync.Once
@@ -172,18 +181,20 @@ func file_pkg_codegraph_proto_symbol_definition_proto_rawDescGZIP() []byte {
 
 var file_pkg_codegraph_proto_symbol_definition_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_pkg_codegraph_proto_symbol_definition_proto_goTypes = []any{
-	(*SymbolDefinition)(nil), // 0: codegraphpb.SymbolDefinition
-	(*Definition)(nil),       // 1: codegraphpb.Definition
+	(*SymbolOccurrence)(nil), // 0: codegraphpb.SymbolOccurrence
+	(*Occurrence)(nil),       // 1: codegraphpb.Occurrence
 	(ElementType)(0),         // 2: codegraphpb.ElementType
+	(RelationType)(0),        // 3: codegraphpb.RelationType
 }
 var file_pkg_codegraph_proto_symbol_definition_proto_depIdxs = []int32{
-	1, // 0: codegraphpb.SymbolDefinition.definitions:type_name -> codegraphpb.Definition
-	2, // 1: codegraphpb.Definition.element_type:type_name -> codegraphpb.ElementType
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	1, // 0: codegraphpb.SymbolOccurrence.occurrences:type_name -> codegraphpb.Occurrence
+	2, // 1: codegraphpb.Occurrence.element_type:type_name -> codegraphpb.ElementType
+	3, // 2: codegraphpb.Occurrence.relation_type:type_name -> codegraphpb.RelationType
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_pkg_codegraph_proto_symbol_definition_proto_init() }

@@ -70,13 +70,13 @@ func (l FileElementTables) Key(i int) store.Key {
 	return store.ElementPathKey{Language: lang.Language(l[i].Language), Path: l[i].Path}
 }
 
-type SymbolDefinitions []*codegraphpb.SymbolDefinition
+type SymbolOccurrences []*codegraphpb.SymbolOccurrence
 
-func (l SymbolDefinitions) Len() int { return len(l) }
-func (l SymbolDefinitions) Value(i int) proto.Message {
+func (l SymbolOccurrences) Len() int { return len(l) }
+func (l SymbolOccurrences) Value(i int) proto.Message {
 	return l[i]
 }
 
-func (l SymbolDefinitions) Key(i int) store.Key {
+func (l SymbolOccurrences) Key(i int) store.Key {
 	return store.SymbolNameKey{Language: lang.Language(l[i].Language), Name: l[i].Name}
 }

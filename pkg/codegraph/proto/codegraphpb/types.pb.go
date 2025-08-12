@@ -92,6 +92,67 @@ func (ElementType) EnumDescriptor() ([]byte, []int) {
 	return file_pkg_codegraph_proto_types_proto_rawDescGZIP(), []int{0}
 }
 
+type RelationType int32
+
+const (
+	RelationType_RELATION_UNDEFINED       RelationType = 0
+	RelationType_RELATION_DEFINITION      RelationType = 1
+	RelationType_RELATION_REFERENCE       RelationType = 2
+	RelationType_RELATION_INHERIT         RelationType = 3
+	RelationType_RELATION_IMPLEMENT       RelationType = 4
+	RelationType_RELATION_SUPER_CLASS     RelationType = 5
+	RelationType_RELATION_SUPER_INTERFACE RelationType = 6
+)
+
+// Enum value maps for RelationType.
+var (
+	RelationType_name = map[int32]string{
+		0: "RELATION_UNDEFINED",
+		1: "RELATION_DEFINITION",
+		2: "RELATION_REFERENCE",
+		3: "RELATION_INHERIT",
+		4: "RELATION_IMPLEMENT",
+		5: "RELATION_SUPER_CLASS",
+		6: "RELATION_SUPER_INTERFACE",
+	}
+	RelationType_value = map[string]int32{
+		"RELATION_UNDEFINED":       0,
+		"RELATION_DEFINITION":      1,
+		"RELATION_REFERENCE":       2,
+		"RELATION_INHERIT":         3,
+		"RELATION_IMPLEMENT":       4,
+		"RELATION_SUPER_CLASS":     5,
+		"RELATION_SUPER_INTERFACE": 6,
+	}
+)
+
+func (x RelationType) Enum() *RelationType {
+	p := new(RelationType)
+	*p = x
+	return p
+}
+
+func (x RelationType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RelationType) Descriptor() protoreflect.EnumDescriptor {
+	return file_pkg_codegraph_proto_types_proto_enumTypes[1].Descriptor()
+}
+
+func (RelationType) Type() protoreflect.EnumType {
+	return &file_pkg_codegraph_proto_types_proto_enumTypes[1]
+}
+
+func (x RelationType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RelationType.Descriptor instead.
+func (RelationType) EnumDescriptor() ([]byte, []int) {
+	return file_pkg_codegraph_proto_types_proto_rawDescGZIP(), []int{1}
+}
+
 var File_pkg_codegraph_proto_types_proto protoreflect.FileDescriptor
 
 const file_pkg_codegraph_proto_types_proto_rawDesc = "" +
@@ -109,7 +170,15 @@ const file_pkg_codegraph_proto_types_proto_rawDesc = "" +
 	"\bVARIABLE\x10\a\x12\n" +
 	"\n" +
 	"\x06IMPORT\x10\b\x12\v\n" +
-	"\aPACKAGE\x10\tB-Z+pkg/codegraph/proto/codegraphpb;codegraphpbb\x06proto3"
+	"\aPACKAGE\x10\t*\xbd\x01\n" +
+	"\fRelationType\x12\x16\n" +
+	"\x12RELATION_UNDEFINED\x10\x00\x12\x17\n" +
+	"\x13RELATION_DEFINITION\x10\x01\x12\x16\n" +
+	"\x12RELATION_REFERENCE\x10\x02\x12\x14\n" +
+	"\x10RELATION_INHERIT\x10\x03\x12\x16\n" +
+	"\x12RELATION_IMPLEMENT\x10\x04\x12\x18\n" +
+	"\x14RELATION_SUPER_CLASS\x10\x05\x12\x1c\n" +
+	"\x18RELATION_SUPER_INTERFACE\x10\x06B-Z+pkg/codegraph/proto/codegraphpb;codegraphpbb\x06proto3"
 
 var (
 	file_pkg_codegraph_proto_types_proto_rawDescOnce sync.Once
@@ -123,9 +192,10 @@ func file_pkg_codegraph_proto_types_proto_rawDescGZIP() []byte {
 	return file_pkg_codegraph_proto_types_proto_rawDescData
 }
 
-var file_pkg_codegraph_proto_types_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_pkg_codegraph_proto_types_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_pkg_codegraph_proto_types_proto_goTypes = []any{
-	(ElementType)(0), // 0: codegraphpb.ElementType
+	(ElementType)(0),  // 0: codegraphpb.ElementType
+	(RelationType)(0), // 1: codegraphpb.RelationType
 }
 var file_pkg_codegraph_proto_types_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -145,7 +215,7 @@ func file_pkg_codegraph_proto_types_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_codegraph_proto_types_proto_rawDesc), len(file_pkg_codegraph_proto_types_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   0,
 			NumExtensions: 0,
 			NumServices:   0,
