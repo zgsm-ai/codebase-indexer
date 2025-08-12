@@ -31,6 +31,17 @@
   )
 )
 
+(source_file
+  (var_declaration
+    (var_spec_list
+      (var_spec
+        name: (identifier) @global_variable
+        type: (_)? @global_variable.type
+      )
+    )
+  )
+)
+
 ;; 函数内的变量声明 - 直接捕获标识符节点
 (block
   (var_declaration
@@ -42,14 +53,17 @@
 )
 
 ;; var块中的多变量声明
-(var_declaration
-  (var_spec_list
-    (var_spec
-      name: (identifier) @variable
-      type: (_)? @variable.type
+(block
+  (var_declaration
+    (var_spec_list
+      (var_spec
+        name: (identifier) @variable
+        type: (_)? @variable.type
+      )
     )
   )
 )
+
 
 ;;短变量
 (short_var_declaration
