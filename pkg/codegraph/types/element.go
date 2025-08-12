@@ -284,6 +284,7 @@ const (
 	NodeKindTypedParameter                     NodeKind = "typed_parameter"
 	NodeKindTypedDefaultParameter              NodeKind = "typed_default_parameter"
 	NodeKindFormalParameters                   NodeKind = "formal_parameters"
+	NodeKindFormalParameter                    NodeKind = "formal_parameter"
 	NodeKindUndefined                          NodeKind = "undefined"
 	NodeKindFuncLiteral                        NodeKind = "func_literal"
 	NodeKindSelectorExpression                 NodeKind = "selector_expression"
@@ -295,6 +296,7 @@ const (
 	NodeKindAwaitExpression                    NodeKind = "await_expression"
 	NodeKindParameterList                      NodeKind = "parameter_list"
 	NodeKindParameterDeclaration               NodeKind = "parameter_declaration"
+	NodeKindVariadicParameter                  NodeKind = "variadic_parameter"
 	NodeKindTypeElem                           NodeKind = "type_elem"
 	NodeKindClassBody                          NodeKind = "class_body"
 	NodeKindPropertyIdentifier                 NodeKind = "property_identifier"
@@ -335,6 +337,7 @@ const (
 	NodeKindArrayType            NodeKind = "array_type"
 	NodeKindGenericType          NodeKind = "generic_type"
 	NodeKindTypeIdentifier       NodeKind = "type_identifier"
+	NodeKindAnnotatedType        NodeKind = "annotated_type"
 	NodeKindTypeArguments        NodeKind = "type_arguments"
 	NodeKindScopedTypeIdentifier NodeKind = "scoped_type_identifier"
 	NodeKindWildcard             NodeKind = "wildcard"             // 通配符 <? extends MyClass>
@@ -379,6 +382,7 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindTypedParameter):                     NodeKindTypedParameter,
 	string(NodeKindTypedDefaultParameter):              NodeKindTypedDefaultParameter,
 	string(NodeKindFormalParameters):                   NodeKindFormalParameters,
+	string(NodeKindFormalParameter):                    NodeKindFormalParameter,
 	string(NodeKindMethodElem):                         NodeKindMethodElem,
 	string(NodeKindMethodSpec):                         NodeKindMethodSpec,
 	string(NodeKindFieldList):                          NodeKindFieldList,
@@ -392,6 +396,7 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindAwaitExpression):                    NodeKindAwaitExpression,
 	string(NodeKindParameterList):                      NodeKindParameterList,
 	string(NodeKindParameterDeclaration):               NodeKindParameterDeclaration,
+	string(NodeKindVariadicParameter):                  NodeKindVariadicParameter,
 	string(NodeKindPropertyIdentifier):                 NodeKindPropertyIdentifier,
 	string(NodeKindPrivatePropertyIdentifier):          NodeKindPrivatePropertyIdentifier,
 	string(NodeKindArrowFunction):                      NodeKindArrowFunction,
@@ -434,7 +439,7 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindScopedTypeIdentifier): NodeKindScopedTypeIdentifier,
 	string(NodeKindTypeArguments):        NodeKindTypeArguments,
 	string(NodeKindWildcard):             NodeKindWildcard,
-
+	string(NodeKindAnnotatedType):        NodeKindAnnotatedType,
 	// 用于查找方法所属的类
 	string(NodeKindClassDeclaration):     NodeKindClassDeclaration,
 	string(NodeKindInterfaceDeclaration): NodeKindInterfaceDeclaration,
