@@ -17,6 +17,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"net/http"
+	_ "net/http/pprof" // 自动注册 pprof 接口
 	"os"
 	"path/filepath"
 	"testing"
@@ -80,6 +82,8 @@ func setupTestEnvironment() (*testEnvironment, error) {
 	// Initialize repositories
 	workspaceRepo := repository.NewWorkspaceRepository(dbManager, newLogger)
 
+	// 监控
+
 	return &testEnvironment{
 		ctx:                ctx,
 		cancel:             cancel,
@@ -101,13 +105,22 @@ func createTestIndexer(env *testEnvironment, visitPattern *types.VisitPattern) *
 		env.workspaceReader,
 		env.storage,
 		env.repository,
-		codegraph.IndexerConfig{VisitPattern: visitPattern, MaxBatchSize: 100, MaxConcurrency: 10},
+		codegraph.IndexerConfig{VisitPattern: visitPattern, MaxBatchSize: 50, MaxConcurrency: 1},
 		// 2,2, 300s， 20% cpu ,500MB内存占用；
 		// 2
 
 		// 100,10 156s ,  70% cpu , 500MB内存占用；
 		env.logger,
 	)
+}
+
+func setupPprof() {
+	// 启动 pprof HTTP 服务（端口自定义，如 6060）
+	// go tool pprof http://localhost:6060/debug/pprof/heap
+	// top；  list 函数名；web；heapcheck
+	go func() {
+		_ = http.ListenAndServe("localhost:6060", nil)
+	}()
 }
 
 // teardownTestEnvironment 清理测试环境，关闭连接和删除临时文件

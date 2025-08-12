@@ -53,6 +53,7 @@ func TestParseGoProjectFiles(t *testing.T) {
 func TestIndexGoProjects(t *testing.T) {
 	env, err := setupTestEnvironment()
 	assert.NoError(t, err)
+	setupPprof()
 	defer teardownTestEnvironment(t, env)
 	indexer := createTestIndexer(env, &types.VisitPattern{
 		ExcludeDirs: defaultVisitPattern.ExcludeDirs,

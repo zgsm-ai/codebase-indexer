@@ -3,6 +3,7 @@ package codegraph
 import (
 	"codebase-indexer/internal/repository"
 	"codebase-indexer/pkg/codegraph/analyzer"
+	cache2 "codebase-indexer/pkg/codegraph/cache"
 	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/parser"
 	"codebase-indexer/pkg/codegraph/pool"
@@ -17,8 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime"
-	"runtime/debug"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +27,8 @@ import (
 type IndexerConfig struct {
 	MaxConcurrency int // TODO 支持环境变量
 	MaxBatchSize   int // TODO 支持环境变量
+	MaxFiles       int // TODO 支持环境变量
+	MaxProjects    int // TODO 支持环境变量
 	VisitPattern   *types.VisitPattern
 }
 
@@ -61,12 +63,13 @@ type BatchProcessResult struct {
 
 // BatchProcessingParams 批处理阶段参数
 type BatchProcessingParams struct {
-	ProjectUuid             string
-	SourceFiles             []string
-	TotalFiles              int
-	Project                 *workspace.Project
-	WorkspacePath           string
-	CpuOptimizedConcurrency int
+	ProjectUuid   string
+	SourceFiles   []string
+	TotalFiles    int
+	Project       *workspace.Project
+	WorkspacePath string
+	Concurrency   int
+	BatchSize     int
 }
 
 // BatchProcessingResult 批处理阶段结果
@@ -83,6 +86,7 @@ type DependencyAnalysisParams struct {
 	ParsedFilesCnt int
 	WorkspacePath  string
 	PreviousNum    int
+	BatchSize      int
 }
 
 // DependencyAnalysisResult 依赖分析结果
@@ -101,8 +105,10 @@ type ProgressInfo struct {
 }
 
 const (
-	defaultConcurrency = 2
+	defaultConcurrency = 1
 	defaultBatchSize   = 10
+	defaultMaxFiles    = 10000
+	defaultMaxProjects = 3
 )
 
 // TODO 并行度、batch_size、cpu、内存使用优化。
@@ -122,6 +128,12 @@ func NewCodeIndexer(
 	}
 	if config.MaxBatchSize <= 0 {
 		config.MaxBatchSize = defaultBatchSize
+	}
+	if config.MaxFiles <= 0 {
+		config.MaxFiles = defaultMaxFiles
+	}
+	if config.MaxProjects <= 0 {
+		config.MaxProjects = defaultMaxProjects
 	}
 	return &Indexer{
 		parser:              parser,
@@ -144,8 +156,13 @@ func (i *Indexer) IndexWorkspace(ctx context.Context, workspacePath string) (*ty
 		return taskMetrics, fmt.Errorf("index_workspace workspace %s not exists", workspacePath)
 	}
 	projects := i.workspaceReader.FindProjects(ctx, workspacePath, workspace.DefaultVisitPattern)
-	if len(projects) == 0 {
+	projectsCnt := len(projects)
+	if projectsCnt == 0 {
 		return taskMetrics, fmt.Errorf("index_workspace find no projects in workspace: %s", workspacePath)
+	}
+	if projectsCnt > i.config.MaxProjects {
+		projects = projects[:i.config.MaxProjects]
+		i.logger.Debug("index_workspace %s found %d projects, exceed %d max_projects config, use config size.", workspacePath, projectsCnt)
 	}
 
 	var errs []error
@@ -171,45 +188,6 @@ func (i *Indexer) IndexWorkspace(ctx context.Context, workspacePath string) (*ty
 	return taskMetrics, nil
 }
 
-// logResourceUsage 资源使用情况日志记录（内存和CPU）
-func (i *Indexer) logResourceUsage(operation string) {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-
-	// 获取CPU使用情况
-	numCPU := runtime.NumCPU()
-	numGoroutine := runtime.NumGoroutine()
-
-	// 获取GC统计信息
-	gcStats := debug.GCStats{
-		Pause: make([]time.Duration, 10), // 记录最近10次GC暂停时间
-	}
-	debug.ReadGCStats(&gcStats)
-
-	i.logger.Debug("resource_usage %s: cpu_cores=%d, goroutines=%d, alloc=%d kb, total_alloc=%d kb, sys=%d kb, num_gc=%d, gc_pause_total=%v, gc_pause_avg=%v",
-		operation, numCPU, numGoroutine,
-		m.Alloc/1024, m.TotalAlloc/1024, m.Sys/1024, m.NumGC,
-		gcStats.PauseTotal, gcStats.PauseTotal/time.Duration(gcStats.NumGC))
-}
-
-// optimizeConcurrency 根据文件数量和系统资源动态优化并发度
-func (i *Indexer) optimizeConcurrency(totalFiles int) int {
-	numCPU := runtime.NumCPU()
-	originalConcurrency := i.config.MaxConcurrency
-
-	// 基础优化策略：根据文件数量调整并发度
-	if totalFiles < 50 {
-		// 少量文件，使用较低的并发度，避免并发开销
-		return utils.Max(1, utils.Min(originalConcurrency, numCPU/2))
-	} else if totalFiles < 200 {
-		// 中等数量文件，使用适中的并发度
-		return utils.Max(2, utils.Min(originalConcurrency, numCPU))
-	} else {
-		// 大量文件，可以使用更高并发度，但不超过CPU核心数
-		return utils.Max(2, utils.Min(originalConcurrency, numCPU))
-	}
-}
-
 // indexProject 索引单个项目
 func (i *Indexer) indexProject(ctx context.Context, workspacePath string, project *workspace.Project) (*types.IndexTaskMetrics, []error) {
 	projectStart := time.Now()
@@ -229,7 +207,7 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 	previousNum := workspaceModel.CodegraphFileNum
 
 	// 阶段0：收集要处理的源码文件
-	sourceFiles, err := i.collectSourceFiles(ctx, project.Path)
+	sourceFiles, err := i.collectSourceFiles(ctx, project.Path, i.config.MaxFiles)
 	if err != nil {
 		projectMetrics := &types.IndexTaskMetrics{TotalFiles: 0}
 		return projectMetrics, []error{fmt.Errorf("index_project collect project files err:%v", err)}
@@ -243,25 +221,22 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 	i.logger.Info("index_project collect project files finish. cost %d ms, found %d source files to index",
 		time.Since(projectStart).Milliseconds(), totalFiles)
 
-	// 优化：添加资源监控点
-	i.logResourceUsage("after_collect_files")
-
 	// CPU优化：使用增强版的并发度优化
-	cpuOptimizedConcurrency := i.optimizeConcurrencyEnhanced(totalFiles)
-	i.logger.Info("index_project optimized concurrency: %d (original: %d)",
-		cpuOptimizedConcurrency, i.config.MaxConcurrency)
+	i.logger.Info("index_project %s concurrency: %d, batch_size: %d",
+		project.Path, i.config.MaxConcurrency, i.config.MaxBatchSize)
 
 	// 阶段1-3：批量处理文件（解析、检查、保存符号表）
 	batchProcessingParams := &BatchProcessingParams{
-		ProjectUuid:             projectUuid,
-		SourceFiles:             sourceFiles,
-		TotalFiles:              totalFiles,
-		Project:                 project,
-		WorkspacePath:           workspacePath,
-		CpuOptimizedConcurrency: cpuOptimizedConcurrency,
+		ProjectUuid:   projectUuid,
+		SourceFiles:   sourceFiles,
+		TotalFiles:    totalFiles,
+		Project:       project,
+		WorkspacePath: workspacePath,
+		Concurrency:   i.config.MaxConcurrency,
+		BatchSize:     i.config.MaxBatchSize,
 	}
 
-	batchResult, err := i.processFilesInBatches(ctx, batchProcessingParams)
+	batchResult, err := i.processParseInBatches(ctx, batchProcessingParams)
 	if err != nil {
 		return nil, []error{err}
 	}
@@ -281,12 +256,14 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 		return batchResult.ProjectMetrics, allErrs
 	}
 
+	// sleep 5 秒，gc
 	// 阶段4：依赖分析
 	dependencyParams := &DependencyAnalysisParams{
 		ProjectUuid:    projectUuid,
 		ParsedFilesCnt: batchResult.ParsedFilesCount,
 		WorkspacePath:  workspacePath,
 		PreviousNum:    previousNum,
+		BatchSize:      i.config.MaxBatchSize,
 	}
 
 	dependencyResult, err := i.processDependencyAnalysis(ctx, dependencyParams)
@@ -297,13 +274,10 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 
 	allErrs = append(allErrs, dependencyResult.Errors...)
 
-	i.logger.Info("index_project project %s analyze dependency end, analyzed %d/%d element tables, cost %d ms.",
+	i.logger.Debug("index_project project %s analyze dependency end, analyzed %d/%d element tables, cost %d ms.",
 		project.Path, dependencyResult.ElementTablesCount, batchResult.ParsedFilesCount, dependencyResult.Duration.Milliseconds())
 
-	// 优化：添加最终资源监控点
-	i.logResourceUsage("after_dependency_analysis")
-
-	i.logger.Info("index_project: finish %s, cost %d ms, processed %d files.", project.Path,
+	i.logger.Info("index_project %s finish, cost %d ms, processed %d files.", project.Path,
 		time.Since(projectStart).Milliseconds(), dependencyResult.ElementTablesCount)
 
 	return batchResult.ProjectMetrics, allErrs
@@ -724,17 +698,22 @@ func (i *Indexer) indexProjectFiles(ctx context.Context, projectUuid string, fil
 		return fmt.Errorf("save symbol definitions error: %w", err)
 	}
 
+	cache := cache2.NewLRUCache[*codegraphpb.FileElementTable](i.config.MaxBatchSize)
+	defer cache.Purge()
+
 	// 转换为 proto
 	protoElementTables := proto.FileElementTablesToProto(fileTables)
-	// 依赖分析
-	updatedTables, err := i.analyzer.Analyze(ctx, projectUuid, protoElementTables)
-	if err != nil {
-		return fmt.Errorf("analyze dependency error: %w", err)
-	}
+	for _, table := range protoElementTables {
+		// 依赖分析
+		updatedTables, err := i.analyzer.Analyze(ctx, projectUuid, table, cache)
+		if err != nil {
+			return fmt.Errorf("analyze dependency error: %w", err)
+		}
 
-	// 关系索引存储
-	if err := i.storage.BatchSave(ctx, projectUuid, workspace.FileElementTables(updatedTables)); err != nil {
-		return fmt.Errorf("batch save error: %w", err)
+		// 关系索引存储
+		if err := i.storage.BatchSave(ctx, projectUuid, workspace.FileElementTables(updatedTables)); err != nil {
+			return fmt.Errorf("batch save error: %w", err)
+		}
 	}
 
 	return nil
@@ -893,6 +872,13 @@ func (i *Indexer) checkElementTables(elementTables []*parser.FileElementTable) {
 		for _, ele := range ft.Elements {
 			total++
 			if resolver.IsValidElement(ele) {
+				// 过滤掉 局部 变量
+				variable, ok := ele.(*resolver.Variable)
+				if ok {
+					if variable.GetScope() == types.ScopeBlock || variable.GetScope() == types.ScopeFunction {
+						continue
+					}
+				}
 				newElements = append(newElements, ele)
 			} else {
 				filtered++
@@ -1632,11 +1618,6 @@ func (i *Indexer) getSymbolDefinitionByName(ctx context.Context, projectUuid str
 	return &symbolDefinition, err
 }
 
-func (i *Indexer) CollectProjectSourceFiles(ctx context.Context, projectPath string, visitPattern *types.VisitPattern) ([]string, error) {
-	// 优化：使用新的collectSourceFiles函数，该函数已经优化了资源监控
-	return i.collectSourceFiles(ctx, projectPath)
-}
-
 // parseFilesOptimized 优化版本的文件解析函数，减少内存分配
 func (i *Indexer) parseFiles(ctx context.Context, filePaths []string) ([]*parser.FileElementTable, *types.IndexTaskMetrics, error) {
 	totalFiles := len(filePaths)
@@ -1648,15 +1629,8 @@ func (i *Indexer) parseFiles(ctx context.Context, filePaths []string) ([]*parser
 		FailedFilePaths: make([]string, 0, totalFiles/4), // 预估失败文件数约为文件数的25%
 	}
 
-	// 优化：预分配错误切片容量
+	// TODO 大量文件，会导致错误很多
 	var errs []error
-	if totalFiles > 10 {
-		errs = make([]error, 0, totalFiles/5) // 预估错误数量约为文件数的20%
-	}
-
-	// 使用缓冲池减少内存分配
-	// 对于小文件，使用固定大小的缓冲区重用
-	bufPool := make([]byte, 0, 32*1024) // 32KB初始缓冲区
 
 	for _, path := range filePaths {
 		language, err := lang.InferLanguage(path)
@@ -1664,9 +1638,6 @@ func (i *Indexer) parseFiles(ctx context.Context, filePaths []string) ([]*parser
 			// not supported language or not source file
 			projectTaskMetrics.TotalFailedFiles++
 			projectTaskMetrics.FailedFilePaths = append(projectTaskMetrics.FailedFilePaths, path)
-			if err != nil {
-				errs = append(errs, err)
-			}
 			continue
 		}
 
@@ -1675,7 +1646,7 @@ func (i *Indexer) parseFiles(ctx context.Context, filePaths []string) ([]*parser
 		if err != nil {
 			projectTaskMetrics.TotalFailedFiles++
 			projectTaskMetrics.FailedFilePaths = append(projectTaskMetrics.FailedFilePaths, path)
-			errs = append(errs, err)
+			i.logger.Debug("index_project read file %s err:%v", path, err)
 			continue
 		}
 
@@ -1690,7 +1661,7 @@ func (i *Indexer) parseFiles(ctx context.Context, filePaths []string) ([]*parser
 		if err != nil {
 			projectTaskMetrics.TotalFailedFiles++
 			projectTaskMetrics.FailedFilePaths = append(projectTaskMetrics.FailedFilePaths, path)
-			errs = append(errs, err)
+			i.logger.Debug("index_project parse file %s err:%v", path, err)
 			// 显式清理内存
 			content = nil
 			sourceFile.Content = nil
@@ -1700,11 +1671,6 @@ func (i *Indexer) parseFiles(ctx context.Context, filePaths []string) ([]*parser
 		// 显式清理内存，帮助GC及时回收
 		content = nil
 		sourceFile.Content = nil
-
-		// 重用缓冲区
-		if cap(bufPool) > 0 {
-			bufPool = bufPool[:0]
-		}
 
 		fileElementTables = append(fileElementTables, fileElementTable)
 	}
@@ -1723,52 +1689,6 @@ func isSymbolExists(filePath string, ranges []int32, state map[string]bool) bool
 }
 func symbolMapKey(filePath string, ranges []int32) string {
 	return filePath + "-" + utils.SliceToString(ranges)
-}
-
-// optimizeConcurrencyEnhanced 增强版并发度优化，考虑系统负载
-func (i *Indexer) optimizeConcurrencyEnhanced(totalFiles int) int {
-	numCPU := runtime.NumCPU()
-	numGoroutine := runtime.NumGoroutine()
-	originalConcurrency := i.config.MaxConcurrency
-
-	// 获取系统负载（简化版本，实际可以使用更精确的系统监控）
-	// 这里使用goroutine数量作为负载指标
-	loadFactor := float64(numGoroutine) / float64(numCPU*10) // 假设每个CPU核心处理10个goroutine为满负载
-	if loadFactor > 1.0 {
-		loadFactor = 1.0
-	}
-
-	// 基于文件数量、CPU核心数和系统负载动态调整
-	if totalFiles < 50 {
-		// 少量文件，使用较低的并发度，避免并发开销
-		baseConcurrency := utils.Max(1, utils.Min(originalConcurrency, numCPU/2))
-		return int(float64(baseConcurrency) * (1.0 - loadFactor*0.5))
-	} else if totalFiles < 200 {
-		// 中等数量文件，使用适中的并发度
-		baseConcurrency := utils.Max(2, utils.Min(originalConcurrency, numCPU))
-		return int(float64(baseConcurrency) * (1.0 - loadFactor*0.3))
-	} else {
-		// 大量文件，可以使用更高并发度，但受限于系统负载
-		baseConcurrency := utils.Max(2, utils.Min(originalConcurrency, numCPU*2))
-		return int(float64(baseConcurrency) * (1.0 - loadFactor*0.4))
-	}
-}
-
-// calculateOptimalBatchSize 动态计算最优批处理大小
-func (i *Indexer) calculateOptimalBatchSize(filePaths []string) int {
-	if len(filePaths) <= i.config.MaxBatchSize {
-		return len(filePaths)
-	}
-
-	// 基于文件数量动态调整批处理大小
-	if len(filePaths) < 50 {
-		return utils.Max(1, i.config.MaxBatchSize/2)
-	} else if len(filePaths) < 200 {
-		return i.config.MaxBatchSize
-	} else {
-		// 大量文件时，可以适当增加批处理大小，减少任务调度开销
-		return utils.Min(i.config.MaxBatchSize*2, 50) // 上限50个文件
-	}
 }
 
 // processBatch 处理单个批次的文件
@@ -1813,6 +1733,7 @@ func (i *Indexer) processBatch(ctx context.Context, taskID uint64, params *Batch
 
 	// element存储，后面依赖分析，基于磁盘，避免大型项目占用太多内存
 	protoElementTables := proto.FileElementTablesToProto(elementTables)
+	batchSaveStart := time.Now()
 	// 关系索引存储
 	if err = i.storage.BatchSave(ctx, params.ProjectUuid, workspace.FileElementTables(protoElementTables)); err != nil {
 		metrics.TotalFailedFiles += params.BatchSize
@@ -1825,7 +1746,7 @@ func (i *Indexer) processBatch(ctx context.Context, taskID uint64, params *Batch
 	protoElementTables = nil
 
 	i.logger.Debug("index_project task-%d batch [%d:%d]/%d save element_tables end, cost %d ms", taskID,
-		params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(batchStartTime).Milliseconds())
+		params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(batchSaveStart).Milliseconds())
 
 	i.logger.Debug("index_project task-%d batch [%d:%d]/%d end, cost %d ms", taskID,
 		params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(batchStartTime).Milliseconds())
@@ -1838,13 +1759,17 @@ func (i *Indexer) processBatch(ctx context.Context, taskID uint64, params *Batch
 }
 
 // collectSourceFiles 收集源文件
-func (i *Indexer) collectSourceFiles(ctx context.Context, projectPath string) ([]string, error) {
+func (i *Indexer) collectSourceFiles(ctx context.Context, projectPath string, maxFiles int) ([]string, error) {
 	startTime := time.Now()
-	filePaths := make([]string, 0, 100)
+	filePaths := make([]string, 0, 500)
 
 	err := i.workspaceReader.WalkFile(ctx, projectPath, func(walkCtx *types.WalkContext) error {
 		if walkCtx.Info.IsDir {
 			return nil
+		}
+		if len(filePaths) >= maxFiles {
+			i.logger.Debug("collect_source_files max files %d reached, return.", maxFiles)
+			return filepath.SkipAll
 		}
 		filePaths = append(filePaths, walkCtx.Path)
 		return nil
@@ -1860,27 +1785,21 @@ func (i *Indexer) collectSourceFiles(ctx context.Context, projectPath string) ([
 	return filePaths, nil
 }
 
-// processFilesInBatches 批量处理文件
-func (i *Indexer) processFilesInBatches(ctx context.Context, params *BatchProcessingParams) (*BatchProcessingResult, error) {
+// processParseInBatches 批量处理文件
+func (i *Indexer) processParseInBatches(ctx context.Context, params *BatchProcessingParams) (*BatchProcessingResult, error) {
 	startTime := time.Now()
 	totalFiles := len(params.SourceFiles)
 
 	// 基于文件数量预分配切片容量，优化内存使用
 	var errs []error
-	if totalFiles > 100 {
-		errs = make([]error, 0, totalFiles/10) // 预估错误数量约为文件数的10%
-	}
 
 	projectMetrics := &types.IndexTaskMetrics{
 		TotalFiles:      totalFiles,
 		FailedFilePaths: make([]string, 0, totalFiles/4), // 预估失败文件数约为文件数的25%
 	}
 
-	// 使用优化的批处理大小
-	batchSize := i.calculateOptimalBatchSize(params.SourceFiles)
-
 	// 创建任务池
-	taskPool := pool.NewTaskPool(params.CpuOptimizedConcurrency, i.logger)
+	taskPool := pool.NewTaskPool(params.Concurrency, i.logger)
 	defer taskPool.Close()
 
 	var mux sync.Mutex
@@ -1888,7 +1807,7 @@ func (i *Indexer) processFilesInBatches(ctx context.Context, params *BatchProces
 
 	// 处理批次
 	for m := 0; m < totalFiles; {
-		batch := utils.Min(totalFiles-m, batchSize)
+		batch := utils.Min(totalFiles-m, params.BatchSize)
 		batchStart, batchEnd := m, m+batch
 		sourceFilesBatch := params.SourceFiles[batchStart:batchEnd]
 
@@ -1907,7 +1826,7 @@ func (i *Indexer) processFilesInBatches(ctx context.Context, params *BatchProces
 		err := taskPool.Submit(ctx, func(ctx context.Context, taskID uint64) {
 			result, err := i.processBatch(ctx, taskID, batchParams)
 			if err != nil {
-				errs = append(errs, err)
+				i.logger.Debug("index_project process batch err:%v", err)
 				return
 			}
 
@@ -1920,7 +1839,7 @@ func (i *Indexer) processFilesInBatches(ctx context.Context, params *BatchProces
 		})
 
 		if err != nil {
-			errs = append(errs, err)
+			i.logger.Debug("index_project submit task err:%v", err)
 		}
 
 		m += batch
@@ -1928,13 +1847,6 @@ func (i *Indexer) processFilesInBatches(ctx context.Context, params *BatchProces
 
 	// 等待所有任务完成
 	taskPool.Wait()
-
-	// 优化：添加资源监控点，并在处理大量文件时触发GC
-	i.logResourceUsage("after_batch_processing")
-	if totalFiles > 500 {
-		// runtime.GC() // 手动触发GC，减少内存压力
-		i.logResourceUsage("after_gc")
-	}
 
 	return &BatchProcessingResult{
 		ParsedFilesCount: parsedFilesCnt,
@@ -1954,11 +1866,15 @@ func (i *Indexer) processDependencyAnalysis(ctx context.Context, params *Depende
 	updateBatch := (params.ParsedFilesCnt + updateTimes - 1) / updateTimes
 
 	elementTablesCnt := 0
-
+	i.logger.Debug("index_project project %s start to process dependency analysis, total files %d", params.ProjectUuid, params.ParsedFilesCnt)
 	// 迭代进行依赖分析
 	iter := i.storage.Iter(ctx, params.ProjectUuid)
 	defer iter.Close()
+	// TODO 增加一个缓存
+	cache := cache2.NewLRUCache[*codegraphpb.FileElementTable](int(0.5 * float64(i.config.MaxBatchSize)))
+	defer cache.Purge()
 
+	batchUpdateStart := time.Now()
 	for iter.Next() {
 		// 遍历 element_table
 		if !store.IsElementPathKey(iter.Key()) {
@@ -1972,24 +1888,22 @@ func (i *Indexer) processDependencyAnalysis(ctx context.Context, params *Depende
 		}
 
 		// 依赖分析
-		updatedTables, err := i.analyzer.Analyze(ctx, params.ProjectUuid, []*codegraphpb.FileElementTable{&elementTable})
+		updatedTables, err := i.analyzer.Analyze(ctx, params.ProjectUuid, &elementTable, cache)
 		if err != nil {
-			errs = append(errs, err)
-			return nil, errors.Join(errs...)
+			i.logger.Debug("index_project analyze element_table err:%v", err)
+			continue
 		}
 
 		// TODO 没发生更新，则不需要存储
 		if err := i.storage.BatchSave(ctx, params.ProjectUuid,
 			workspace.FileElementTables(updatedTables)); err != nil {
-			errs = append(errs, fmt.Errorf("batch save after analyze failed: %w", err))
-			return nil, errors.Join(errs...)
+			i.logger.Debug("index_project batch save element_table err:%v", err)
+			continue
 		}
-
-		// 优化：显式清理elementTable，帮助GC及时回收
-		elementTable = codegraphpb.FileElementTable{}
 
 		// 更新进度
 		if elementTablesCnt > 0 && elementTablesCnt%updateBatch == 0 {
+			updateStartTime := time.Now()
 			if err := i.updateProgress(ctx, &ProgressInfo{
 				ElementTablesCount: elementTablesCnt,
 				ParsedFilesCnt:     params.ParsedFilesCnt,
@@ -1998,6 +1912,11 @@ func (i *Indexer) processDependencyAnalysis(ctx context.Context, params *Depende
 			}); err != nil {
 				errs = append(errs, err)
 			}
+			i.logger.Debug("update workspace %s successful, file num %d/%d, cost %d ms, batch %d cost %d ms",
+				params.WorkspacePath, elementTablesCnt+params.PreviousNum,
+				params.ParsedFilesCnt, time.Since(updateStartTime).Milliseconds(),
+				updateBatch, time.Since(batchUpdateStart).Milliseconds())
+			batchUpdateStart = time.Now()
 		}
 
 		elementTablesCnt++
@@ -2022,7 +1941,6 @@ func (i *Indexer) processDependencyAnalysis(ctx context.Context, params *Depende
 
 // updateProgress 更新进度
 func (i *Indexer) updateProgress(ctx context.Context, progress *ProgressInfo) error {
-	startTime := time.Now()
 
 	if err := i.workspaceRepository.UpdateCodegraphInfo(progress.WorkspacePath,
 		progress.ElementTablesCount+progress.PreviousNum, time.Now().Unix()); err != nil {
@@ -2030,10 +1948,6 @@ func (i *Indexer) updateProgress(ctx context.Context, progress *ProgressInfo) er
 			progress.WorkspacePath, progress.ElementTablesCount, progress.ParsedFilesCnt, err)
 		return err
 	}
-
-	i.logger.Debug("update workspace %s successful, file num %d/%d, cost %d ms",
-		progress.WorkspacePath, progress.ElementTablesCount+progress.PreviousNum,
-		progress.ParsedFilesCnt, time.Since(startTime).Milliseconds())
 
 	return nil
 }

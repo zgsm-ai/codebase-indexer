@@ -122,8 +122,18 @@ func (s *LevelDBStorage) createDB(projectUuid string) (*leveldb.DB, error) {
 func openLevelDB(dbPath string) (*leveldb.DB, error) {
 	// 配置LevelDB选项
 	dbOptions := &opt.Options{
-		BlockCacheCapacity: 64 * 1024 * 1024, // 64MB block cache
-		WriteBuffer:        16 * 1024 * 1024, // 16MB write buffer
+		WriteBuffer:        4 * 1024 * 1024, // 16MB write buffer
+		BlockCacheCapacity: 8 * 1024 * 1024, // 64MB block cache
+		// 限制内存表大小，更早刷盘
+		//WriteBuffer: 2 * 1024 * 1024, // 2MiB
+		//// 减小块缓存，减少缓冲区占用
+		//BlockCacheCapacity: 4 * 1024 * 1024, // 4MiB
+		//// 禁用缓冲区池，避免缓冲区累积
+		//DisableBufferPool: false,
+		//// 更早触发合并，减少Level-0表数量
+		//CompactionL0Trigger: 2,
+		//// 减少打开文件缓存，降低mmap内存
+		//OpenFilesCacheCapacity: 100,
 	}
 
 	db, err := leveldb.OpenFile(dbPath, dbOptions)

@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	packageclassifier "codebase-indexer/pkg/codegraph/analyzer/package_classifier"
+	"codebase-indexer/pkg/codegraph/cache"
 	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/parser"
 	"codebase-indexer/pkg/codegraph/proto"
@@ -29,7 +30,6 @@ func NewDependencyAnalyzer(logger logger.Logger,
 	packageClassifier *packageclassifier.PackageClassifier,
 	reader *workspace.WorkspaceReader,
 	store store.GraphStorage) *DependencyAnalyzer {
-
 	return &DependencyAnalyzer{
 		logger:            logger,
 		PackageClassifier: packageClassifier,
@@ -38,176 +38,193 @@ func NewDependencyAnalyzer(logger logger.Logger,
 	}
 }
 
-func (da *DependencyAnalyzer) Analyze(ctx context.Context,
-	projectUuid string, fileElementTables []*codegraphpb.FileElementTable) ([]*codegraphpb.FileElementTable, error) {
+func (da *DependencyAnalyzer) Analyze(ctx context.Context, projectUuid string,
+	fromTable *codegraphpb.FileElementTable,
+	cache *cache.LRUCache[*codegraphpb.FileElementTable]) ([]*codegraphpb.FileElementTable, error) {
 
-	updatedElementTables := append([]*codegraphpb.FileElementTable{}, fileElementTables...)
+	deduplicateUpdateTables := map[string]*codegraphpb.FileElementTable{fromTable.Path: fromTable}
+	cache.Put(fromTable.Path, fromTable)
 	// 迭代符号表，去解析依赖关系。 需要区分跨文件依赖、当前文件引用。
 	// 优先根据名字做匹配，匹配到多个，再根据作用域、导入、包、别名等信息进行二次过滤。
-	for _, fileTable := range fileElementTables {
-		currentPath := fileTable.Path
-		imports := fileTable.Imports
+	currentPath := fromTable.Path
+	imports := fromTable.Imports
+	//TODO relation 避免重复添加
+	for _, e := range fromTable.Elements {
+		extraData := e.ExtraData
 
-		for _, e := range fileTable.Elements {
-			extraData := e.ExtraData
+		switch e.ElementType {
+		// 函数、方法调用
+		case codegraphpb.ElementType_CALL:
+			// todo 函数重载，考虑参数
+			// TODO 先通过参数数量过滤
+			referredElements, err := da.findReferredElement(ctx, projectUuid, e.Name, currentPath, imports)
+			if err != nil {
+				da.logger.Debug("dependency_analyze find call %s referred element err:%v", e.Name, err)
+				continue
+			}
+			if len(referredElements) == 0 {
+				continue
+			}
 
-			switch e.ElementType {
-			// 函数、方法调用
-			case codegraphpb.ElementType_CALL:
-				// todo 函数重载，考虑参数
-				// TODO 先通过参数数量过滤
-				foundElements, err := da.findReferredElement(ctx, projectUuid, e.Name, currentPath, imports)
-				if err != nil {
-					da.logger.Debug("dependency_analyze find call %s referred element err:%v", e.Name, err)
-					continue
+			for _, d := range referredElements {
+				toElement, toTable := da.findOrLoadElementTable(ctx, projectUuid, d, fromTable, cache)
+				if toTable != nil {
+					deduplicateUpdateTables[toTable.Path] = toTable
 				}
-				if len(foundElements) == 0 {
-					continue
-				}
 
-				for _, d := range foundElements {
-					toElement, foundTable := da.findElementTable(ctx, projectUuid, d, fileTable)
-					if foundTable != nil {
-						updatedElementTables = append(updatedElementTables, foundTable)
+				bindRelation(&RichElement{Element: e, Path: currentPath}, toElement,
+					codegraphpb.RelationType_RELATION_TYPE_DEFINITION,
+					codegraphpb.RelationType_RELATION_TYPE_REFERENCE)
+			}
+
+		// 类、结构体引用
+		case codegraphpb.ElementType_REFERENCE:
+			foundElements, err := da.findReferredElement(ctx, projectUuid, e.Name, currentPath, imports)
+			if err != nil {
+				da.logger.Debug("dependency_analyze find reference %s referred element err:%v", e.Name, err)
+				continue
+			}
+			if len(foundElements) == 0 {
+				continue
+			}
+
+			for _, d := range foundElements {
+				toElement, toTable := da.findOrLoadElementTable(ctx, projectUuid, d, fromTable, cache)
+				if toTable != nil {
+					deduplicateUpdateTables[toTable.Path] = toTable
+				}
+				bindRelation(&RichElement{Element: e, Path: currentPath}, toElement,
+					codegraphpb.RelationType_RELATION_TYPE_DEFINITION,
+					codegraphpb.RelationType_RELATION_TYPE_REFERENCE)
+			}
+
+		// 类继承、实现
+		case codegraphpb.ElementType_CLASS:
+			superClasses, err := proto.GetSuperClassesFromExtraData(extraData)
+			if err != nil {
+				da.logger.Debug("dependency_analyze get super_classes from extra_data err:%v", err)
+			} else {
+				// Handle inheritance
+				for _, superClassName := range superClasses {
+					foundElements, err := da.findReferredElement(ctx, projectUuid, superClassName, currentPath, imports)
+					if err != nil {
+						da.logger.Debug("dependency_analyze find class %s referred element err:%v", e.Name, err)
+						continue
 					}
-
-					bindRelation(&RichElement{Element: e, Path: currentPath}, toElement,
-						codegraphpb.RelationType_RELATION_TYPE_REFERENCE,
-						codegraphpb.RelationType_RELATION_TYPE_DEFINITION)
-				}
-
-			// 类、结构体引用
-			case codegraphpb.ElementType_REFERENCE:
-				foundElements, err := da.findReferredElement(ctx, projectUuid, e.Name, currentPath, imports)
-				if err != nil {
-					da.logger.Debug("dependency_analyze find reference %s referred element err:%v", e.Name, err)
-					continue
-				}
-				if len(foundElements) == 0 {
-					continue
-				}
-
-				for _, d := range foundElements {
-					toElement, foundTable := da.findElementTable(ctx, projectUuid, d, fileTable)
-					if foundTable != nil {
-						updatedElementTables = append(updatedElementTables, foundTable)
+					if len(foundElements) == 0 {
+						continue
 					}
-					bindRelation(&RichElement{Element: e, Path: currentPath}, toElement,
-						codegraphpb.RelationType_RELATION_TYPE_REFERENCE,
-						codegraphpb.RelationType_RELATION_TYPE_DEFINITION)
-				}
-
-			// 类继承、实现
-			case codegraphpb.ElementType_CLASS:
-				superClasses, err := proto.GetSuperClassesFromExtraData(extraData)
-				if err != nil {
-					da.logger.Debug("dependency_analyze get super_classes from extra_data err:%v", err)
-				} else {
-					// Handle inheritance
-					for _, superClassName := range superClasses {
-						foundElements, err := da.findReferredElement(ctx, projectUuid, superClassName, currentPath, imports)
-						if err != nil {
-							da.logger.Debug("dependency_analyze find class %s referred element err:%v", e.Name, err)
-							continue
+					for _, d := range foundElements {
+						toElement, toTable := da.findOrLoadElementTable(ctx, projectUuid, d, fromTable, cache)
+						if toTable != nil {
+							deduplicateUpdateTables[toTable.Path] = toTable
 						}
-						if len(foundElements) == 0 {
-							continue
-						}
-						for _, d := range foundElements {
-							toElement, foundTable := da.findElementTable(ctx, projectUuid, d, fileTable)
-							if foundTable != nil {
-								updatedElementTables = append(updatedElementTables, foundTable)
-							}
-							bindRelation(&RichElement{Element: e, Path: currentPath}, toElement,
-								codegraphpb.RelationType_RELATION_TYPE_INHERIT,
-								codegraphpb.RelationType_RELATION_TYPE_SUPER_CLASS)
-						}
+						bindRelation(&RichElement{Element: e, Path: currentPath}, toElement,
+							codegraphpb.RelationType_RELATION_TYPE_SUPER_CLASS,
+							codegraphpb.RelationType_RELATION_TYPE_INHERIT)
 					}
 				}
-				superInterfaces, err := proto.GetSuperInterfacesFromExtraData(extraData)
-				if err != nil {
-					da.logger.Debug("dependency_analyze get super_interfaces from extra_data err:%v", err)
-				} else {
-					// Handle implementation
-					for _, superInterfaceName := range superInterfaces {
-						foundElements, err := da.findReferredElement(ctx, projectUuid, superInterfaceName, currentPath, imports)
-						if err != nil {
-							da.logger.Debug("dependency_analyze find class %s referred element err:%v", e.Name, err)
-							continue
+			}
+			superInterfaces, err := proto.GetSuperInterfacesFromExtraData(extraData)
+			if err != nil {
+				da.logger.Debug("dependency_analyze get super_interfaces from extra_data err:%v", err)
+			} else {
+				// Handle implementation
+				for _, superInterfaceName := range superInterfaces {
+					foundElements, err := da.findReferredElement(ctx, projectUuid, superInterfaceName, currentPath, imports)
+					if err != nil {
+						da.logger.Debug("dependency_analyze find class %s referred element err:%v", e.Name, err)
+						continue
+					}
+					if len(foundElements) == 0 {
+						continue
+					}
+					for _, d := range foundElements {
+						toElement, toTable := da.findOrLoadElementTable(ctx, projectUuid, d, fromTable, cache)
+						if toTable != nil {
+							deduplicateUpdateTables[toTable.Path] = toTable
 						}
-						if len(foundElements) == 0 {
-							continue
-						}
-						for _, d := range foundElements {
-							toElement, foundTable := da.findElementTable(ctx, projectUuid, d, fileTable)
-							if foundTable != nil {
-								updatedElementTables = append(updatedElementTables, foundTable)
-							}
-							bindRelation(&RichElement{Element: e, Path: currentPath}, toElement,
-								codegraphpb.RelationType_RELATION_TYPE_IMPLEMENT,
-								codegraphpb.RelationType_RELATION_TYPE_SUPER_INTERFACE)
-						}
+						bindRelation(&RichElement{Element: e, Path: currentPath}, toElement,
+							codegraphpb.RelationType_RELATION_TYPE_SUPER_INTERFACE,
+							codegraphpb.RelationType_RELATION_TYPE_IMPLEMENT)
 					}
 				}
+			}
 
-			// 接口继承
-			case codegraphpb.ElementType_INTERFACE:
-				superInterfaces, err := proto.GetSuperInterfacesFromExtraData(extraData)
-				if err != nil {
-					da.logger.Debug("dependency_analyze get super_interfaces from extra_data err:%v", err)
-				} else {
-					// Handle interface extension
-					for _, superInterfaceName := range superInterfaces {
-						foundElements, err := da.findReferredElement(ctx, projectUuid, superInterfaceName, currentPath, imports)
-						if err != nil {
-							da.logger.Debug("dependency_analyze find interface %s referred element err:%v", e.Name, err)
-							continue
+		// 接口继承
+		case codegraphpb.ElementType_INTERFACE:
+			superInterfaces, err := proto.GetSuperInterfacesFromExtraData(extraData)
+			if err != nil {
+				da.logger.Debug("dependency_analyze get super_interfaces from extra_data err:%v", err)
+			} else {
+				// Handle interface extension
+				for _, superInterfaceName := range superInterfaces {
+					foundElements, err := da.findReferredElement(ctx, projectUuid, superInterfaceName, currentPath, imports)
+					if err != nil {
+						da.logger.Debug("dependency_analyze find interface %s referred element err:%v", e.Name, err)
+						continue
+					}
+					if len(foundElements) == 0 {
+						continue
+					}
+					for _, d := range foundElements {
+						toElement, toTable := da.findOrLoadElementTable(ctx, projectUuid, d, fromTable, cache)
+						if toTable != nil {
+							deduplicateUpdateTables[toTable.Path] = toTable
 						}
-						if len(foundElements) == 0 {
-							continue
-						}
-						for _, d := range foundElements {
-							toElement, foundTable := da.findElementTable(ctx, projectUuid, d, fileTable)
-							if foundTable != nil {
-								updatedElementTables = append(updatedElementTables, foundTable)
-							}
-							bindRelation(&RichElement{Element: e, Path: currentPath}, toElement,
-								codegraphpb.RelationType_RELATION_TYPE_IMPLEMENT,
-								codegraphpb.RelationType_RELATION_TYPE_SUPER_INTERFACE)
-						}
+						bindRelation(&RichElement{Element: e, Path: currentPath}, toElement,
+							codegraphpb.RelationType_RELATION_TYPE_SUPER_INTERFACE,
+							codegraphpb.RelationType_RELATION_TYPE_IMPLEMENT)
 					}
 				}
 			}
 		}
 	}
-
-	return updatedElementTables, nil
+	updateElementTables := make([]*codegraphpb.FileElementTable, 0, len(deduplicateUpdateTables))
+	for _, t := range deduplicateUpdateTables {
+		updateElementTables = append(updateElementTables, t)
+	}
+	return updateElementTables, nil
 }
 
-func (da *DependencyAnalyzer) findElementTable(ctx context.Context, projectUuid string, d *RichElement,
-	fromTable *codegraphpb.FileElementTable) (*RichElement, *codegraphpb.FileElementTable) {
+func (da *DependencyAnalyzer) findOrLoadElementTable(ctx context.Context,
+	projectUuid string, toElement *RichElement, fromTable *codegraphpb.FileElementTable,
+	cache *cache.LRUCache[*codegraphpb.FileElementTable]) (*RichElement, *codegraphpb.FileElementTable) {
 	// 找到d 对应的fileElementTable，和它真实的element，进行更新
-	var dFileTable codegraphpb.FileElementTable
-	found := false
-	bytes, err := da.store.Get(ctx, projectUuid, store.ElementPathKey{Path: d.Path, Language: lang.Language(fromTable.Language)})
-	toElement := d
-	if err != nil {
-		da.logger.Debug("dependency_analyze get referred element %s file_element_table err:%v", d.Path, err)
-	} else {
-		if err := store.UnmarshalValue(bytes, &dFileTable); err != nil {
-			da.logger.Debug("dependency_analyze unmarshal referred element %s file_element_table err:%v", d.Path, err)
+	var toElementTable *codegraphpb.FileElementTable
+	if table, ok := cache.Get(toElement.Path); ok {
+		toElementTable = table
+	}
+	if toElementTable == nil {
+		bytes, err := da.store.Get(ctx, projectUuid, store.ElementPathKey{Path: toElement.Path, Language: lang.Language(fromTable.Language)})
+		if err != nil {
+			da.logger.Debug("dependency_analyze get referred element %s file_element_table err:%v", toElement.Path, err)
 		} else {
-			for _, element := range dFileTable.Elements {
-				if element.Name == d.Name && utils.SliceEqual(element.Range, d.Range) {
-					toElement = &RichElement{Element: element, Path: d.Path}
-					found = true
-					break
-				}
+			var dFileTable codegraphpb.FileElementTable
+			if err := store.UnmarshalValue(bytes, &dFileTable); err != nil {
+				da.logger.Debug("dependency_analyze unmarshal referred element %s file_element_table err:%v", toElement.Path, err)
+			} else {
+				toElementTable = &dFileTable
 			}
+		}
+	}
+
+	if toElementTable == nil {
+		return nil, nil
+	}
+
+	cache.Put(toElement.Path, toElementTable)
+
+	found := false
+	for _, element := range toElementTable.Elements {
+		if element.Name == toElement.Name && utils.SliceEqual(element.Range, toElement.Range) {
+			toElement = &RichElement{Element: element, Path: toElement.Path}
+			found = true
+			break
 		}
 	}
 	if found {
-		return toElement, &dFileTable
+		return toElement, toElementTable
 	}
 	return toElement, nil
 }
@@ -287,7 +304,6 @@ func (da *DependencyAnalyzer) findReferredElement(ctx context.Context,
 	if err = store.UnmarshalValue(value, symbolDefs); err != nil {
 		return nil, err
 	}
-	//TODO 有问题
 
 	// 同名的所有定义
 	for _, def := range symbolDefs.Definitions {
