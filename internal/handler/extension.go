@@ -4,6 +4,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -438,6 +439,27 @@ func (h *ExtensionHandler) TriggerIndex(c *gin.Context) {
 			Data:    0,
 		})
 		return
+	}
+
+	if req.Type != dto.IndexTypeAll && req.Type != dto.IndexTypeEmbedding && req.Type != dto.IndexTypeCodegraph {
+		h.logger.Error("invalid index type: %s", req.Type)
+		c.JSON(http.StatusBadRequest, dto.TriggerIndexResponse{
+			Code:    http.StatusBadRequest,
+			Success: false,
+			Message: "invalid index type",
+			Data:    0,
+		})
+	}
+
+	// 检查workspace路径文件是否存在
+	if _, err := os.Stat(req.Workspace); os.IsNotExist(err) {
+		h.logger.Error("workspace path does not exist: %s", req.Workspace)
+		c.JSON(http.StatusBadRequest, dto.TriggerIndexResponse{
+			Code:    http.StatusBadRequest,
+			Success: false,
+			Message: "workspace path does not exist",
+			Data:    0,
+		})
 	}
 
 	h.logger.Info("index build trigger request: Workspace=%s, Type=%s", req.Workspace, req.Type)

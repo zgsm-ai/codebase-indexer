@@ -257,69 +257,67 @@ func (s *extensionService) UpdateSyncConfig(ctx context.Context, clientID, serve
 // CheckIgnoreFiles 检查文件是否应该被忽略
 func (s *extensionService) CheckIgnoreFiles(ctx context.Context, clientID, workspacePath, workspaceName string, filePaths []string) (*CheckIgnoreResult, error) {
 	s.logger.Info("checking ignore files for client %s, workspace: %s, files: %d", clientID, workspacePath, len(filePaths))
-
-	// 查找代码库配置
-	configs, err := s.codebaseService.FindCodebasePaths(ctx, workspacePath, workspaceName)
-	if err != nil {
-		s.logger.Error("failed to find codebase paths: %v", err)
-		return nil, fmt.Errorf("failed to find codebase paths: %w", err)
-	}
-
-	if len(configs) == 0 {
-		s.logger.Warn("no codebase found in workspace: %s", workspacePath)
-		return &CheckIgnoreResult{
-			ShouldIgnore: false,
-			Reason:       "no codebase found",
-			IgnoredFiles: []string{},
-		}, nil
-	}
-
 	// 检查每个文件
 	maxFileSizeKB := s.fileScanner.GetScannerConfig().MaxFileSizeKB
 	maxFileSize := int64(maxFileSizeKB * 1024)
-	for _, config := range configs {
-		ignore := s.fileScanner.LoadIgnoreRules(config.CodebasePath)
-		if ignore == nil {
-			s.logger.Warn("no ignore file found for codebase: %s", config.CodebasePath)
+	ignore := s.fileScanner.LoadIgnoreRules(workspacePath)
+	if ignore == nil {
+		s.logger.Warn("no ignore file found for codebase: %s", workspacePath)
+		return &CheckIgnoreResult{
+			ShouldIgnore: false,
+			Reason:       "no ignore file found",
+			IgnoredFiles: []string{},
+		}, nil
+	}
+	fileInclude := s.fileScanner.LoadIncludeFiles()
+	fileIncludeMap := utils.StringSlice2Map(fileInclude)
+
+	for _, filePath := range filePaths {
+		// Check if the file is in this codebase
+		relPath, err := filepath.Rel(workspacePath, filePath)
+		if err != nil {
+			s.logger.Debug("file path %s is not in codebase %s: %v", filePath, workspacePath, err)
 			continue
 		}
 
-		for _, filePath := range filePaths {
-			// Check if the file is in this codebase
-			relPath, err := filepath.Rel(config.CodebasePath, filePath)
-			if err != nil {
-				s.logger.Debug("file path %s is not in codebase %s: %v", filePath, config.CodebasePath, err)
-				continue
-			}
+		// Check file size and ignore rules
+		checkPath := relPath
+		fileInfo, err := os.Stat(filePath)
+		if err != nil {
+			s.logger.Warn("failed to get file info: %s, %v", filePath, err)
+			continue
+		}
 
-			// Check file size and ignore rules
-			checkPath := relPath
-			fileInfo, err := os.Stat(filePath)
-			if err != nil {
-				s.logger.Warn("failed to get file info: %s, %v", filePath, err)
-				continue
-			}
+		// If directory, append "/" and skip size check
+		if fileInfo.IsDir() {
+			checkPath = relPath + "/"
+		} else if fileInfo.Size() > maxFileSize {
+			// For regular files, check size limit
+			fileSizeKB := float64(fileInfo.Size()) / 1024
+			s.logger.Info("file size exceeded limit: %s (%.2fKB)", filePath, fileSizeKB)
+			return &CheckIgnoreResult{
+				ShouldIgnore: false,
+				Reason:       fmt.Sprintf("file size exceeded limit: %s (%.2fKB)", filePath, fileSizeKB),
+				IgnoredFiles: []string{filePath},
+			}, nil
+		}
 
-			// If directory, append "/" and skip size check
-			if fileInfo.IsDir() {
-				checkPath = relPath + "/"
-			} else if fileInfo.Size() > maxFileSize {
-				// For regular files, check size limit
-				fileSizeKB := float64(fileInfo.Size()) / 1024
-				s.logger.Info("file size exceeded limit: %s (%.2fKB)", filePath, fileSizeKB)
+		// Check ignore rules
+		if ignore.MatchesPath(checkPath) {
+			s.logger.Info("ignore file found: %s in codebase %s", checkPath, workspacePath)
+			return &CheckIgnoreResult{
+				ShouldIgnore: false,
+				Reason:       "ignore file found:" + filePath,
+				IgnoredFiles: []string{filePath},
+			}, nil
+		}
+
+		if len(fileIncludeMap) > 0 {
+			if _, ok := fileIncludeMap[filePath]; !ok {
+				s.logger.Info("file not included: %s in codebase %s", filePath, workspacePath)
 				return &CheckIgnoreResult{
-					ShouldIgnore: false,
-					Reason:       fmt.Sprintf("file size exceeded limit: %s (%.2fKB)", filePath, fileSizeKB),
-					IgnoredFiles: []string{filePath},
-				}, nil
-			}
-
-			// Check ignore rules
-			if ignore.MatchesPath(checkPath) {
-				s.logger.Info("ignore file found: %s in codebase %s", checkPath, config.CodebasePath)
-				return &CheckIgnoreResult{
-					ShouldIgnore: false,
-					Reason:       "ignore file found:" + filePath,
+					ShouldIgnore: true,
+					Reason:       "file not included:" + filePath,
 					IgnoredFiles: []string{filePath},
 				}, nil
 			}
@@ -826,20 +824,17 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 			TargetFilePath: "",
 			SyncId:         "", // 暂时为空，后续可以生成
 		}
-	}
-	switch indexType {
-	case dto.IndexTypeEmbedding:
-		eventModel.EmbeddingStatus = model.EmbeddingStatusInit
-		eventModel.CodegraphStatus = model.CodegraphStatusSuccess
-	case dto.IndexTypeCodegraph:
-		eventModel.EmbeddingStatus = model.EmbeddingStatusSuccess
-		eventModel.CodegraphStatus = model.CodegraphStatusInit
-	default:
-		eventModel.EmbeddingStatus = model.EmbeddingStatusInit
-		eventModel.CodegraphStatus = model.CodegraphStatusInit
-	}
-
-	if shouldCreateEvent {
+		switch indexType {
+		case dto.IndexTypeEmbedding:
+			eventModel.EmbeddingStatus = model.EmbeddingStatusInit
+			eventModel.CodegraphStatus = model.CodegraphStatusSuccess
+		case dto.IndexTypeCodegraph:
+			eventModel.EmbeddingStatus = model.EmbeddingStatusSuccess
+			eventModel.CodegraphStatus = model.CodegraphStatusInit
+		default:
+			eventModel.EmbeddingStatus = model.EmbeddingStatusInit
+			eventModel.CodegraphStatus = model.CodegraphStatusInit
+		}
 		// 保存事件到数据库
 		if err := s.eventRepo.CreateEvent(eventModel); err != nil {
 			s.logger.Error("failed to create open workspace event: %v", err)
