@@ -47,25 +47,20 @@ func (p *SourceFileParser) Parse(ctx context.Context,
 
 	defer tree.Close()
 
-	queryScm, ok := BaseQueries[langParser.Language]
+	baseQuery, ok := BaseQueries[langParser.Language]
 	if !ok {
 		return nil, lang.ErrQueryNotFound
 	}
+	// TODO baseQuery永远不会关闭，影响？
 
-	query, err := sitter.NewQuery(sitterLanguage, queryScm)
-	if err != nil && lang.IsRealQueryErr(err) {
-		return nil, err
-	}
-	defer query.Close()
-
-	captureNames := query.CaptureNames() // 根据scm文件从上到下排列的
+	captureNames := baseQuery.CaptureNames() // 根据scm文件从上到下排列的
 	if len(captureNames) == 0 {
 		return nil, fmt.Errorf("tree_sitter base_processor query capture names is empty")
 	}
 
 	qc := sitter.NewQueryCursor()
 	defer qc.Close()
-	matches := qc.Matches(query, tree.RootNode(), content)
+	matches := qc.Matches(baseQuery, tree.RootNode(), content)
 
 	// 消费 matches，并调用 ProcessStructureMatch 处理匹配结果
 	// elementName->elementPosition

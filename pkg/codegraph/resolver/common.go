@@ -287,7 +287,7 @@ func FilterValidElems(elems []Element, logger logger.Logger) []Element {
 				scope = "<empty>"
 			}
 
-			logger.Warn(
+			logger.Debug(
 				"INVALID ELEMENT | type=%s | name=%s | path=%s | range=%v | scope=%s",
 				elemType,
 				name,

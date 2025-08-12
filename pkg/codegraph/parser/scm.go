@@ -16,8 +16,8 @@ const defSubdir = "def"
 const baseSubDir = "base"
 const queryExt = ".scm"
 
-var DefinitionQueries = make(map[lang.Language]string)
-var BaseQueries = make(map[lang.Language]string)
+var DefinitionQueries = make(map[lang.Language]*sitter.Query)
+var BaseQueries = make(map[lang.Language]*sitter.Query)
 
 func init() {
 	if err := loadScm(); err != nil {
@@ -36,24 +36,24 @@ func loadScm() error {
 			return fmt.Errorf("failed to init language parser %s: %w", l.Language, err)
 		}
 
-		baseQueryContent, err := loadLanguageScm(l, baseSubDir, sitterLang)
+		baseQuery, err := loadLanguageScm(l, baseSubDir, sitterLang)
 		if err != nil {
 			return err
 		}
 
-		defQueryContent, err := loadLanguageScm(l, defSubdir, sitterLang)
+		defQuery, err := loadLanguageScm(l, defSubdir, sitterLang)
 		if err != nil {
 			return err
 		}
 
 		langParser.Close()
-		BaseQueries[l.Language] = string(baseQueryContent)
-		DefinitionQueries[l.Language] = string(defQueryContent)
+		BaseQueries[l.Language] = baseQuery
+		DefinitionQueries[l.Language] = defQuery
 	}
 	return nil
 }
 
-func loadLanguageScm(l *lang.TreeSitterParser, scmDir string, sitterLang *sitter.Language) ([]byte, error) {
+func loadLanguageScm(l *lang.TreeSitterParser, scmDir string, sitterLang *sitter.Language) (*sitter.Query, error) {
 	var err error
 	baseQuery := makeQueryPath(l.Language, scmDir)
 	baseQueryContent, err := scmFS.ReadFile(baseQuery)
@@ -64,8 +64,7 @@ func loadLanguageScm(l *lang.TreeSitterParser, scmDir string, sitterLang *sitter
 	if queryError != nil && lang.IsRealQueryErr(queryError) {
 		return nil, fmt.Errorf("failed to parse base query file %s: %w", baseQuery, queryError)
 	}
-	query.Close()
-	return baseQueryContent, nil
+	return query, nil
 }
 
 func makeQueryPath(lang lang.Language, subdir string) string {

@@ -15,21 +15,21 @@ func TestCResolver(t *testing.T) {
 	logger := initLogger()                // 如果有日志初始化
 	parser := NewSourceFileParser(logger) // 假设有类似 Java 的解析器
 	res, err := parser.Parse(context.Background(), &types.SourceFile{
-		Path:    "testdata/cpp/test.cpp",
-		Content: readFile("testdata/cpp/test.cpp"),
+		Path:    "testdata/c/test.c",
+		Content: readFile("testdata/c/test.c"),
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 	for _, elem := range res.Elements {
-		if !resolver.IsValidElement(elem) {
-			fmt.Printf("📦 Type: %s | Name: %s | Path: %s\n", elem.GetType(), elem.GetName(), elem.GetPath())
-			fmt.Printf("🔍 Range: %v | Scope: %s\n", elem.GetRange(), elem.GetScope())
-			fmt.Println("--------------------------------------------------")
-		}
+		// if resolver.IsValidElement(elem) {
+		// 	fmt.Printf("📦 Type: %s | Name: %s | Path: %s\n", elem.GetType(), elem.GetName(), elem.GetPath())
+		// 	fmt.Printf("🔍 Range: %v | Scope: %s\n", elem.GetRange(), elem.GetScope())
+		// 	fmt.Println("--------------------------------------------------")
+		// }
 
-		//fmt.Printf("📦 Type: %s | Name: %s | Path: %s\n", elem.GetType(), elem.GetName(), elem.GetPath())
-		//fmt.Printf("🔍 Range: %v | Scope: %s\n", elem.GetRange(), elem.GetScope())
-		//fmt.Println("--------------------------------------------------")
+		fmt.Printf("📦 Type: %s | Name: %s | Path: %s\n", elem.GetType(), elem.GetName(), elem.GetPath())
+		fmt.Printf("🔍 Range: %v | Scope: %s\n", elem.GetRange(), elem.GetScope())
+		fmt.Println("--------------------------------------------------")
 
 	}
 	for _, elem := range res.Imports {
@@ -202,8 +202,8 @@ func TestCResolver_ResolveFunction(t *testing.T) {
 				// {Name: "func53", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "x", Type: []string{types.PrimitiveType}}}},
 
 				// 可变参数函数
-				{Name: "func54", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "count", Type: []string{types.PrimitiveType}}}},
-				{Name: "func55", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "format", Type: []string{types.PrimitiveType}}}},
+				{Name: "func54", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "count", Type: []string{types.PrimitiveType}},{Name: "...", Type: []string{types.PrimitiveType}}}},
+				{Name: "func55", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "format", Type: []string{types.PrimitiveType}},{Name: "...", Type: []string{types.PrimitiveType}}}},
 
 				// 复杂组合
 				{Name: "func56", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "ptr", Type: []string{types.PrimitiveType}}, {Name: "strings", Type: []string{types.PrimitiveType}}, {Name: "vptr", Type: []string{types.PrimitiveType}}}},
@@ -246,7 +246,7 @@ func TestCResolver_ResolveFunction(t *testing.T) {
 				{Name: "func77", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "x", Type: []string{types.PrimitiveType}}}},
 
 				// 完整复杂示例
-				{Name: "func78", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "points", Type: []string{"Point"}}, {Name: "colors", Type: []string{"Color"}}, {Name: "callbacks", Type: []string{types.PrimitiveType}}}},
+				{Name: "func78", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "points", Type: []string{"Point"}}, {Name: "colors", Type: []string{"Color"}}, {Name: "callbacks", Type: []string{types.PrimitiveType}},{Name: "...", Type: []string{types.PrimitiveType}}}},
 
 				// 函数指针数组作为参数
 				{Name: "func79", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "func_array", Type: []string{types.PrimitiveType}}}},
@@ -262,7 +262,7 @@ func TestCResolver_ResolveFunction(t *testing.T) {
 				// 使用预定义类型
 				{Name: "func84", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "len", Type: []string{types.PrimitiveType}}}},
 				{Name: "func85", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "offset", Type: []string{types.PrimitiveType}}}},
-				{Name: "func86", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "ch", Type: []string{types.PrimitiveType}}}},
+				{Name: "func86", ReturnType: []string{"wchar_t"}, Parameters: []resolver.Parameter{{Name: "ch", Type: []string{"wchar_t"}}}},
 
 				// 布尔类型（C99）
 				{Name: "func87", ReturnType: []string{"_Bool"}, Parameters: []resolver.Parameter{{Name: "flag", Type: []string{"_Bool"}}}},
@@ -282,15 +282,15 @@ func TestCResolver_ResolveFunction(t *testing.T) {
 				{Name: "func95", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "ptr", Type: []string{types.PrimitiveType}}}},
 
 				// 文件操作相关类型
-				{Name: "func96", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "filename", Type: []string{types.PrimitiveType}}}},
-				{Name: "func97", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "stream", Type: []string{types.PrimitiveType}}}},
+				{Name: "func96", ReturnType: []string{"FILE"}, Parameters: []resolver.Parameter{{Name: "filename", Type: []string{types.PrimitiveType}}}},
+				{Name: "func97", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "stream", Type: []string{"FILE"}}}},
 
 				// 信号处理相关
 				// {Name: "func98", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "sig", Type: []string{types.PrimitiveType}}, {Name: "handler", Type: []string{types.PrimitiveType}}}},
 
 				// 时间相关类型
-				{Name: "func99", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "timer", Type: []string{types.PrimitiveType}}}},
-				{Name: "func100", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "clk", Type: []string{types.PrimitiveType}}}},
+				{Name: "func99", ReturnType: []string{"time_t"}, Parameters: []resolver.Parameter{{Name: "timer", Type: []string{"time_t"}}}},
+				{Name: "func100", ReturnType: []string{"clock_t"}, Parameters: []resolver.Parameter{{Name: "clk", Type: []string{"clock_t"}}}},
 
 				// 本地化相关
 				{Name: "func101", ReturnType: []string{"locale_t"}, Parameters: []resolver.Parameter{{Name: "locale", Type: []string{"locale_t"}}}},

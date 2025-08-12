@@ -70,7 +70,7 @@ func TestResolveProjectModules(t *testing.T) {
 	resolver := newModuleResolver(mockLogger)
 
 	// 测试传入 nil project 时的错误处理
-	err := resolver.ResolveProjectModules(ctx, nil, 2)
+	err := resolver.ResolveProjectModules(ctx, nil, "test-project", 2)
 	if err == nil {
 		t.Error("传入 nil project 时应该返回错误")
 	}
@@ -84,7 +84,7 @@ func TestResolveProjectModules(t *testing.T) {
 	tempDir := t.TempDir()
 	project := NewProject("test-project", tempDir)
 
-	err = resolver.ResolveProjectModules(ctx, project, 2)
+	err = resolver.ResolveProjectModules(ctx, project, "test-project", 2)
 	if err != nil {
 		t.Errorf("解析项目模块时发生错误: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestResolveProjectModulesWithVariousLanguages(t *testing.T) {
 	// 创建各种语言的配置文件
 	createTestFiles(t, tempDir)
 
-	err := resolver.ResolveProjectModules(ctx, project, 2)
+	err := resolver.ResolveProjectModules(ctx, project, "test-project", 2)
 	if err != nil {
 		t.Errorf("解析项目模块时发生错误: %v", err)
 	}

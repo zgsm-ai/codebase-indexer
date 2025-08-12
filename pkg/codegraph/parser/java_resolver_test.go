@@ -66,7 +66,6 @@ import static java.util.Collections.emptyList;`),
 
 			if err == nil {
 				// 验证导入解析
-				fmt.Println(len(res.Imports))
 				for _, importItem := range res.Imports {
 					fmt.Printf("Import: %s", importItem.GetName())
 					assert.NotEmpty(t, importItem.GetName())
@@ -82,8 +81,8 @@ func TestJavaResolver_ResolveClass(t *testing.T) {
 	parser := NewSourceFileParser(logger)
 
 	sourceFile := &types.SourceFile{
-		Path:    "testdata/com/example/test/TestClass.java",
-		Content: readFile("testdata/com/example/test/TestClass.java"),
+		Path:    "testdata/java/TestClass.java",
+		Content: readFile("testdata/java/TestClass.java"),
 	}
 
 	res, err := parser.Parse(context.Background(), sourceFile)
@@ -175,7 +174,7 @@ func TestJavaResolver_ResolveClass(t *testing.T) {
 		"UserServiceImpl": {
 			Scope:        types.ScopeProject,
 			SuperClasses: []string{"BaseService"},
-			SuperIfaces:  []string{"UserApi", "String", "Loggable", "Serializable"},
+			SuperIfaces:  []string{"UserApi", "Loggable", "Serializable"},
 		},
 	}
 

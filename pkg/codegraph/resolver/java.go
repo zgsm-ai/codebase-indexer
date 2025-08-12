@@ -82,7 +82,6 @@ func (j *JavaResolver) resolveMethod(ctx context.Context, element *Method, rc *R
 			element.Declaration.ReturnType = findAllTypes(&cap.Node, rc.SourceFile.Content)
 		case types.ElementTypeMethodParameters:
 			element.Declaration.Parameters = ParseParameterList(&cap.Node, rc.SourceFile.Content)
-			fmt.Println("params", element.Declaration.Parameters)
 		}
 	}
 	// 设置owner并且补充默认修饰符

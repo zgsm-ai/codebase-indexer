@@ -164,14 +164,14 @@ func (c *CppResolver) resolveVariable(ctx context.Context, element *Variable, rc
 				element.BaseElement.Scope = types.ScopeClass
 			}
 		case types.ElementTypeVariableType, types.ElementTypeFieldType:
-			typs:= findAllTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
+			typs := findAllTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
 			for _, typ := range typs {
 				refs = append(refs, NewReference(element, &cap.Node, typ, types.EmptyString))
 			}
 			element.VariableType = typs
 			if len(element.VariableType) == 0 {
 				element.VariableType = []string{types.PrimitiveType}
-			}			
+			}
 		case types.ElementTypeEnumConstantName:
 			// 枚举的类型不考虑，都是基础类型（有匿名枚举）
 			element.BaseElement.Name = StripSpaces(content)
@@ -303,7 +303,7 @@ func parseCppParameters(node *sitter.Node, content []byte) []Parameter {
 			}
 			// 可能为nil，即无名参数，只有类型
 			declaratorNode := child.ChildByFieldName("declarator")
-			// 理论上delcs第一个应该是参数名，后面是嵌套的参数，不管(这里只有一层)
+			// 理论上delcs第一个应该是参数名(这里应该只有一层)
 			decls := findAllIdentifiers(declaratorNode, content)
 			if len(decls) > 0 {
 				param.Name = decls[0]
@@ -312,10 +312,12 @@ func parseCppParameters(node *sitter.Node, content []byte) []Parameter {
 
 		case types.NodeKindVariadicParameter:
 			// ...可变参数的情况
-			params = append(params, Parameter{
+			param := Parameter{
 				Name: "...",
-				Type: []string{},
-			})
+				// 参数类型未知，也不重要，暂时用primitiveType
+				Type: []string{types.PrimitiveType},
+			}
+			params = append(params, param)
 		}
 	}
 	return params
@@ -339,6 +341,7 @@ func isLocalVariable(node *sitter.Node) bool {
 	}
 	return false
 }
+
 // 处理cpp语法中的base_class_clause类型，返回类型列表
 func parseBaseClassClause(node *sitter.Node, content []byte) []string {
 	if node == nil {

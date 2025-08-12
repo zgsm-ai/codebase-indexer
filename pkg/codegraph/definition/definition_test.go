@@ -43,8 +43,7 @@ var TestVar = "test"
 `)
 
 	// 获取 Go 语言配置
-	parser, err := NewDefinitionParser()
-	assert.NoError(t, err)
+	parser := NewDefinitionParser()
 	// 解析文件结构
 	structure, err := parser.Parse(context.Background(), &types.SourceFile{
 		Content: code,

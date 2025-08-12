@@ -30,8 +30,50 @@
 
 (type_definition
   type: (_) @definition.typedef.name
-  declarator: (_) @definition.typedef.alias
-)@definition.typedef
+  declarator: [
+    ;; 基本类型别名 (如: typedef int MyInt;)
+    (type_identifier) @definition.typedef.alias
+    
+    ;; 指针类型 (如: typedef int* IntPtr;)
+    (pointer_declarator
+      declarator: (type_identifier) @definition.typedef.alias)
+    
+    ;; 数组类型 (如: typedef int IntArray[10];)
+    (array_declarator
+      declarator: (type_identifier) @definition.typedef.alias)
+    
+    ;; 函数类型 (如: typedef int MyFunc(int);)
+    (function_declarator
+      declarator: (type_identifier) @definition.typedef.alias
+      parameters: (parameter_list))
+    
+    ;; 简单函数指针 (如: typedef int (*FuncPtr)(int, int);)
+    (function_declarator
+      declarator: (parenthesized_declarator
+        (pointer_declarator
+          declarator: (type_identifier) @definition.typedef.alias))
+      parameters: (parameter_list))
+    
+    ;; 复杂函数指针 
+    (function_declarator
+      declarator: (parenthesized_declarator
+        (pointer_declarator
+          declarator: (type_identifier) @definition.typedef.alias)))
+    
+    ;; 多层嵌套的指针/数组组合
+    (pointer_declarator
+      declarator: (array_declarator
+        declarator: (type_identifier) @definition.typedef.alias))
+    
+    (array_declarator
+      declarator: (pointer_declarator
+        declarator: (type_identifier) @definition.typedef.alias))
+    
+    ;; 其他可能的复杂声明符
+    (parenthesized_declarator
+      (type_identifier) @definition.typedef.alias)
+  ]
+) @definition.typedef
 
 
 
@@ -86,6 +128,7 @@
             declarator: (identifier) @variable.name))
       ]
       value: (_) @variable.value)
+      (#not-match? @variable.name "^$") ;; 处理解析异常的情况
 ) @variable
 
 ;; 无初始化值的变量声明
@@ -104,6 +147,7 @@
       declarator: (array_declarator
         declarator: (identifier) @variable.name))
   ]
+  (#not-match? @variable.name "^$") ;; 处理解析异常的情况
 ) @variable
 
 
@@ -123,11 +167,13 @@
       declarator: (array_declarator
         declarator: (identifier) @definition.field.name))
   ]
+  (#not-match? @definition.field.name "^$") ;; 处理解析异常的情况
 ) @definition.field
 
 ;; ------------------------ Enum Constant --------------------------------
 (enumerator
   name: (identifier) @definition.enum.constant.name
+  (#not-match? @definition.enum.constant.name "^$") ;; 处理解析异常的情况
   value: (_)? @definition.enum.constant.value
 ) @definition.enum.constant
 

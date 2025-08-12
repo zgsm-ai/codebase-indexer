@@ -227,17 +227,10 @@ func TestGoBaseParse_MatchesDebug(t *testing.T) {
 	}
 	defer tree.Close()
 
-	queryScm, ok := BaseQueries[langParser.Language]
+	query, ok := BaseQueries[langParser.Language]
 	if !ok {
 		t.Fatalf("query not found")
 	}
-	// TODO: 巨坑err1，变量遮蔽（shadowing）
-	query, err1 := sitter.NewQuery(sitterLanguage, queryScm)
-	if err1 != nil {
-		t.Fatalf("new query error: %v", err1)
-	}
-	defer query.Close()
-
 	qc := sitter.NewQueryCursor()
 	defer qc.Close()
 	matches := qc.Matches(query, tree.RootNode(), content)
@@ -264,4 +257,3 @@ func TestGoBaseParse_MatchesDebug(t *testing.T) {
 		}
 	}
 }
-
