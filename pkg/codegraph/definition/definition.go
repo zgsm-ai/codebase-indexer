@@ -32,7 +32,7 @@ func (s *DefParser) Parse(ctx context.Context, codeFile *types.SourceFile, opts 
 	if err != nil {
 		return nil, err
 	}
-	queryScm, ok := parser.DefinitionQueries[langConf.Language]
+	query, ok := parser.DefinitionQueries[langConf.Language]
 	if !ok {
 		return nil, lang.ErrQueryNotFound
 	}
@@ -49,11 +49,6 @@ func (s *DefParser) Parse(ctx context.Context, codeFile *types.SourceFile, opts 
 	}
 	defer tree.Close()
 
-	query, err := sitter.NewQuery(sitterLanguage, queryScm)
-	if err != nil && lang.IsRealQueryErr(err) {
-		return nil, err
-	}
-	defer query.Close()
 
 	// 执行 query，并处理匹配结果
 	qc := sitter.NewQueryCursor()

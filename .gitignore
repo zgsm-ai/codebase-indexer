@@ -13,3 +13,4 @@ logs
 .zgsm
 test/tmp
 localhost
+tmp/codegraph/*.profile

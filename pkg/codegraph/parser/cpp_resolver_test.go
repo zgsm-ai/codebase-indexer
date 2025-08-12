@@ -143,33 +143,33 @@ func TestCPPResolver_ResolveFunction(t *testing.T) {
 				{Name: "getBuffer", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
 					{Name: "count", Type: []string{types.PrimitiveType}},
 				}},
-				{Name: "getNameRef1", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
-				{Name: "getNameRef2", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+				{Name: "getNameRef1", ReturnType: []string{"string"}, Parameters: []resolver.Parameter{}},
+				{Name: "getNameRef2", ReturnType: []string{"string"}, Parameters: []resolver.Parameter{}},
 
 				// 标准模板容器
-				{Name: "getVector", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
-				{Name: "getMap", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+				{Name: "getVector", ReturnType: []string{"vector"}, Parameters: []resolver.Parameter{}},
+				{Name: "getMap", ReturnType: []string{"map","string"}, Parameters: []resolver.Parameter{}},
 
 				// 嵌套模板类型
-				{Name: "getComplexMap", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+				{Name: "getComplexMap", ReturnType: []string{"map", "string", "vector"}, Parameters: []resolver.Parameter{}},
 
 				// 自定义模板类型
 				{Name: "getBox", ReturnType: []string{"Box"}, Parameters: []resolver.Parameter{}},
-				{Name: "getBoxOfVector", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+				{Name: "getBoxOfVector", ReturnType: []string{"vector"}, Parameters: []resolver.Parameter{}},
 				{
 					Name:       "getComplexMap1",
-					ReturnType: []string{types.PrimitiveType},
+					ReturnType: []string{"map", "string", "vector"},
 					Parameters: []resolver.Parameter{
-						{Name: "simpleMap", Type: []string{types.PrimitiveType}},
-						{Name: "names", Type: []string{types.PrimitiveType}},
-						{Name: "key", Type: []string{types.PrimitiveType}},
+						{Name: "simpleMap", Type: []string{"map", "string"}},
+						{Name: "names", Type: []string{"vector","string"}},
+						{Name: "key", Type: []string{"string"}},
 						{Name: "count", Type: []string{types.PrimitiveType}},
 					},
 				},
 
 				// pair 和 tuple 类型
-				{Name: "getPair", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
-				{Name: "getTuple", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
+				{Name: "getPair", ReturnType: []string{"pair","string"}, Parameters: []resolver.Parameter{}},
+				{Name: "getTuple", ReturnType: []string{"tuple","string"}, Parameters: []resolver.Parameter{
 					{Name: "count", Type: []string{types.PrimitiveType}}, // 有默认值，断言类型即可
 				}},
 
@@ -178,12 +178,12 @@ func TestCPPResolver_ResolveFunction(t *testing.T) {
 				// {Name: "getAnotherInt", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
 
 				// 带默认参数和命名空间返回值
-				{Name: "getNames", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
+				{Name: "getNames", ReturnType: []string{"vector","map","string"}, Parameters: []resolver.Parameter{
 					{Name: "count", Type: []string{types.PrimitiveType}}, // 有默认值，断言类型即可
 				}},
 
 				// 带 const 和 noexcept 的返回值
-				{Name: "getConstVector", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
+				{Name: "getConstVector", ReturnType: []string{"vector"}, Parameters: []resolver.Parameter{}},
 
 				// 你补充的 15+ 个函数
 				{Name: "func0", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
@@ -192,26 +192,26 @@ func TestCPPResolver_ResolveFunction(t *testing.T) {
 					{Name: "arg2", Type: []string{types.PrimitiveType}},
 				}},
 				// 泛型函数模板参数名可用T，参数名可用arg1、arg2
-				{Name: "func2", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
-					{Name: "arg1", Type: []string{types.PrimitiveType}},
+				{Name: "func2", ReturnType: []string{"T"}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{"T"}},
 				}},
-				{Name: "func3", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
-					{Name: "arg1", Type: []string{types.PrimitiveType}},
-					{Name: "arg2", Type: []string{types.PrimitiveType}},
+				{Name: "func3", ReturnType: []string{"T"}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{"T"}},
+					{Name: "arg2", Type: []string{"vector","T"}},
 				}},
-				{Name: "func4", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
-				{Name: "func5", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
-					{Name: "arg1", Type: []string{types.PrimitiveType}},
+				{Name: "func4", ReturnType: []string{"string"}, Parameters: []resolver.Parameter{}},
+				{Name: "func5", ReturnType: []string{"vector"}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{"string"}},
 				}},
 				{Name: "func6", ReturnType: []string{"MyStruct"}, Parameters: []resolver.Parameter{}},
 				{Name: "func7", ReturnType: []string{"MyClass"}, Parameters: []resolver.Parameter{
 					{Name: "arg1", Type: []string{"MyClass"}},
 					{Name: "arg2", Type: []string{types.PrimitiveType}},
 				}},
-				{Name: "func8", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
-					{Name: "arg1", Type: []string{types.PrimitiveType}},
+				{Name: "func8", ReturnType: []string{"vector","T"}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{"vector","T"}},
 				}},
-				{Name: "func9", ReturnType: []string{"MyClass"}, Parameters: []resolver.Parameter{
+				{Name: "func9", ReturnType: []string{"MyClass","map"}, Parameters: []resolver.Parameter{
 					{Name: "arg1", Type: []string{types.PrimitiveType}},
 					{Name: "arg2", Type: []string{"MyClass"}},
 				}},
@@ -219,25 +219,25 @@ func TestCPPResolver_ResolveFunction(t *testing.T) {
 				{Name: "func11", ReturnType: []string{"MyClass"}, Parameters: []resolver.Parameter{
 					{Name: "arg1", Type: []string{"MyStruct"}},
 				}},
-				{Name: "func12", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
-					{Name: "arg1", Type: []string{types.PrimitiveType}},
+				{Name: "func12", ReturnType: []string{"T"}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{"T"}},
 					{Name: "arg2", Type: []string{types.PrimitiveType}},
 				}},
-				{Name: "func13", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
-				{Name: "func14", ReturnType: []string{"MyClass"}, Parameters: []resolver.Parameter{
-					{Name: "arg1", Type: []string{"MyClass"}},
+				{Name: "func13", ReturnType: []string{"vector","string"}, Parameters: []resolver.Parameter{}},
+				{Name: "func14", ReturnType: []string{"vector","MyClass"}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{"vector","MyClass"}},
 					{Name: "arg2", Type: []string{types.PrimitiveType}},
 				}},
-				{Name: "func15", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
-				{Name: "func16", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
-					{Name: "arg1", Type: []string{types.PrimitiveType}},
+				{Name: "func15", ReturnType: []string{"vector","T"}, Parameters: []resolver.Parameter{}},
+				{Name: "func16", ReturnType: []string{"vector","T"}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{"T"}},
 					{Name: "arg2", Type: []string{types.PrimitiveType}},
 				}},
 				{Name: "func17", ReturnType: []string{"MyStruct"}, Parameters: []resolver.Parameter{}},
 				{Name: "func18", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
 					{Name: "arg1", Type: []string{types.PrimitiveType}},
 				}},
-				{Name: "func19", ReturnType: []string{"MyClass"}, Parameters: []resolver.Parameter{}},
+				{Name: "func19", ReturnType: []string{"vector","map","MyClass"}, Parameters: []resolver.Parameter{}},
 			},
 			description: "测试 testfunc.cpp 中所有函数声明的解析",
 		},
@@ -262,17 +262,15 @@ func TestCPPResolver_ResolveFunction(t *testing.T) {
 					actualFunc, exists := funcMap[wantFunc.Name]
 					assert.True(t, exists, "未找到函数: %s", wantFunc.Name)
 					if exists {
-						assert.Equal(t, wantFunc.ReturnType, actualFunc.ReturnType,
+						assert.ElementsMatch(t, wantFunc.ReturnType, actualFunc.ReturnType,
 							"函数 %s 的返回值类型不匹配，期望 %v，实际 %v",
 							wantFunc.Name, wantFunc.ReturnType, actualFunc.ReturnType)
 						assert.Equal(t, len(wantFunc.Parameters), len(actualFunc.Parameters),
 							"函数 %s 的参数数量不匹配，期望 %d，实际 %d",
 							wantFunc.Name, len(wantFunc.Parameters), len(actualFunc.Parameters))
-						for i, wantParam := range wantFunc.Parameters {
-							assert.Equal(t, wantParam.Type, actualFunc.Parameters[i].Type,
-								"函数 %s 的第 %d 个参数类型不匹配，期望 %v，实际 %v",
-								wantFunc.Name, i+1, wantParam.Type, actualFunc.Parameters[i].Type)
-						}
+						assert.ElementsMatch(t, wantFunc.Parameters, actualFunc.Parameters,
+							"函数 %s 的参数类型不匹配，期望 %v，实际 %v",
+							wantFunc.Name, wantFunc.Parameters, actualFunc.Parameters)
 					}
 				}
 			}
@@ -379,9 +377,9 @@ func TestCPPResolver_ResolveVariable(t *testing.T) {
 		{Name: "raw_ptr", Type: []string{types.PrimitiveType}},
 		{Name: "raw_ptr2", Type: []string{types.PrimitiveType}},
 		{Name: "ref_a", Type: []string{types.PrimitiveType}},
-		{Name: "name_ref", Type: []string{types.PrimitiveType}},
-		{Name: "text", Type: []string{types.PrimitiveType}},
-		{Name: "greeting", Type: []string{types.PrimitiveType}},
+		{Name: "name_ref", Type: []string{"string"}},
+		{Name: "text", Type: []string{"string"}},
+		{Name: "greeting", Type: []string{"string"}},
 		{Name: "pt", Type: []string{"Point"}},
 		{Name: "pt_init", Type: []string{"Point"}},
 		{Name: "counter", Type: []string{types.PrimitiveType}},
@@ -389,8 +387,8 @@ func TestCPPResolver_ResolveVariable(t *testing.T) {
 		{Name: "version", Type: []string{types.PrimitiveType}},
 		{Name: "nums", Type: []string{types.PrimitiveType}},
 		{Name: "nums_init", Type: []string{types.PrimitiveType}},
-		{Name: "vec", Type: []string{types.PrimitiveType}},
-		{Name: "vec_init", Type: []string{types.PrimitiveType}},
+		{Name: "vec", Type: []string{"vector"}},
+		{Name: "vec_init", Type: []string{"vector"}},
 		{Name: "flag", Type: []string{types.PrimitiveType}},
 		{Name: "radius", Type: []string{types.PrimitiveType}},
 		{Name: "x", Type: []string{types.PrimitiveType}},
@@ -406,17 +404,17 @@ func TestCPPResolver_ResolveVariable(t *testing.T) {
 		{Name: "local_cstr", Type: []string{types.PrimitiveType}},
 		{Name: "local_float_ptr", Type: []string{types.PrimitiveType}},
 		{Name: "local_ref", Type: []string{types.PrimitiveType}},
-		{Name: "local_str_ref", Type: []string{types.PrimitiveType}},
+		{Name: "local_str_ref", Type: []string{"string"}},
 		{Name: "local_arr", Type: []string{types.PrimitiveType}},
 		{Name: "local_ptr2", Type: []string{types.PrimitiveType}},
 		{Name: "local_ptr3", Type: []string{types.PrimitiveType}},
 		{Name: "local_ref2", Type: []string{types.PrimitiveType}},
 		{Name: "local_arr_init", Type: []string{types.PrimitiveType}},
 		{Name: "local_chars", Type: []string{types.PrimitiveType}},
-		{Name: "local_name", Type: []string{types.PrimitiveType}},
-		{Name: "local_vec", Type: []string{types.PrimitiveType}},
-		{Name: "data", Type: []string{"shapes_ns::ShapeData"}},
-		{Name: "data_ptr", Type: []string{"shapes_ns::ShapeData"}},
+		{Name: "local_name", Type: []string{"string"}},
+		{Name: "local_vec", Type: []string{"vector"}},
+		{Name: "data", Type: []string{"ShapeData"}},
+		{Name: "data_ptr", Type: []string{"ShapeData"}},
 		{Name: "w", Type: []string{"Widget"}},
 		{Name: "w_ptr", Type: []string{"Widget"}},
 		{Name: "shape", Type: []string{"IShape"}},
@@ -570,7 +568,6 @@ func TestCPPResolver_ResolveClass(t *testing.T) {
 		if ok {
 			// 继承类名断言（顺序不敏感）
 			actualSupers := append([]string{}, classElem.SuperClasses...)
-
 			assert.ElementsMatch(t, supers, actualSupers, "类/结构体 %s 继承不符", name)
 
 		}

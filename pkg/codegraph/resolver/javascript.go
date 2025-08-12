@@ -14,6 +14,14 @@ var (
 	arrayIndexRegex = regexp.MustCompile(`\[[^\]]+\]`)
 )
 
+var jsReplacer = strings.NewReplacer(
+	"[", "",
+	"]", "",
+	"*", "",
+	"(", "",
+	")", "",
+)
+
 type JavaScriptResolver struct {
 }
 
@@ -911,8 +919,7 @@ func extractReferencePath(node *sitter.Node, content []byte) map[string]string {
 		text := node.Utf8Text(content)
 
 		// 清除[]、*字符和数组索引如[100]、[queueCapacity]等
-		cleanText := strings.ReplaceAll(strings.ReplaceAll(text, "[]", ""), "*", "")
-		// 使用正则表达式去除数组索引，包括数字索引[100]和标识符索引[queueCapacity]
+		cleanText := jsReplacer.Replace(text)
 		cleanText = arrayIndexRegex.ReplaceAllString(cleanText, "")
 		result["property"] = cleanText
 		// 根据.分割，后面为property，前面为object
