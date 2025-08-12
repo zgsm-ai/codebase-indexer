@@ -30,7 +30,7 @@ func (j *JavaResolver) resolveImport(ctx context.Context, element *Import, rc *R
 		content := cap.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(captureName) {
 		case types.ElementTypeImportName:
-			element.BaseElement.Name = content
+			element.BaseElement.Name = StripSpaces(content)
 		}
 	}
 	// 处理类导入
@@ -46,22 +46,21 @@ func (j *JavaResolver) resolvePackage(ctx context.Context, element *Package, rc 
 	for _, cap := range rc.Match.Captures {
 		captureName := rc.CaptureNames[cap.Index]
 		if cap.Node.IsMissing() || cap.Node.IsError() {
-			return nil, fmt.Errorf("package is missing or error")
+			continue
 		}
 		content := cap.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(captureName) {
 		case types.ElementTypePackageName:
-			element.BaseElement.Name = content
+			element.BaseElement.Name = StripSpaces(content)
 		}
 	}
 	element.BaseElement.Scope = types.ScopeProject
-	// package不需要额外处理，直接返回
 	return []Element{element}, nil
 }
 
 func (j *JavaResolver) resolveFunction(ctx context.Context, element *Function, rc *ResolveContext) ([]Element, error) {
 	// TODO java中不存在单独的函数，暂时不实现
-	return nil, fmt.Errorf("not implemented")
+	return nil, fmt.Errorf("java function not supported")
 }
 
 func (j *JavaResolver) resolveMethod(ctx context.Context, element *Method, rc *ResolveContext) ([]Element, error) {
@@ -77,19 +76,21 @@ func (j *JavaResolver) resolveMethod(ctx context.Context, element *Method, rc *R
 		case types.ElementTypeMethodModifier:
 			element.Declaration.Modifier = getElementModifier(content)
 		case types.ElementTypeMethodName:
-			element.BaseElement.Name = strings.TrimSpace(content)
+			element.BaseElement.Name = StripSpaces(content)
 			element.Declaration.Name = element.BaseElement.Name
 		case types.ElementTypeMethodReturnType:
-			element.Declaration.ReturnType = getFilteredTypes(content)
+			element.Declaration.ReturnType = findAllTypes(&cap.Node, rc.SourceFile.Content)
 		case types.ElementTypeMethodParameters:
-			element.Declaration.Parameters = getFilteredParameters(content)
+			element.Declaration.Parameters = ParseParameterList(&cap.Node, rc.SourceFile.Content)
+			fmt.Println("params", element.Declaration.Parameters)
 		}
 	}
 	// 设置owner并且补充默认修饰符
 	ownerNode := findMethodOwner(&rootCap.Node)
 	var ownerKind types.NodeKind
 	if ownerNode != nil {
-		element.Owner = extractNodeName(ownerNode, rc.SourceFile.Content)
+		owner := extractNodeName(ownerNode, rc.SourceFile.Content)
+		element.Owner = StripSpaces(owner)
 		ownerKind = types.ToNodeKind(ownerNode.Kind())
 	}
 
@@ -126,15 +127,16 @@ func (j *JavaResolver) resolveClass(ctx context.Context, element *Class, rc *Res
 		switch elemType {
 		case types.ElementTypeClassName, types.ElementTypeEnumName:
 			// 解析类名/枚举名
-			element.BaseElement.Name = content
+			element.BaseElement.Name = StripSpaces(content)
 		case types.ElementTypeClassExtends, types.ElementTypeClassImplements, types.ElementTypeEnumImplements:
 			// 枚举的多继承、类的单继承、类的多实现
-			typs := parseTypeList(&cap.Node, rc.SourceFile.Content)
+			// TODO 这里可能存在多个类型，需要额外处理
+			typs := ParseSuperTypes(&cap.Node, rc.SourceFile.Content)
 			for _, typ := range typs {
 				parts := strings.Split(typ, types.Dot)
 				// owner 可能是包名，也可能是嵌套类的上层类调用
-				owner := strings.Join(parts[:len(parts)-1], types.Dot)
-				parent := parts[len(parts)-1]
+				owner := StripSpaces(strings.Join(parts[:len(parts)-1], types.Dot))
+				parent := StripSpaces(parts[len(parts)-1])
 				if owner != types.EmptyString {
 					imports = append(imports, &Import{
 						BaseElement: &BaseElement{
@@ -192,7 +194,7 @@ func (j *JavaResolver) resolveVariable(ctx context.Context, element *Variable, r
 			// 处理 int a=10,b,c=0的情况，a,b,c分别对应一个cap
 			elem := &Variable{
 				BaseElement: &BaseElement{
-					Name:  content, // 暂时用于填充字段
+					Name:  StripSpaces(content), // 暂时用于填充字段
 					Path:  element.BaseElement.Path,
 					Type:  types.ElementTypeVariable,
 					Scope: types.ScopeClass,
@@ -213,25 +215,16 @@ func (j *JavaResolver) resolveVariable(ctx context.Context, element *Variable, r
 			elems = append(elems, elem)
 		case types.ElementTypeLocalVariableName, types.ElementTypeFieldName, types.ElementTypeEnumConstantName:
 			// 用于处理这种 String managerName = "DefaultManager", managerVersion
-			elems[len(elems)-1].BaseElement.Name = content
+			elems[len(elems)-1].BaseElement.Name = StripSpaces(content)
 		case types.ElementTypeLocalVariableType, types.ElementTypeFieldType:
 			// 左侧的类型声明
-			//1. 标准类型 设置为primitive_type
-			//2. 用户自定义或其他包里面的类型 设置为对应的类型
-			typs := parseLocalVariableType(&cap.Node, rc.SourceFile.Content)
-			// 筛选出用户自定义的类型
-			// typs = types.FilterCustomTypes(typs)
+			typs := findAllTypes(&cap.Node, rc.SourceFile.Content)
 			elems[len(elems)-1].VariableType = typs
 			for _, typ := range typs {
-				if typ == types.PrimitiveType {
-					continue
-				}
 				// 得到owner，用点进行分割，取最后一个
 				parts := strings.Split(typ, types.Dot)
-				owner := strings.Join(parts[:len(parts)-1], types.Dot)
-				realTyp := parts[len(parts)-1]
-				// 自定义类型走引用
-				refs = append(refs, NewReference(element, &cap.Node, realTyp, owner))
+				owner := StripSpaces(strings.Join(parts[:len(parts)-1], types.Dot))
+				realTyp := StripSpaces(parts[len(parts)-1])
 				if owner != types.EmptyString {
 					// 包名抛一个import
 					imports = append(imports, &Import{
@@ -244,6 +237,9 @@ func (j *JavaResolver) resolveVariable(ctx context.Context, element *Variable, r
 						},
 					})
 				}
+				// 自定义类型走引用
+				refs = append(refs, NewReference(element, &cap.Node, realTyp, owner))
+
 			}
 		}
 	}
@@ -274,17 +270,17 @@ func (j *JavaResolver) resolveInterface(ctx context.Context, element *Interface,
 		content := cap.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(captureName) {
 		case types.ElementTypeInterfaceName:
-			element.BaseElement.Name = content
+			element.BaseElement.Name = StripSpaces(content)
 		case types.ElementTypeInterfaceModifiers:
 			modifier = getElementModifier(content)
 		case types.ElementTypeInterfaceExtends:
-			typs := parseTypeList(&cap.Node, rc.SourceFile.Content)
-
+			// TODO 这里可能存在多个类型，需要额外处理
+			typs := ParseSuperTypes(&cap.Node, rc.SourceFile.Content)
 			for _, typ := range typs {
 				parts := strings.Split(typ, types.Dot)
 				// owner 可能是包名，也可能是嵌套类的上层类调用
-				owner := strings.Join(parts[:len(parts)-1], types.Dot)
-				parent := parts[len(parts)-1]
+				owner := StripSpaces(strings.Join(parts[:len(parts)-1], types.Dot))
+				parent := StripSpaces(parts[len(parts)-1])
 				if owner != types.EmptyString {
 					imports = append(imports, &Import{
 						BaseElement: &BaseElement{
@@ -296,7 +292,6 @@ func (j *JavaResolver) resolveInterface(ctx context.Context, element *Interface,
 						},
 					})
 				}
-
 				element.SuperInterfaces = append(element.SuperInterfaces, parent)
 				refs = append(refs, NewReference(element, &cap.Node, parent, owner))
 			}
@@ -315,7 +310,6 @@ func (j *JavaResolver) resolveInterface(ctx context.Context, element *Interface,
 }
 
 func (j *JavaResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
-
 	rootCap := rc.Match.Captures[0]
 	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
 	var refs []*Reference
@@ -328,15 +322,14 @@ func (j *JavaResolver) resolveCall(ctx context.Context, element *Call, rc *Resol
 		content := cap.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(captureName) {
 		case types.ElementTypeCallName:
-			element.BaseElement.Name = content
+			element.BaseElement.Name = StripSpaces(content)
 		case types.ElementTypeClassLiteralType, types.ElementTypeCastExpressionType, types.ElementTypeInstanceofExpressionType,
 			types.ElementTypeArrayCreationType, types.ElementTypeNewExpressionType:
 			typs := findAllTypes(&cap.Node, rc.SourceFile.Content)
-			// 不一定都是type_identifier，也可能是全是基础类型
 			for i, typ := range typs {
 				parts := strings.Split(typ, types.Dot)
-				owner := strings.Join(parts[:len(parts)-1], types.Dot)
-				realTyp := parts[len(parts)-1]
+				owner := StripSpaces(strings.Join(parts[:len(parts)-1], types.Dot))
+				realTyp := StripSpaces(parts[len(parts)-1])
 				if owner != types.EmptyString {
 					imports = append(imports, &Import{
 						BaseElement: &BaseElement{
@@ -349,20 +342,22 @@ func (j *JavaResolver) resolveCall(ctx context.Context, element *Call, rc *Resol
 					})
 				}
 				if i == 0 {
+					// 第一个类型作为这个调用的name
 					element.BaseElement.Name = realTyp
 					element.Owner = owner
 					continue
 				}
+				// 同时剩余的类型都要走引用
 				refs = append(refs, NewReference(element, &cap.Node, realTyp, owner))
 			}
 		case types.ElementTypeCallArguments, types.ElementTypeNewExpressionArgs:
-			params := parseParameters(content)
+			params := ParseArgumentList(&cap.Node, rc.SourceFile.Content)
 			// 只有数量可以用于匹配
 			for _, param := range params {
 				element.Parameters = append(element.Parameters, &param)
 			}
 		case types.ElementTypeCallOwner:
-			element.Owner = content
+			element.Owner = StripSpaces(content)
 		}
 	}
 	element.BaseElement.Scope = types.ScopeFunction
@@ -377,72 +372,28 @@ func (j *JavaResolver) resolveCall(ctx context.Context, element *Call, rc *Resol
 	return elements, nil
 }
 
-func parseParameters(content string) []Parameter {
-	// 参数格式 (int a, Function<String, Integer> func, Runnable r, List<String[]> arrs,int... nums)
-	var params []Parameter
-	// 容错处理：如果没有左括号，尝试从开头解析
-	start := 0
-	if len(content) > 0 && content[0] == '(' {
-		// 去掉第一个(
-		start = 1
+// ParseArgumentList 解析java方法调用中的参数列表
+func ParseArgumentList(node *sitter.Node, content []byte) []Parameter {
+	if node == nil {
+		return nil
 	}
-	level := 0
-	for i, c := range content {
-		switch c {
-		case '<':
-			level++
-		case '>':
-			level--
-		case ',':
-			if level == 0 {
-				paramStr := strings.TrimSpace(content[start:i])
-				if paramStr != "" {
-					params = append(params, parseSingleParameter(paramStr))
-				}
-				start = i + 1
-			}
-		}
+	if types.ToNodeKind(node.Kind()) != types.NodeKindArgumentList {
+		return nil
 	}
-	// 最后一个参数
-	if start < len(content) {
-		// 预防没有右括号的情况
-		end := len(content)
-		if end > 0 && content[end-1] == ')' {
-			end = end - 1
+	params := []Parameter{}
+	for i := uint(0); i < node.NamedChildCount(); i++ {
+		child := node.NamedChild(i)
+		if child == nil {
+			continue
 		}
-		paramStr := strings.TrimSpace(content[start:end])
-		if paramStr != "" {
-			params = append(params, parseSingleParameter(paramStr))
-		}
+		// 参数类型没有用
+		params = append(params, Parameter{
+			Name: child.Utf8Text(content),
+			Type: []string{types.PrimitiveType},
+		})
 	}
 	return params
 }
-
-func parseSingleParameter(paramStr string) Parameter {
-	// 过滤修饰符在CleanParam里面做完了
-	// 拆分类型和名称
-	// 解析如下三种参数格式，提取类型和名称，忽略默认值：
-	// 1. std::vector<int>& scores      => 类型: std::vector<int>&, 名称: scores
-	// 2. int rank = 1                  => 类型: int, 名称: rank
-	// 3. double bonus = 0.0            => 类型: double, 名称: bonus
-	// 实现：先去除=及其后面的默认值，再用空格分割，最后一个为名称，其余为类型
-	if idx := strings.Index(paramStr, "="); idx != -1 {
-		paramStr = paramStr[:idx]
-	}
-	paramStr = strings.TrimSpace(paramStr)
-	parts := strings.Fields(paramStr)
-	if len(parts) < 2 {
-		// 省略了type的情况
-		return Parameter{Name: paramStr, Type: []string{types.PrimitiveType}}
-	}
-	name := parts[len(parts)-1]
-	typ := strings.Join(parts[:len(parts)-1], " ")
-	return Parameter{
-		Name: strings.TrimSpace(name),
-		Type: []string{strings.TrimSpace(typ)},
-	}
-}
-
 // getScopeFromModifiers 根据Java访问修饰符确定作用域
 // 参数：
 //   - modifiers: 包含修饰符的字符串，可能包含多个修饰符如 "public static final"
@@ -488,113 +439,6 @@ func getScopeFromModifiers(modifiers string, kind types.NodeKind) types.Scope {
 	}
 }
 
-// parseLocalVariableType 解析局部变量类型
-// 参数：
-//   - node: 节点
-//   - content: 内容
-//
-// 返回：
-//   - 类型名切片
-func parseLocalVariableType(node *sitter.Node, content []byte) []string {
-
-	// 从顶部判断是不是基础数据类型
-	parentKind := node.Kind()
-	switch types.ToNodeKind(parentKind) {
-	// ---------------------------java返回值类型解析--------------------------------
-	case types.NodeKindIntegralType:
-		// 接收 int long short byte char
-		return []string{types.PrimitiveType}
-	case types.NodeKindFloatingPointType:
-		// 接收 float double
-		return []string{types.PrimitiveType}
-	case types.NodeKindBooleanType:
-		// 接收 boolean
-		return []string{types.PrimitiveType}
-	case types.NodeKindTypeIdentifier, types.NodeKindScopedTypeIdentifier:
-		// 接收类名
-		return []string{node.Utf8Text(content)}
-	case types.NodeKindArrayType:
-		// 解析数组类型
-		// type: array_type [26, 4] - [26, 10]
-		//   element: integral_type [26, 4] - [26, 8]
-		//   dimensions: dimensions [26, 8] - [26, 10]
-		// 递归处理element
-		if node.ChildCount() > 0 {
-			return parseLocalVariableType(node.Child(0), content)
-		}
-		return []string{types.PrimitiveType}
-
-	case types.NodeKindGenericType:
-		// 解析泛型类型
-		// Map<String, Person>
-		// type: generic_type [18, 4] - [18, 24]
-		//   type_identifier [18, 4] - [18, 7] Map
-		//   type_arguments [18, 7] - [18, 24]
-		//     type_identifier [18, 8] - [18, 14] String
-		//     type_identifier [18, 16] - [18, 23] Person
-		//
-		return parseGenericType(node, content)
-
-	// ---------------------------c/cpp返回值类型解析--------------------------------
-	case types.NodeKindPrimitiveType:
-		// c/cpp的基础类型都由这个接收
-		return []string{types.PrimitiveType}
-
-	default:
-		// 可能有漏的情况，先返回primitive_type
-		return []string{types.PrimitiveType}
-	}
-
-}
-
-// parseGenericType 递归解析泛型类型节点，返回如 "Map<String, Person>" 这样的字符串
-//
-// 支持的情况示例：
-// 1. 单层泛型：List<String>、Map<Integer, String>
-// 2. 嵌套泛型：Map<String, List<Person>>、List<Map<String, Integer>>
-// 3. 通配符泛型：List<?>、List<? extends Person>、List<? super Number>
-// 4. 复杂嵌套与通配符：Map<String, List<? extends Person>>
-//
-// 例如：
-//
-//	Map<String, Person>         -> ["Map", "String", "Person"]
-//	List<Person>                -> ["List", "Person"]
-//	Map<String, List<Person>>   -> ["Map", "String", "List", "Person"]
-//	List<? extends Person>      -> ["List", "Person"]
-//	List<?>                     -> ["List"]
-
-// parseGenericType 递归提取泛型类型节点中出现的所有类型名（不去重，顺序不保证）
-// 例如：Map<String, List<Person>> -> ["Map", "String", "List", "Person"]
-func parseGenericType(node *sitter.Node, content []byte) []string {
-	// List<? extends Number> numbers = new ArrayList<>();
-	// type: generic_type [19, 4] - [19, 26]
-	//       type_identifier [19, 4] - [19, 8]
-	//       type_arguments [19, 8] - [19, 26]
-	//         wildcard [19, 9] - [19, 25]
-	//           type_identifier [19, 19] - [19, 25]
-	var result []string
-	var walk func(n *sitter.Node)
-	walk = func(n *sitter.Node) {
-		for i := uint(0); i < n.NamedChildCount(); i++ {
-			child := n.NamedChild(i)
-			kind := types.ToNodeKind(child.Kind())
-			switch kind {
-			case types.NodeKindTypeIdentifier:
-				typeName := child.Utf8Text(content)
-				result = append(result, typeName)
-			case types.NodeKindScopedTypeIdentifier:
-				// 只会解析出来一个superType
-				result = append(result, child.Utf8Text(content))
-			case types.NodeKindGenericType, types.NodeKindTypeArguments, types.NodeKindWildcard, types.NodeKindArrayType:
-				walk(child)
-			}
-		}
-	}
-	walk(node)
-
-	return result
-}
-
 // findMethodOwner 通过遍历语法树找到方法的拥有者（类或接口），返回拥有者的节点
 func findMethodOwner(node *sitter.Node) *sitter.Node {
 	if node == nil {
@@ -623,7 +467,7 @@ func findMethodOwner(node *sitter.Node) *sitter.Node {
 	return nil
 }
 
-// extractNodeName 从类/接口/枚举声明节点中提取名称
+// extractNodeName 从类/接口/枚举的声明节点中提取名称
 func extractNodeName(node *sitter.Node, content []byte) string {
 	for i := uint(0); i < node.ChildCount(); i++ {
 		child := node.Child(i)
@@ -647,113 +491,12 @@ func getElementModifier(content string) string {
 	return types.EmptyString
 }
 
-// 提取参数字符串中所有类型名，去除泛型、数组、可变参数等修饰，按出现顺序输出
-func ExtractParameters(paramStr string) []Parameter {
-	// 解析参数，只会返回 List<String[]> arrs，不会将类型拆开
-	params := parseParameters(paramStr)
-	var results []Parameter
 
-	for _, param := range params {
-		typs := extractTypeNames(param.Type[0])
-		results = append(results, Parameter{
-			Name: param.Name,
-			Type: typs,
-		})
-	}
-	return results
-}
-
-func getFilteredTypes(typ string) []string {
-	typ = CleanParam(typ)
-	typeNames := extractTypeNames(typ)
-	return types.FilterCustomTypes(typeNames)
-}
-
-// 提取参数字符串并过滤类型
-func getFilteredParameters(paramStr string) []Parameter {
-	// 删除一些影响解析的修饰符
-	paramStr = CleanParam(paramStr)
-	// 提取参数
-	params := ExtractParameters(paramStr)
-	for i, param := range params {
-		params[i].Type = types.FilterCustomTypes(param.Type)
-	}
-	return params
-}
-
-// 递归提取类型字符串中的所有类型名
-func extractTypeNames(typeStr string) []string {
-	var res []string
-	typeStr = strings.TrimSpace(typeStr)
-	// 去除可变参数
-	typeStr = strings.TrimSuffix(typeStr, "...")
-	// 去除数组
-	for strings.HasSuffix(typeStr, "[]") {
-		typeStr = strings.TrimSuffix(typeStr, "[]")
-		typeStr = strings.TrimSpace(typeStr)
-	}
-	// 处理泛型
-	lt := strings.Index(typeStr, "<")
-	if lt != -1 {
-		base := strings.TrimSpace(typeStr[:lt])
-		if base != "" {
-			res = append(res, base)
-		}
-		gt := strings.LastIndex(typeStr, ">")
-		if gt != -1 && gt > lt {
-			inner := typeStr[lt+1 : gt]
-			// 递归处理泛型参数，支持多层嵌套
-			innerTypes := splitGenericTypes(inner)
-			for _, t := range innerTypes {
-				res = append(res, extractTypeNames(t)...)
-			}
-		}
-	} else {
-		// 没有泛型，直接加
-		if typeStr != "" {
-			res = append(res, typeStr)
-		}
-	}
-	return res
-}
-
-// 拆分泛型参数，支持嵌套
-func splitGenericTypes(s string) []string {
-	var res []string
-	level := 0
-	start := 0
-	for i, c := range s {
-		switch c {
-		case '<':
-			level++
-		case '>':
-			level--
-		case ',':
-			if level == 0 {
-				part := strings.TrimSpace(s[start:i])
-				if part != "" {
-					res = append(res, part)
-				}
-				start = i + 1
-			}
-		}
-	}
-	// 最后一个
-	if start < len(s) {
-		part := strings.TrimSpace(s[start:])
-		if part != "" {
-			res = append(res, part)
-		}
-	}
-	return res
-}
-
-// 用于搜索类型里面所有的单个类型
+// 用于搜索类型里面所有的单个类型，自动过滤了基础数据类型
 func findAllTypes(node *sitter.Node, content []byte) []string {
 	if node == nil {
 		return nil
 	}
-
 	kind := types.ToNodeKind(node.Kind())
 	if kind == types.NodeKindTypeIdentifier || kind == types.NodeKindScopedTypeIdentifier {
 		return []string{node.Utf8Text(content)}
@@ -762,8 +505,127 @@ func findAllTypes(node *sitter.Node, content []byte) []string {
 	var typs []string
 	for i := uint(0); i < node.NamedChildCount(); i++ {
 		child := node.NamedChild(i)
+		if child == nil || child.IsMissing() || child.IsError() {
+			continue
+		}
 		childTypes := findAllTypes(child, content)
 		typs = append(typs, childTypes...)
 	}
 	return typs
+}
+
+// 用于搜索类型里面第一个单类型，自动过滤了基础数据类型
+func findFirstType(node *sitter.Node, content []byte) string {
+	if node == nil {
+		return types.EmptyString
+	}
+	kind := types.ToNodeKind(node.Kind())
+	if kind == types.NodeKindTypeIdentifier || kind == types.NodeKindScopedTypeIdentifier {
+		return node.Utf8Text(content)
+	}
+
+	for i := uint(0); i < node.NamedChildCount(); i++ {
+		child := node.NamedChild(i)
+		if child == nil || child.IsMissing() || child.IsError() {
+			continue
+		}
+		childType := findFirstType(child, content)
+		if childType != types.EmptyString {
+			return childType
+		}
+	}
+	return types.EmptyString
+}
+
+// 解析java语法中的type_list类型，返回类型列表
+func parseTypeList(node *sitter.Node, content []byte) []string {
+	if node == nil {
+		return nil
+	}
+	if types.ToNodeKind(node.Kind()) != types.NodeKindTypeList {
+		return []string{node.Utf8Text(content)}
+	}
+	typs := []string{}
+	for i := uint(0); i < node.NamedChildCount(); i++ {
+		child := node.NamedChild(i)
+		if child == nil || child.IsMissing() || child.IsError() {
+			continue
+		}
+		switch types.ToNodeKind(child.Kind()) {
+		case types.NodeKindScopedTypeIdentifier:
+			typs = append(typs, child.Utf8Text(content))
+		case types.NodeKindTypeIdentifier:
+			typs = append(typs, child.Utf8Text(content))
+		default:
+			typ := findFirstType(child, content)
+			if typ != types.EmptyString {
+				typs = append(typs, typ)
+			}
+		}
+	}
+	return typs
+}
+
+// 解析java中的父类和接口，返回类型列表，并非所有类型，只返回第一个类型
+func ParseSuperTypes(node *sitter.Node, content []byte) []string {
+	if node == nil {
+		return nil
+	}
+	typs := []string{}
+	switch types.ToNodeKind(node.Kind()) {
+	case types.NodeKindScopedTypeIdentifier:
+		typs = append(typs, node.Utf8Text(content))
+	case types.NodeKindTypeIdentifier:
+		typs = append(typs, node.Utf8Text(content))
+	case types.NodeKindAnnotatedType, types.NodeKindGenericType:
+		typ := findFirstType(node, content)
+		if typ != types.EmptyString {
+			typs = append(typs, typ)
+		}
+	case types.NodeKindTypeList:
+		// 多继承、多实现的情况
+		typs = append(typs, parseTypeList(node, content)...)
+	}
+	return typs
+}
+
+// 解析java方法中的参数列表里面的所有类型
+func ParseParameterList(node *sitter.Node, content []byte) []Parameter {
+	if node == nil || types.ToNodeKind(node.Kind()) != types.NodeKindFormalParameters {
+		return nil
+	}
+	params := []Parameter{}
+	for i := uint(0); i < node.NamedChildCount(); i++ {
+		child := node.NamedChild(i)
+		param, err := parseParameter(child, content)
+		if err != nil {
+			continue
+		}
+		params = append(params, param)
+	}
+	return params
+}
+
+// 解析java方法中单个参数类型里面的所有类型
+func parseParameter(node *sitter.Node, content []byte) (Parameter, error) {
+	if node == nil || types.ToNodeKind(node.Kind()) != types.NodeKindFormalParameter {
+		// 一定要校验，否则会panic，可能会接收注释
+		return Parameter{}, fmt.Errorf("node is nil or not a formal parameter")
+	}
+	typs := []string{}
+	typChild := node.ChildByFieldName("type")
+	if typChild != nil {
+		typs = append(typs, findAllTypes(typChild, content)...)
+	} else {
+		typs = []string{types.PrimitiveType}
+	}
+	nameChild := node.ChildByFieldName("name")
+	if nameChild != nil {
+		name := nameChild.Utf8Text(content)
+		return Parameter{
+			Name: name,
+			Type: typs,
+		}, nil
+	}
+	return Parameter{}, fmt.Errorf("name is nil")
 }

@@ -107,8 +107,9 @@ func CleanParam(param string) string {
 	// 6. super/extends
 	param = superRegex.ReplaceAllString(param, "")
 
-	// 7. 清理问号
-	param = questionRegex.ReplaceAllString(param, "")
+	// 7. 清理问号（java的<?>）
+	reQuestion := regexp.MustCompile(`\?`)
+	param = reQuestion.ReplaceAllString(param, "")
 
 	// 8. 去除这种情况 struct TempPoint {
 	// int tx, ty;
@@ -161,72 +162,6 @@ func NewReference(rootElement Element, curNode *sitter.Node, name string, owner 
 	}
 }
 
-// 解析java语法中的type_list类型，返回类型列表
-func parseTypeList(node *sitter.Node, content []byte) []string {
-	if node == nil {
-		return nil
-	}
-	if types.ToNodeKind(node.Kind()) != types.NodeKindTypeList {
-		return []string{node.Utf8Text(content)}
-	}
-	typs := []string{}
-	for i := uint(0); i < node.NamedChildCount(); i++ {
-		child := node.NamedChild(i)
-		if child == nil || child.Kind() == types.Comma {
-			continue
-		}
-		switch types.ToNodeKind(child.Kind()) {
-		case types.NodeKindScopedTypeIdentifier:
-			typs = append(typs, child.Utf8Text(content))
-		case types.NodeKindTypeIdentifier:
-			typs = append(typs, child.Utf8Text(content))
-		case types.NodeKindGenericType:
-			typs = append(typs, parseGenericType(child, content)...)
-		}
-
-	}
-	return typs
-}
-
-// 处理cpp语法中的base_class_clause类型，返回类型列表
-func parseBaseClassClause(node *sitter.Node, content []byte) []string {
-	if node == nil {
-		return nil
-	}
-
-	// 如果不是base_class_clause节点，直接返回节点内容
-	if types.ToNodeKind(node.Kind()) != types.NodeKindBaseClassClause {
-		return []string{node.Utf8Text(content)}
-	}
-
-	typs := []string{}
-
-	// 从后往前遍历所有子节点
-	for i := int(node.NamedChildCount()) - 1; i >= 0; i-- {
-		child := node.NamedChild(uint(i))
-		if child == nil || child.Kind() == types.Comma || child.Kind() == types.Colon {
-			continue
-		}
-
-		// 处理类型节点
-		var baseClasses []string
-
-		if types.ToNodeKind(child.Kind()) == types.NodeKindTypeIdentifier {
-			// 直接是type_identifier
-			baseClasses = []string{child.Utf8Text(content)}
-		} else {
-			// 不是type_identifier，递归查找所有的type_identifier
-			baseClasses = findAllTypeIdentifiers(child, content)
-		}
-
-		// 如果找到了类型标识符，添加到结果中
-		if len(baseClasses) > 0 {
-			typs = append(typs, baseClasses...)
-		}
-	}
-
-	return typs
-}
 func removeDuplicates(slice []string) []string {
 	seen := make(map[string]struct{})
 	var result []string
@@ -258,7 +193,7 @@ func findAllIdentifiers(node *sitter.Node, content []byte) []string {
 			}
 			switch types.ToNodeKind(child.Kind()) {
 			case types.NodeKindIdentifier:
-				identifiers = append(identifiers, child.Utf8Text(content))
+				identifiers = append(identifiers, StripSpaces(child.Utf8Text(content)))
 			default:
 				// 递归查找类型中的标识符
 				walk(child)
@@ -267,6 +202,36 @@ func findAllIdentifiers(node *sitter.Node, content []byte) []string {
 	}
 	walk(node)
 	return identifiers
+}
+
+func findFirstIdentifier(node *sitter.Node, content []byte) string {
+	if node == nil {
+		return types.EmptyString
+	}
+	var identifier string
+	var walk func(n *sitter.Node)
+	walk = func(n *sitter.Node) {
+		if types.ToNodeKind(n.Kind()) == types.NodeKindIdentifier {
+			identifier = StripSpaces(n.Utf8Text(content))
+			return
+		}
+		for i := uint(0); i < n.NamedChildCount(); i++ {
+			child := n.NamedChild(i)
+			if child.IsMissing() || child.IsError() {
+				continue
+			}
+			switch types.ToNodeKind(child.Kind()) {
+			case types.NodeKindIdentifier:
+				identifier = StripSpaces(child.Utf8Text(content))
+				return 
+			default:
+				// 递归查找类型中的标识符
+				walk(child)
+			}
+		}
+	}
+	walk(node)
+	return identifier
 }
 
 func findAllTypeIdentifiers(node *sitter.Node, content []byte) []string {
@@ -334,4 +299,8 @@ func FilterValidElems(elems []Element, logger logger.Logger) []Element {
 		}
 	}
 	return validElems
+}
+
+func StripSpaces(s string) string {
+	return strings.TrimSpace(s)
 }

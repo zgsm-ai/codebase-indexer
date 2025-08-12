@@ -105,21 +105,7 @@
 
 
 
-;; Dataclass definitions
-(decorated_definition
-  (decorator
-    (expression (identifier) @decorator)
-    (#eq? @decorator "dataclass"))
-  definition: (class_definition
-                name: (identifier) @definition.dataclass.name)) @definition.dataclass
 
-;; Protocol definitions
-(class_definition
-  name: (identifier) @definition.protocol.name
-  superclasses: (argument_list
-                  (identifier) @base
-                  (#eq? @base "Protocol"))
-  ) @definition.protocol
 
 
 
