@@ -2,7 +2,6 @@ package job
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"codebase-indexer/internal/config"
@@ -14,24 +13,26 @@ import (
 
 // EventProcessorJob 事件处理任务
 type EventProcessorJob struct {
+	httpSync  repository.SyncInterface
 	embedding service.EmbeddingProcessService
 	codegraph service.CodegraphProcessService
 	storage   repository.StorageInterface
 	logger    logger.Logger
 	ctx       context.Context
 	cancel    context.CancelFunc
-	wg        sync.WaitGroup
 }
 
 // NewEventProcessorJob 创建事件处理任务
 func NewEventProcessorJob(
 	logger logger.Logger,
+	httpSync repository.SyncInterface,
 	embedding service.EmbeddingProcessService,
 	codegraph service.CodegraphProcessService,
 	storage repository.StorageInterface,
 ) *EventProcessorJob {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &EventProcessorJob{
+		httpSync:  httpSync,
 		embedding: embedding,
 		codegraph: codegraph,
 		storage:   storage,
@@ -42,40 +43,42 @@ func NewEventProcessorJob(
 }
 
 // Start 启动事件处理任务
-func (j *EventProcessorJob) Start() {
+func (j *EventProcessorJob) Start(ctx context.Context) {
 	j.logger.Info("starting event processor job")
 
 	// 立即执行一次事件处理
-	j.embeddingProcessWorkspaces()
+	if j.httpSync.GetSyncConfig() != nil {
+		j.embeddingProcessWorkspaces(ctx)
+	}
 
-	j.wg.Add(1)
 	go func() {
-		defer j.wg.Done()
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
 
 		for {
 			select {
-			case <-j.ctx.Done():
-				j.logger.Info("event embedding job stopped")
+			case <-ctx.Done():
+				j.logger.Info("event processor task stopped")
 				return
 			case <-ticker.C:
+				if j.httpSync.GetSyncConfig() == nil {
+					j.logger.Warn("sync config is nil, skipping embedding process")
+					continue
+				}
 				// 处理事件
-				j.embeddingProcessWorkspaces()
+				j.embeddingProcessWorkspaces(ctx)
 			}
 		}
 	}()
 
-	j.wg.Add(1)
 	go func() {
-		defer j.wg.Done()
-
 		for {
 			select {
-			case <-j.ctx.Done():
+			case <-ctx.Done():
+				j.logger.Info("event processor task stopped")
 				return
 			default:
-				err := j.codegraphProcessWorkSpaces()
+				err := j.codegraphProcessWorkSpaces(ctx)
 				if err != nil {
 					j.logger.Error("failed to process codegraph events: %v", err)
 				}
@@ -90,14 +93,13 @@ func (j *EventProcessorJob) Start() {
 func (j *EventProcessorJob) Stop() {
 	j.logger.Info("stopping event processor job...")
 	j.cancel()
-	j.wg.Wait()
 	j.logger.Info("event processor job stopped")
 }
 
-func (j *EventProcessorJob) embeddingProcessWorkspaces() {
+func (j *EventProcessorJob) embeddingProcessWorkspaces(ctx context.Context) {
 	// 检查上下文是否已取消
 	select {
-	case <-j.ctx.Done():
+	case <-ctx.Done():
 		j.logger.Info("context cancelled, skipping embedding process")
 		return
 	default:
@@ -135,7 +137,7 @@ func (j *EventProcessorJob) embeddingProcessWorkspaces() {
 
 	// 在处理事件前再次检查上下文是否已取消
 	select {
-	case <-j.ctx.Done():
+	case <-ctx.Done():
 		j.logger.Info("context cancelled, skipping embedding process")
 		return
 	default:
@@ -148,10 +150,10 @@ func (j *EventProcessorJob) embeddingProcessWorkspaces() {
 	}
 }
 
-func (j *EventProcessorJob) codegraphProcessWorkSpaces() error {
+func (j *EventProcessorJob) codegraphProcessWorkSpaces(ctx context.Context) error {
 	// 检查上下文是否已取消
 	select {
-	case <-j.ctx.Done():
+	case <-ctx.Done():
 		j.logger.Info("context cancelled, skipping codegraph events processing")
 		return j.ctx.Err()
 	default:

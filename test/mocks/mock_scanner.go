@@ -41,6 +41,11 @@ func (m *MockScanner) LoadFolderIgnoreRules(codebasePath string) *gitignore.GitI
 	return args.Get(0).(*gitignore.GitIgnore)
 }
 
+func (m *MockScanner) LoadIncludeFiles() []string {
+	args := m.Called()
+	return args.Get(0).([]string)
+}
+
 func (m *MockScanner) ScanCodebase(codebasePath string) (map[string]string, error) {
 	args := m.Called(codebasePath)
 	if args.Get(0) != nil {
@@ -68,6 +73,11 @@ func (m *MockScanner) ScanDirectory(codebasePath, dirPath string) (map[string]st
 func (m *MockScanner) ScanFile(codebasePath, filePath string) (string, error) {
 	args := m.Called(codebasePath, filePath)
 	return args.String(0), args.Error(1)
+}
+
+func (m *MockScanner) IsIgnoreFile(codebasePath, filePath string) (bool, error) {
+	args := m.Called(codebasePath, filePath)
+	return args.Bool(0), args.Error(1)
 }
 
 func (m *MockScanner) CalculateFileChanges(local, remote map[string]string) []*utils.FileStatus {

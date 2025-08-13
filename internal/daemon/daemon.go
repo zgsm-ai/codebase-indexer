@@ -121,13 +121,25 @@ func (d *Daemon) Start() {
 	}()
 
 	// 启动文件扫描任务（5分钟间隔）
-	d.startFileScannerTask()
+	d.wg.Add(1)
+	go func() {
+		defer d.wg.Done()
+		d.startFileScannerTask()
+	}()
 
 	// 启动事件处理协程任务
-	d.startEventProcessorTask()
+	d.wg.Add(1)
+	go func() {
+		defer d.wg.Done()
+		d.startEventProcessorTask()
+	}()
 
 	// 启动状态检查任务（3秒间隔）
-	d.startStatusCheckerTask()
+	d.wg.Add(1)
+	go func() {
+		defer d.wg.Done()
+		d.startStatusCheckerTask()
+	}()
 }
 
 // updateConfig updates client configuration
@@ -261,25 +273,6 @@ func (d *Daemon) fetchServerHashTree() {
 func (d *Daemon) Stop() {
 	d.logger.Info("stopping daemon process...")
 	d.cancel()
-
-	// 停止文件扫描任务
-	if d.scannerJob != nil {
-		d.scannerJob.Stop()
-		d.logger.Info("file scanner task stopped")
-	}
-
-	// 停止事件处理协程任务
-	if d.eventProcessorJob != nil {
-		d.eventProcessorJob.Stop()
-		d.logger.Info("event processor task stopped")
-	}
-
-	// 停止状态检查任务
-	if d.statusCheckerJob != nil {
-		d.statusCheckerJob.Stop()
-		d.logger.Info("status checker task stopped")
-	}
-
 	utils.CleanUploadTmpDir()
 	d.logger.Info("temp directory cleaned up")
 	d.wg.Wait()
@@ -293,17 +286,17 @@ func (d *Daemon) Stop() {
 // startFileScannerTask 启动文件扫描任务
 func (d *Daemon) startFileScannerTask() {
 	d.logger.Info("starting file scanner task...")
-	d.scannerJob.Start()
+	d.scannerJob.Start(d.ctx)
 }
 
 // startEventProcessorTask 启动事件处理协程任务
 func (d *Daemon) startEventProcessorTask() {
 	d.logger.Info("starting event processor task...")
-	d.eventProcessorJob.Start()
+	d.eventProcessorJob.Start(d.ctx)
 }
 
 // startStatusCheckerTask 启动状态检查任务
 func (d *Daemon) startStatusCheckerTask() {
 	d.logger.Info("starting status checker task...")
-	d.statusCheckerJob.Start()
+	d.statusCheckerJob.Start(d.ctx)
 }

@@ -449,6 +449,7 @@ func (h *ExtensionHandler) TriggerIndex(c *gin.Context) {
 			Message: "invalid index type",
 			Data:    0,
 		})
+		return
 	}
 
 	// 检查workspace路径文件是否存在
@@ -460,6 +461,7 @@ func (h *ExtensionHandler) TriggerIndex(c *gin.Context) {
 			Message: "workspace path does not exist",
 			Data:    0,
 		})
+		return
 	}
 
 	h.logger.Info("index build trigger request: Workspace=%s, Type=%s", req.Workspace, req.Type)

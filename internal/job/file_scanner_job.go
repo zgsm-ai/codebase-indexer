@@ -3,7 +3,6 @@ package job
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"codebase-indexer/internal/config"
@@ -18,17 +17,18 @@ import (
 type FileScanJob struct {
 	scanner  service.FileScanService
 	storage  repository.StorageInterface
+	httpSync repository.SyncInterface
 	logger   logger.Logger
 	interval time.Duration
 	ctx      context.Context
 	cancel   context.CancelFunc
-	wg       sync.WaitGroup
 }
 
 // NewFileScanJob 创建文件扫描任务
 func NewFileScanJob(
 	scanner service.FileScanService,
 	storage repository.StorageInterface,
+	httpSync repository.SyncInterface,
 	logger logger.Logger,
 	interval time.Duration,
 ) *FileScanJob {
@@ -36,6 +36,7 @@ func NewFileScanJob(
 	return &FileScanJob{
 		scanner:  scanner,
 		storage:  storage,
+		httpSync: httpSync,
 		logger:   logger,
 		interval: interval,
 		ctx:      ctx,
@@ -44,24 +45,29 @@ func NewFileScanJob(
 }
 
 // Start 启动文件扫描任务
-func (j *FileScanJob) Start() {
+func (j *FileScanJob) Start(ctx context.Context) {
 	j.logger.Info("starting file scan job with interval: %v", j.interval)
 
 	// 立即执行一次扫描
-	j.scanWorkspaces()
+	if j.interval > 0 && j.httpSync.GetSyncConfig() != nil {
+		j.scanWorkspaces(ctx)
+	}
 
-	j.wg.Add(1)
 	go func() {
-		defer j.wg.Done()
 		ticker := time.NewTicker(j.interval)
 		defer ticker.Stop()
 
 		for {
 			select {
-			case <-j.ctx.Done():
+			case <-ctx.Done():
+				j.logger.Info("file scanner task stopped")
 				return
 			case <-ticker.C:
-				j.scanWorkspaces()
+				if j.httpSync.GetSyncConfig() == nil {
+					j.logger.Warn("sync config is nil, skip file scanner task")
+					continue
+				}
+				j.scanWorkspaces(ctx)
 			}
 		}
 	}()
@@ -71,15 +77,14 @@ func (j *FileScanJob) Start() {
 func (j *FileScanJob) Stop() {
 	j.logger.Info("stopping file scan job...")
 	j.cancel()
-	j.wg.Wait()
 	j.logger.Info("file scan job stopped")
 }
 
 // scanWorkspaces 扫描工作区
-func (j *FileScanJob) scanWorkspaces() {
+func (j *FileScanJob) scanWorkspaces(ctx context.Context) {
 	// 检查上下文是否已取消
 	select {
-	case <-j.ctx.Done():
+	case <-ctx.Done():
 		j.logger.Info("context cancelled, skipping workspace scan")
 		return
 	default:
@@ -113,7 +118,7 @@ func (j *FileScanJob) scanWorkspaces() {
 
 	// 检查上下文是否已取消
 	select {
-	case <-j.ctx.Done():
+	case <-ctx.Done():
 		j.logger.Info("context cancelled, skipping workspace scan")
 		return
 	default:

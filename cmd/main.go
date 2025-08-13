@@ -159,9 +159,9 @@ func main() {
 	codegraphProcessor := service.NewCodegraphProcessor(workspaceReader, indexer, workspaceRepo, eventRepo, appLogger)
 
 	// Initialize job layer
-	fileScanJob := job.NewFileScanJob(fileScanService, storageManager, appLogger, 5*time.Minute)
-	eventProcessorJob := job.NewEventProcessorJob(appLogger, embeddingProcessService, codegraphProcessor, storageManager)
-	statusCheckerJob := job.NewStatusCheckerJob(embeddingStatusService, storageManager, appLogger, 5*time.Second)
+	fileScanJob := job.NewFileScanJob(fileScanService, storageManager, syncRepo, appLogger, 5*time.Minute)
+	eventProcessorJob := job.NewEventProcessorJob(appLogger, syncRepo, embeddingProcessService, codegraphProcessor, storageManager)
+	statusCheckerJob := job.NewStatusCheckerJob(embeddingStatusService, storageManager, syncRepo, appLogger, 5*time.Second)
 
 	// Initialize handler layer
 	// grpcHandler := handler.NewGRPCHandler(syncRepo, scanRepo, storageManager, schedulerService, appLogger)

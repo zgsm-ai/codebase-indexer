@@ -229,11 +229,11 @@ func (ws *fileScanService) updateExistingEvent(existingEvent, newEvent *model.Ev
 		if newEvent.EventType == existingEvent.EventType {
 			return nil
 		}
-		ws.logger.Info("building event, create new event for path: %s, type: %s", existingEvent.SourceFilePath, newEvent.EventType)
+		ws.logger.Debug("building event, create new event for path: %s, type: %s", existingEvent.SourceFilePath, newEvent.EventType)
 		return ws.eventRepo.CreateEvent(newEvent)
 	}
 
-	ws.logger.Info("update existing event for path: %s, type: %s, embedding status: %s", existingEvent.SourceFilePath, newEvent.EventType, model.EmbeddingStatusInitStr)
+	ws.logger.Debug("update existing event for path: %s, type: %s, embedding status: %s", existingEvent.SourceFilePath, newEvent.EventType, model.EmbeddingStatusInitStr)
 	// 更新事件类型和其他必要信息
 	updateEvent := &model.Event{
 		ID:              existingEvent.ID,
