@@ -202,8 +202,8 @@ func TestCResolver_ResolveFunction(t *testing.T) {
 				// {Name: "func53", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "x", Type: []string{types.PrimitiveType}}}},
 
 				// 可变参数函数
-				{Name: "func54", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "count", Type: []string{types.PrimitiveType}},{Name: "...", Type: []string{types.PrimitiveType}}}},
-				{Name: "func55", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "format", Type: []string{types.PrimitiveType}},{Name: "...", Type: []string{types.PrimitiveType}}}},
+				{Name: "func54", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "count", Type: []string{types.PrimitiveType}}, {Name: "...", Type: []string{types.PrimitiveType}}}},
+				{Name: "func55", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "format", Type: []string{types.PrimitiveType}}, {Name: "...", Type: []string{types.PrimitiveType}}}},
 
 				// 复杂组合
 				{Name: "func56", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "ptr", Type: []string{types.PrimitiveType}}, {Name: "strings", Type: []string{types.PrimitiveType}}, {Name: "vptr", Type: []string{types.PrimitiveType}}}},
@@ -246,7 +246,7 @@ func TestCResolver_ResolveFunction(t *testing.T) {
 				{Name: "func77", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "x", Type: []string{types.PrimitiveType}}}},
 
 				// 完整复杂示例
-				{Name: "func78", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "points", Type: []string{"Point"}}, {Name: "colors", Type: []string{"Color"}}, {Name: "callbacks", Type: []string{types.PrimitiveType}},{Name: "...", Type: []string{types.PrimitiveType}}}},
+				{Name: "func78", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "points", Type: []string{"Point"}}, {Name: "colors", Type: []string{"Color"}}, {Name: "callbacks", Type: []string{types.PrimitiveType}}, {Name: "...", Type: []string{types.PrimitiveType}}}},
 
 				// 函数指针数组作为参数
 				{Name: "func79", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{{Name: "func_array", Type: []string{types.PrimitiveType}}}},
@@ -338,7 +338,7 @@ func TestCResolver_ResolveFunction(t *testing.T) {
 				funcMap := make(map[string]*resolver.Declaration)
 				for _, element := range res.Elements {
 					if fn, ok := element.(*resolver.Function); ok {
-						funcMap[fn.Declaration.Name] = &fn.Declaration
+						funcMap[fn.Declaration.Name] = fn.Declaration
 					}
 				}
 				// 2. 逐个比较每个期望的函数

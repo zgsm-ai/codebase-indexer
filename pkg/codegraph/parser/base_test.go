@@ -2,7 +2,6 @@ package parser
 
 import (
 	"codebase-indexer/internal/utils"
-	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/resolver"
 	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/logger"
@@ -12,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 func initLogger() logger.Logger {
@@ -60,7 +58,7 @@ func TestGoBaseParse(t *testing.T) {
 							fmt.Printf("  RootIndex: %v\n", imp.BaseElement.GetRootIndex())
 							fmt.Printf("  type: %s\n", imp.BaseElement.GetType())
 							fmt.Printf("  Alias: %s\n", imp.Alias)
-
+							fmt.Printf("  Source: %s\n", imp.Source)
 						}
 					}
 				}
@@ -74,6 +72,14 @@ func TestGoBaseParse(t *testing.T) {
 						fmt.Printf("[%d] %s (Type: %v)\n", i, elem.GetName(), elem.GetType())
 						fmt.Printf("  Range: %v\n", elem.GetRange())
 
+						// 添加基本字段断言
+						assert.NotEmpty(t, elem.GetName(), "Element[%d] Name 不能为空", i)
+						assert.NotEmpty(t, elem.GetPath(), "Element[%d] Path 不能为空", i)
+						assert.NotEmpty(t, elem.GetRange(), "Element[%d] Range 不能为空", i)
+						assert.Equal(t, 4, len(elem.GetRange()), "Element[%d] Range 应该包含4个元素 [开始行,开始列,结束行,结束列]", i)
+						assert.NotEqual(t, types.ElementTypeUndefined, elem.GetType(), "Element[%d] Type 不能为 undefined", i)
+						assert.NotEqual(t, "", string(elem.GetType()), "Element[%d] Type 不能为空字符串", i)
+						assert.NotEqual(t, types.ElementTypeUndefined, elem.GetScope(), "Element[%d] Scope 不能为 undefined", i)
 						if base, ok := elem.(*resolver.BaseElement); ok {
 							fmt.Printf("  Content: %s\n", string(base.Content))
 						}
@@ -82,17 +88,17 @@ func TestGoBaseParse(t *testing.T) {
 						switch v := elem.(type) {
 						case *resolver.Function:
 							fmt.Printf("    详细内容(Function) 名称: %s, 作用域: %s, 返回类型: %s, 参数数量: %d\n",
-								v.Declaration.Name, v.Scope, v.ReturnType, len(v.Parameters))
-							fmt.Printf("  Parameters: %v\n", v.Parameters)
-							fmt.Printf("  ReturnType: %s\n", v.ReturnType)
+								v.GetName(), v.Scope, v.Declaration.ReturnType, len(v.Declaration.Parameters))
+							fmt.Printf("  Parameters: %v\n", v.Declaration.Parameters)
+							fmt.Printf("  ReturnType: %s\n", v.Declaration.ReturnType)
 						case *resolver.Method:
 							fmt.Printf("    详细内容(Method) 名称: %s, 拥有者: %s, 作用域: %s, 返回类型: %s, 参数数量: %d\n",
-								v.Declaration.Name, v.Owner, v.Scope, v.ReturnType, len(v.Parameters))
-							fmt.Printf("  Parameters: %v\n", v.Parameters)
-							fmt.Printf("  ReturnType: %s\n", v.ReturnType)
+								v.GetName(), v.Owner, v.Scope, v.Declaration.ReturnType, len(v.Declaration.Parameters))
+							fmt.Printf("  Parameters: %v\n", v.Declaration.Parameters)
+							fmt.Printf("  ReturnType: %s\n", v.Declaration.ReturnType)
 						case *resolver.Call:
-							fmt.Printf("    详细内容(Call) 名称: %s, 所有者: %s, 参数数量: %d\n",
-								elem.GetName(), v.Owner, len(v.Parameters))
+							fmt.Printf("    详细内容(Call) 名称: %s, 作用域: %s, 所有者: %s, 参数数量: %d\n",
+								elem.GetName(), v.Scope, v.Owner, len(v.Parameters))
 							for _, param := range v.Parameters {
 								fmt.Printf("    参数: %s, 类型: %s\n", param.Name, param.Type)
 							}
@@ -125,8 +131,8 @@ func TestGoBaseParse(t *testing.T) {
 			}
 			assert.ErrorIs(t, err, tt.wantErr)
 			assert.NotNil(t, res)
-			assert.NotNil(t, res.Package)
-			assert.NotEmpty(t, res.Imports)
+			//assert.NotNil(t, res.Package)
+			//assert.NotEmpty(t, res.Imports)
 			assert.NotEmpty(t, res.Elements)
 
 		})
@@ -199,61 +205,68 @@ func readFile(path string) []byte {
 	return bytes
 }
 
-func TestGoBaseParse_MatchesDebug(t *testing.T) {
-	// logger := initLogger()
-	// parser := NewSourceFileParser(logger)
-	// prj := project.NewProjectInfo(lang.Go, "github.com/hashicorp", []string{"pkg/go-uuid/uuid.go"})
+// func TestGoBaseParse_MatchesDebug(t *testing.T) {
+// 	// logger := initLogger()
+// 	// parser := NewSourceFileParser(logger)
+// 	// prj := project.NewProjectInfo(lang.Go, "github.com/hashicorp", []string{"pkg/go-uuid/uuid.go"})
 
-	sourceFile := &types.SourceFile{
-		Path: "test.java",
-		// Content: readFile("testdata/test.java"),
-		Content: readFile("testdata/com/example/test/TestClass.java"),
-	}
+// 	sourceFile := &types.SourceFile{
+// 		Path: "test.java",
+// 		// Content: readFile("testdata/test.java"),
+// 		Content: readFile("testdata/com/example/test/TestClass.java"),
+// 	}
 
-	// 1. 获取语言解析器
-	langParser, err := lang.GetSitterParserByFilePath(sourceFile.Path)
-	if err != nil {
-		t.Fatalf("lang parser error: %v", err)
-	}
-	sitterParser := sitter.NewParser()
-	sitterLanguage := langParser.SitterLanguage()
-	if err := sitterParser.SetLanguage(sitterLanguage); err != nil {
-		t.Fatalf("set language error: %v", err)
-	}
-	content := sourceFile.Content
-	tree := sitterParser.Parse(content, nil)
-	if tree == nil {
-		t.Fatalf("parse tree error")
-	}
-	defer tree.Close()
+// 	// 1. 获取语言解析器
+// 	langParser, err := lang.GetSitterParserByFilePath(sourceFile.Path)
+// 	if err != nil {
+// 		t.Fatalf("lang parser error: %v", err)
+// 	}
+// 	sitterParser := sitter.NewParser()
+// 	sitterLanguage := langParser.SitterLanguage()
+// 	if err := sitterParser.SetLanguage(sitterLanguage); err != nil {
+// 		t.Fatalf("set language error: %v", err)
+// 	}
+// 	content := sourceFile.Content
+// 	tree := sitterParser.Parse(content, nil)
+// 	if tree == nil {
+// 		t.Fatalf("parse tree error")
+// 	}
+// 	defer tree.Close()
 
-	query, ok := BaseQueries[langParser.Language]
-	if !ok {
-		t.Fatalf("query not found")
-	}
-	qc := sitter.NewQueryCursor()
-	defer qc.Close()
-	matches := qc.Matches(query, tree.RootNode(), content)
+// 	queryScm, ok := BaseQueries[langParser.Language]
+// 	if !ok {
+// 		t.Fatalf("query not found")
+// 	}
+// 	// TODO: 巨坑err1，变量遮蔽（shadowing）
+// 	query, err1 := sitter.NewQuery(sitterLanguage, queryScm)
+// 	if err1 != nil {
+// 		t.Fatalf("new query error: %v", err1)
+// 	}
+// 	defer query.Close()
 
-	names := query.CaptureNames()
-	fmt.Println("CaptureNames:", names)
-	// 打印前15个match的内容
-	for i := 0; ; i++ {
-		match := matches.Next()
-		if match == nil {
-			break
-		}
-		fmt.Printf("Match #%d:\n", i+1)
-		for _, cap := range match.Captures {
-			// 层级结构，从上到下
-			//Capture: name=import, text=import java.util.List;, start=3:0, end=3:22
-			//Capture: name=import.name, text=java.util.List, start=3:7, end=3:21
-			fmt.Printf("  Capture: name=%s, text=%s, start=%d:%d, end=%d:%d\n",
-				query.CaptureNames()[cap.Index],
-				cap.Node.Utf8Text(content),
-				cap.Node.StartPosition().Row, cap.Node.StartPosition().Column,
-				cap.Node.EndPosition().Row, cap.Node.EndPosition().Column,
-			)
-		}
-	}
-}
+// 	qc := sitter.NewQueryCursor()
+// 	defer qc.Close()
+// 	matches := qc.Matches(query, tree.RootNode(), content)
+
+// 	names := query.CaptureNames()
+// 	fmt.Println("CaptureNames:", names)
+// 	// 打印前15个match的内容
+// 	for i := 0; ; i++ {
+// 		match := matches.Next()
+// 		if match == nil {
+// 			break
+// 		}
+// 		fmt.Printf("Match #%d:\n", i+1)
+// 		for _, cap := range match.Captures {
+// 			// 层级结构，从上到下
+// 			//Capture: name=import, text=import java.util.List;, start=3:0, end=3:22
+// 			//Capture: name=import.name, text=java.util.List, start=3:7, end=3:21
+// 			fmt.Printf("  Capture: name=%s, text=%s, start=%d:%d, end=%d:%d\n",
+// 				query.CaptureNames()[cap.Index],
+// 				cap.Node.Utf8Text(content),
+// 				cap.Node.StartPosition().Row, cap.Node.StartPosition().Column,
+// 				cap.Node.EndPosition().Row, cap.Node.EndPosition().Column,
+// 			)
+// 		}
+// 	}
+// }

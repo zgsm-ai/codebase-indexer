@@ -85,7 +85,7 @@ func (ts *TypeScriptResolver) resolveFunction(ctx context.Context, element *Func
 			parseTypeScriptParameters(element, capture.Node, rc.SourceFile.Content)
 		case types.ElementTypeFunctionReturnType:
 			returnTypes := parseReturnTypeNode(&capture.Node, rc.SourceFile.Content)
-			element.ReturnType = returnTypes
+			element.Declaration.ReturnType = returnTypes
 		}
 	}
 	return elements, nil
@@ -111,7 +111,7 @@ func (ts *TypeScriptResolver) resolveMethod(ctx context.Context, element *Method
 			parseTypeScriptMethodParameters(element, capture.Node, rc.SourceFile.Content)
 		case types.ElementTypeMethodReturnType:
 			returnTypes := parseReturnTypeNode(&capture.Node, rc.SourceFile.Content)
-			element.ReturnType = returnTypes
+			element.Declaration.ReturnType = returnTypes
 		}
 	}
 	ownerNode := findMethodOwner(&rootCap.Node)
@@ -312,7 +312,7 @@ func (ts *TypeScriptResolver) resolveInterface(ctx context.Context, element *Int
 	// 使用parseTypeScriptClassBody解析接口体，获取方法
 	cls, references := parseTypeScriptClassBody(&rootCapture.Node, rc.SourceFile.Content, element.BaseElement.Name, element.Path)
 	for _, method := range cls.Methods {
-		element.Methods = append(element.Methods, &method.Declaration)
+		element.Methods = append(element.Methods, method.Declaration)
 		elements = append(elements, method)
 	}
 	for _, ref := range references {
@@ -584,7 +584,7 @@ func parseTypeScriptMethodNode(node *sitter.Node, content []byte, className stri
 	// 查找方法参数
 	paramsNode := node.ChildByFieldName("parameters")
 	if paramsNode != nil {
-		method.Parameters = make([]Parameter, 0)
+		method.Declaration.Parameters = make([]Parameter, 0)
 		for j := uint(0); j < paramsNode.ChildCount(); j++ {
 			paramChild := paramsNode.Child(j)
 			patternNode := paramChild.ChildByFieldName("pattern")
@@ -603,7 +603,7 @@ func parseTypeScriptMethodNode(node *sitter.Node, content []byte, className stri
 			} else {
 				parameter.Type = []string{typeContent}
 			}
-			method.Parameters = append(method.Parameters, parameter)
+			method.Declaration.Parameters = append(method.Declaration.Parameters, parameter)
 		}
 	}
 	// 查找返回类型
@@ -611,9 +611,9 @@ func parseTypeScriptMethodNode(node *sitter.Node, content []byte, className stri
 	if returnNode != nil {
 		returnContent := returnNode.Utf8Text(content)
 		if isTypeScriptPrimitiveType(returnContent) {
-			method.ReturnType = []string{types.PrimitiveType}
+			method.Declaration.ReturnType = []string{types.PrimitiveType}
 		} else {
-			method.ReturnType = []string{returnContent}
+			method.Declaration.ReturnType = []string{returnContent}
 		}
 	}
 	method.Type = types.ElementTypeMethod
@@ -734,17 +734,17 @@ func parseTypeScriptPropertySignatureNode(node *sitter.Node, content []byte) (*F
 							int32(child.EndPosition().Column),
 						},
 					},
-					Declaration: Declaration{
+					Declaration: &Declaration{
 						Name: field.Name,
 					},
 				}
 				paramsNode := child.ChildByFieldName("parameters")
 				if paramsNode != nil {
-					method.Parameters = parseTypeScriptParamNodes(*paramsNode, content)
+					method.Declaration.Parameters = parseTypeScriptParamNodes(*paramsNode, content)
 				}
 				returnTypeNode := child.ChildByFieldName("return_type")
 				if returnTypeNode != nil {
-					method.ReturnType = parseReturnTypeNode(returnTypeNode, content)
+					method.Declaration.ReturnType = parseReturnTypeNode(returnTypeNode, content)
 				}
 			}
 		}
@@ -864,12 +864,12 @@ func parseRequiredParameterNode(paramNode *sitter.Node, content []byte) Paramete
 
 // parseTypeScriptParameters 解析TypeScript函数参数
 func parseTypeScriptParameters(element *Function, paramsNode sitter.Node, content []byte) {
-	element.Parameters = parseTypeScriptParamNodes(paramsNode, content)
+	element.Declaration.Parameters = parseTypeScriptParamNodes(paramsNode, content)
 }
 
 // parseTypeScriptMethodParameters 解析TypeScript方法参数
 func parseTypeScriptMethodParameters(element *Method, paramsNode sitter.Node, content []byte) {
-	element.Parameters = parseTypeScriptParamNodes(paramsNode, content)
+	element.Declaration.Parameters = parseTypeScriptParamNodes(paramsNode, content)
 }
 
 // isNodeDelimiter 检查节点是否为分隔符

@@ -80,13 +80,16 @@ func (r *GoResolver) resolveFunction(ctx context.Context, element *Function, rc 
 			// 处理函数名
 			switch types.ToElementType(nodeCaptureName) {
 			case types.ElementTypeFunctionName:
-				element.Declaration.Name = content
 				element.BaseElement.Name = content
 				element.Scope = analyzeScope(content)
 			case types.ElementTypeFunctionParameters:
 				parameters := strings.Trim(content, "()")
 				if parameters != types.EmptyString {
-					element.Parameters = make([]Parameter, 0)
+					// 确保Declaration已初始化
+					if element.Declaration == nil {
+						element.Declaration = &Declaration{}
+					}
+					element.Declaration.Parameters = make([]Parameter, 0)
 					// 分析整个参数字符串
 					typeGroups := analyzeParameterGroups(parameters)
 					// 处理每个类型组
@@ -95,7 +98,7 @@ func (r *GoResolver) resolveFunction(ctx context.Context, element *Function, rc 
 						paramTypes := group.Type
 						// 处理每个参数名
 						for _, name := range group.Names {
-							element.Parameters = append(element.Parameters, Parameter{
+							element.Declaration.Parameters = append(element.Declaration.Parameters, Parameter{
 								Name: name,
 								Type: paramTypes,
 							})
@@ -104,7 +107,11 @@ func (r *GoResolver) resolveFunction(ctx context.Context, element *Function, rc 
 					}
 				}
 			case types.ElementTypeFunctionReturnType:
-				element.ReturnType = analyzeReturnTypes(&capture.Node, rc.SourceFile.Content)
+				// 确保Declaration已初始化
+				if element.Declaration == nil {
+					element.Declaration = &Declaration{}
+				}
+				element.Declaration.ReturnType = analyzeReturnTypes(&capture.Node, rc.SourceFile.Content)
 			}
 		}
 	}
@@ -143,18 +150,17 @@ func (r *GoResolver) resolveMethod(ctx context.Context, element *Method, rc *Res
 			content := capture.Node.Utf8Text(rc.SourceFile.Content)
 			switch types.ToElementType(nodeCaptureName) {
 			case types.ElementTypeMethodName:
-				element.Declaration.Name = content
 				element.BaseElement.Name = content
 				element.Scope = analyzeScope(content)
 			case types.ElementTypeMethodParameters:
 				parameters := strings.Trim(content, "()")
 				if parameters != "" {
-					element.Parameters = make([]Parameter, 0)
+					element.Declaration.Parameters = make([]Parameter, 0)
 					typeGroups := analyzeParameterGroups(parameters)
 					for _, group := range typeGroups {
 						paramTypes := group.Type
 						for _, name := range group.Names {
-							element.Parameters = append(element.Parameters, Parameter{
+							element.Declaration.Parameters = append(element.Declaration.Parameters, Parameter{
 								Name: name,
 								Type: paramTypes,
 							})
@@ -162,7 +168,7 @@ func (r *GoResolver) resolveMethod(ctx context.Context, element *Method, rc *Res
 					}
 				}
 			case types.ElementTypeFunctionReturnType:
-				element.ReturnType = analyzeReturnTypes(&capture.Node, rc.SourceFile.Content)
+				element.Declaration.ReturnType = analyzeReturnTypes(&capture.Node, rc.SourceFile.Content)
 			}
 		}
 	}
@@ -359,7 +365,6 @@ func (r *GoResolver) resolveInterface(ctx context.Context, element *Interface, r
 					case types.NodeKindMethodElem:
 						decl := &Declaration{
 							Modifier:   "", // Go中接口方法没有显式修饰符
-							Name:       "",
 							Parameters: []Parameter{},
 						}
 						nameNode := childNode.ChildByFieldName("name")

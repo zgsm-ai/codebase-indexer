@@ -281,9 +281,9 @@ func MarshalExtraData(element resolver.Element) (map[string][]byte, error) {
 	case *resolver.Import, *resolver.Package, *resolver.Variable:
 		// 无需处理的类型
 	case *resolver.Function:
-		if len(e.Parameters) > 0 {
+		if len(e.Declaration.Parameters) > 0 {
 			// 处理函数共有的参数和返回类型
-			parametersBytes, err := json.Marshal(e.Parameters)
+			parametersBytes, err := json.Marshal(e.Declaration.Parameters)
 			if err != nil {
 				errs = append(errs, err)
 			} else {
@@ -291,8 +291,8 @@ func MarshalExtraData(element resolver.Element) (map[string][]byte, error) {
 			}
 		}
 
-		if len(e.ReturnType) > 0 {
-			returnTypeBytes, err := json.Marshal(e.ReturnType)
+		if len(e.Declaration.ReturnType) > 0 {
+			returnTypeBytes, err := json.Marshal(e.Declaration.ReturnType)
 			if err != nil {
 				errs = append(errs, err)
 			} else {
@@ -302,8 +302,8 @@ func MarshalExtraData(element resolver.Element) (map[string][]byte, error) {
 
 	case *resolver.Method:
 		// 处理方法共有的参数和返回类型
-		if len(e.Parameters) > 0 {
-			parametersBytes, err := json.Marshal(e.Parameters)
+		if len(e.Declaration.Parameters) > 0 {
+			parametersBytes, err := json.Marshal(e.Declaration.Parameters)
 			if err != nil {
 				errs = append(errs, err)
 			} else {
@@ -311,8 +311,8 @@ func MarshalExtraData(element resolver.Element) (map[string][]byte, error) {
 			}
 		}
 
-		if len(e.ReturnType) > 0 {
-			returnTypeBytes, err := json.Marshal(e.ReturnType)
+		if len(e.Declaration.ReturnType) > 0 {
+			returnTypeBytes, err := json.Marshal(e.Declaration.ReturnType)
 			if err != nil {
 				errs = append(errs, err)
 			} else {

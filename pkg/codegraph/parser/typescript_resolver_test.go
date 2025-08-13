@@ -371,7 +371,7 @@ func TestTypeScriptResolver_ResolveFunction(t *testing.T) {
 			wantFunctions: []resolver.Function{
 				{
 					BaseElement: &resolver.BaseElement{Name: "add", Type: types.ElementTypeFunction},
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name: "add",
 						Parameters: []resolver.Parameter{
 							{Name: "a", Type: []string{"primitive_type"}},
@@ -382,7 +382,7 @@ func TestTypeScriptResolver_ResolveFunction(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{Name: "greet", Type: types.ElementTypeFunction},
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name: "greet",
 						Parameters: []resolver.Parameter{
 							{Name: "name", Type: []string{"primitive_type"}},
@@ -394,7 +394,7 @@ func TestTypeScriptResolver_ResolveFunction(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{Name: "sum", Type: types.ElementTypeFunction},
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name: "sum",
 						Parameters: []resolver.Parameter{
 							{Name: "numbers", Type: []string{"primitive_type"}},
@@ -404,7 +404,7 @@ func TestTypeScriptResolver_ResolveFunction(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{Name: "process", Type: types.ElementTypeFunction},
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name: "process",
 						Parameters: []resolver.Parameter{
 							{Name: "value", Type: []string{"primitive_type"}},
@@ -414,7 +414,7 @@ func TestTypeScriptResolver_ResolveFunction(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{Name: "process", Type: types.ElementTypeFunction},
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name: "process",
 						Parameters: []resolver.Parameter{
 							{Name: "value", Type: []string{"primitive_type"}},
@@ -424,7 +424,7 @@ func TestTypeScriptResolver_ResolveFunction(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{Name: "process", Type: types.ElementTypeFunction},
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name: "process",
 						Parameters: []resolver.Parameter{
 							{Name: "value", Type: []string{"primitive_type"}},
@@ -434,7 +434,7 @@ func TestTypeScriptResolver_ResolveFunction(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{Name: "multiply", Type: types.ElementTypeFunction},
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name: "multiply",
 						Parameters: []resolver.Parameter{
 							{Name: "a", Type: []string{"primitive_type"}},
@@ -445,7 +445,7 @@ func TestTypeScriptResolver_ResolveFunction(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{Name: "square", Type: types.ElementTypeFunction},
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name: "square",
 						Parameters: []resolver.Parameter{
 							{Name: "x", Type: []string{"primitive_type"}},
@@ -455,7 +455,7 @@ func TestTypeScriptResolver_ResolveFunction(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{Name: "identity", Type: types.ElementTypeFunction},
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name: "identity",
 						Parameters: []resolver.Parameter{
 							{Name: "value", Type: []string{"T"}},
@@ -465,7 +465,7 @@ func TestTypeScriptResolver_ResolveFunction(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{Name: "pair", Type: types.ElementTypeFunction},
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name: "pair",
 						Parameters: []resolver.Parameter{
 							{Name: "first", Type: []string{"T"}},
@@ -476,7 +476,7 @@ func TestTypeScriptResolver_ResolveFunction(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{Name: "fetchData", Type: types.ElementTypeFunction},
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name: "fetchData",
 						Parameters: []resolver.Parameter{
 							{Name: "url", Type: []string{"primitive_type"}},
@@ -486,7 +486,7 @@ func TestTypeScriptResolver_ResolveFunction(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{Name: "idGenerator", Type: types.ElementTypeFunction},
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "idGenerator",
 						Parameters: []resolver.Parameter{},
 						ReturnType: []string{"primitive_type"},
@@ -534,7 +534,7 @@ func TestTypeScriptResolver_ResolveFunction(t *testing.T) {
 
 					actualFuncMap[function.GetName()] = function
 					fmt.Printf("函数: %s, 参数数量: %d, 返回类型: %v\n",
-						function.GetName(), len(function.Parameters), function.Declaration.ReturnType)
+						function.GetName(), len(function.Declaration.Parameters), function.Declaration.ReturnType)
 				}
 
 				// 验证每个期望的函数
@@ -552,14 +552,14 @@ func TestTypeScriptResolver_ResolveFunction(t *testing.T) {
 							"函数类型不匹配")
 
 						// 验证参数数量精确匹配
-						assert.Equal(t, len(wantFunction.Parameters), len(actualFunction.Parameters),
+						assert.Equal(t, len(wantFunction.Declaration.Parameters), len(actualFunction.Declaration.Parameters),
 							"函数 %s 的参数数量不匹配，期望 %d，实际 %d",
-							wantFunction.GetName(), len(wantFunction.Parameters), len(actualFunction.Parameters))
+							wantFunction.GetName(), len(wantFunction.Declaration.Parameters), len(actualFunction.Declaration.Parameters))
 
 						// 验证每个参数
-						for i, wantParam := range wantFunction.Parameters {
-							if i < len(actualFunction.Parameters) {
-								actualParam := actualFunction.Parameters[i]
+						for i, wantParam := range wantFunction.Declaration.Parameters {
+							if i < len(actualFunction.Declaration.Parameters) {
+								actualParam := actualFunction.Declaration.Parameters[i]
 								assert.Equal(t, wantParam.Name, actualParam.Name,
 									"函数 %s 的第 %d 个参数名称不匹配", wantFunction.GetName(), i+1)
 								assert.Equal(t, wantParam.Type, actualParam.Type,
@@ -899,8 +899,8 @@ func TestTypeScriptResolver_ResolveClass(t *testing.T) {
 						{Name: "age", Type: "primitive_type"},
 					},
 					Methods: []*resolver.Method{
-						{Declaration: resolver.Declaration{Name: "constructor", Modifier: "public"}},
-						{Declaration: resolver.Declaration{Name: "greet", Modifier: "public", ReturnType: []string{"primitive_type"}}},
+						{Declaration: &resolver.Declaration{Name: "constructor", Modifier: "public"}},
+						{Declaration: &resolver.Declaration{Name: "greet", Modifier: "public", ReturnType: []string{"primitive_type"}}},
 					},
 				},
 				{
@@ -913,9 +913,9 @@ func TestTypeScriptResolver_ResolveClass(t *testing.T) {
 						{Name: "startDate", Type: "primitive_type", Modifier: ""},
 					},
 					Methods: []*resolver.Method{
-						{Declaration: resolver.Declaration{Name: "constructor", Modifier: "public"}},
-						{Declaration: resolver.Declaration{Name: "greet", Modifier: "public", ReturnType: []string{"primitive_type"}}},
-						{Declaration: resolver.Declaration{Name: "createManager", Modifier: "public", ReturnType: []string{"Employee"}}},
+						{Declaration: &resolver.Declaration{Name: "constructor", Modifier: "public"}},
+						{Declaration: &resolver.Declaration{Name: "greet", Modifier: "public", ReturnType: []string{"primitive_type"}}},
+						{Declaration: &resolver.Declaration{Name: "createManager", Modifier: "public", ReturnType: []string{"Employee"}}},
 					},
 				},
 				{
@@ -924,8 +924,8 @@ func TestTypeScriptResolver_ResolveClass(t *testing.T) {
 						{Name: "content", Type: "primitive_type"},
 					},
 					Methods: []*resolver.Method{
-						{Declaration: resolver.Declaration{Name: "constructor", Modifier: "public"}},
-						{Declaration: resolver.Declaration{Name: "print", Modifier: "public", ReturnType: []string{"primitive_type"}}},
+						{Declaration: &resolver.Declaration{Name: "constructor", Modifier: "public"}},
+						{Declaration: &resolver.Declaration{Name: "print", Modifier: "public", ReturnType: []string{"primitive_type"}}},
 					},
 				},
 			},

@@ -267,11 +267,11 @@ type ParameterSetter interface {
 
 // 为 Function 和 Method 实现这个接口
 func (f *Function) SetParameters(params []Parameter) {
-	f.Parameters = params
+	f.Declaration.Parameters = params
 }
 
 func (m *Method) SetParameters(params []Parameter) {
-	m.Parameters = params
+	m.Declaration.Parameters = params
 }
 
 // 通用的参数解析函数
@@ -428,12 +428,12 @@ func parseJavaScriptMethodNode(node *sitter.Node, content []byte, className stri
 	// 查找方法参数
 	paramsNode := node.ChildByFieldName("parameters")
 	if paramsNode != nil {
-		method.Parameters = make([]Parameter, 0)
+		method.Declaration.Parameters = make([]Parameter, 0)
 		for j := uint(0); j < paramsNode.ChildCount(); j++ {
 			paramChild := paramsNode.Child(j)
 			if paramChild != nil && paramChild.Kind() == types.Identifier {
 				paramName := paramChild.Utf8Text(content)
-				method.Parameters = append(method.Parameters, Parameter{
+				method.Declaration.Parameters = append(method.Declaration.Parameters, Parameter{
 					Name: paramName,
 					Type: nil,
 				})

@@ -167,7 +167,7 @@ func TestJavaScriptResolver_ResolveFunction(t *testing.T) {
 			wantFunctions: []resolver.Function{
 				{
 					BaseElement: &resolver.BaseElement{Name: "add", Type: types.ElementTypeFunction},
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name: "add",
 						Parameters: []resolver.Parameter{
 							{Name: "a", Type: []string{}},
@@ -178,7 +178,7 @@ func TestJavaScriptResolver_ResolveFunction(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{Name: "fetchData", Type: types.ElementTypeFunction},
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "fetchData",
 						Parameters: []resolver.Parameter{},
 						ReturnType: nil,
@@ -187,7 +187,7 @@ func TestJavaScriptResolver_ResolveFunction(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{Name: "multiply", Type: types.ElementTypeFunction},
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name: "multiply",
 						Parameters: []resolver.Parameter{
 							{Name: "a", Type: []string{}},
@@ -198,7 +198,7 @@ func TestJavaScriptResolver_ResolveFunction(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{Name: "generator", Type: types.ElementTypeFunction},
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "generator",
 						Parameters: []resolver.Parameter{},
 						ReturnType: nil,
@@ -247,7 +247,7 @@ func TestJavaScriptResolver_ResolveFunction(t *testing.T) {
 
 					actualFuncMap[function.GetName()] = function
 					fmt.Printf("函数: %s, 参数数量: %d, 修饰符: %s\n",
-						function.GetName(), len(function.Parameters), function.Declaration.Modifier)
+						function.GetName(), len(function.Declaration.Parameters), function.Declaration.Modifier)
 				}
 
 				// 验证每个期望的函数
@@ -265,14 +265,14 @@ func TestJavaScriptResolver_ResolveFunction(t *testing.T) {
 							"函数类型不匹配")
 
 						// 验证参数数量
-						assert.Equal(t, len(wantFunction.Parameters), len(actualFunction.Parameters),
+						assert.Equal(t, len(wantFunction.Declaration.Parameters), len(actualFunction.Declaration.Parameters),
 							"函数 %s 的参数数量不匹配，期望 %d，实际 %d",
-							wantFunction.GetName(), len(wantFunction.Parameters), len(actualFunction.Parameters))
+							wantFunction.GetName(), len(wantFunction.Declaration.Parameters), len(actualFunction.Declaration.Parameters))
 
 						// 验证每个参数
-						for i, wantParam := range wantFunction.Parameters {
-							if i < len(actualFunction.Parameters) {
-								actualParam := actualFunction.Parameters[i]
+						for i, wantParam := range wantFunction.Declaration.Parameters {
+							if i < len(actualFunction.Declaration.Parameters) {
+								actualParam := actualFunction.Declaration.Parameters[i]
 								assert.Equal(t, wantParam.Name, actualParam.Name,
 									"函数 %s 的第 %d 个参数名称不匹配", wantFunction.GetName(), i+1)
 							}
@@ -464,8 +464,8 @@ func TestJavaScriptResolver_ResolveClass(t *testing.T) {
 					BaseElement: &resolver.BaseElement{Name: "Animal", Type: types.ElementTypeClass},
 					Fields:      []*resolver.Field{},
 					Methods: []*resolver.Method{
-						{Declaration: resolver.Declaration{Name: "constructor", Modifier: "public"}},
-						{Declaration: resolver.Declaration{Name: "speak", Modifier: "public"}},
+						{Declaration: &resolver.Declaration{Name: "constructor", Modifier: "public"}},
+						{Declaration: &resolver.Declaration{Name: "speak", Modifier: "public"}},
 					},
 				},
 				{
@@ -473,9 +473,9 @@ func TestJavaScriptResolver_ResolveClass(t *testing.T) {
 					SuperClasses: []string{"Animal"},
 					Fields:       []*resolver.Field{},
 					Methods: []*resolver.Method{
-						{Declaration: resolver.Declaration{Name: "constructor", Modifier: "public"}},
-						{Declaration: resolver.Declaration{Name: "speak", Modifier: "public"}},
-						{Declaration: resolver.Declaration{Name: "create", Modifier: "static public"}},
+						{Declaration: &resolver.Declaration{Name: "constructor", Modifier: "public"}},
+						{Declaration: &resolver.Declaration{Name: "speak", Modifier: "public"}},
+						{Declaration: &resolver.Declaration{Name: "create", Modifier: "static public"}},
 					},
 				},
 			},
@@ -811,7 +811,7 @@ func TestJavaScriptResolver_ResolveObjectMethod(t *testing.T) {
 			if method.Declaration.Modifier != "" {
 				fmt.Printf("  修饰符: %s\n", method.Declaration.Modifier)
 			}
-			fmt.Printf("  参数数量: %d\n", len(method.Parameters))
+			fmt.Printf("  参数数量: %d\n", len(method.Declaration.Parameters))
 		}
 	}
 	fmt.Printf("\n对象方法总数: %d\n", methodCount)

@@ -148,7 +148,7 @@ func TestCPPResolver_ResolveFunction(t *testing.T) {
 
 				// 标准模板容器
 				{Name: "getVector", ReturnType: []string{"vector"}, Parameters: []resolver.Parameter{}},
-				{Name: "getMap", ReturnType: []string{"map","string"}, Parameters: []resolver.Parameter{}},
+				{Name: "getMap", ReturnType: []string{"map", "string"}, Parameters: []resolver.Parameter{}},
 
 				// 嵌套模板类型
 				{Name: "getComplexMap", ReturnType: []string{"map", "string", "vector"}, Parameters: []resolver.Parameter{}},
@@ -161,15 +161,15 @@ func TestCPPResolver_ResolveFunction(t *testing.T) {
 					ReturnType: []string{"map", "string", "vector"},
 					Parameters: []resolver.Parameter{
 						{Name: "simpleMap", Type: []string{"map", "string"}},
-						{Name: "names", Type: []string{"vector","string"}},
+						{Name: "names", Type: []string{"vector", "string"}},
 						{Name: "key", Type: []string{"string"}},
 						{Name: "count", Type: []string{types.PrimitiveType}},
 					},
 				},
 
 				// pair 和 tuple 类型
-				{Name: "getPair", ReturnType: []string{"pair","string"}, Parameters: []resolver.Parameter{}},
-				{Name: "getTuple", ReturnType: []string{"tuple","string"}, Parameters: []resolver.Parameter{
+				{Name: "getPair", ReturnType: []string{"pair", "string"}, Parameters: []resolver.Parameter{}},
+				{Name: "getTuple", ReturnType: []string{"tuple", "string"}, Parameters: []resolver.Parameter{
 					{Name: "count", Type: []string{types.PrimitiveType}}, // 有默认值，断言类型即可
 				}},
 
@@ -178,7 +178,7 @@ func TestCPPResolver_ResolveFunction(t *testing.T) {
 				// {Name: "getAnotherInt", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{}},
 
 				// 带默认参数和命名空间返回值
-				{Name: "getNames", ReturnType: []string{"vector","map","string"}, Parameters: []resolver.Parameter{
+				{Name: "getNames", ReturnType: []string{"vector", "map", "string"}, Parameters: []resolver.Parameter{
 					{Name: "count", Type: []string{types.PrimitiveType}}, // 有默认值，断言类型即可
 				}},
 
@@ -197,7 +197,7 @@ func TestCPPResolver_ResolveFunction(t *testing.T) {
 				}},
 				{Name: "func3", ReturnType: []string{"T"}, Parameters: []resolver.Parameter{
 					{Name: "arg1", Type: []string{"T"}},
-					{Name: "arg2", Type: []string{"vector","T"}},
+					{Name: "arg2", Type: []string{"vector", "T"}},
 				}},
 				{Name: "func4", ReturnType: []string{"string"}, Parameters: []resolver.Parameter{}},
 				{Name: "func5", ReturnType: []string{"vector"}, Parameters: []resolver.Parameter{
@@ -208,10 +208,10 @@ func TestCPPResolver_ResolveFunction(t *testing.T) {
 					{Name: "arg1", Type: []string{"MyClass"}},
 					{Name: "arg2", Type: []string{types.PrimitiveType}},
 				}},
-				{Name: "func8", ReturnType: []string{"vector","T"}, Parameters: []resolver.Parameter{
-					{Name: "arg1", Type: []string{"vector","T"}},
+				{Name: "func8", ReturnType: []string{"vector", "T"}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{"vector", "T"}},
 				}},
-				{Name: "func9", ReturnType: []string{"MyClass","map"}, Parameters: []resolver.Parameter{
+				{Name: "func9", ReturnType: []string{"MyClass", "map"}, Parameters: []resolver.Parameter{
 					{Name: "arg1", Type: []string{types.PrimitiveType}},
 					{Name: "arg2", Type: []string{"MyClass"}},
 				}},
@@ -223,13 +223,13 @@ func TestCPPResolver_ResolveFunction(t *testing.T) {
 					{Name: "arg1", Type: []string{"T"}},
 					{Name: "arg2", Type: []string{types.PrimitiveType}},
 				}},
-				{Name: "func13", ReturnType: []string{"vector","string"}, Parameters: []resolver.Parameter{}},
-				{Name: "func14", ReturnType: []string{"vector","MyClass"}, Parameters: []resolver.Parameter{
-					{Name: "arg1", Type: []string{"vector","MyClass"}},
+				{Name: "func13", ReturnType: []string{"vector", "string"}, Parameters: []resolver.Parameter{}},
+				{Name: "func14", ReturnType: []string{"vector", "MyClass"}, Parameters: []resolver.Parameter{
+					{Name: "arg1", Type: []string{"vector", "MyClass"}},
 					{Name: "arg2", Type: []string{types.PrimitiveType}},
 				}},
-				{Name: "func15", ReturnType: []string{"vector","T"}, Parameters: []resolver.Parameter{}},
-				{Name: "func16", ReturnType: []string{"vector","T"}, Parameters: []resolver.Parameter{
+				{Name: "func15", ReturnType: []string{"vector", "T"}, Parameters: []resolver.Parameter{}},
+				{Name: "func16", ReturnType: []string{"vector", "T"}, Parameters: []resolver.Parameter{
 					{Name: "arg1", Type: []string{"T"}},
 					{Name: "arg2", Type: []string{types.PrimitiveType}},
 				}},
@@ -237,7 +237,7 @@ func TestCPPResolver_ResolveFunction(t *testing.T) {
 				{Name: "func18", ReturnType: []string{types.PrimitiveType}, Parameters: []resolver.Parameter{
 					{Name: "arg1", Type: []string{types.PrimitiveType}},
 				}},
-				{Name: "func19", ReturnType: []string{"vector","map","MyClass"}, Parameters: []resolver.Parameter{}},
+				{Name: "func19", ReturnType: []string{"vector", "map", "MyClass"}, Parameters: []resolver.Parameter{}},
 			},
 			description: "测试 testfunc.cpp 中所有函数声明的解析",
 		},
@@ -254,7 +254,7 @@ func TestCPPResolver_ResolveFunction(t *testing.T) {
 				funcMap := make(map[string]*resolver.Declaration)
 				for _, element := range res.Elements {
 					if fn, ok := element.(*resolver.Function); ok {
-						funcMap[fn.Declaration.Name] = &fn.Declaration
+						funcMap[fn.Declaration.Name] = fn.Declaration
 					}
 				}
 				// 2. 逐个比较每个期望的函数
@@ -296,7 +296,7 @@ func TestCPPResolver_ResolveCall(t *testing.T) {
 		// fmt.Println(element.GetName(),"element name",element.GetType())
 		if call, ok := element.(*resolver.Call); ok {
 			callMap[call.GetName()] = call
-			fmt.Println(call.GetName(),"call name")
+			fmt.Println(call.GetName(), "call name")
 		}
 	}
 
@@ -507,31 +507,31 @@ func TestCPPResolver_ResolveClass(t *testing.T) {
 
 	// 期望的类/结构体及其继承
 	expected := map[string][]string{
-		"Animal":       {},
-		"Shape":        {},
-		"Circle":       {"Shape"},
-		"Flyable":      {},
-		"Swimmable":    {},
-		"Duck":         {"Animal", "Flyable", "Swimmable"},
-		"Outer":        {},
-		"Inner":        {},
-		"Box":          {},
-		"LabeledBox":   {"Box","T"},
-		"Point":        {},
-		"ColoredPoint": {"Point"},
-		"Config":       {},
-		"MathUtil":     {},
-		"Logger":       {},
-		"Serializable": {},
-		"User":         {"Logger", "Serializable"},
-		"Position":     {},
-		"Drawable":     {},
-		"Circle1":      {"Position", "Drawable"},
-		"Color":        {},
-		"Status":       {},
-		"Direction":    {},
-		"Priority":     {},
-		"ErrorCode":    {},
+		"Animal":         {},
+		"Shape":          {},
+		"Circle":         {"Shape"},
+		"Flyable":        {},
+		"Swimmable":      {},
+		"Duck":           {"Animal", "Flyable", "Swimmable"},
+		"Outer":          {},
+		"Inner":          {},
+		"Box":            {},
+		"LabeledBox":     {"Box", "T"},
+		"Point":          {},
+		"ColoredPoint":   {"Point"},
+		"Config":         {},
+		"MathUtil":       {},
+		"Logger":         {},
+		"Serializable":   {},
+		"User":           {"Logger", "Serializable"},
+		"Position":       {},
+		"Drawable":       {},
+		"Circle1":        {"Position", "Drawable"},
+		"Color":          {},
+		"Status":         {},
+		"Direction":      {},
+		"Priority":       {},
+		"ErrorCode":      {},
 		"NetworkManager": {},
 		"Protocol":       {},
 		"State":          {},
@@ -539,7 +539,7 @@ func TestCPPResolver_ResolveClass(t *testing.T) {
 		"LogLevel":       {},
 		"DatabaseType":   {},
 		"FilePermission": {},
-		"Derived1":       {"Outer","Base","Inner"},
+		"Derived1":       {"Outer", "Base", "Inner"},
 		"Derived2":       {"Base1", "Base2"},
 		"MyInt":          {},
 		"B":              {},
