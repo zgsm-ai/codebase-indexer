@@ -275,7 +275,7 @@ func TestIndexer_IndexWorkspace(t *testing.T) {
 	assert.NoError(t, err)
 
 	// 查找工作区中的项目
-	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, testVisitPattern)
+	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, testVisitPattern)
 
 	// 验证存储状态 - 确保索引数量与文件数量一致
 	validateStorageState(t, env.ctx, env.workspaceReader, env.storage, env.workspaceDir, projects, testVisitPattern)
@@ -317,7 +317,7 @@ func TestIndexer_IndexProjectFilesWhenProjectHasIndex(t *testing.T) {
 	indexer := createTestIndexer(env, newVisitPattern)
 
 	// 查找工作区中的项目
-	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, newVisitPattern)
+	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, newVisitPattern)
 
 	// 清理索引存储
 	err := cleanIndexStoreTest(env.ctx, projects, env.storage)
@@ -355,7 +355,7 @@ func TestIndexer_IndexProjectFilesWhenProjectHasNoIndex(t *testing.T) {
 	indexer := createTestIndexer(env, testVisitPattern)
 
 	// 查找工作区中的项目
-	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, testVisitPattern)
+	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, testVisitPattern)
 
 	// 清理索引存储
 	err := cleanIndexStoreTest(env.ctx, projects, env.storage)
@@ -390,7 +390,7 @@ func TestIndexer_RemoveIndexes(t *testing.T) {
 	indexer := createTestIndexer(env, testVisitPattern)
 
 	// 查找工作区中的项目
-	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, testVisitPattern)
+	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, testVisitPattern)
 
 	// 清理索引存储
 	err := cleanIndexStoreTest(env.ctx, projects, env.storage)
@@ -439,7 +439,7 @@ func TestIndexer_QueryElements(t *testing.T) {
 	indexer := createTestIndexer(env, testVisitPattern)
 
 	// 查找工作区中的项目
-	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, testVisitPattern)
+	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, testVisitPattern)
 
 	// 清理索引存储
 	err := cleanIndexStoreTest(env.ctx, projects, env.storage)
@@ -474,7 +474,7 @@ func TestIndexer_QuerySymbols_WithExistFile(t *testing.T) {
 	indexer := createTestIndexer(env, testVisitPattern)
 
 	// 查找工作区中的项目
-	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, testVisitPattern)
+	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, testVisitPattern)
 
 	// 清理索引存储
 	err := cleanIndexStoreTest(env.ctx, projects, env.storage)
@@ -497,8 +497,8 @@ func TestIndexer_QuerySymbols_WithExistFile(t *testing.T) {
 	for _, s := range symbols {
 		assert.True(t, slices.Contains(symbolNames, s.Name))
 		assert.Equal(t, s.Language, string(lang.Go))
-		assert.True(t, len(s.Definitions) > 0)
-		for _, d := range s.Definitions {
+		assert.True(t, len(s.Occurrences) > 0)
+		for _, d := range s.Occurrences {
 			assert.Equal(t, len(d.Range), 4)
 			assert.True(t, d.Path == filePath)
 		}
