@@ -5,6 +5,8 @@ const (
 	Underline         = "_"
 	DoubleQuote       = "\""
 	Slash             = "/"
+	WindowsSeparator  = "\\"
+	UnixSeparator     = "/"
 	Comma             = ","
 	Colon             = ":"
 	Identifier        = "identifier"

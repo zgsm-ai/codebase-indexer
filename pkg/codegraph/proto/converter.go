@@ -58,6 +58,26 @@ func ElementTypeFromProto(t codegraphpb.ElementType) types.ElementType {
 	}
 }
 
+// ToDefinitionElementType 转换为定义的类型
+func ToDefinitionElementType(t types.ElementType) types.ElementType {
+	switch t {
+	case types.ElementTypeFunction, types.ElementTypeFunctionCall:
+		return types.ElementTypeFunction
+	case types.ElementTypeMethod, types.ElementTypeMethodCall:
+		return types.ElementTypeMethod
+	case types.ElementTypeReference:
+		return types.ElementTypeClass
+	case types.ElementTypeClass:
+		return types.ElementTypeClass
+	case types.ElementTypeInterface:
+		return types.ElementTypeInterface
+	case types.ElementTypeVariable:
+		return types.ElementTypeVariable
+	default:
+		return types.ElementTypeUndefined
+	}
+}
+
 //// ElementTypeSliceToProto 将 []types.ElementType 转换为 []codegraphpb.ElementType
 //func ElementTypeSliceToProto(elementTypes []types.ElementType) []codegraphpb.ElementType {
 //	result := make([]codegraphpb.ElementType, len(elementTypes))
@@ -161,6 +181,27 @@ func ElementTypeFromProto(t codegraphpb.ElementType) types.ElementType {
 //	return result
 //}
 
+//
+//// RelationSliceFromProto 将 []*codegraphpb.Relation 转换为 []*resolver.Relation
+//func RelationSliceFromProto(relations []*codegraphpb.Relation) []*resolver.Relation {
+//	if relations == nil {
+//		return nil
+//	}
+//
+//	result := make([]*resolver.Relation, len(relations))
+//	for i, r := range relations {
+//		result[i] = RelationFromProto(r)
+//	}
+//	return result
+//}
+
+const (
+	keyParameters      = "parameters"
+	keyReturnType      = "returnType"
+	keySuperClasses    = "superClasses"
+	keySuperInterfaces = "superInterfaces"
+)
+
 // FileElementTablesToProto 将 []parser.FileElementTable 转换为 []*codegraphpb.FileElementTable
 func FileElementTablesToProto(fileElementTables []*parser.FileElementTable) []*codegraphpb.FileElementTable {
 	if len(fileElementTables) == 0 {
@@ -215,27 +256,6 @@ func FileElementTablesToProto(fileElementTables []*parser.FileElementTable) []*c
 	}
 	return protoElementTables
 }
-
-//
-//// RelationSliceFromProto 将 []*codegraphpb.Relation 转换为 []*resolver.Relation
-//func RelationSliceFromProto(relations []*codegraphpb.Relation) []*resolver.Relation {
-//	if relations == nil {
-//		return nil
-//	}
-//
-//	result := make([]*resolver.Relation, len(relations))
-//	for i, r := range relations {
-//		result[i] = RelationFromProto(r)
-//	}
-//	return result
-//}
-
-const (
-	keyParameters      = "parameters"
-	keyReturnType      = "returnType"
-	keySuperClasses    = "superClasses"
-	keySuperInterfaces = "superInterfaces"
-)
 
 func GetParametersFromExtraData(extraData map[string][]byte) (parameters []resolver.Parameter, err error) {
 	parametersBytes, ok := extraData[keyParameters]

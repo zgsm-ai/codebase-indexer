@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	packageclassifier "codebase-indexer/pkg/codegraph/analyzer/package_classifier"
+	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
 	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/codegraph/workspace"
 	"context"
@@ -18,7 +19,7 @@ import (
 // 3、c/cpp 简单处理，只关心项目内的源码，根据当前文件的using部分，再结合符号名；
 // 4、python、ts、go 别名处理；
 // 5、作用域。
-// 6、将 . 统一转为 /，方便后续处理。
+// 6、将 / 统一转为 .，方便后续处理。
 func (da *DependencyAnalyzer) PreprocessImports(ctx context.Context,
 	language lang.Language, projectInfo *workspace.Project, imports []*resolver.Import) ([]*resolver.Import, error) {
 	processedImports := make([]*resolver.Import, 0, len(imports))
@@ -61,7 +62,7 @@ func (da *DependencyAnalyzer) processImportByLanguage(imp *resolver.Import, lang
 		imp.Name = da.resolveRelativePath(imp.Name, imp.Path)
 	}
 
-	// . 转 /
+	// / 转 .
 	imp.Source = da.normalizeImportPath(imp.Source)
 	imp.Name = da.normalizeImportPath(imp.Name)
 
@@ -86,8 +87,19 @@ func (da *DependencyAnalyzer) resolveRelativePath(importPath, currentFilePath st
 	return filepath.Join(baseDir, relPath)
 }
 
-// normalizeImportPath 标准化导入路径，统一处理点和斜杠
+// normalizeImportPath 标准化导入路径，统一处理点和斜杠; 处理 *
 func (da *DependencyAnalyzer) normalizeImportPath(path string) string {
-	path = strings.ReplaceAll(path, types.Dot, types.Slash)
+	path = strings.ReplaceAll(path, types.WindowsSeparator, types.Dot)
+	path = strings.ReplaceAll(path, types.UnixSeparator, types.Dot)
+	path = strings.ReplaceAll(path, types.Star, types.EmptyString)
 	return filepath.Clean(path)
+}
+
+// IsImportPathInFilePath 简化版：将文件目录转为.分隔格式后与import路径比对
+func IsImportPathInFilePath(imp *codegraphpb.Import, filePath string) bool {
+	// 转换为.分隔格式（替换所有系统分隔符）
+	filePath = strings.ReplaceAll(filePath, types.WindowsSeparator, types.Dot)
+	filePath = strings.ReplaceAll(filePath, types.UnixSeparator, types.Dot)
+
+	return strings.Contains(filePath, imp.Name) || strings.Contains(filePath, imp.Source)
 }

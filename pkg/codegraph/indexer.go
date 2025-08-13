@@ -1125,7 +1125,7 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 		}
 
 		// 根据所找到的call 的name + currentImports， 去模糊匹配symbol
-		symDefs, err := i.searchSymbolNames(ctx, projectUuid, dependencyNames, imports)
+		symDefs, err := i.searchSymbolNames(ctx, projectUuid, dependencyNames, currentImports)
 		if err != nil {
 			return nil, fmt.Errorf("failed to search function/method call names: %w", err)
 		}
@@ -1204,7 +1204,7 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 							Path:  o.Path,
 							Name:  s.Name,
 							Range: o.Range,
-							Type:  string(proto.ElementTypeFromProto(s.ElementType)),
+							Type:  string(proto.ToDefinitionElementType(proto.ElementTypeFromProto(s.ElementType))),
 						})
 					}
 				} else {
@@ -1222,7 +1222,7 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 
 const eachSymbolKeepResult = 2
 
-func (i *Indexer) searchSymbolNames(ctx context.Context, projectUuid string, names []string, imports []*resolver.Import) (
+func (i *Indexer) searchSymbolNames(ctx context.Context, projectUuid string, names []string, imports []*codegraphpb.Import) (
 	[]*codegraphpb.Occurrence, error) {
 
 	start := time.Now()
@@ -1283,7 +1283,7 @@ func (i *Indexer) searchSymbolNames(ctx context.Context, projectUuid string, nam
 		for _, v := range foundKeys {
 			for _, doc := range v {
 				for _, imp := range imports {
-					if strings.Contains(doc.Path, imp.Name) || strings.Contains(doc.Path, imp.Source) { //TODO , go work ，多模块等特殊情况
+					if analyzer.IsImportPathInFilePath(imp, doc.Path) { //TODO , go work ，多模块等特殊情况
 						filteredResult = append(filteredResult, doc)
 						break
 					}

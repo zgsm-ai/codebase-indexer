@@ -7,15 +7,28 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"golang.org/x/mod/modfile"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/mod/modfile"
 )
 
 // ModuleResolver 模块解析器，用于解析各种语言的包信息
 type ModuleResolver struct {
 	logger logger.Logger
+}
+
+// GoWorkFile go.work文件结构
+type GoWorkFile struct {
+	Go  string
+	Use []GoWorkUse
+}
+
+// GoWorkUse go.work文件中的use指令
+type GoWorkUse struct {
+	Path       string
+	ModulePath string // 解析后的模块路径
 }
 
 // NewModuleResolver 创建新的模块解析器
@@ -28,7 +41,6 @@ func NewModuleResolver(logger logger.Logger) *ModuleResolver {
 // ResolveProjectModules 解析项目的模块信息，递归多层处理，适应子项目、子模块的场景
 func (mr *ModuleResolver) ResolveProjectModules(ctx context.Context, project *Project, path string, maxDepth int) error {
 	if maxDepth == 0 {
-		mr.logger.Debug("module_resolver project path %s modules info resolve end.", path)
 		return nil
 	}
 	if project == nil {
@@ -42,9 +54,7 @@ func (mr *ModuleResolver) ResolveProjectModules(ctx context.Context, project *Pr
 	if !stat.IsDir() {
 		return nil
 	}
-
-	mr.logger.Debug("module_resolver start to resolve project path %s modules info.", path)
-
+	// goStart := time.Now()
 	// 解析Go模块
 	goModules, err := mr.resolveGoModules(ctx, path)
 	if err != nil {
@@ -53,42 +63,52 @@ func (mr *ModuleResolver) ResolveProjectModules(ctx context.Context, project *Pr
 		project.GoModules = append(project.GoModules, goModules...)
 		mr.logger.Debug("module_resolver project path %s resolved go modules: %v", path, goModules)
 	}
+	//mr.logger.Debug("module_resolver resolve project path %s go modules cost %d ms.", path, time.Since(goStart).Milliseconds())
 
-	// 解析Java包前缀
-	javaPrefixes, err := mr.resolveJavaPackagePrefixes(ctx, path)
-	if err != nil {
-		mr.logger.Debug("module_resolver project path %s resolve java package prefixes err: %v", path, err)
-	} else if len(javaPrefixes) > 0 {
-		project.JavaPackagePrefix = append(project.JavaPackagePrefix, javaPrefixes...)
-		mr.logger.Debug("module_resolver project path %s resolved java package prefixes: %v", path, javaPrefixes)
-	}
+	//// 解析Java包前缀
+	//javaPrefixes, err := mr.resolveJavaPackagePrefixes(ctx, path)
+	//if err != nil {
+	//	mr.logger.Debug("module_resolver project path %s resolve java package prefixes err: %v", path, err)
+	//} else if len(javaPrefixes) > 0 {
+	//	project.JavaPackagePrefix = append(project.JavaPackagePrefix, javaPrefixes...)
+	//	mr.logger.Debug("module_resolver project path %s resolved java package prefixes: %v", path, javaPrefixes)
+	//}
+	//
+	//mr.logger.Debug("module_resolver resolve project path %s java packages cost %d ms.", path, time.Since(goStart).Milliseconds())
 
-	// 解析Python包
-	pythonPackages, err := mr.resolvePythonPackages(ctx, path)
-	if err != nil {
-		mr.logger.Debug("module_resolver project path %s resolved python packages err: %v", path, err)
-	} else if len(pythonPackages) > 0 {
-		project.PythonPackages = append(project.PythonPackages, pythonPackages...)
-		mr.logger.Debug("module_resolver project path %s resolved python packages: %v", path, pythonPackages)
-	}
+	//// 解析Python包
+	//pythonPackages, err := mr.resolvePythonPackages(ctx, path)
+	//if err != nil {
+	//	mr.logger.Debug("module_resolver project path %s resolved python packages err: %v", path, err)
+	//} else if len(pythonPackages) > 0 {
+	//	project.PythonPackages = append(project.PythonPackages, pythonPackages...)
+	//	mr.logger.Debug("module_resolver project path %s resolved python packages: %v", path, pythonPackages)
+	//}
+	//
+	//mr.logger.Debug("module_resolver resolve project path %s python packages cost %d ms.", path, time.Since(goStart).Milliseconds())
+	//
+	//// 解析C/C++头文件路径
+	//cppIncludes, err := mr.resolveCppIncludes(ctx, path)
+	//if err != nil {
+	//	mr.logger.Debug("module_resolver project path %s resolved c/cpp head dirEntries err: %v", path, err)
+	//} else if len(cppIncludes) > 0 {
+	//	project.CppIncludes = append(project.CppIncludes, cppIncludes...)
+	//	mr.logger.Debug("module_resolver project path %s resolved c/cpp head dirEntries: %v", path, cppIncludes)
+	//}
+	//
+	//mr.logger.Debug("module_resolver resolve project path %s cpp includes cost %d ms.", path, time.Since(goStart).Milliseconds())
+	//
+	//// 解析JavaScript/TypeScript包
+	//jsPackages, err := mr.resolveJsPackages(ctx, path)
+	//
+	//if err != nil {
+	//	mr.logger.Debug("module_resolver project path %s resolved ts/js package err: %v", path, err)
+	//} else if len(jsPackages) > 0 {
+	//	project.JsPackages = append(project.JsPackages, jsPackages...)
+	//	mr.logger.Debug("module_resolver project path %s resolved ts/js package err: %v", path, cppIncludes)
+	//}
 
-	// 解析C/C++头文件路径
-	cppIncludes, err := mr.resolveCppIncludes(ctx, path)
-	if err != nil {
-		mr.logger.Debug("module_resolver project path %s resolved c/cpp head dirEntries err: %v", path, err)
-	} else if len(cppIncludes) > 0 {
-		project.CppIncludes = append(project.CppIncludes, cppIncludes...)
-		mr.logger.Debug("module_resolver project path %s resolved c/cpp head dirEntries: %v", path, cppIncludes)
-	}
-
-	// 解析JavaScript/TypeScript包
-	jsPackages, err := mr.resolveJsPackages(ctx, path)
-	if err != nil {
-		mr.logger.Debug("module_resolver project path %s resolved ts/js package err: %v", path, err)
-	} else if len(jsPackages) > 0 {
-		project.JsPackages = append(project.JsPackages, jsPackages...)
-		mr.logger.Debug("module_resolver project path %s resolved ts/js package err: %v", path, cppIncludes)
-	}
+	// mr.logger.Debug("module_resolver resolve project path %s js packages cost %d ms.", path, time.Since(goStart).Milliseconds())
 
 	dirEntries, err := os.ReadDir(path)
 	if err != nil {
@@ -147,7 +167,7 @@ func (mr *ModuleResolver) resolveJavaPackagePrefixes(ctx context.Context, projec
 	}
 
 	// 去重
-	return mr.deduplicateStrings(prefixes), nil
+	return utils.DeDuplicate(prefixes), nil
 }
 
 // parsePomXML 解析pom.xml文件，提取包前缀
@@ -286,7 +306,7 @@ func (mr *ModuleResolver) resolvePythonPackages(ctx context.Context, projectPath
 	}
 
 	// 去重
-	return mr.deduplicateStrings(packages), nil
+	return utils.DeDuplicate(packages), nil
 }
 
 // parseSetupPy 解析setup.py文件
@@ -460,7 +480,7 @@ func (mr *ModuleResolver) resolveCppIncludes(ctx context.Context, projectPath st
 	}
 
 	// 去重
-	return mr.deduplicateStrings(includes), nil
+	return utils.DeDuplicate(includes), nil
 }
 
 // findCppHeadersInDir 在指定目录中查找C/C++头文件
@@ -535,7 +555,7 @@ func (mr *ModuleResolver) resolveJsPackages(ctx context.Context, projectPath str
 	}
 
 	// 去重
-	return mr.deduplicateStrings(packages), nil
+	return utils.DeDuplicate(packages), nil
 }
 
 // parsePackageJson 解析package.json文件
@@ -613,13 +633,78 @@ func (mr *ModuleResolver) findJsPackages(projectPath string) ([]string, error) {
 	return packages, nil
 }
 
-// resolveGoModules 解析Go模块
+// resolveGoWorkspace 解析go.work文件，提取其中引用的所有模块路径
+func (mr *ModuleResolver) resolveGoWorkspace(ctx context.Context, projectPath string) ([]string, error) {
+	goWorkPath := filepath.Join(projectPath, "go.work")
+
+	// 检查go.work文件是否存在
+	if _, err := os.Stat(goWorkPath); err != nil {
+		return nil, nil
+	}
+
+	mr.logger.Debug("module_resolver parsing go.work file: %s", goWorkPath)
+
+	data, err := os.ReadFile(goWorkPath)
+	if err != nil {
+		return nil, fmt.Errorf("module_resolver read go.work file err: %v", err)
+	}
+
+	// 解析go.work文件
+	goWorkFile, err := modfile.ParseWork(goWorkPath, data, nil)
+	if err != nil {
+		return nil, fmt.Errorf("module_resolver parse go.work file err: %v", err)
+	}
+
+	var modules []string
+
+	// 遍历go.work中的use指令，获取所有模块路径
+	for _, use := range goWorkFile.Use {
+		usePath := filepath.Join(projectPath, use.Path)
+
+		// 解析每个use路径下的go.mod文件，获取模块路径
+		goModPath := filepath.Join(usePath, "go.mod")
+		if _, err := os.Stat(goModPath); err == nil {
+			modData, err := os.ReadFile(goModPath)
+			if err != nil {
+				mr.logger.Debug("module_resolver read go.mod file %s err: %v", goModPath, err)
+				continue
+			}
+
+			modulePath := modfile.ModulePath(modData)
+			if modulePath != "" {
+				modules = append(modules, modulePath)
+				mr.logger.Debug("module_resolver resolved go module from go.work: %s -> %s", use.Path, modulePath)
+			}
+		} else {
+			mr.logger.Debug("module_resolver go.mod file not found in use path: %s", usePath)
+		}
+	}
+
+	mr.logger.Debug("module_resolver resolved %d modules from go.work file: %s", len(modules), goWorkPath)
+
+	return modules, nil
+}
+
+// resolveGoModules 解析Go模块，优先使用go.work文件，不存在时解析go.mod文件
 func (mr *ModuleResolver) resolveGoModules(ctx context.Context, projectPath string) ([]string, error) {
 	var modules []string
 
-	// 检查go.mod文件
+	// 首先尝试解析go.work文件
+	goWorkModules, err := mr.resolveGoWorkspace(ctx, projectPath)
+	if err != nil {
+		mr.logger.Debug("module_resolver resolve go.work file err: %v", err)
+	}
+	if len(goWorkModules) > 0 {
+		// 如果go.work文件存在且解析成功，直接返回结果
+		modules = append(modules, goWorkModules...)
+	}
+
+	// 如果没有go.work文件或解析失败，则解析go.mod文件
 	goModPath := filepath.Join(projectPath, "go.mod")
+
 	if _, err := os.Stat(goModPath); err == nil {
+		mr.logger.Debug("module_resolver parsing go.mod file: %s", goModPath)
+
 		data, err := os.ReadFile(goModPath)
 		if err != nil {
 			return nil, fmt.Errorf("module_resover parse go.mod file err: %v", err)
@@ -630,22 +715,8 @@ func (mr *ModuleResolver) resolveGoModules(ctx context.Context, projectPath stri
 			modules = append(modules, modulePath)
 			mr.logger.Debug("module_resolver resolved go module: %s", modulePath)
 		}
+
 	}
 
-	return modules, nil
-}
-
-// deduplicateStrings 去重字符串切片
-func (mr *ModuleResolver) deduplicateStrings(slice []string) []string {
-	keys := make(map[string]bool)
-	var result []string
-
-	for _, item := range slice {
-		if item != "" && !keys[item] {
-			keys[item] = true
-			result = append(result, item)
-		}
-	}
-
-	return result
+	return utils.DeDuplicate(modules), nil
 }

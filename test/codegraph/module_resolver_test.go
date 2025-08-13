@@ -25,7 +25,7 @@ func TestModuleResolver(t *testing.T) {
 		{
 			Name:            "go kubernetes",
 			Workspace:       filepath.Join(testProjectRoot, "go", "kubernetes"),
-			ExpectedModules: []string{"k8s.io"},
+			ExpectedModules: []string{"k8s.io/kubernetes"},
 			WantError:       false,
 		},
 	}
@@ -40,7 +40,8 @@ func TestModuleResolver(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, sliceEqual(testCase.ExpectedModules, project.GoModules))
 		cost := time.Since(start)
-		assert.True(t, cost.Milliseconds() < 50, "module resolve cost should less than %d ms", 50)
+		t.Logf("%s module resolve cost %d ms", testCase.Name, cost.Milliseconds())
+		assert.True(t, cost.Milliseconds() < 50, "module resolve cost should less than %d ms, actual %d ms", 50, cost.Milliseconds())
 	}
 
 }

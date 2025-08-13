@@ -13,7 +13,6 @@ import (
 	"codebase-indexer/pkg/logger"
 	"context"
 	"fmt"
-	"strings"
 )
 
 type DependencyAnalyzer struct {
@@ -412,8 +411,7 @@ func (da *DependencyAnalyzer) FilterByImports(filePath string, imports []*codegr
 
 		// 3、根据import，当前def的路径包含imp的路径
 		for _, imp := range imports {
-			if strings.Contains(def.Path, imp.Source) ||
-				strings.Contains(def.Path, imp.Name) {
+			if IsImportPathInFilePath(imp, filePath) {
 				found = append(found, def)
 				break
 			}
