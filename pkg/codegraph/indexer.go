@@ -1098,17 +1098,19 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 		}
 		imports := parsedData.Imports
 		elements := parsedData.Elements
-		// TODO 找到所有的外部依赖, 当前只处理call
-		var callNames []string
+		// TODO 找到所有的外部依赖, call、
+		var dependencyNames []string
 		for _, e := range elements {
 			if c, ok := e.(*resolver.Call); ok {
-				callNames = append(callNames, c.Name)
+				dependencyNames = append(dependencyNames, c.Name)
+			} else if r, ok := e.(*resolver.Reference); ok {
+				dependencyNames = append(dependencyNames, r.Name)
 			}
 		}
-		if len(callNames) == 0 {
-			return nil, fmt.Errorf("no function/method call found in code snippet")
+		if len(dependencyNames) == 0 {
+			return nil, nil
 		}
-
+		// TODO resolve go modules
 		// 对imports预处理
 		if filteredImps, err := i.analyzer.PreprocessImports(ctx, language, project, imports); err == nil {
 			imports = filteredImps
@@ -1123,7 +1125,7 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 		}
 
 		// 根据所找到的call 的name + currentImports， 去模糊匹配symbol
-		symDefs, err := i.searchSymbolNames(ctx, projectUuid, callNames, imports)
+		symDefs, err := i.searchSymbolNames(ctx, projectUuid, dependencyNames, imports)
 		if err != nil {
 			return nil, fmt.Errorf("failed to search function/method call names: %w", err)
 		}

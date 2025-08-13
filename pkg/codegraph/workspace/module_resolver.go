@@ -13,20 +13,20 @@ import (
 	"strings"
 )
 
-// moduleResolver 模块解析器，用于解析各种语言的包信息
-type moduleResolver struct {
+// ModuleResolver 模块解析器，用于解析各种语言的包信息
+type ModuleResolver struct {
 	logger logger.Logger
 }
 
-// newModuleResolver 创建新的模块解析器
-func newModuleResolver(logger logger.Logger) *moduleResolver {
-	return &moduleResolver{
+// NewModuleResolver 创建新的模块解析器
+func NewModuleResolver(logger logger.Logger) *ModuleResolver {
+	return &ModuleResolver{
 		logger: logger,
 	}
 } //TODO go.work submodules 解析有问题，其它语言支持。扫描目录优化； 有些只查询projects，不需要解析包，分离；
 
 // ResolveProjectModules 解析项目的模块信息，递归多层处理，适应子项目、子模块的场景
-func (mr *moduleResolver) ResolveProjectModules(ctx context.Context, project *Project, path string, maxDepth int) error {
+func (mr *ModuleResolver) ResolveProjectModules(ctx context.Context, project *Project, path string, maxDepth int) error {
 	if maxDepth == 0 {
 		mr.logger.Debug("module_resolver project path %s modules info resolve end.", path)
 		return nil
@@ -121,7 +121,7 @@ type PomXML struct {
 }
 
 // resolveJavaPackagePrefixes 解析Java包前缀
-func (mr *moduleResolver) resolveJavaPackagePrefixes(ctx context.Context, projectPath string) ([]string, error) {
+func (mr *ModuleResolver) resolveJavaPackagePrefixes(ctx context.Context, projectPath string) ([]string, error) {
 	var prefixes []string
 
 	// 1. 从pom.xml文件解析groupId和artifactId
@@ -151,7 +151,7 @@ func (mr *moduleResolver) resolveJavaPackagePrefixes(ctx context.Context, projec
 }
 
 // parsePomXML 解析pom.xml文件，提取包前缀
-func (mr *moduleResolver) parsePomXML(pomPath string) ([]string, error) {
+func (mr *ModuleResolver) parsePomXML(pomPath string) ([]string, error) {
 	data, err := os.ReadFile(pomPath)
 	if err != nil {
 		return nil, fmt.Errorf("module_resolver read pom.xml err: %v", err)
@@ -177,7 +177,7 @@ func (mr *moduleResolver) parsePomXML(pomPath string) ([]string, error) {
 }
 
 // inferJavaPrefixFromDir 从目录结构推断Java包前缀
-func (mr *moduleResolver) inferJavaPrefixFromDir(javaSrcPath string) ([]string, error) {
+func (mr *ModuleResolver) inferJavaPrefixFromDir(javaSrcPath string) ([]string, error) {
 	var prefixes []string
 
 	err := filepath.Walk(javaSrcPath, func(path string, info os.FileInfo, err error) error {
@@ -252,7 +252,7 @@ type PyProjectToml struct {
 }
 
 // resolvePythonPackages 解析Python包
-func (mr *moduleResolver) resolvePythonPackages(ctx context.Context, projectPath string) ([]string, error) {
+func (mr *ModuleResolver) resolvePythonPackages(ctx context.Context, projectPath string) ([]string, error) {
 	var packages []string
 
 	// 1. 从setup.py文件解析包名
@@ -290,7 +290,7 @@ func (mr *moduleResolver) resolvePythonPackages(ctx context.Context, projectPath
 }
 
 // parseSetupPy 解析setup.py文件
-func (mr *moduleResolver) parseSetupPy(setupPyPath string) ([]string, error) {
+func (mr *ModuleResolver) parseSetupPy(setupPyPath string) ([]string, error) {
 	// 注意： setup.py是Python文件，解析比较复杂
 	// 这里使用简化的方法，只读取文件内容并尝试提取包名
 	data, err := os.ReadFile(setupPyPath)
@@ -331,7 +331,7 @@ func (mr *moduleResolver) parseSetupPy(setupPyPath string) ([]string, error) {
 }
 
 // parsePyProjectToml 解析pyproject.toml文件
-func (mr *moduleResolver) parsePyProjectToml(pyprojectPath string) ([]string, error) {
+func (mr *ModuleResolver) parsePyProjectToml(pyprojectPath string) ([]string, error) {
 	data, err := os.ReadFile(pyprojectPath)
 	if err != nil {
 		return nil, fmt.Errorf("module_resolver read pyproject.toml err: %v", err)
@@ -355,7 +355,7 @@ func (mr *moduleResolver) parsePyProjectToml(pyprojectPath string) ([]string, er
 }
 
 // parsePyProjectTomlText 简单文本解析pyproject.toml
-func (mr *moduleResolver) parsePyProjectTomlText(content string) []string {
+func (mr *ModuleResolver) parsePyProjectTomlText(content string) []string {
 	var packages []string
 	lines := strings.Split(content, "\n")
 
@@ -385,7 +385,7 @@ func (mr *moduleResolver) parsePyProjectTomlText(content string) []string {
 }
 
 // findPythonPackages 从项目目录结构查找Python包
-func (mr *moduleResolver) findPythonPackages(projectPath string) ([]string, error) {
+func (mr *ModuleResolver) findPythonPackages(projectPath string) ([]string, error) {
 	var packages []string
 
 	err := filepath.Walk(projectPath, func(path string, info os.FileInfo, err error) error {
@@ -426,7 +426,7 @@ func (mr *moduleResolver) findPythonPackages(projectPath string) ([]string, erro
 }
 
 // resolveCppIncludes 解析C/C++头文件路径
-func (mr *moduleResolver) resolveCppIncludes(ctx context.Context, projectPath string) ([]string, error) {
+func (mr *ModuleResolver) resolveCppIncludes(ctx context.Context, projectPath string) ([]string, error) {
 	var includes []string
 
 	// 检查项目中的常见目录
@@ -464,7 +464,7 @@ func (mr *moduleResolver) resolveCppIncludes(ctx context.Context, projectPath st
 }
 
 // findCppHeadersInDir 在指定目录中查找C/C++头文件
-func (mr *moduleResolver) findCppHeadersInDir(basePath, dirPath string) ([]string, error) {
+func (mr *ModuleResolver) findCppHeadersInDir(basePath, dirPath string) ([]string, error) {
 	var includes []string
 
 	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
@@ -512,7 +512,7 @@ type PackageJSON struct {
 }
 
 // resolveJsPackages 解析JavaScript/TypeScript包
-func (mr *moduleResolver) resolveJsPackages(ctx context.Context, projectPath string) ([]string, error) {
+func (mr *ModuleResolver) resolveJsPackages(ctx context.Context, projectPath string) ([]string, error) {
 	var packages []string
 
 	// 1. 从package.json文件解析包名
@@ -539,7 +539,7 @@ func (mr *moduleResolver) resolveJsPackages(ctx context.Context, projectPath str
 }
 
 // parsePackageJson 解析package.json文件
-func (mr *moduleResolver) parsePackageJson(packageJsonPath string) ([]string, error) {
+func (mr *ModuleResolver) parsePackageJson(packageJsonPath string) ([]string, error) {
 	data, err := os.ReadFile(packageJsonPath)
 	if err != nil {
 		return nil, fmt.Errorf("module_resolver read package.json file err: %v", err)
@@ -581,7 +581,7 @@ func (mr *moduleResolver) parsePackageJson(packageJsonPath string) ([]string, er
 }
 
 // findJsPackages 从项目目录结构查找JavaScript/TypeScript包
-func (mr *moduleResolver) findJsPackages(projectPath string) ([]string, error) {
+func (mr *ModuleResolver) findJsPackages(projectPath string) ([]string, error) {
 	var packages []string
 
 	// 检查常见源代码目录
@@ -614,7 +614,7 @@ func (mr *moduleResolver) findJsPackages(projectPath string) ([]string, error) {
 }
 
 // resolveGoModules 解析Go模块
-func (mr *moduleResolver) resolveGoModules(ctx context.Context, projectPath string) ([]string, error) {
+func (mr *ModuleResolver) resolveGoModules(ctx context.Context, projectPath string) ([]string, error) {
 	var modules []string
 
 	// 检查go.mod文件
@@ -636,7 +636,7 @@ func (mr *moduleResolver) resolveGoModules(ctx context.Context, projectPath stri
 }
 
 // deduplicateStrings 去重字符串切片
-func (mr *moduleResolver) deduplicateStrings(slice []string) []string {
+func (mr *ModuleResolver) deduplicateStrings(slice []string) []string {
 	keys := make(map[string]bool)
 	var result []string
 

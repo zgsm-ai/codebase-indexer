@@ -308,3 +308,83 @@ func TestListSubDirs(t *testing.T) {
 		})
 	}
 }
+
+func TestIsSubdir(t *testing.T) {
+	tests := []struct {
+		name     string
+		parent   string
+		sub      string
+		expected bool
+	}{
+		{
+			name:     "NormalSubdir",
+			parent:   "/home/user",
+			sub:      "/home/user/documents",
+			expected: true,
+		},
+		{
+			name:     "SameDir",
+			parent:   "/home/user",
+			sub:      "/home/user",
+			expected: false, // 相同目录不是子目录
+		},
+		{
+			name:     "NotSubdir",
+			parent:   "/home/user",
+			sub:      "/var/log",
+			expected: false,
+		},
+		{
+			name:     "ParentTrailingSlash",
+			parent:   "/home/user/",
+			sub:      "/home/user/documents",
+			expected: true,
+		},
+		{
+			name:     "SubTrailingSlash",
+			parent:   "/home/user",
+			sub:      "/home/user/documents/",
+			expected: true,
+		},
+		{
+			name:     "BothTrailingSlash",
+			parent:   "/home/user/",
+			sub:      "/home/user/documents/",
+			expected: true,
+		},
+		{
+			name:     "DeepSubdir",
+			parent:   "/a",
+			sub:      "/a/b/c/d",
+			expected: true,
+		},
+		{
+			name:     "WindowsPath",
+			parent:   "C:\\Users\\user",
+			sub:      "C:\\Users\\user\\Downloads",
+			expected: true,
+		},
+		{
+			name:     "WindowsDifferentDrive",
+			parent:   "C:\\Users",
+			sub:      "D:\\Users",
+			expected: false,
+		},
+		{
+			name:     "WithDotSegments",
+			parent:   "/home/user",
+			sub:      "/home/user/../user/documents",
+			expected: true, // 清理后是/home/user/documents
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsSubdir(tt.parent, tt.sub)
+			if got != tt.expected {
+				t.Errorf("IsSubdir(parent=%q, sub=%q) = %v, expected %v",
+					tt.parent, tt.sub, got, tt.expected)
+			}
+		})
+	}
+}

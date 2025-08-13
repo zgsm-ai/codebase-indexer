@@ -31,19 +31,19 @@ func PathEqual(a, b string) bool {
 	return filepath.ToSlash(a) == filepath.ToSlash(b)
 }
 
-func IsChild(parent, path string) bool {
-	// 确保路径规范化（处理斜杠、相对路径等）
+// IsSubdir 判断sub绝对路径是否是parent绝对路径的子目录
+// 注意：parent和sub都必须是绝对路径
+func IsSubdir(parent, sub string) bool {
+	// 确保路径已清理（处理.和..）
 	parent = ToUnixPath(filepath.Clean(parent))
-	path = ToUnixPath(filepath.Clean(path))
-
-	// 计算相对路径
-	rel, err := filepath.Rel(parent, path)
-	if err != nil {
-		return false // 无法计算相对路径（如跨磁盘）
+	sub = ToUnixPath(filepath.Clean(sub))
+	if !strings.HasSuffix(parent, types.Slash) {
+		parent = parent + types.Slash
 	}
-
-	// 相对路径不能以 ".." 开头，且不能等于 "."（即相同路径）
-	return !strings.HasPrefix(rel, "..") && rel != "."
+	if !strings.HasSuffix(sub, types.Slash) {
+		sub = sub + types.Slash
+	}
+	return strings.HasPrefix(sub, parent) && sub != parent
 }
 
 // IsHiddenFile 判断文件或目录是否为隐藏项

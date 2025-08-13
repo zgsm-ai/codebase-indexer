@@ -11,6 +11,7 @@ import (
 	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
 	"codebase-indexer/pkg/codegraph/store"
 	"codebase-indexer/pkg/codegraph/types"
+	"codebase-indexer/pkg/codegraph/utils"
 	"codebase-indexer/pkg/codegraph/workspace"
 	"codebase-indexer/pkg/response"
 	"context"
@@ -86,6 +87,14 @@ type codebaseService struct {
 	workspaceRepository  repository.WorkspaceRepository
 	fileDefinitionParser *definition.DefParser
 	indexer              *codegraph.Indexer
+}
+
+func (s *codebaseService) checkPath(ctx context.Context, workspacePath string, filePath string) error {
+	if filePath != types.EmptyString && !utils.IsSubdir(workspacePath, filePath) {
+		return fmt.Errorf("cannot access path %s which not in workspace %s", filePath, workspacePath)
+	}
+	_, err := s.workspaceRepository.GetWorkspaceByPath(workspacePath)
+	return err
 }
 
 func (s *codebaseService) ExportIndex(c *gin.Context, d *dto.ExportIndexRequest) error {
@@ -200,6 +209,9 @@ func (l *codebaseService) GetFileContent(ctx context.Context, req *dto.GetFileCo
 	// 读取文件
 	filePath := req.FilePath
 	clientPath := req.CodebasePath
+	if err := l.checkPath(ctx, clientPath, filePath); err != nil {
+		return nil, err
+	}
 
 	if clientPath == types.EmptyString {
 		return nil, errors.New("codebase path is empty")
@@ -210,6 +222,11 @@ func (l *codebaseService) GetFileContent(ctx context.Context, req *dto.GetFileCo
 
 func (l *codebaseService) GetCodebaseDirectoryTree(ctx context.Context, req *dto.GetCodebaseDirectoryRequest) (
 	resp *dto.DirectoryData, err error) {
+
+	if err = l.checkPath(ctx, req.CodebasePath, req.SubDir); err != nil {
+		return nil, err
+	}
+
 	// 1. 从数据库查询 codebase 信息
 	treeOpts := types.TreeOptions{
 		MaxDepth: req.Depth,
@@ -381,7 +398,7 @@ const maxLayerLimit = 5
 
 func (l *codebaseService) QueryRelation(ctx context.Context, req *dto.SearchRelationRequest) (resp *dto.RelationData, err error) {
 
-	return nil, fmt.Errorf("api not implemented")
+	return nil, fmt.Errorf("api not supported")
 	// 参数验证
 	//if req.ClientId == types.EmptyString {
 	//	return nil, errs.NewMissingParamError("clientId")

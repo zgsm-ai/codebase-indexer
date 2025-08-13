@@ -48,14 +48,14 @@ func (m *MockLogger) Fatal(format string, args ...any) {
 	m.fatalMessages = append(m.fatalMessages, fmt.Sprintf(format, args...))
 }
 
-// TestNewModuleResolver 测试 newModuleResolver 函数
+// TestNewModuleResolver 测试 NewModuleResolver 函数
 func TestNewModuleResolver(t *testing.T) {
 	mockLogger := NewMockLogger()
 
-	resolver := newModuleResolver(mockLogger)
+	resolver := NewModuleResolver(mockLogger)
 
 	if resolver == nil {
-		t.Fatal("newModuleResolver 返回了 nil")
+		t.Fatal("NewModuleResolver 返回了 nil")
 	}
 
 	if resolver.logger != mockLogger {
@@ -67,7 +67,7 @@ func TestNewModuleResolver(t *testing.T) {
 func TestResolveProjectModules(t *testing.T) {
 	ctx := context.Background()
 	mockLogger := NewMockLogger()
-	resolver := newModuleResolver(mockLogger)
+	resolver := NewModuleResolver(mockLogger)
 
 	// 测试传入 nil project 时的错误处理
 	err := resolver.ResolveProjectModules(ctx, nil, "test-project", 2)
@@ -106,7 +106,7 @@ func TestResolveProjectModules(t *testing.T) {
 func TestResolveProjectModulesWithVariousLanguages(t *testing.T) {
 	ctx := context.Background()
 	mockLogger := NewMockLogger()
-	resolver := newModuleResolver(mockLogger)
+	resolver := NewModuleResolver(mockLogger)
 
 	tempDir := t.TempDir()
 	project := NewProject("test-project", tempDir)
@@ -150,7 +150,7 @@ func TestResolveProjectModulesWithVariousLanguages(t *testing.T) {
 func TestResolveJavaPackagePrefixes(t *testing.T) {
 	ctx := context.Background()
 	mockLogger := NewMockLogger()
-	resolver := newModuleResolver(mockLogger)
+	resolver := NewModuleResolver(mockLogger)
 
 	tempDir := t.TempDir()
 
@@ -208,7 +208,7 @@ func TestResolveJavaPackagePrefixes(t *testing.T) {
 func TestResolvePythonPackages(t *testing.T) {
 	ctx := context.Background()
 	mockLogger := NewMockLogger()
-	resolver := newModuleResolver(mockLogger)
+	resolver := NewModuleResolver(mockLogger)
 
 	tempDir := t.TempDir()
 
@@ -283,7 +283,7 @@ name = "myapp2"
 func TestResolveCppIncludes(t *testing.T) {
 	ctx := context.Background()
 	mockLogger := NewMockLogger()
-	resolver := newModuleResolver(mockLogger)
+	resolver := NewModuleResolver(mockLogger)
 
 	tempDir := t.TempDir()
 
@@ -349,7 +349,7 @@ func TestResolveCppIncludes(t *testing.T) {
 func TestResolveJsPackages(t *testing.T) {
 	ctx := context.Background()
 	mockLogger := NewMockLogger()
-	resolver := newModuleResolver(mockLogger)
+	resolver := NewModuleResolver(mockLogger)
 
 	tempDir := t.TempDir()
 
@@ -426,7 +426,7 @@ func TestResolveJsPackages(t *testing.T) {
 func TestResolveGoModules(t *testing.T) {
 	ctx := context.Background()
 	mockLogger := NewMockLogger()
-	resolver := newModuleResolver(mockLogger)
+	resolver := NewModuleResolver(mockLogger)
 
 	tempDir := t.TempDir()
 
@@ -455,7 +455,7 @@ go 1.19
 // TestDeduplicateStrings 测试 deduplicateStrings 方法
 func TestDeduplicateStrings(t *testing.T) {
 	mockLogger := NewMockLogger()
-	resolver := newModuleResolver(mockLogger)
+	resolver := NewModuleResolver(mockLogger)
 
 	// 测试正常去重
 	input := []string{"a", "b", "a", "c", "", "b", ""}
@@ -486,7 +486,7 @@ func TestDeduplicateStrings(t *testing.T) {
 // TestParsePomXML 测试 parsePomXML 方法
 func TestParsePomXML(t *testing.T) {
 	mockLogger := NewMockLogger()
-	resolver := newModuleResolver(mockLogger)
+	resolver := NewModuleResolver(mockLogger)
 
 	tempDir := t.TempDir()
 
@@ -548,7 +548,7 @@ func TestParsePomXML(t *testing.T) {
 // TestParseSetupPy 测试 parseSetupPy 方法
 func TestParseSetupPy(t *testing.T) {
 	mockLogger := NewMockLogger()
-	resolver := newModuleResolver(mockLogger)
+	resolver := NewModuleResolver(mockLogger)
 
 	tempDir := t.TempDir()
 
@@ -621,7 +621,7 @@ setup(
 // TestParsePackageJson 测试 parsePackageJson 方法
 func TestParsePackageJson(t *testing.T) {
 	mockLogger := NewMockLogger()
-	resolver := newModuleResolver(mockLogger)
+	resolver := NewModuleResolver(mockLogger)
 
 	tempDir := t.TempDir()
 

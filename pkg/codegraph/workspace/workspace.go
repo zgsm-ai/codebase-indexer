@@ -38,8 +38,8 @@ func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, re
 	start := time.Now()
 	w.logger.Info("find_projects start to scan workspace：%s", workspace)
 
-	// 创建 moduleResolver 实例
-	moduleResolver := newModuleResolver(w.logger)
+	// 创建 ModuleResolver 实例
+	moduleResolver := NewModuleResolver(w.logger)
 
 	var projects []*Project
 	maxLayer := 3
