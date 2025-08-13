@@ -227,7 +227,6 @@ func (h *BackendHandler) GetIndexSummary(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("get index summary request: ClientId=%s, Workspace=%s", req.ClientId, req.CodebasePath)
 	summarize, err := h.codebaseService.Summarize(c, &req)
 	if err != nil {
 		h.logger.Error("get index summary: %v", err)
@@ -235,6 +234,22 @@ func (h *BackendHandler) GetIndexSummary(c *gin.Context) {
 		return
 	}
 	response.OkJson(c, summarize)
+}
+
+func (h *BackendHandler) ExportIndex(c *gin.Context) {
+	var req dto.ExportIndexRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		h.logger.Error("invalid request format: %v", err)
+		response.Error(c, http.StatusBadRequest, err)
+		return
+	}
+
+	err := h.codebaseService.ExportIndex(c, &req)
+	if err != nil {
+		h.logger.Error("export index err: %v", err)
+		response.Error(c, http.StatusBadRequest, err)
+		return
+	}
 }
 
 // SetupRoutes 设置后端API路由
@@ -248,5 +263,6 @@ func (h *BackendHandler) SetupRoutes(router *gin.Engine) {
 		api.GET("/codebases/directory", h.GetCodebaseDirectory)
 		api.GET("/files/structure", h.GetFileStructure)
 		api.GET("/index/summary", h.GetIndexSummary)
+		api.GET("/index/export", h.ExportIndex)
 	}
 }

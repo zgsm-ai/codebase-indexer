@@ -8,12 +8,17 @@ import (
 	"codebase-indexer/pkg/codegraph"
 	"codebase-indexer/pkg/codegraph/definition"
 	"codebase-indexer/pkg/codegraph/lang"
+	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
+	"codebase-indexer/pkg/codegraph/store"
 	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/codegraph/workspace"
+	"codebase-indexer/pkg/response"
 	"context"
 	"crypto/md5"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,6 +58,7 @@ type CodebaseService interface {
 
 	// DeleteIndex 删除代码库的索引（支持按类型删除）
 	DeleteIndex(ctx context.Context, req *dto.DeleteIndexRequest) error
+	ExportIndex(c *gin.Context, d *dto.ExportIndexRequest) error
 }
 
 const maxReadLine = 5000
@@ -80,6 +86,49 @@ type codebaseService struct {
 	workspaceRepository  repository.WorkspaceRepository
 	fileDefinitionParser *definition.DefParser
 	indexer              *codegraph.Indexer
+}
+
+func (s *codebaseService) ExportIndex(c *gin.Context, d *dto.ExportIndexRequest) error {
+	projects := s.workspaceReader.FindProjects(c, d.CodebasePath, false, workspace.DefaultVisitPattern)
+	if len(projects) == 0 {
+		return fmt.Errorf("can not find project in workspace %s", d.CodebasePath)
+	}
+	downloader := response.NewDownloader(c, fmt.Sprintf("%s-index.json", d.CodebasePath))
+	defer downloader.Finish()
+	for _, project := range projects {
+		summary, _ := s.indexer.GetSummary(c, d.CodebasePath)
+		s.logger.Debug("workspace %s has %d indexes", d.CodebasePath, summary.TotalFiles)
+		iter := s.indexer.IndexIter(c, project.Uuid)
+		for iter.Next() {
+			key := iter.Key()
+			value := iter.Value()
+			if store.IsElementPathKey(key) {
+				var fileTable codegraphpb.FileElementTable
+				if err := store.UnmarshalValue(value, &fileTable); err != nil {
+					return err
+				} else {
+					bytes, err := json.Marshal(&fileTable)
+					if err == nil {
+						_ = downloader.Write(bytes)
+						_ = downloader.Write([]byte("\n"))
+					}
+				}
+			} else if store.IsSymbolNameKey(key) {
+				var sym codegraphpb.SymbolOccurrence
+				if err := store.UnmarshalValue(value, &sym); err != nil {
+					return err
+				} else {
+					bytes, err := json.Marshal(&sym)
+					if err == nil {
+						_ = downloader.Write(bytes)
+						_ = downloader.Write([]byte("\n"))
+					}
+				}
+			}
+		}
+		_ = iter.Close()
+	}
+	return nil
 }
 
 // FindCodebasePaths 查找指定路径下的代码库配置

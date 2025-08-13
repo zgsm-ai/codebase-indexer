@@ -33,7 +33,7 @@ func NewWorkSpaceReader(logger logger.Logger) *WorkspaceReader {
 	}
 }
 
-func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, visitPattern *types.VisitPattern) []*Project {
+func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, resolveModule bool, visitPattern *types.VisitPattern) []*Project {
 
 	start := time.Now()
 	w.logger.Info("find_projects start to scan workspace：%s", workspace)
@@ -63,8 +63,10 @@ func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, vi
 			Uuid: generateUuid(projectName, workspace),
 		}
 		projects = append(projects, project)
-		if err := moduleResolver.ResolveProjectModules(ctx, project, project.Path, 2); err != nil {
-			w.logger.Error("find_projects resolve project modules err:%v", err)
+		if resolveModule {
+			if err := moduleResolver.ResolveProjectModules(ctx, project, project.Path, 2); err != nil {
+				w.logger.Error("find_projects resolve project modules err:%v", err)
+			}
 		}
 
 		foundGit = true
@@ -117,9 +119,10 @@ func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, vi
 							Uuid: generateUuid(projectName, subDir),
 						}
 						projects = append(projects, project)
-
-						if err = moduleResolver.ResolveProjectModules(ctx, project, project.Path, 2); err != nil {
-							w.logger.Error("find_projects resolve project modules err:%v", err)
+						if resolveModule {
+							if err = moduleResolver.ResolveProjectModules(ctx, project, project.Path, 2); err != nil {
+								w.logger.Error("find_projects resolve project modules err:%v", err)
+							}
 						}
 
 						foundGit = true
@@ -143,8 +146,10 @@ func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, vi
 			Uuid: generateUuid(projectName, workspace),
 		}
 		projects = append(projects, project)
-		if err := moduleResolver.ResolveProjectModules(ctx, project, project.Path, 2); err != nil {
-			w.logger.Error("find_projects resolve project modules err:%v", err)
+		if resolveModule {
+			if err := moduleResolver.ResolveProjectModules(ctx, project, project.Path, 2); err != nil {
+				w.logger.Error("find_projects resolve project modules err:%v", err)
+			}
 		}
 	}
 
@@ -485,8 +490,8 @@ func (l *WorkspaceReader) Tree(ctx context.Context, workspacePath string, subDir
 	return rootNodes, nil
 }
 
-func (w *WorkspaceReader) GetProjectByFilePath(ctx context.Context, workspace string, filePath string) (*Project, error) {
-	projects := w.FindProjects(ctx, workspace, DefaultVisitPattern)
+func (w *WorkspaceReader) GetProjectByFilePath(ctx context.Context, workspace string, filePath string, resolveModule bool) (*Project, error) {
+	projects := w.FindProjects(ctx, workspace, resolveModule, DefaultVisitPattern)
 	if len(projects) == 0 {
 		return nil, fmt.Errorf("found no projects in workspace %s", workspace)
 	}

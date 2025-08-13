@@ -187,7 +187,7 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 		model.CodegraphStatusInit,
 	}
 	// 1、打开工作区事件
-	openEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeAddFile}, workspacePaths, 10,
+	openEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeOpenWorkspace}, workspacePaths, 10,
 		false, nil, codegraphStatuses)
 
 	if err != nil {

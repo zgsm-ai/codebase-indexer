@@ -123,6 +123,12 @@ type GetIndexSummaryRequest struct {
 	CodebasePath string `form:"codebasePath" binding:"required"`
 }
 
+// ExportIndexRequest 导出索引请求
+type ExportIndexRequest struct {
+	ClientId     string `form:"clientId" binding:"required"`
+	CodebasePath string `form:"codebasePath" binding:"required"`
+}
+
 // DeleteIndexRequest 删除索引请求
 type DeleteIndexRequest struct {
 	ClientId     string `form:"clientId" binding:"required"`

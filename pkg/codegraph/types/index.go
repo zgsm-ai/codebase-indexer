@@ -23,12 +23,11 @@ type CodeDefinition struct {
 }
 
 type Definition struct {
-	Name      string
-	Type      string
-	Path      string
-	Range     []int32
-	Signature string
-	Content   []byte
+	Name    string
+	Type    string
+	Path    string
+	Range   []int32
+	Content []byte
 }
 
 type QueryDefinitionOptions struct {

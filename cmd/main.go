@@ -3,6 +3,7 @@ package main
 
 import (
 	"codebase-indexer/pkg/codegraph/definition"
+	"codebase-indexer/pkg/codegraph/types"
 	"context"
 	"flag"
 	"fmt"
@@ -112,9 +113,19 @@ func main() {
 	workspaceRepo := repository.NewWorkspaceRepository(dbManager, appLogger)
 	eventRepo := repository.NewEventRepository(dbManager, appLogger)
 	var syncServiceConfig *config.SyncConfig
+	if *clientId == types.EmptyString {
+		panic("missing required param clientid")
+	}
+	if *serverEndpoint == types.EmptyString {
+		panic("missing required param server")
+	}
+	if *token == types.EmptyString {
+		panic("missing required param token")
+	}
 	if *clientId != "" && *serverEndpoint != "" && *token != "" {
 		syncServiceConfig = &config.SyncConfig{ClientId: *clientId, ServerURL: *serverEndpoint, Token: *token}
 	}
+
 	scanRepo := repository.NewFileScanner(appLogger)
 	syncRepo := repository.NewHTTPSync(syncServiceConfig, appLogger)
 

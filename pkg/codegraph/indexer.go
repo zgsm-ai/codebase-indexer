@@ -153,7 +153,7 @@ func (i *Indexer) IndexWorkspace(ctx context.Context, workspacePath string) (*ty
 	if err == nil && !exists {
 		return taskMetrics, fmt.Errorf("index_workspace workspace %s not exists", workspacePath)
 	}
-	projects := i.workspaceReader.FindProjects(ctx, workspacePath, workspace.DefaultVisitPattern)
+	projects := i.workspaceReader.FindProjects(ctx, workspacePath, true, workspace.DefaultVisitPattern)
 	projectsCnt := len(projects)
 	if projectsCnt == 0 {
 		return taskMetrics, fmt.Errorf("index_workspace find no projects in workspace: %s", workspacePath)
@@ -220,7 +220,7 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 		time.Since(projectStart).Milliseconds(), totalFiles)
 
 	// CPU优化：使用增强版的并发度优化
-	i.logger.Info("index_project %s concurrency: %d, batch_size: %d",
+	i.logger.Info("index_project %s, concurrency: %d, batch_size: %d",
 		project.Path, i.config.MaxConcurrency, i.config.MaxBatchSize)
 
 	// 阶段1-3：批量处理文件（解析、检查、保存符号表）
@@ -342,7 +342,7 @@ func (i *Indexer) RemoveIndexes(ctx context.Context, workspacePath string, fileP
 	start := time.Now()
 	i.logger.Info("remove_indexes start to remove workspace %s files: %v", workspacePath, filePaths)
 
-	projects := i.workspaceReader.FindProjects(ctx, workspacePath, workspace.DefaultVisitPattern)
+	projects := i.workspaceReader.FindProjects(ctx, workspacePath, false, workspace.DefaultVisitPattern)
 	if len(projects) == 0 {
 		return fmt.Errorf("no project found in workspace %s", workspacePath)
 	}
@@ -547,7 +547,7 @@ func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePath
 	if err == nil && !exists {
 		return fmt.Errorf("index_files workspace %s not exists", workspacePath)
 	}
-	projects := i.workspaceReader.FindProjects(ctx, workspacePath, workspace.DefaultVisitPattern)
+	projects := i.workspaceReader.FindProjects(ctx, workspacePath, true, workspace.DefaultVisitPattern)
 	if len(projects) == 0 {
 		return fmt.Errorf("no project found in workspace %s", workspacePath)
 	}
@@ -643,7 +643,7 @@ func (i *Indexer) indexProjectFiles(ctx context.Context, projectUuid string, fil
 func (i *Indexer) QueryElements(ctx context.Context, workspacePath string, filePaths []string) ([]*codegraphpb.FileElementTable, error) {
 	i.logger.Info("query_elements start to query workspace %s files: %v", workspacePath, filePaths)
 
-	projects := i.workspaceReader.FindProjects(ctx, workspacePath, workspace.DefaultVisitPattern)
+	projects := i.workspaceReader.FindProjects(ctx, workspacePath, false, workspace.DefaultVisitPattern)
 	if len(projects) == 0 {
 		return nil, fmt.Errorf("no project found in workspace %s", workspacePath)
 	}
@@ -688,7 +688,7 @@ func (i *Indexer) QueryElements(ctx context.Context, workspacePath string, fileP
 func (i *Indexer) QuerySymbols(ctx context.Context, workspacePath string, filePath string, symbolNames []string) ([]*codegraphpb.SymbolOccurrence, error) {
 	i.logger.Info("query_symbols start to query workspace %s file %s symbols: %v", workspacePath, filePath, symbolNames)
 
-	projects := i.workspaceReader.FindProjects(ctx, workspacePath, workspace.DefaultVisitPattern)
+	projects := i.workspaceReader.FindProjects(ctx, workspacePath, false, workspace.DefaultVisitPattern)
 	if len(projects) == 0 {
 		return nil, fmt.Errorf("no project found in workspace %s", workspacePath)
 	}
@@ -1053,7 +1053,7 @@ func (i *Indexer) querySymbolsByNameAndLine(doc *codegraphpb.FileElementTable, o
 
 func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefinitionOptions) ([]*types.Definition, error) {
 	filePath := options.FilePath
-	project, err := i.workspaceReader.GetProjectByFilePath(ctx, options.Workspace, filePath)
+	project, err := i.workspaceReader.GetProjectByFilePath(ctx, options.Workspace, filePath, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project by file: %s, err: %w", filePath, err)
 	}
@@ -1154,6 +1154,9 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 		// 1. 获取文档
 		var fileTable codegraphpb.FileElementTable
 		fileTableBytes, err := i.storage.Get(ctx, projectUuid, store.ElementPathKey{Language: language, Path: filePath})
+		if errors.Is(err, store.ErrKeyNotFound) {
+			return nil, fmt.Errorf("index not found for file %s", filePath)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to get file %s element_table, err: %v", filePath, err)
 		}
@@ -1179,6 +1182,7 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 				Path:  filePath,
 				Name:  s.Name,
 				Range: s.Range,
+				Type:  string(proto.ElementTypeFromProto(s.ElementType)),
 			})
 			continue
 		} else { // 引用
@@ -1198,6 +1202,7 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 							Path:  o.Path,
 							Name:  s.Name,
 							Range: o.Range,
+							Type:  string(proto.ElementTypeFromProto(s.ElementType)),
 						})
 					}
 				} else {
@@ -1361,7 +1366,7 @@ func (i *Indexer) findReferenceSymbolBelonging(f *codegraphpb.FileElementTable,
 }
 
 func (i *Indexer) GetSummary(ctx context.Context, workspacePath string) (*types.CodeGraphSummary, error) {
-	projects := i.workspaceReader.FindProjects(ctx, workspacePath, workspace.DefaultVisitPattern)
+	projects := i.workspaceReader.FindProjects(ctx, workspacePath, false, workspace.DefaultVisitPattern)
 	if len(projects) == 0 {
 		return nil, fmt.Errorf("found no projects in workspace %s", workspacePath)
 	}
@@ -1373,7 +1378,7 @@ func (i *Indexer) GetSummary(ctx context.Context, workspacePath string) (*types.
 }
 
 func (i *Indexer) RemoveAllIndexes(ctx context.Context, workspacePath string) error {
-	projects := i.workspaceReader.FindProjects(ctx, workspacePath, workspace.DefaultVisitPattern)
+	projects := i.workspaceReader.FindProjects(ctx, workspacePath, false, workspace.DefaultVisitPattern)
 	if len(projects) == 0 {
 		i.logger.Info("remove_all_index found no projects in workspace %s", workspacePath)
 		return nil
@@ -1388,16 +1393,16 @@ func (i *Indexer) RemoveAllIndexes(ctx context.Context, workspacePath string) er
 // RenameIndexes 重命名索引，根据路径（文件或文件夹）
 func (i *Indexer) RenameIndexes(ctx context.Context, workspacePath string, sourceFilePath string, targetFilePath string) error {
 	//TODO 查出来source，删除、重命名相关path、写入，更新symbol中指向source的路径为target（迭代式进行）
-	projects := i.workspaceReader.FindProjects(ctx, workspacePath, workspace.DefaultVisitPattern)
+	projects := i.workspaceReader.FindProjects(ctx, workspacePath, false, workspace.DefaultVisitPattern)
 	if len(projects) == 0 {
 		i.logger.Info("rename_index found no projects in workspace %s", workspacePath)
 		return nil
 	}
-	sourceProject, err := i.workspaceReader.GetProjectByFilePath(ctx, workspacePath, sourceFilePath)
+	sourceProject, err := i.workspaceReader.GetProjectByFilePath(ctx, workspacePath, sourceFilePath, false)
 	if err != nil {
 		return fmt.Errorf("rename_index cannot find project for file %s, err:%v", sourceFilePath, err)
 	}
-	targetProject, err := i.workspaceReader.GetProjectByFilePath(ctx, workspacePath, targetFilePath)
+	targetProject, err := i.workspaceReader.GetProjectByFilePath(ctx, workspacePath, targetFilePath, false)
 	if err != nil {
 		return fmt.Errorf("rename_index cannot find project for file %s, err:%v", targetFilePath, err)
 	}
@@ -1795,4 +1800,8 @@ func (i *Indexer) updateProgress(ctx context.Context, progress *ProgressInfo) er
 	}
 
 	return nil
+}
+
+func (i *Indexer) IndexIter(ctx context.Context, projectUuid string) store.Iterator {
+	return i.storage.Iter(ctx, projectUuid)
 }
