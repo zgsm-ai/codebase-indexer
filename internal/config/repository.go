@@ -6,7 +6,9 @@ import "time"
 type ScannerConfig struct {
 	FileIgnorePatterns   []string
 	FolderIgnorePatterns []string
+	FileIncludePatterns  []string
 	MaxFileSizeKB        int // File size limit in KB
+	MaxFileCount         int
 }
 
 // SyncConfig holds the sync configuration

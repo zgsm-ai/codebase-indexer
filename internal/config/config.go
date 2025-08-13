@@ -10,10 +10,12 @@ type ConfigServer struct {
 type ConfigSync struct {
 	IntervalMinutes         int      `json:"intervalMinutes"`
 	MaxFileSizeKB           int      `json:"maxFileSizeKB"`
+	MaxFileCount            int      `json:"maxFileCount"`
 	MaxRetries              int      `json:"maxRetries"`
 	RetryDelaySeconds       int      `json:"retryDelaySeconds"`
 	FileIgnorePatterns      []string `json:"fileIgnorePatterns"`
 	FolderIgnorePatterns    []string `json:"folderIgnorePatterns"`
+	FileIncludePatterns     []string `json:"fileIncludePatterns"`
 	EmbeddingSuccessPercent float32  `json:"embeddingSuccessPercent"`
 	CodegraphSuccessPercent float32  `json:"codegraphSuccessPercent"`
 }
@@ -75,18 +77,24 @@ var DefaultFolderIgnorePatterns = []string{
 	// Keep other specific directories not starting with dot
 	"logs/", "temp/", "tmp/", "node_modules/",
 	"bin/", "dist/", "build/", "out/",
-	"__pycache__/", "venv/", "target/",
+	"__pycache__/", "venv/", "target/", "vendor/",
+}
+
+var DefaultFileIncludePatterns = []string{
+	".md",
 }
 
 var DefaultConfigSync = ConfigSync{
-	IntervalMinutes:         5,                           // Default sync interval in minutes
-	MaxFileSizeKB:           50,                          // Default maximum file size in KB
+	IntervalMinutes:         5,  // Default sync interval in minutes
+	MaxFileSizeKB:           50, // Default maximum file size in KB
+	MaxFileCount:            50000,
 	MaxRetries:              3,                           // Default maximum retry count
 	RetryDelaySeconds:       3,                           // Default retry delay in seconds
 	FileIgnorePatterns:      DefaultFileIgnorePatterns,   // Default file ignore patterns
 	FolderIgnorePatterns:    DefaultFolderIgnorePatterns, // Default folder ignore patterns
-	EmbeddingSuccessPercent: 80.0,                        // Default embedding success percent
-	CodegraphSuccessPercent: 90.0,                        // Default codegraph success percent
+	FileIncludePatterns:     DefaultFileIncludePatterns,
+	EmbeddingSuccessPercent: 80.0, // Default embedding success percent
+	CodegraphSuccessPercent: 90.0, // Default codegraph success percent
 }
 
 // Default pprof configuration
