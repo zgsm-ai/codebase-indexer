@@ -26,7 +26,10 @@ func newRootElement(elementTypeValue string, rootIndex uint32) resolver.Element 
 		return &resolver.Import{BaseElement: base}
 	case types.ElementTypeFunction:
 		base.Type = types.ElementTypeFunction
-		return &resolver.Function{BaseElement: base}
+		return &resolver.Function{
+			BaseElement: base,
+			Declaration: &resolver.Declaration{},
+		}
 	case types.ElementTypeClass:
 		base.Type = types.ElementTypeClass
 		return &resolver.Class{BaseElement: base}
@@ -50,7 +53,10 @@ func newRootElement(elementTypeValue string, rootIndex uint32) resolver.Element 
 		return &resolver.Class{BaseElement: base}
 	case types.ElementTypeMethod:
 		base.Type = types.ElementTypeMethod
-		return &resolver.Method{BaseElement: base}
+		return &resolver.Method{
+			BaseElement: base,
+			Declaration: &resolver.Declaration{},
+		}
 	case types.ElementTypeFunctionCall:
 		base.Type = types.ElementTypeFunctionCall
 		return &resolver.Call{BaseElement: base}

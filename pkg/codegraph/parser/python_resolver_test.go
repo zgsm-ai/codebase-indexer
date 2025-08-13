@@ -183,7 +183,7 @@ func TestPythonResolver_ResolveFunction(t *testing.T) {
 				funcMap := make(map[string]*resolver.Declaration)
 				for _, element := range res.Elements {
 					if fn, ok := element.(*resolver.Function); ok {
-						funcMap[fn.Declaration.Name] = &fn.Declaration
+						funcMap[fn.Declaration.Name] = fn.Declaration
 					}
 				}
 				// 2. 逐个比较每个期望的函数
@@ -324,7 +324,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 			wantMethods: []resolver.Method{
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "simple_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -335,7 +335,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_with_params",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -349,7 +349,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_with_defaults",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -363,7 +363,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "typed_method",
 						ReturnType: []string{"bool"},
 						Parameters: []resolver.Parameter{
@@ -376,7 +376,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "complex_typed_method",
 						ReturnType: []string{"tuple", "int", "str"},
 						Parameters: []resolver.Parameter{
@@ -389,7 +389,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "variadic_args",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -401,7 +401,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "variadic_kwargs",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -413,7 +413,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "mixed_params",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -428,7 +428,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "keyword_only",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -441,7 +441,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "positional_only",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -456,7 +456,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "documented_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -469,7 +469,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "generator_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -480,7 +480,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "async_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -491,7 +491,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "complex_body_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -503,7 +503,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_with_exception",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -514,7 +514,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_with_context",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -525,7 +525,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_with_comprehension",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -537,7 +537,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_with_ternary",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -549,7 +549,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_with_loops",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -561,7 +561,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_with_assert",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -573,7 +573,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_with_complex_return",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -584,7 +584,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "recursive_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -596,7 +596,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__special_method__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -607,7 +607,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "_private_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -618,7 +618,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_with_underscore_end_",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -629,7 +629,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_with_complex_control_flow",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -641,7 +641,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "static_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{},
@@ -650,7 +650,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "static_method_with_params",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -662,7 +662,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "typed_static_method",
 						ReturnType: []string{"bool"},
 						Parameters: []resolver.Parameter{
@@ -674,7 +674,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "class_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -685,7 +685,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "class_method_with_params",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -697,7 +697,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "computed_property1",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -708,7 +708,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "computed_property2",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -720,7 +720,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "computed_property3",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -731,7 +731,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "decorated_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -742,7 +742,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "decorated_method_with_args",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -753,7 +753,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "cached_property",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -764,7 +764,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "abstract_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -775,7 +775,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "abstract_method_with_params",
 						ReturnType: []string{"str"},
 						Parameters: []resolver.Parameter{
@@ -787,7 +787,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "concrete_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -798,7 +798,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "parent_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -809,7 +809,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "overridden_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -820,7 +820,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "overridden_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -831,7 +831,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "extended_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -842,7 +842,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "generic_method",
 						ReturnType: []string{"T"},
 						Parameters: []resolver.Parameter{
@@ -854,7 +854,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_with_typing_annotations",
 						ReturnType: []string{"List", "str"},
 						Parameters: []resolver.Parameter{
@@ -870,7 +870,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__init__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -882,7 +882,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__str__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -893,7 +893,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__repr__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -904,7 +904,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__len__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -915,7 +915,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__getitem__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -927,7 +927,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__setitem__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -940,7 +940,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__call__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -953,7 +953,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__enter__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -964,7 +964,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__exit__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -978,7 +978,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__iter__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -989,7 +989,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__next__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1000,7 +1000,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__add__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1012,7 +1012,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__eq__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1024,7 +1024,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "inner_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1035,7 +1035,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "inner_static_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{},
@@ -1044,7 +1044,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "outer_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1055,7 +1055,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_with_unpacking",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1066,7 +1066,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_with_walrus",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1078,7 +1078,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_a",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1089,7 +1089,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_b",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1100,7 +1100,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "combined_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1111,7 +1111,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "access_class_var",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1122,7 +1122,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "modify_class_var",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1134,7 +1134,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__init__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1145,7 +1145,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "access_instance_var",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1156,7 +1156,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "modify_instance_var",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1168,7 +1168,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_with_global",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1179,7 +1179,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "outer_with_nonlocal",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1190,7 +1190,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_with_complex_defaults",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1204,7 +1204,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_with_match",
 						ReturnType: []string{"str"},
 						Parameters: []resolver.Parameter{
@@ -1216,7 +1216,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "greet",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1227,7 +1227,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "is_adult",
 						ReturnType: []string{"bool"},
 						Parameters: []resolver.Parameter{
@@ -1238,7 +1238,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "expensive_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1250,7 +1250,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "multi_decorated_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{},
@@ -1259,7 +1259,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "complex_control_flow",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1271,7 +1271,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "async_generator_method",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1282,7 +1282,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__init__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1293,7 +1293,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__enter__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1304,7 +1304,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__exit__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1318,7 +1318,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_with_context_manager",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1329,7 +1329,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__init__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1340,7 +1340,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__get__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1353,7 +1353,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__set__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1366,7 +1366,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__delete__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1378,7 +1378,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "use_descriptor",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1389,7 +1389,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__new__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1403,7 +1403,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "method_using_meta_attr",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1414,7 +1414,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "__init__",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1427,7 +1427,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "class_property",
 						ReturnType: nil,
 						Parameters: []resolver.Parameter{
@@ -1438,7 +1438,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "cached_static_method",
 						ReturnType: []string{"int"},
 						Parameters: []resolver.Parameter{
@@ -1449,7 +1449,7 @@ func TestPythonResolver_ResolveMethod(t *testing.T) {
 				},
 				{
 					BaseElement: nil,
-					Declaration: resolver.Declaration{
+					Declaration: &resolver.Declaration{
 						Name:       "complex_method",
 						ReturnType: []string{"Union", "str", "int"},
 						Parameters: []resolver.Parameter{
@@ -1713,7 +1713,6 @@ func TestPythonResolver_ResolveVariable(t *testing.T) {
 					},
 					VariableType: []string{"Union", "User", "Admin", "Guest"},
 				},
-				
 			},
 			description: "测试 testVar.py 中所有变量声明的解析",
 		},
@@ -1761,7 +1760,6 @@ func TestPythonResolver_ResolveVariable(t *testing.T) {
 		})
 	}
 }
-
 
 func TestPythonResolver_ResolveCall(t *testing.T) {
 	logger := initLogger()
@@ -1905,7 +1903,6 @@ func TestPythonResolver_ResolveCall(t *testing.T) {
 					},
 					Parameters: []*resolver.Parameter{},
 				},
-				
 			},
 		},
 	}

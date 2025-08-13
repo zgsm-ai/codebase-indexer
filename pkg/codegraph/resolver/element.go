@@ -113,15 +113,15 @@ type Package struct {
 // Function 表示函数
 type Function struct {
 	*BaseElement
-	Owner string
-	Declaration
+	Owner       string
+	Declaration *Declaration
 }
 
 // Method 表示方法
 type Method struct {
 	*BaseElement
-	Owner string
-	Declaration
+	Owner       string
+	Declaration *Declaration
 }
 
 // Call 函数调用
