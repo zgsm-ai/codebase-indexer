@@ -1053,7 +1053,7 @@ func (i *Indexer) querySymbolsByNameAndLine(doc *codegraphpb.FileElementTable, o
 
 func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefinitionOptions) ([]*types.Definition, error) {
 	filePath := options.FilePath
-	project, err := i.workspaceReader.GetProjectByFilePath(ctx, options.Workspace, filePath, false)
+	project, err := i.workspaceReader.GetProjectByFilePath(ctx, options.Workspace, filePath, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project by file: %s, err: %w", filePath, err)
 	}
@@ -1125,31 +1125,26 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 		}
 
 		// 根据所找到的call 的name + currentImports， 去模糊匹配symbol
-		symDefs, err := i.searchSymbolNames(ctx, projectUuid, dependencyNames, currentImports)
+		symDefs, err := i.searchSymbolNames(ctx, projectUuid, language, dependencyNames, currentImports)
 		if err != nil {
 			return nil, fmt.Errorf("failed to search function/method call names: %w", err)
 		}
 		if len(symDefs) == 0 {
 			return nil, fmt.Errorf("failed to search symbol by function/method call names")
 		}
-		for _, def := range symDefs {
-			var fileTable codegraphpb.FileElementTable
-			fileTableBytes, err := i.storage.Get(ctx, projectUuid, store.ElementPathKey{
-				Language: language, Path: def.Path})
-			if err != nil {
-				i.logger.Error("query_definitions failed to get fileTable by def: %s, err: %v", err)
-				continue
+		for name, def := range symDefs {
+			for _, d := range def {
+				if d == nil {
+					continue
+				}
+				res = append(res, &types.Definition{
+					Name:  name,
+					Type:  string(proto.ElementTypeFromProto(d.ElementType)),
+					Path:  d.Path,
+					Range: d.Range,
+				})
 			}
-			if err = store.UnmarshalValue(fileTableBytes, &fileTable); err != nil {
-				i.logger.Error("Failed to unmarshal fileTable by path: %s, err:%v", def.Path, err)
-				continue
-			}
-			if symbol := i.findSymbolInDocByRange(&fileTable, def.Range); symbol != nil {
-				foundSymbols = append(foundSymbols, symbol)
-			} else {
-				i.logger.Error("Failed to find symbol in file_element_table %s by range: %v",
-					def.Path, def.Range)
-			}
+
 		}
 
 	} else {
@@ -1222,89 +1217,64 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 
 const eachSymbolKeepResult = 2
 
-func (i *Indexer) searchSymbolNames(ctx context.Context, projectUuid string, names []string, imports []*codegraphpb.Import) (
-	[]*codegraphpb.Occurrence, error) {
+func (i *Indexer) searchSymbolNames(ctx context.Context, projectUuid string, language lang.Language, names []string, imports []*codegraphpb.Import) (
+	map[string][]*codegraphpb.Occurrence, error) {
 
 	start := time.Now()
 	// 去重
 	names = utils.DeDuplicate(names)
-	foundKeys := make(map[string][]*codegraphpb.Occurrence)
+	found := make(map[string][]*codegraphpb.Occurrence)
 
-	iter := i.storage.Iter(ctx, projectUuid)
-	defer iter.Close()
+	for _, name := range names {
 
-	for iter.Next() {
+		bytes, err := i.storage.Get(ctx, projectUuid, store.SymbolNameKey{
+			Language: language,
+			Name:     name,
+		})
 
-		key := iter.Key()
-		symbol, err := store.ToSymbolNameKey(key)
 		if err != nil {
-			i.logger.Debug("search_symbol_names err: %v", err)
-			continue
-		}
-		symbolName := symbol.Name
-
-		var matchName string
-		for _, name := range names {
-			if symbolName == name { //TODO 是否包含特殊符号？ 将 namespace 放入 KeyRange, 用于过滤（map->[keyRange]）
-				matchName = name
-				break
-			}
-
-		}
-		if matchName == types.EmptyString {
 			continue
 		}
 
-		item := iter.Value()
-		var keyset codegraphpb.SymbolOccurrence
-		if err := store.UnmarshalValue(item, &keyset); err != nil {
+		var symbolOccurrence codegraphpb.SymbolOccurrence
+		if err := store.UnmarshalValue(bytes, &symbolOccurrence); err != nil {
 			return nil, fmt.Errorf("failed to deserialize document: %w", err)
 		}
 
-		if len(keyset.Occurrences) == 0 {
+		if len(symbolOccurrence.Occurrences) == 0 {
 			continue
 		}
 
-		if _, ok := foundKeys[matchName]; !ok {
-			foundKeys[matchName] = make([]*codegraphpb.Occurrence, 0)
+		if _, ok := found[name]; !ok {
+			found[name] = make([]*codegraphpb.Occurrence, 0)
 		}
-		foundKeys[matchName] = append(foundKeys[matchName], keyset.Occurrences...)
+		found[name] = append(found[name], symbolOccurrence.Occurrences...)
 	}
 
 	// TODO 同一个name可能检索出多条数据，再根据import 过滤一遍。 namespace 要么用. 要么用/ 得判断
 	total := 0
-	for _, v := range foundKeys {
+	for _, v := range found {
 		total += len(v)
 	}
 
-	filteredResult := make([]*codegraphpb.Occurrence, 0, total)
-
 	if len(imports) > 0 {
-		for _, v := range foundKeys {
-			for _, doc := range v {
+		for k, v := range found {
+			filtered := make([]*codegraphpb.Occurrence, 0, len(v))
+			for _, occ := range v {
 				for _, imp := range imports {
-					if analyzer.IsImportPathInFilePath(imp, doc.Path) { //TODO , go work ，多模块等特殊情况
-						filteredResult = append(filteredResult, doc)
+					if analyzer.IsImportPathInFilePath(imp, occ.Path) { //TODO , go work ，多模块等特殊情况
+						filtered = append(filtered, occ)
 						break
 					}
 				}
 			}
+			found[k] = filtered
 		}
 	}
 
-	if len(filteredResult) == 0 {
-		i.logger.Debug("result after filter is empty, use origin result ans keep 2 with each symbol")
-		// 每个仅保留2个
-		for _, v := range foundKeys {
-			if len(v) > eachSymbolKeepResult {
-				v = v[:eachSymbolKeepResult]
-			}
-			filteredResult = append(filteredResult, v...)
-		}
-	}
-	i.logger.Info("codegraph symbol name search end, cost %d ms, names: %d, key found:%d, filtered result:%d",
-		time.Since(start).Milliseconds(), len(names), total, len(filteredResult))
-	return filteredResult, nil
+	i.logger.Info("codegraph symbol name search end, cost %d ms, names count: %d, key found:%d",
+		time.Since(start).Milliseconds(), len(names), total, len(found))
+	return found, nil
 }
 
 func (i *Indexer) findSymbolInDocByRange(fileElementTable *codegraphpb.FileElementTable, symbolRange []int32) *codegraphpb.Element {
