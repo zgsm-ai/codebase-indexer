@@ -77,3 +77,18 @@ type FileStatusRespFileListItem struct {
 	Operate string `json:"operate"`
 	Status  string `json:"status"`
 }
+
+// DeleteEmbeddingReq 删除嵌入请求
+type DeleteEmbeddingReq struct {
+	ClientId     string   `json:"clientId"`
+	CodebasePath string   `json:"codebasePath"`
+	FilePaths    []string `json:"filePaths"`
+}
+
+// DeleteEmbeddingResp 删除嵌入响应
+type DeleteEmbeddingResp struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Success bool        `json:"success"`
+	Data    interface{} `json:"data"`
+}

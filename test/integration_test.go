@@ -47,14 +47,14 @@ func (s *IntegrationTestSuite) SetupTest() {
 	fmt.Printf("log directory: %s\n", logPath)
 
 	// Initialize cache directory
-	cachePath, err := utils.GetCacheDir(rootPath)
+	cachePath, err := utils.GetCacheDir(rootPath, appInfo.AppName)
 	if err != nil {
 		s.T().Fatalf("failed to get cache directory: %v", err)
 	}
 	fmt.Printf("cache directory: %s\n", cachePath)
 
 	// Initialize upload temporary directory
-	uploadTmpPath, err := utils.GetUploadTmpDir(rootPath)
+	uploadTmpPath, err := utils.GetCacheUploadTmpDir(cachePath)
 	if err != nil {
 		s.T().Fatalf("failed to get upload temp directory: %v", err)
 	}

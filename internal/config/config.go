@@ -2,6 +2,13 @@
 
 package config
 
+import (
+	"codebase-indexer/internal/utils"
+	"encoding/json"
+	"fmt"
+	"os"
+)
+
 type ConfigServer struct {
 	RegisterExpireMinutes int `json:"registerExpireMinutes"`
 	HashTreeExpireHours   int `json:"hashTreeExpireHours"`
@@ -139,4 +146,82 @@ func GetAppInfo() AppInfo {
 
 func SetAppInfo(info AppInfo) {
 	appInfo = info
+}
+
+type AuthInfo struct {
+	ClientId  string `json:"machine_id"`
+	Token     string `json:"access_token"`
+	ServerURL string `json:"base_url"`
+}
+
+// Global auth configuration
+var authInfo AuthInfo
+
+// GetAuthInfo gets the current auth configuration
+func GetAuthInfo() AuthInfo {
+	return authInfo
+}
+
+// SetAuthInfo sets the auth configuration
+func SetAuthInfo(info AuthInfo) {
+	authInfo = info
+}
+
+// LoadAuthConfig loads auth configuration from auth.json file
+func LoadAuthConfig() error {
+	// Get auth.json file path
+	authFilePath := utils.AuthJsonFile
+
+	// Check if file exists
+	if _, err := os.Stat(authFilePath); os.IsNotExist(err) {
+		return fmt.Errorf("auth.json file not found at %s", authFilePath)
+	}
+
+	// Read file content
+	data, err := os.ReadFile(authFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read auth.json file: %w", err)
+	}
+
+	// Parse JSON content
+	var authConfig AuthInfo
+	if err := json.Unmarshal(data, &authConfig); err != nil {
+		return fmt.Errorf("failed to parse auth.json: %w", err)
+	}
+
+	// Set global auth configuration
+	authInfo = authConfig
+
+	return nil
+}
+
+// LoadAuthConfigWithPath loads auth configuration from specified path
+func LoadAuthConfigWithPath(rootPath string) error {
+	// Get auth.json file path using utils function
+	authFilePath, err := utils.GetAuthJsonFile(rootPath)
+	if err != nil {
+		return fmt.Errorf("failed to get auth.json file path: %w", err)
+	}
+
+	// Check if file exists
+	if _, err := os.Stat(authFilePath); os.IsNotExist(err) {
+		return fmt.Errorf("auth.json file not found at %s", authFilePath)
+	}
+
+	// Read file content
+	data, err := os.ReadFile(authFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read auth.json file: %w", err)
+	}
+
+	// Parse JSON content
+	var authConfig AuthInfo
+	if err := json.Unmarshal(data, &authConfig); err != nil {
+		return fmt.Errorf("failed to parse auth.json: %w", err)
+	}
+
+	// Set global auth configuration
+	authInfo = authConfig
+
+	return nil
 }

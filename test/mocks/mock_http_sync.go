@@ -44,3 +44,8 @@ func (m *MockHTTPSync) GetClientConfig() (config.ClientConfig, error) {
 	args := m.Called()
 	return args.Get(0).(config.ClientConfig), args.Error(1)
 }
+
+func (m *MockHTTPSync) DeleteEmbedding(req dto.DeleteEmbeddingReq) (*dto.DeleteEmbeddingResp, error) {
+	args := m.Called(req)
+	return args.Get(0).(*dto.DeleteEmbeddingResp), args.Error(1)
+}

@@ -260,9 +260,26 @@ func (h *BackendHandler) SetupRoutes(router *gin.Engine) {
 		api.GET("/search/relation", h.SearchRelation)
 		api.GET("/search/definition", h.SearchDefinition)
 		api.GET("/files/content", h.GetFileContent)
+		api.POST("/snippets/read", h.ReadCodeSnippets)
 		api.GET("/codebases/directory", h.GetCodebaseDirectory)
 		api.GET("/files/structure", h.GetFileStructure)
 		api.GET("/index/summary", h.GetIndexSummary)
 		api.GET("/index/export", h.ExportIndex)
 	}
+}
+
+func (h *BackendHandler) ReadCodeSnippets(c *gin.Context) {
+	var req dto.ReadCodeSnippetsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("invalid request format: %v", err)
+		response.Error(c, http.StatusBadRequest, err)
+		return
+	}
+	list, err := h.codebaseService.ReadCodeSnippets(c, &req)
+	if err != nil {
+		h.logger.Error("read code snippets err: %v", err)
+		response.Error(c, http.StatusBadRequest, err)
+		return
+	}
+	response.OkJson(c, list)
 }
