@@ -13,9 +13,9 @@ type ScannerConfig struct {
 
 // SyncConfig holds the sync configuration
 type SyncConfig struct {
-	ClientId  string
-	Token     string
-	ServerURL string
+	ClientId  string `json:"machine_id"`
+	Token     string `json:"access_token"`
+	ServerURL string `json:"base_url"`
 }
 
 type CodebaseEnv struct {

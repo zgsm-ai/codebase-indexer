@@ -385,11 +385,11 @@ func (s *Scheduler) ProcessFileChanges(config *config.CodebaseConfig, changes []
 }
 
 type SyncMetadata struct {
-	ClientId     string            `json:"clientId"`
-	CodebaseName string            `json:"codebaseName"`
-	CodebasePath string            `json:"codebasePath"`
-	FileList     map[string]string `json:"fileList"`
-	Timestamp    int64             `json:"timestamp"`
+	ClientId     string             `json:"clientId"`
+	CodebaseName string             `json:"codebaseName"`
+	CodebasePath string             `json:"codebasePath"`
+	FileList     []utils.FileStatus `json:"fileList"`
+	Timestamp    int64              `json:"timestamp"`
 }
 
 // CreateChangesZip Create zip file containing file changes and metadata
@@ -424,16 +424,15 @@ func (s *Scheduler) CreateChangesZip(config *config.CodebaseConfig, changes []*u
 		ClientId:     config.ClientID,
 		CodebaseName: config.CodebaseName,
 		CodebasePath: config.CodebasePath,
-		FileList:     make(map[string]string),
+		FileList:     make([]utils.FileStatus, 0, len(changes)),
 		Timestamp:    time.Now().Unix(),
 	}
 
-	for _, change := range changes {
-		filePath := change.Path
+	for index, change := range changes {
 		if runtime.GOOS == "windows" {
-			filePath = filepath.ToSlash(filePath)
+			change.Path = filepath.ToSlash(change.Path)
 		}
-		metadata.FileList[filePath] = change.Status
+		metadata.FileList[index] = *change
 
 		// Only add new and modified files to zip
 		if change.Status == utils.FILE_STATUS_ADDED || change.Status == utils.FILE_STATUS_MODIFIED {
@@ -589,15 +588,14 @@ func (s *Scheduler) CreateSingleFileZip(config *config.CodebaseConfig, fileStatu
 		ClientId:     config.ClientID,
 		CodebaseName: config.CodebaseName,
 		CodebasePath: config.CodebasePath,
-		FileList:     make(map[string]string),
+		FileList:     make([]utils.FileStatus, 0),
 		Timestamp:    time.Now().Unix(),
 	}
 
-	filePath := fileStatus.Path
 	if runtime.GOOS == "windows" {
-		filePath = filepath.ToSlash(filePath)
+		fileStatus.Path = filepath.ToSlash(fileStatus.Path)
 	}
-	metadata.FileList[filePath] = fileStatus.Status
+	metadata.FileList = append(metadata.FileList, *fileStatus)
 
 	// 只添加新增和修改的文件到ZIP
 	if fileStatus.Status == utils.FILE_STATUS_ADDED || fileStatus.Status == utils.FILE_STATUS_MODIFIED {

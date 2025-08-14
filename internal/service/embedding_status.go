@@ -133,7 +133,7 @@ func (sc *embeddingStatusService) checkWorkspaceUploadingStates(workspacePath st
 	// 检查每个event的上传状态
 	nowTime := time.Now()
 	for _, event := range events {
-		if nowTime.Sub(event.UpdatedAt) < time.Minute*10 {
+		if nowTime.Sub(event.UpdatedAt) < time.Minute*5 {
 			continue
 		}
 		updateEvent := &model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusUploadFailed}

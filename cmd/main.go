@@ -55,13 +55,13 @@ func main() {
 	}
 
 	// Parse command line arguments
-	appName := flag.String("appname", "zgsm", "app name")
+	appName := flag.String("appname", "codebase-indexer", "app name")
 	// grpcServer := flag.String("grpc", "localhost:51353", "gRPC server address")
 	httpServer := flag.String("http", "localhost:11380", "HTTP server address")
 	logLevel := flag.String("loglevel", "info", "log level (debug, info, warn, error)")
-	clientId := flag.String("clientid", "", "client id")
-	serverEndpoint := flag.String("server", "", "server endpoint")
-	token := flag.String("token", "", "authentication token")
+	// clientId := flag.String("clientid", "", "client id")
+	// serverEndpoint := flag.String("server", "", "server endpoint")
+	// token := flag.String("token", "", "authentication token")
 	enableSwagger := flag.Bool("swagger", false, "enable swagger documentation")
 	enablePprof := flag.Bool("pprof", false, "enable pprof profiling")
 	pprofAddr := flag.String("pprof-addr", "localhost:6060", "pprof server address")
@@ -73,13 +73,32 @@ func main() {
 		return
 	}
 	// Initialize configuration
-	initConfig(*appName)
+	if err := initConfig(*appName); err != nil {
+		fmt.Printf("failed to initialize configuration: %v\n", err)
+		return
+	}
 
 	// Update pprof configuration from command line arguments
 	clientConfig := config.GetClientConfig()
 	clientConfig.Pprof.Enabled = *enablePprof
 	clientConfig.Pprof.Address = *pprofAddr
 	config.SetClientConfig(clientConfig)
+	// syncConfig
+	authInfo := config.GetAuthInfo()
+	if authInfo.ClientId == types.EmptyString {
+		panic("missing required auth.json clientid")
+	}
+	if authInfo.Token == types.EmptyString {
+		panic("missing required auth.json server")
+	}
+	if authInfo.ServerURL == types.EmptyString {
+		panic("missing required auth.json token")
+	}
+	syncServiceConfig := &config.SyncConfig{
+		ClientId:  authInfo.ClientId,
+		ServerURL: authInfo.ServerURL,
+		Token:     authInfo.Token,
+	}
 
 	// Initialize logging system
 	appLogger, err := logger.NewLogger(utils.LogsDir, *logLevel)
@@ -95,7 +114,7 @@ func main() {
 		appLogger.Fatal("failed to initialize workspace manager: %v", err)
 		return
 	}
-	codebaseEmbeddingRepo, err := repository.NewEmbeddingFileRepo(utils.WorkspaceEmbeddingDir, appLogger)
+	codebaseEmbeddingRepo, err := repository.NewEmbeddingFileRepo(utils.EmbeddingDir, appLogger)
 	if err != nil {
 		appLogger.Fatal("Failed to create codebase embedding repository: %v", err)
 		return
@@ -112,20 +131,6 @@ func main() {
 	// Initialize repositories
 	workspaceRepo := repository.NewWorkspaceRepository(dbManager, appLogger)
 	eventRepo := repository.NewEventRepository(dbManager, appLogger)
-	var syncServiceConfig *config.SyncConfig
-	if *clientId == types.EmptyString {
-		panic("missing required param clientid")
-	}
-	if *serverEndpoint == types.EmptyString {
-		panic("missing required param server")
-	}
-	if *token == types.EmptyString {
-		panic("missing required param token")
-	}
-	if *clientId != "" && *serverEndpoint != "" && *token != "" {
-		syncServiceConfig = &config.SyncConfig{ClientId: *clientId, ServerURL: *serverEndpoint, Token: *token}
-	}
-
 	scanRepo := repository.NewFileScanner(appLogger)
 	syncRepo := repository.NewHTTPSync(syncServiceConfig, appLogger)
 
@@ -266,7 +271,7 @@ func initDir(appName string) error {
 	fmt.Printf("log directory: %s\n", logPath)
 
 	// Initialize cache directory
-	cachePath, err := utils.GetCacheDir(rootPath)
+	cachePath, err := utils.GetCacheDir(rootPath, appName)
 	if err != nil {
 		return fmt.Errorf("failed to get cache directory: %v", err)
 	}
@@ -280,14 +285,14 @@ func initDir(appName string) error {
 	fmt.Printf("cache env file: %s\n", cacheEnvFilePath)
 
 	// Initialize upload temp directory
-	uploadTmpPath, err := utils.GetUploadTmpDir(rootPath)
+	uploadTmpPath, err := utils.GetCacheUploadTmpDir(cachePath)
 	if err != nil {
 		return fmt.Errorf("failed to get upload temporary directory: %v", err)
 	}
 	fmt.Printf("upload temporary directory: %s\n", uploadTmpPath)
 
 	// Initialize index directory
-	indexPath, err := utils.GetIndexDir(rootPath)
+	indexPath, err := utils.GetCacheIndexDir(cachePath)
 	if err != nil {
 		return fmt.Errorf("failed to get index directory: %v", err)
 	}
@@ -307,18 +312,25 @@ func initDir(appName string) error {
 	}
 	fmt.Printf("cache workspace directory: %s\n", cacheWorkspacePath)
 
-	// Initialize cache workspace directory
-	cacheWorkspaceEmbeddingPath, err := utils.GetCacheWorkspaceEmbeddingDir(cachePath)
+	// Initialize cache embedding directory
+	cacheWorkspaceEmbeddingPath, err := utils.GetCacheEmbeddingDir(cachePath)
 	if err != nil {
-		return fmt.Errorf("failed to get cache workspace embedding directory: %v", err)
+		return fmt.Errorf("failed to get cache embedding directory: %v", err)
 	}
-	fmt.Printf("cache workspace embedding directory: %s\n", cacheWorkspaceEmbeddingPath)
+	fmt.Printf("cache embedding directory: %s\n", cacheWorkspaceEmbeddingPath)
+
+	// Initialize share auth file
+	authFile, err := utils.GetAuthJsonFile(rootPath)
+	if err != nil {
+		return fmt.Errorf("failed to get auth file: %v", err)
+	}
+	fmt.Printf("share auth file: %s\n", authFile)
 
 	return nil
 }
 
 // initConfig initializes configuration
-func initConfig(appName string) {
+func initConfig(appName string) error {
 	// Set app info
 	appInfo := config.AppInfo{
 		AppName:  appName,
@@ -327,6 +339,15 @@ func initConfig(appName string) {
 		Version:  version,
 	}
 	config.SetAppInfo(appInfo)
+
 	// Set client default configuration
 	config.SetClientConfig(config.DefaultClientConfig)
+
+	// Load auth configuration
+	err := config.LoadAuthConfig()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
