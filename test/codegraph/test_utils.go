@@ -8,6 +8,7 @@ import (
 	"codebase-indexer/pkg/codegraph"
 	"codebase-indexer/pkg/codegraph/analyzer"
 	packageclassifier "codebase-indexer/pkg/codegraph/analyzer/package_classifier"
+	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/parser"
 	"codebase-indexer/pkg/codegraph/store"
 	"codebase-indexer/pkg/codegraph/types"
@@ -189,4 +190,44 @@ func initWorkspaceModel(env *testEnvironment, workspaceDir string) error {
 		}
 	}
 	return err
+}
+
+// ParseProjectFiles 解析项目中的所有文件
+func ParseProjectFiles(ctx context.Context, env *testEnvironment, p *workspace.Project) ([]*parser.FileElementTable, types.IndexTaskMetrics, error) {
+	fileElementTables := make([]*parser.FileElementTable, 0)
+	projectTaskMetrics := types.IndexTaskMetrics{}
+
+	// TODO walk 目录收集列表， 并发构建，批量保存结果
+	if err := env.workspaceReader.WalkFile(ctx, p.Path, func(walkCtx *types.WalkContext) error {
+		projectTaskMetrics.TotalFiles++
+		language, err := lang.InferLanguage(walkCtx.Path)
+		if err != nil || language == types.EmptyString {
+			// not supported language or not source file
+			return nil
+		}
+
+		content, err := env.workspaceReader.ReadFile(ctx, walkCtx.Path, types.ReadOptions{})
+		if err != nil {
+			projectTaskMetrics.TotalFailedFiles++
+			return err
+		}
+		fileElementTable, err := env.sourceFileParser.Parse(ctx, &types.SourceFile{
+			Path:    walkCtx.Path,
+			Content: content,
+		})
+
+		if err != nil {
+			projectTaskMetrics.TotalFailedFiles++
+			return err
+		}
+		fileElementTables = append(fileElementTables, fileElementTable)
+		return nil
+	}, types.WalkOptions{
+		IgnoreError:  true,
+		VisitPattern: workspace.DefaultVisitPattern,
+	}); err != nil {
+		return nil, types.IndexTaskMetrics{}, err
+	}
+
+	return fileElementTables, projectTaskMetrics, nil
 }

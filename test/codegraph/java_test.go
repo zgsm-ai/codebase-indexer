@@ -2,7 +2,6 @@ package codegraph
 
 import (
 	"codebase-indexer/pkg/codegraph/resolver"
-	"codebase-indexer/pkg/codegraph/types"
 	"context"
 	"fmt"
 	"os"
@@ -98,10 +97,6 @@ func TestParseJavaProjectFiles(t *testing.T) {
 	assert.NoError(t, err)
 	defer cleanup()
 
-	indexer := createTestIndexer(env, &types.VisitPattern{
-		ExcludeDirs: defaultVisitPattern.ExcludeDirs,
-		IncludeExts: []string{".java"},
-	})
 	testCases := []struct {
 		Name    string
 		Path    string
@@ -145,7 +140,7 @@ func TestParseJavaProjectFiles(t *testing.T) {
 
 			start := time.Now()
 			project := NewTestProject(tc.Path, env.logger)
-			fileElements, _, err := indexer.ParseProjectFiles(context.Background(), project)
+			fileElements, _, err := ParseProjectFiles(context.Background(), env, project)
 			fmt.Println("err:", err)
 			err = exportFileElements(defaultExportDir, tc.Name, fileElements)
 			duration := time.Since(start)
@@ -199,11 +194,6 @@ func BenchmarkParseJavaProject(b *testing.B) {
 	}
 	defer teardownTestEnvironment(nil, env)
 
-	indexer := createTestIndexer(env, &types.VisitPattern{
-		ExcludeDirs: defaultVisitPattern.ExcludeDirs,
-		IncludeExts: []string{".java"},
-	})
-
 	// 选择一个中等大小的项目进行基准测试
 	projectPath := filepath.Join(JavaProjectRootDir, "kafka")
 
@@ -212,7 +202,7 @@ func BenchmarkParseJavaProject(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		project := NewTestProject(projectPath, env.logger)
-		fileElements, _, err := indexer.ParseProjectFiles(context.Background(), project)
+		fileElements, _, err := ParseProjectFiles(context.Background(), env, project)
 		if err != nil {
 			b.Fatal(err)
 		}

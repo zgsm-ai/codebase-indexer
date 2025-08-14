@@ -2,7 +2,6 @@ package codegraph
 
 import (
 	"codebase-indexer/pkg/codegraph/resolver"
-	"codebase-indexer/pkg/codegraph/types"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -17,10 +16,6 @@ func TestParseCProjectFiles(t *testing.T) {
 	env, err := setupTestEnvironment()
 	assert.NoError(t, err)
 	defer teardownTestEnvironment(t, env)
-	indexer := createTestIndexer(env, &types.VisitPattern{
-		ExcludeDirs: defaultVisitPattern.ExcludeDirs,
-		IncludeExts: []string{".c", ".h"},
-	})
 	testCases := []struct {
 		Name    string
 		Path    string
@@ -51,7 +46,7 @@ func TestParseCProjectFiles(t *testing.T) {
 		t.Run(tc.Name, func(t *testing.T) {
 			fmt.Println("tc.Path", tc.Path)
 			project := NewTestProject(tc.Path, env.logger)
-			fileElements, _, err := indexer.ParseProjectFiles(context.Background(), project)
+			fileElements, _, err := ParseProjectFiles(context.Background(), env, project)
 			err = exportFileElements(defaultExportDir, tc.Name, fileElements)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.wantErr, err)

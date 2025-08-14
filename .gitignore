@@ -14,3 +14,4 @@ logs
 test/tmp
 localhost
 tmp/codegraph/*.profile
+.costrict
