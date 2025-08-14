@@ -155,8 +155,6 @@ func (s *LevelDBStorage) BatchSave(ctx context.Context, projectUuid string, valu
 		return fmt.Errorf("failed to get database: %w", err)
 	}
 
-	batch := new(leveldb.Batch)
-
 	for i := 0; i < values.Len(); i++ {
 		if err := utils.CheckContext(ctx); err != nil {
 			return fmt.Errorf("context cancelled during batch save: %w", err)
@@ -186,10 +184,9 @@ func (s *LevelDBStorage) BatchSave(ctx context.Context, projectUuid string, valu
 			continue
 		}
 
-		batch.Put([]byte(key), data)
+		_ = db.Put([]byte(key), data, &opt.WriteOptions{})
 	}
 
-	err = db.Write(batch, nil)
 	return err
 }
 

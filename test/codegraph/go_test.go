@@ -21,10 +21,6 @@ func TestParseGoProjectFiles(t *testing.T) {
 	env, err := setupTestEnvironment()
 	assert.NoError(t, err)
 	defer teardownTestEnvironment(t, env)
-	indexer := createTestIndexer(env, &types.VisitPattern{
-		ExcludeDirs: defaultVisitPattern.ExcludeDirs,
-		IncludeExts: []string{".go"},
-	})
 	testCases := []struct {
 		Name    string
 		Path    string
@@ -39,8 +35,8 @@ func TestParseGoProjectFiles(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			project := NewTestProject(tc.Path, env.logger)
-			fileElements, _, err := indexer.ParseProjectFiles(context.Background(), project)
-			err = exportFileElements(defaultExportDir, tc.Name, fileElements)
+			fileElements, _, err := ParseProjectFiles(context.Background(), env, project)
+			//err = exportFileElements(defaultExportDir, tc.Name, fileElements)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.wantErr, err)
 			assert.True(t, len(fileElements) > 0)
@@ -433,7 +429,7 @@ func TestFindDefinitionsForAllElements(t *testing.T) {
 
 	fmt.Println("开始索引工作空间...")
 	project := NewTestProject(workspacePath, env.logger)
-	fileElements, _, err := indexer.ParseProjectFiles(context.Background(), project)
+	fileElements, _, err := ParseProjectFiles(context.Background(), env, project)
 	assert.NoError(t, err)
 	fmt.Printf("解析完成，共找到 %d 个文件\n", len(fileElements))
 

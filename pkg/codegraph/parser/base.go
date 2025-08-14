@@ -46,6 +46,7 @@ func (p *SourceFileParser) Parse(ctx context.Context,
 	}
 
 	sitterParser := sitter.NewParser()
+	defer sitterParser.Close()
 	sitterLanguage := langParser.SitterLanguage()
 	if err := sitterParser.SetLanguage(sitterLanguage); err != nil {
 		return nil, err

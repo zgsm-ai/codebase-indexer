@@ -2,7 +2,6 @@ package codegraph
 
 import (
 	"codebase-indexer/pkg/codegraph/resolver"
-	"codebase-indexer/pkg/codegraph/types"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -18,10 +17,6 @@ func TestParsePythonProjectFiles(t *testing.T) {
 	env, err := setupTestEnvironment()
 	assert.NoError(t, err)
 	defer teardownTestEnvironment(t, env)
-	indexer := createTestIndexer(env, &types.VisitPattern{
-		ExcludeDirs: defaultVisitPattern.ExcludeDirs,
-		IncludeExts: []string{".py"},
-	})
 	testCases := []struct {
 		Name    string
 		Path    string
@@ -54,7 +49,7 @@ func TestParsePythonProjectFiles(t *testing.T) {
 		t.Run(tc.Name, func(t *testing.T) {
 			start := time.Now()
 			project := NewTestProject(tc.Path, env.logger)
-			fileElements, _, err := indexer.ParseProjectFiles(context.Background(), project)
+			fileElements, _, err := ParseProjectFiles(context.Background(), env, project)
 			err = exportFileElements(defaultExportDir, tc.Name, fileElements)
 			duration := time.Since(start)
 			fmt.Printf("测试用例 '%s' 执行时间: %v, 文件个数: %d\n", tc.Name, duration, len(fileElements))

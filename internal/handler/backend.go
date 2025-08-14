@@ -256,6 +256,7 @@ func (h *BackendHandler) ExportIndex(c *gin.Context) {
 // @Description 设置后端API路由
 func (h *BackendHandler) SetupRoutes(router *gin.Engine) {
 	api := router.Group("/codebase-indexer/api/v1")
+
 	{
 		api.GET("/search/relation", h.SearchRelation)
 		api.GET("/search/definition", h.SearchDefinition)
