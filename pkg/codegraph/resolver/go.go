@@ -3,6 +3,7 @@ package resolver
 import (
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
+	"fmt"
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -200,6 +201,9 @@ func (r *GoResolver) processStructFields(structTypeNode *sitter.Node, element *C
 		if fieldNode != nil && types.ToNodeKind(fieldNode.Kind()) == types.NodeKindField {
 			// 获取字段名和类型
 			nameNode := fieldNode.ChildByFieldName("name")
+			if nameNode != nil {
+				fmt.Println("nameNode", nameNode.Utf8Text(rc.SourceFile.Content))
+			}
 			typeNode := fieldNode.ChildByFieldName("type")
 
 			if typeNode != nil {
@@ -232,10 +236,15 @@ func (r *GoResolver) processStructFields(structTypeNode *sitter.Node, element *C
 
 				if nameNode != nil {
 					fieldName = nameNode.Utf8Text(rc.SourceFile.Content)
+					fieldName = CleanParam(fieldName)
 					if !isPrimitiveType(fieldType) {
 						// 创建引用元素
+						fmt.Println("我进来了")
 						refPathMap := extractReferencePath(typeNode, rc.SourceFile.Content)
 						refPathMap["property"] = CleanParam(refPathMap["property"])
+						// 删除前后的数字
+						refPathMap["property"] = strings.TrimLeft(refPathMap["property"], "0123456789")
+						refPathMap["property"] = strings.TrimRight(refPathMap["property"], "0123456789")
 						ref := NewReference(element, typeNode, refPathMap["property"], refPathMap["object"])
 						newReferences = append(newReferences, ref)
 					}
