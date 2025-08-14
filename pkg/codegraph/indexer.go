@@ -1077,7 +1077,7 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 		i.logger.Info("query definitions cost %d ms", time.Since(startTime).Milliseconds())
 	}()
 
-	var res []*types.Definition
+	res := make([]*types.Definition, 0)
 
 	var foundSymbols []*codegraphpb.Element
 	queryStartLine := int32(options.StartLine - 1)
@@ -1108,7 +1108,7 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 			}
 		}
 		if len(dependencyNames) == 0 {
-			return nil, nil
+			return res, nil
 		}
 		// TODO resolve go modules
 		// 对imports预处理

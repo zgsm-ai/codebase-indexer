@@ -87,7 +87,7 @@ func TestIndexLanguages(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.Name, func(t *testing.T) {
+		t.Run("init-database-"+tc.Name, func(t *testing.T) {
 			err = initWorkspaceModel(env, tc.Path)
 			assert.NoError(t, err)
 		})
@@ -95,7 +95,7 @@ func TestIndexLanguages(t *testing.T) {
 
 	for _, tc := range testCases {
 		ctx := context.Background()
-		t.Run(fmt.Sprintf("%s--%s", tc.Language, tc.Name), func(t *testing.T) {
+		t.Run(fmt.Sprintf("index-%s--%s", tc.Language, tc.Name), func(t *testing.T) {
 			indexer := createTestIndexer(env, &types.VisitPattern{
 				ExcludeDirs: defaultVisitPattern.ExcludeDirs,
 				IncludeExts: tc.Exts,
