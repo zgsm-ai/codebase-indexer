@@ -66,6 +66,9 @@ func (j *JavaResolver) resolveFunction(ctx context.Context, element *Function, r
 func (j *JavaResolver) resolveMethod(ctx context.Context, element *Method, rc *ResolveContext) ([]Element, error) {
 	rootCap := rc.Match.Captures[0]
 	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
+	if element.Declaration == nil {
+		element.Declaration = &Declaration{}
+	}
 	for _, cap := range rc.Match.Captures {
 		captureName := rc.CaptureNames[cap.Index]
 		if cap.Node.IsMissing() || cap.Node.IsError() {
@@ -393,6 +396,7 @@ func ParseArgumentList(node *sitter.Node, content []byte) []Parameter {
 	}
 	return params
 }
+
 // getScopeFromModifiers 根据Java访问修饰符确定作用域
 // 参数：
 //   - modifiers: 包含修饰符的字符串，可能包含多个修饰符如 "public static final"
@@ -489,7 +493,6 @@ func getElementModifier(content string) string {
 	}
 	return types.EmptyString
 }
-
 
 // 用于搜索类型里面所有的单个类型，自动过滤了基础数据类型
 func findAllTypes(node *sitter.Node, content []byte) []string {

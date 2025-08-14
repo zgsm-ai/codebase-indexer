@@ -48,6 +48,9 @@ func (py *PythonResolver) resolvePackage(ctx context.Context, element *Package, 
 func (py *PythonResolver) resolveFunction(ctx context.Context, element *Function, rc *ResolveContext) ([]Element, error) {
 	rootCap := rc.Match.Captures[0]
 	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
+	if element.Declaration == nil {
+		element.Declaration = &Declaration{}
+	}
 	for _, cap := range rc.Match.Captures {
 		captureName := rc.CaptureNames[cap.Index]
 		if cap.Node.IsMissing() || cap.Node.IsError() {
@@ -71,6 +74,9 @@ func (py *PythonResolver) resolveFunction(ctx context.Context, element *Function
 func (py *PythonResolver) resolveMethod(ctx context.Context, element *Method, rc *ResolveContext) ([]Element, error) {
 	rootCap := rc.Match.Captures[0]
 	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
+	if element.Declaration == nil {
+		element.Declaration = &Declaration{}
+	}
 	for _, cap := range rc.Match.Captures {
 		captureName := rc.CaptureNames[cap.Index]
 		if cap.Node.IsMissing() || cap.Node.IsError() {

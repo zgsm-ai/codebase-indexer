@@ -8,6 +8,7 @@ import (
 	"codebase-indexer/pkg/logger"
 	"context"
 	"fmt"
+	"runtime/debug"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
@@ -26,7 +27,18 @@ func NewSourceFileParser(logger logger.Logger) *SourceFileParser {
 }
 
 func (p *SourceFileParser) Parse(ctx context.Context,
-	sourceFile *types.SourceFile) (*FileElementTable, error) {
+	sourceFile *types.SourceFile) (result *FileElementTable, err error) {
+	// 添加顶层的panic恢复机制
+	defer func() {
+		if r := recover(); r != nil {
+			stack := debug.Stack()
+			err = fmt.Errorf("panic during parsing file %s: %v\nStack trace:\n%s",
+				sourceFile.Path, r, string(stack))
+			p.logger.Error("Parse panic recovered: %v", err)
+			result = nil
+		}
+	}()
+
 	// Extract file extension
 	langParser, err := lang.GetSitterParserByFilePath(sourceFile.Path)
 	if err != nil {
@@ -125,8 +137,8 @@ func (p *SourceFileParser) processNode(
 	match *sitter.QueryMatch,
 	captureNames []string,
 	sourceFile *types.SourceFile) ([]resolver.Element, error) {
-
 	if len(match.Captures) == 0 || len(captureNames) == 0 {
+		fmt.Println("no captures", sourceFile.Path)
 		return nil, lang.ErrNoCaptures
 	} // root node
 	rootIndex := match.Captures[0].Index

@@ -415,7 +415,9 @@ func parseJavaScriptMethodNode(node *sitter.Node, content []byte, className stri
 	method.BaseElement = &BaseElement{
 		Scope: types.ScopeFile,
 	}
-	method.Declaration.Modifier = types.ModifierPublic // JavaScript默认为public
+	method.Declaration = &Declaration{
+		Modifier: types.ModifierPublic, // JavaScript默认为public
+	}
 
 	// 查找方法名
 	nameNode := node.ChildByFieldName("name")

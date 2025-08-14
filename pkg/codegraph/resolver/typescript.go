@@ -560,6 +560,9 @@ func parseTypeScriptMethodNode(node *sitter.Node, content []byte, className stri
 	method.BaseElement = &BaseElement{
 		Scope: types.ScopeFile,
 	}
+	if method.Declaration == nil {
+		method.Declaration = &Declaration{}
+	}
 	modifierNode := node.ChildByFieldName("accessibility_modifier")
 	if modifierNode != nil {
 		method.Declaration.Modifier = modifierNode.Utf8Text(content)
@@ -610,6 +613,9 @@ func parseTypeScriptMethodNode(node *sitter.Node, content []byte, className stri
 	returnNode := node.ChildByFieldName("return_type")
 	if returnNode != nil {
 		returnContent := returnNode.Utf8Text(content)
+		// 移除冒号前缀并清理空格
+		returnContent = strings.TrimPrefix(returnContent, types.Colon)
+		returnContent = strings.TrimSpace(returnContent)
 		if isTypeScriptPrimitiveType(returnContent) {
 			method.Declaration.ReturnType = []string{types.PrimitiveType}
 		} else {
@@ -643,7 +649,12 @@ func parseTypeScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Refer
 			typeText = strings.TrimPrefix(typeText, types.Colon)
 			typeText = strings.TrimSpace(typeText)
 			typeText = strings.TrimPrefix(typeText, types.EmailAt)
-			field.Type = typeText
+
+			if isTypeScriptPrimitiveType(typeText) {
+				field.Type = types.PrimitiveType
+			} else {
+				field.Type = typeText
+			}
 
 			if !isTypeScriptPrimitiveType(typeText) && isValidReferenceName(typeText) {
 				ref = &Reference{

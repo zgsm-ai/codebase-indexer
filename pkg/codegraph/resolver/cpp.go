@@ -4,6 +4,7 @@ import (
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
 	"fmt"
+
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
@@ -71,6 +72,9 @@ func (c *CppResolver) resolveFunction(ctx context.Context, element *Function, rc
 func (c *CppResolver) resolveMethod(ctx context.Context, element *Method, rc *ResolveContext) ([]Element, error) {
 	rootCap := rc.Match.Captures[0]
 	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
+	if element.Declaration == nil {
+		element.Declaration = &Declaration{}
+	}
 	for _, cap := range rc.Match.Captures {
 		captureName := rc.CaptureNames[cap.Index]
 		if cap.Node.IsMissing() || cap.Node.IsError() {

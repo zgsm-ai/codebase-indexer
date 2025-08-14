@@ -218,8 +218,8 @@ func TestJavaResolver_ResolveVariable(t *testing.T) {
 		{
 			name: "TestVar.java 全变量类型校验",
 			sourceFile: &types.SourceFile{
-				Path:    "testdata/com/example/test/TestVar.java",
-				Content: readFile("testdata/com/example/test/TestVar.java"),
+				Path:    "testdata/java/TestVar.java",
+				Content: readFile("testdata/java/TestVar.java"),
 			},
 			wantErr: nil,
 			wantVariables: []resolver.Variable{
@@ -508,7 +508,7 @@ func TestJavaResolver_ResolveLocalVariableValue(t *testing.T) {
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
 	sourceFile := &types.SourceFile{
-		Path: "testdata/com/example/test/TestClass.java",
+		Path: "testdata/java/TestClass.java",
 		Content: []byte(`
 			package com.example.test;
 			public class TestClass {
@@ -583,10 +583,10 @@ func TestJavaResolver_ResolveCall(t *testing.T) {
 				Path:    "testdata/com/example/test/TestCall.java",
 				Content: readFile("testdata/com/example/test/TestCall.java"),
 			},
-			wantErr:   nil,
+			wantErr: nil,
 			wantCalls: []resolver.Call{
 				{BaseElement: &resolver.BaseElement{Name: "string", Type: types.ElementTypeFunctionCall}, Owner: ""},
-				{BaseElement: &resolver.BaseElement{Name :"List", Type: types.ElementTypeFunctionCall}, Owner: "java.util"},
+				{BaseElement: &resolver.BaseElement{Name: "List", Type: types.ElementTypeFunctionCall}, Owner: "java.util"},
 			},
 		},
 	}
