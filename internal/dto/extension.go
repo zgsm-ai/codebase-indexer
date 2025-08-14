@@ -210,7 +210,7 @@ type CheckIgnoreFileRequest struct {
 type CheckIgnoreFileResponse struct {
 	// 响应代码
 	// example: 0
-	Code int `json:"code"`
+	Code string `json:"code"`
 
 	// 是否成功
 	// example: true
@@ -264,7 +264,7 @@ type PublishEventsRequest struct {
 type PublishEventsResponse struct {
 	// 响应代码
 	// example: 0
-	Code int `json:"code"`
+	Code string `json:"code"`
 
 	// 是否成功
 	// example: true
@@ -299,7 +299,7 @@ type TriggerIndexRequest struct {
 type TriggerIndexResponse struct {
 	// 响应代码
 	// example: 0
-	Code int `json:"code"`
+	Code string `json:"code"`
 
 	// 是否成功
 	// example: true
@@ -357,7 +357,7 @@ type IndexStatusData struct {
 type IndexStatusResponse struct {
 	// 响应代码
 	// example: 0
-	Code int `json:"code"`
+	Code string `json:"code"`
 
 	// 响应消息
 	// example: ok
@@ -398,7 +398,7 @@ type IndexSwitchQuery struct {
 type IndexSwitchResponse struct {
 	// 响应代码
 	// example: 0
-	Code int `json:"code"`
+	Code string `json:"code"`
 
 	// 是否成功
 	// example: true

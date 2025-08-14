@@ -936,7 +936,7 @@ func (s *extensionService) GetIndexStatus(ctx context.Context, clientID, workspa
 
 	// 构建响应
 	response := &dto.IndexStatusResponse{
-		Code:    0,
+		Code:    "0",
 		Message: "ok",
 		Data:    data,
 	}

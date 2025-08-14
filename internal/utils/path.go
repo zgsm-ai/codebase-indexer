@@ -10,15 +10,16 @@ import (
 )
 
 var (
-	AppRootDir            = "./.zgsm"
-	LogsDir               = "./.zgsm/logs"
-	CacheDir              = "./.zgsm/cache"
-	UploadTmpDir          = "./.zgsm/tmp"
-	EnvFile               = "./.zgsm/cache/env"
-	DbDir                 = "./.zgsm/cache/db"
-	WorkspaceDir          = "./.zgsm/cache/workspace"
-	WorkspaceEmbeddingDir = "./.zgsm/cache/workspaceEmbedding"
-	IndexDir              = "./.zgsm/index"
+	AppRootDir   = "./.costrict"
+	LogsDir      = "./.costrict/logs"
+	CacheDir     = "./.costrict/cache/codebase-indexer"
+	UploadTmpDir = "./.costrict/cache/codebase-indexer/tmp"
+	EnvFile      = "./.costrict/cache/codebase-indexer/env"
+	DbDir        = "./.costrict/cache/codebase-indexer/db"
+	WorkspaceDir = "./.costrict/cache/codebase-indexer/workspace"
+	EmbeddingDir = "./.costrict/cache/codebase-indexer/embedding"
+	IndexDir     = "./.costrict/cache/codebase-indexer/index"
+	AuthJsonFile = "./.costrict/share/auth.json"
 )
 
 // GetRootDir gets cross-platform root directory
@@ -30,16 +31,16 @@ func GetRootDir(appName string) (string, error) {
 	case "windows":
 		// Windows: Use %USERPROFILE% or %APPDATA%
 		if userProfile := os.Getenv("USERPROFILE"); userProfile != "" {
-			rootDir = filepath.Join(userProfile, "."+appName)
+			rootDir = filepath.Join(userProfile, ".costrict")
 		} else if appData := os.Getenv("APPDATA"); appData != "" {
-			rootDir = filepath.Join(appData, appName)
+			rootDir = filepath.Join(appData, "costrict")
 		} else {
 			// Fallback: Use current user home directory
 			homeDir, err := os.UserHomeDir()
 			if err != nil {
 				return "", err
 			}
-			rootDir = filepath.Join(homeDir, "."+appName)
+			rootDir = filepath.Join(homeDir, ".costrict")
 		}
 	case "darwin":
 		// macOS: Use ~/Library/Application Support/ or ~/.appname
@@ -50,7 +51,7 @@ func GetRootDir(appName string) (string, error) {
 		// Option 1: Use standard macOS application support directory
 		// rootDir = filepath.Join(homeDir, "Library", "Application Support", appName)
 		// Option 2: Use simple hidden directory
-		rootDir = filepath.Join(homeDir, "."+appName)
+		rootDir = filepath.Join(homeDir, ".costrict")
 	default:
 		// Linux and other Unix-like systems
 		// XDG Base Directory Specification standard
@@ -61,7 +62,7 @@ func GetRootDir(appName string) (string, error) {
 		if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
 			// User customized XDG_CONFIG_HOME, use this path
 			// Example: XDG_CONFIG_HOME=/custom/config -> /custom/config/appname
-			rootDir = filepath.Join(xdgConfig, appName)
+			rootDir = filepath.Join(xdgConfig, "costrict")
 		} else {
 			// XDG_CONFIG_HOME not set, use traditional hidden directory
 			// Example: ~/.appname or /home/username/.appname
@@ -69,7 +70,7 @@ func GetRootDir(appName string) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			rootDir = filepath.Join(homeDir, "."+appName)
+			rootDir = filepath.Join(homeDir, ".costrict")
 		}
 	}
 
@@ -101,12 +102,12 @@ func GetLogDir(rootPath string) (string, error) {
 }
 
 // GetCacheDir gets cache directory
-func GetCacheDir(rootPath string) (string, error) {
+func GetCacheDir(rootPath string, appName string) (string, error) {
 	if _, err := os.Stat(rootPath); os.IsNotExist(err) {
 		return "", fmt.Errorf("root path %s does not exist", rootPath)
 	}
 
-	cachePath := filepath.Join(rootPath, "cache")
+	cachePath := filepath.Join(rootPath, "cache", appName)
 	// Ensure config directory exists
 	if err := os.MkdirAll(cachePath, 0755); err != nil {
 		return "", err
@@ -126,13 +127,13 @@ func GetCacheEnvFile(cachePath string) (string, error) {
 	return envFilePath, nil
 }
 
-// GetUploadTmpDir gets temporary upload directory
-func GetUploadTmpDir(rootPath string) (string, error) {
-	if _, err := os.Stat(rootPath); os.IsNotExist(err) {
-		return "", fmt.Errorf("root path %s does not exist", rootPath)
+// GetCacheUploadTmpDir gets temporary upload directory
+func GetCacheUploadTmpDir(cachePath string) (string, error) {
+	if _, err := os.Stat(cachePath); os.IsNotExist(err) {
+		return "", fmt.Errorf("cache path %s does not exist", cachePath)
 	}
 
-	tmpPath := filepath.Join(rootPath, "tmp")
+	tmpPath := filepath.Join(cachePath, "tmp")
 	// Ensure config directory exists
 	if err := os.MkdirAll(tmpPath, 0755); err != nil {
 		return "", err
@@ -176,29 +177,29 @@ func GetCacheWorkspaceDir(cachePath string) (string, error) {
 	return workspacePath, nil
 }
 
-func GetCacheWorkspaceEmbeddingDir(cachePath string) (string, error) {
+func GetCacheEmbeddingDir(cachePath string) (string, error) {
 	if _, err := os.Stat(cachePath); os.IsNotExist(err) {
 		return "", fmt.Errorf("cache path %s does not exist", cachePath)
 	}
 
-	workspaceEmbeddingPath := filepath.Join(cachePath, "workspaceEmbedding")
+	embeddingPath := filepath.Join(cachePath, "embedding")
 
 	// Ensure config directory exists
-	if err := os.MkdirAll(workspaceEmbeddingPath, 0755); err != nil {
+	if err := os.MkdirAll(embeddingPath, 0755); err != nil {
 		return "", err
 	}
 
-	WorkspaceEmbeddingDir = workspaceEmbeddingPath
+	EmbeddingDir = embeddingPath
 
-	return workspaceEmbeddingPath, nil
+	return embeddingPath, nil
 }
 
-func GetIndexDir(rootPath string) (string, error) {
-	if _, err := os.Stat(rootPath); os.IsNotExist(err) {
-		return "", fmt.Errorf("root path %s does not exist", rootPath)
+func GetCacheIndexDir(cachePath string) (string, error) {
+	if _, err := os.Stat(cachePath); os.IsNotExist(err) {
+		return "", fmt.Errorf("cache path %s does not exist", cachePath)
 	}
 
-	indexPath := filepath.Join(rootPath, "index")
+	indexPath := filepath.Join(cachePath, "index")
 
 	// Ensure config directory exists
 	if err := os.MkdirAll(indexPath, 0755); err != nil {
@@ -208,6 +209,17 @@ func GetIndexDir(rootPath string) (string, error) {
 	IndexDir = indexPath
 
 	return indexPath, nil
+}
+
+func GetAuthJsonFile(rootPath string) (string, error) {
+	if _, err := os.Stat(rootPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("root path %s does not exist", rootPath)
+	}
+
+	authJsonPath := filepath.Join(rootPath, "share", "auth.json")
+	AuthJsonFile = authJsonPath
+
+	return authJsonPath, nil
 }
 
 // CleanUploadTmpDir cleans temporary upload directory

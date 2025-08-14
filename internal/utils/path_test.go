@@ -178,7 +178,7 @@ func TestGetCacheDir(t *testing.T) {
 				}
 			}
 
-			got, err := GetCacheDir(tt.rootPath)
+			got, err := GetCacheDir(tt.rootPath, "codebase-indexer")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetCacheDir() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -246,7 +246,7 @@ func TestGetUploadTmpDir(t *testing.T) {
 				}
 			}
 
-			got, err := GetUploadTmpDir(tt.rootPath)
+			got, err := GetCacheUploadTmpDir(tt.rootPath)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetUploadTmpDir() error = %v, wantErr %v", err, tt.wantErr)
 				return

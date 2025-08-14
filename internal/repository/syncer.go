@@ -3,6 +3,7 @@ package repository
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -24,6 +25,7 @@ const (
 	API_UPLOAD_FILE       = "/codebase-embedder/api/v1/files/upload"
 	API_FILE_STATUS       = "/codebase-embedder/api/v1/files/status"
 	API_GET_CODEBASE_HASH = "/codebase-embedder/api/v1/codebases/hash"
+	API_DELETE_EMBEDDING  = "/codebase-embedder/api/v1/embeddings"
 )
 
 type SyncInterface interface {
@@ -34,6 +36,7 @@ type SyncInterface interface {
 	GetClientConfig() (config.ClientConfig, error)
 	FetchUploadToken(req dto.UploadTokenReq) (*dto.UploadTokenResp, error)
 	FetchFileStatus(req dto.FileStatusReq) (*dto.FileStatusResp, error)
+	DeleteEmbedding(req dto.DeleteEmbeddingReq) (*dto.DeleteEmbeddingResp, error)
 }
 
 type HTTPSync struct {
@@ -317,7 +320,6 @@ func (hs *HTTPSync) GetClientConfig() (config.ClientConfig, error) {
 	duration := time.Since(startTime)
 	hs.logger.Info("HTTP %s %s completed in %v", "GET", url, duration)
 
-	hs.logger.Info("client config fetched successfully")
 	return clientConfig, nil
 }
 
@@ -343,7 +345,6 @@ func (hs *HTTPSync) FetchUploadToken(req dto.UploadTokenReq) (*dto.UploadTokenRe
 	duration := time.Since(startTime)
 	hs.logger.Info("HTTP %s %s completed in %v, status: %d", "POST", url, duration, responseData.Code)
 
-	hs.logger.Info("upload token fetched successfully")
 	return &responseData, nil
 }
 
@@ -369,6 +370,62 @@ func (hs *HTTPSync) FetchFileStatus(req dto.FileStatusReq) (*dto.FileStatusResp,
 	duration := time.Since(startTime)
 	hs.logger.Info("HTTP %s %s completed in %v, status: %d", "POST", url, duration, responseData.Code)
 
-	hs.logger.Info("file status fetched successfully")
+	return &responseData, nil
+}
+
+// DeleteEmbedding deletes embedding from server
+func (hs *HTTPSync) DeleteEmbedding(req dto.DeleteEmbeddingReq) (*dto.DeleteEmbeddingResp, error) {
+	hs.logger.Info("deleting embedding from server")
+
+	// 验证配置
+	if err := hs.ValidateSyncConfig(); err != nil {
+		return nil, err
+	}
+
+	// 构建请求URL
+	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_DELETE_EMBEDDING)
+
+	// 构建查询参数
+	queryParams := map[string]string{
+		"clientId":     req.ClientId,
+		"codebasePath": req.CodebasePath,
+	}
+
+	// 如果有文件路径参数，添加到查询参数中
+	if len(req.FilePaths) > 0 {
+		// 对于多个文件路径，可能需要特殊处理，这里简单地将第一个文件路径作为参数
+		// 实际使用中可能需要根据API规范调整
+		queryParams["filePaths"] = req.FilePaths[0]
+	}
+
+	// 创建HTTP请求
+	httpReq := &utils.HTTPRequest{
+		Method:      "DELETE",
+		URL:         url,
+		QueryParams: queryParams,
+		Headers:     map[string]string{},
+	}
+
+	// 执行请求
+	hs.logger.Info("sending HTTP %s request to: %s", "DELETE", url)
+	startTime := time.Now()
+	resp, err := hs.httpClient.DoHTTPRequest(httpReq, hs.syncConfig.Token)
+	if err != nil {
+		return nil, err
+	}
+	duration := time.Since(startTime)
+
+	// 检查响应状态
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("delete embedding failed, status: %d, response: %s", resp.StatusCode, string(resp.Body))
+	}
+
+	// 解析响应数据
+	var responseData dto.DeleteEmbeddingResp
+	if err := json.Unmarshal(resp.Body, &responseData); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %v", err)
+	}
+
+	hs.logger.Info("HTTP %s %s completed in %v, status: %d", "DELETE", url, duration, responseData.Code)
 	return &responseData, nil
 }
