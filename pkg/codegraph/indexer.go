@@ -104,7 +104,7 @@ type ProgressInfo struct {
 
 const (
 	defaultConcurrency = 1
-	defaultBatchSize   = 10
+	defaultBatchSize   = 50
 	defaultMaxFiles    = 50000
 	defaultMaxProjects = 3
 )
