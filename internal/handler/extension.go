@@ -269,17 +269,17 @@ func (h *ExtensionHandler) GetVersion(c *gin.Context) {
 // @Router /codebase-indexer/api/v1/check-ignore [post]
 func (h *ExtensionHandler) CheckIgnoreFile(c *gin.Context) {
 	// 获取更新头信息
-	err := h.UpdateSyncConfig(c)
-	if err != nil {
-		h.logger.Error("failed to update sync config: %v", err)
-		c.JSON(http.StatusInternalServerError, dto.IndexSwitchResponse{
-			Code:    "500",
-			Success: false,
-			Message: err.Error(),
-			Data:    false,
-		})
-		return
-	}
+	// err := h.UpdateSyncConfig(c)
+	// if err != nil {
+	// 	h.logger.Error("failed to update sync config: %v", err)
+	// 	c.JSON(http.StatusInternalServerError, dto.IndexSwitchResponse{
+	// 		Code:    "500",
+	// 		Success: false,
+	// 		Message: err.Error(),
+	// 		Data:    false,
+	// 	})
+	// 	return
+	// }
 
 	// 获取请求参数
 	var req dto.CheckIgnoreFileRequest
@@ -298,7 +298,7 @@ func (h *ExtensionHandler) CheckIgnoreFile(c *gin.Context) {
 		req.WorkspacePath, req.WorkspaceName, req.FilePaths)
 
 	// 参数验证
-	if req.ClientId == "" || req.WorkspacePath == "" || req.WorkspaceName == "" || len(req.FilePaths) == 0 {
+	if req.WorkspacePath == "" || req.WorkspaceName == "" || len(req.FilePaths) == 0 {
 		h.logger.Error("invalid check ignore file parameters")
 		c.JSON(http.StatusBadRequest, dto.CheckIgnoreFileResponse{
 			Code:    "400",
@@ -310,7 +310,8 @@ func (h *ExtensionHandler) CheckIgnoreFile(c *gin.Context) {
 	}
 
 	// 调用service层处理业务逻辑
-	result, err := h.extensionService.CheckIgnoreFiles(c.Request.Context(), req.ClientId, req.WorkspacePath, req.WorkspaceName, req.FilePaths)
+	clientId := c.GetHeader("Client-ID")
+	result, err := h.extensionService.CheckIgnoreFiles(c.Request.Context(), clientId, req.WorkspacePath, req.WorkspaceName, req.FilePaths)
 	if err != nil {
 		h.logger.Error("failed to check ignore files: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.CheckIgnoreFileResponse{
@@ -324,8 +325,8 @@ func (h *ExtensionHandler) CheckIgnoreFile(c *gin.Context) {
 
 	// 根据结果返回响应
 	if result.ShouldIgnore {
-		c.JSON(http.StatusUnprocessableEntity, dto.CheckIgnoreFileResponse{
-			Code:    "422",
+		c.JSON(http.StatusOK, dto.CheckIgnoreFileResponse{
+			Code:    "0",
 			Success: false,
 			Ignore:  true,
 			Message: result.Reason,
@@ -354,17 +355,17 @@ func (h *ExtensionHandler) CheckIgnoreFile(c *gin.Context) {
 // @Router /codebase-indexer/api/v1/events [post]
 func (h *ExtensionHandler) PublishEvents(c *gin.Context) {
 	// 获取更新头信息
-	err := h.UpdateSyncConfig(c)
-	if err != nil {
-		h.logger.Error("failed to update sync config: %v", err)
-		c.JSON(http.StatusInternalServerError, dto.IndexSwitchResponse{
-			Code:    "500",
-			Success: false,
-			Message: err.Error(),
-			Data:    false,
-		})
-		return
-	}
+	// err := h.UpdateSyncConfig(c)
+	// if err != nil {
+	// 	h.logger.Error("failed to update sync config: %v", err)
+	// 	c.JSON(http.StatusInternalServerError, dto.IndexSwitchResponse{
+	// 		Code:    "500",
+	// 		Success: false,
+	// 		Message: err.Error(),
+	// 		Data:    false,
+	// 	})
+	// 	return
+	// }
 
 	// 获取请求参数
 	var req dto.PublishEventsRequest
@@ -416,17 +417,17 @@ func (h *ExtensionHandler) PublishEvents(c *gin.Context) {
 // @Router /codebase-indexer/api/v1/index [post]
 func (h *ExtensionHandler) TriggerIndex(c *gin.Context) {
 	// 获取更新头信息
-	err := h.UpdateSyncConfig(c)
-	if err != nil {
-		h.logger.Error("failed to update sync config: %v", err)
-		c.JSON(http.StatusInternalServerError, dto.IndexSwitchResponse{
-			Code:    "500",
-			Success: false,
-			Message: err.Error(),
-			Data:    false,
-		})
-		return
-	}
+	// err := h.UpdateSyncConfig(c)
+	// if err != nil {
+	// 	h.logger.Error("failed to update sync config: %v", err)
+	// 	c.JSON(http.StatusInternalServerError, dto.IndexSwitchResponse{
+	// 		Code:    "500",
+	// 		Success: false,
+	// 		Message: err.Error(),
+	// 		Data:    false,
+	// 	})
+	// 	return
+	// }
 
 	// 获取请求参数
 	var req dto.TriggerIndexRequest
@@ -468,7 +469,7 @@ func (h *ExtensionHandler) TriggerIndex(c *gin.Context) {
 	clientId := c.GetHeader("Client-ID")
 
 	// 调用service层处理业务逻辑
-	err = h.extensionService.TriggerIndex(c.Request.Context(), req.Workspace, req.Type, clientId)
+	err := h.extensionService.TriggerIndex(c.Request.Context(), req.Workspace, req.Type, clientId)
 	if err != nil {
 		h.logger.Error("failed to trigger index: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.TriggerIndexResponse{
@@ -502,17 +503,17 @@ func (h *ExtensionHandler) TriggerIndex(c *gin.Context) {
 // @Router /codebase-indexer/api/v1/index/status [get]
 func (h *ExtensionHandler) GetIndexStatus(c *gin.Context) {
 	// 获取更新头信息
-	err := h.UpdateSyncConfig(c)
-	if err != nil {
-		h.logger.Error("failed to update sync config: %v", err)
-		c.JSON(http.StatusInternalServerError, dto.IndexSwitchResponse{
-			Code:    "500",
-			Success: false,
-			Message: err.Error(),
-			Data:    false,
-		})
-		return
-	}
+	// err := h.UpdateSyncConfig(c)
+	// if err != nil {
+	// 	h.logger.Error("failed to update sync config: %v", err)
+	// 	c.JSON(http.StatusInternalServerError, dto.IndexSwitchResponse{
+	// 		Code:    "500",
+	// 		Success: false,
+	// 		Message: err.Error(),
+	// 		Data:    false,
+	// 	})
+	// 	return
+	// }
 
 	// 获取请求参数
 	var query dto.IndexStatusQuery
@@ -525,10 +526,10 @@ func (h *ExtensionHandler) GetIndexStatus(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("index status query request: ClientId=%s, Workspace=%s", query.ClientId, query.Workspace)
+	h.logger.Info("index status query request: Workspace=%s", query.Workspace)
 
 	// 调用service层处理业务逻辑
-	response, err := h.extensionService.GetIndexStatus(c.Request.Context(), query.ClientId, query.Workspace)
+	response, err := h.extensionService.GetIndexStatus(c.Request.Context(), query.Workspace)
 	if err != nil {
 		h.logger.Error("failed to get index status: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.IndexStatusResponse{
@@ -554,17 +555,17 @@ func (h *ExtensionHandler) GetIndexStatus(c *gin.Context) {
 // @Router /codebase-indexer/api/v1/switch [get]
 func (h *ExtensionHandler) SwitchIndex(c *gin.Context) {
 	// 获取更新头信息
-	err := h.UpdateSyncConfig(c)
-	if err != nil {
-		h.logger.Error("failed to update sync config: %v", err)
-		c.JSON(http.StatusInternalServerError, dto.IndexSwitchResponse{
-			Code:    "500",
-			Success: false,
-			Message: err.Error(),
-			Data:    false,
-		})
-		return
-	}
+	// err := h.UpdateSyncConfig(c)
+	// if err != nil {
+	// 	h.logger.Error("failed to update sync config: %v", err)
+	// 	c.JSON(http.StatusInternalServerError, dto.IndexSwitchResponse{
+	// 		Code:    "500",
+	// 		Success: false,
+	// 		Message: err.Error(),
+	// 		Data:    false,
+	// 	})
+	// 	return
+	// }
 
 	// 获取请求参数
 	var query dto.IndexSwitchQuery
@@ -604,7 +605,7 @@ func (h *ExtensionHandler) SwitchIndex(c *gin.Context) {
 	h.logger.Info("index switch request: Workspace=%s, Switch=%s", query.Workspace, query.Switch)
 	clientId := c.GetHeader("Client-ID")
 
-	err = h.extensionService.SwitchIndex(c, query.Workspace, query.Switch, clientId)
+	err := h.extensionService.SwitchIndex(c, query.Workspace, query.Switch, clientId)
 	if err != nil {
 		h.logger.Error("failed to switch index: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.IndexSwitchResponse{
@@ -659,22 +660,4 @@ func (h *ExtensionHandler) UpdateSyncConfig(c *gin.Context) error {
 
 	h.logger.Info("sync config updated successfully")
 	return nil
-}
-
-// SetupRoutes sets up the REST API routes
-// @Description 设置REST API路由
-func (h *ExtensionHandler) SetupRoutes(router *gin.Engine) {
-	api := router.Group("/codebase-indexer/api/v1")
-	{
-		api.POST("/register", h.RegisterSync)
-		api.POST("/sync", h.SyncCodebase)
-		api.POST("/unregister", h.UnregisterSync)
-		api.POST("/token", h.ShareAccessToken)
-		api.POST("/version", h.GetVersion)
-		api.POST("/files/ignore", h.CheckIgnoreFile)
-		api.POST("/events", h.PublishEvents)
-		api.POST("/index", h.TriggerIndex)
-		api.GET("/index/status", h.GetIndexStatus)
-		api.GET("/switch", h.SwitchIndex)
-	}
 }

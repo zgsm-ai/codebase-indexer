@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"time"
 
+	"codebase-indexer/internal/config"
 	"codebase-indexer/internal/dto"
 	"codebase-indexer/internal/model"
 	"codebase-indexer/internal/repository"
@@ -185,7 +186,7 @@ func (sc *embeddingStatusService) checkEventBuildStatus(workspacePath string, ev
 	fileStatusData := fileStatusResp.Data
 	processStatus := fileStatusData.Process
 
-	sc.logger.Info("fetched file status for syncId %s: process=%s", event.SyncId, processStatus)
+	sc.logger.Debug("fetched file status for syncId %s: process=%s", event.SyncId, processStatus)
 
 	// 当process为pending时，不处理
 	if processStatus == dto.EmbeddingStatusPending {
@@ -207,14 +208,15 @@ func (sc *embeddingStatusService) checkEventBuildStatus(workspacePath string, ev
 	}
 
 	// 其他情况保持原来的处理逻辑
-	sc.logger.Info("build completed for syncId: %s", event.SyncId)
+	sc.logger.Debug("build completed for syncId: %s", event.SyncId)
 	return sc.handleBuildCompletion(workspacePath, event, fileStatusData.FileList)
 }
 
 // fetchFileStatus 获取文件状态
 func (sc *embeddingStatusService) fetchFileStatus(workspacePath, syncId string) (*dto.FileStatusResp, error) {
+	authInfo := config.GetAuthInfo()
 	fileStatusReq := dto.FileStatusReq{
-		ClientId:     sc.syncer.GetSyncConfig().ClientId,
+		ClientId:     authInfo.ClientId,
 		CodebasePath: workspacePath,
 		CodebaseName: filepath.Base(workspacePath),
 		SyncId:       syncId,

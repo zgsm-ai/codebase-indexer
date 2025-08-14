@@ -64,7 +64,8 @@ func (d *Daemon) Start() {
 	d.logger.Info("daemon process started")
 
 	// Update configuration on startup
-	if d.httpSync.GetSyncConfig() != nil {
+	authInfo := config.GetAuthInfo()
+	if authInfo.ClientId != "" && authInfo.Token != "" && authInfo.ServerURL != "" {
 		d.updateConfig()
 	}
 
