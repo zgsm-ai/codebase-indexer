@@ -18,6 +18,7 @@ import (
 	"codebase-indexer/internal/config"
 	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/codegraph/lang"
+	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/logger"
 
 	gitignore "github.com/sabhiram/go-gitignore"
@@ -115,6 +116,27 @@ func (s *FileScanner) CalculateFileHash(filePath string) (string, error) {
 		filePath, time.Since(startTime), hashValue)
 
 	return hashValue, nil
+}
+
+type ignoreStu struct {
+	ignoreRules  *gitignore.GitIgnore
+	includeRules []string
+	maxFileCount int
+	maxFileSize  int
+}
+
+func (s *FileScanner) loadIngoreRules(codebasePath string) ignoreStu {
+	return ignoreStu{
+		ignoreRules:  s.LoadIgnoreRules(codebasePath),
+		includeRules: s.LoadIncludeFiles(),
+		maxFileCount: s.scannerConfig.MaxFileCount,
+		maxFileSize:  s.scannerConfig.MaxFileSizeKB,
+	}
+}
+
+// skipAll skipDir
+func (s *FileScanner) checkIgnoreRules(ignoreRules ignoreStu, filePath *types.FileInfo) (bool, error) {
+	return false, nil
 }
 
 // Load and combine default ignore rules with .gitignore rules

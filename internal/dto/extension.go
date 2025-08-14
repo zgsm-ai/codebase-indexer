@@ -184,11 +184,6 @@ type VersionResponse struct {
 // CheckIgnoreFileRequest represents the request for checking ignore file
 // @Description 检查忽略文件的请求参数
 type CheckIgnoreFileRequest struct {
-	// 客户端ID
-	// required: true
-	// example: client-123456
-	ClientId string `json:"clientId" binding:"required"`
-
 	// 工作空间路径
 	// required: true
 	// example: /home/user/workspace/project
@@ -370,11 +365,6 @@ type IndexStatusResponse struct {
 // IndexStatusQuery represents the query parameters for index status
 // @Description 索引状态查询参数
 type IndexStatusQuery struct {
-	// 客户端ID
-	// required: true
-	// example: 111a
-	ClientId string `form:"clientId" binding:"required"`
-
 	// 工作空间路径
 	// required: true
 	// example: g:\projects\codebase-indexer

@@ -44,25 +44,37 @@ func NewEventProcessorJob(
 
 // Start 启动事件处理任务
 func (j *EventProcessorJob) Start(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			j.logger.Error("recovered from panic in event processor job: %v", r)
+		}
+	}()
 	j.logger.Info("starting event processor job")
 
 	// 立即执行一次事件处理
-	if j.httpSync.GetSyncConfig() != nil {
+	authInfo := config.GetAuthInfo()
+	if authInfo.ClientId != "" && authInfo.Token != "" && authInfo.ServerURL != "" {
 		j.embeddingProcessWorkspaces(ctx)
 	}
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				j.logger.Error("recovered from panic in embedding processor: %v", r)
+			}
+		}()
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
 
 		for {
 			select {
 			case <-ctx.Done():
-				j.logger.Info("event processor task stopped")
+				j.logger.Info("embedding processor task stopped")
 				return
 			case <-ticker.C:
-				if j.httpSync.GetSyncConfig() == nil {
-					j.logger.Warn("sync config is nil, skipping embedding process")
+				authInfo := config.GetAuthInfo()
+				if authInfo.ClientId == "" || authInfo.Token == "" || authInfo.ServerURL == "" {
+					j.logger.Warn("auth info is nil, skipping embedding process")
 					continue
 				}
 				// 处理事件
@@ -72,10 +84,15 @@ func (j *EventProcessorJob) Start(ctx context.Context) {
 	}()
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				j.logger.Error("recovered from panic in codegraph processor: %v", r)
+			}
+		}()
 		for {
 			select {
 			case <-ctx.Done():
-				j.logger.Info("event processor task stopped")
+				j.logger.Info("codegraph processor task stopped")
 				return
 			default:
 				err := j.codegraphProcessWorkSpaces(ctx)

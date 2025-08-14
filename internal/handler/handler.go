@@ -107,7 +107,8 @@ func (h *GRPCHandler) RegisterSync(ctx context.Context, req *api.RegisterSyncReq
 	}
 
 	// Sync newly registered codebases
-	if len(addCodebaseConfigs) > 0 && h.httpSync.GetSyncConfig() != nil {
+	authInfo := config.GetAuthInfo()
+	if len(addCodebaseConfigs) > 0 && authInfo.ClientId != "" && authInfo.Token != "" && authInfo.ServerURL != "" {
 		go h.syncCodebases(addCodebaseConfigs)
 	}
 
@@ -188,7 +189,8 @@ func (h *GRPCHandler) SyncCodebase(ctx context.Context, req *api.SyncCodebaseReq
 	}
 
 	// Sync codebases
-	if len(syncCodebaseConfigs) > 0 && h.httpSync.GetSyncConfig() != nil {
+	authInfo := config.GetAuthInfo()
+	if len(syncCodebaseConfigs) > 0 && authInfo.ClientId != "" && authInfo.Token != "" && authInfo.ServerURL != "" {
 		var err error
 		if len(req.FilePaths) == 0 {
 			err = h.syncCodebases(syncCodebaseConfigs)

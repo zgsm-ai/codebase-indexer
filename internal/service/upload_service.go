@@ -142,8 +142,9 @@ func (us *uploadService) DeleteFileWithRetry(workspacePath string, filePath stri
 	}
 
 	// 6. 获取上传令牌
+	authInfo := config.GetAuthInfo()
 	tokenReq := dto.UploadTokenReq{
-		ClientId:     us.syncer.GetSyncConfig().ClientId,
+		ClientId:     authInfo.ClientId,
 		CodebasePath: workspacePath,
 		CodebaseName: filepath.Base(workspacePath),
 	}
@@ -155,7 +156,7 @@ func (us *uploadService) DeleteFileWithRetry(workspacePath string, filePath stri
 
 	// 4. 创建临时的 codebase 配置
 	codebaseConfig := &config.CodebaseConfig{
-		ClientID:     us.syncer.GetSyncConfig().ClientId,
+		ClientID:     authInfo.ClientId,
 		CodebaseId:   filepath.Base(workspacePath),
 		CodebasePath: workspacePath,
 		CodebaseName: filepath.Base(workspacePath),
@@ -186,7 +187,7 @@ func (us *uploadService) DeleteFileWithRetry(workspacePath string, filePath stri
 		requestId = time.Now().Format("20060102150405000")
 	}
 	uploadReq := dto.UploadReq{
-		ClientId:     us.syncer.GetSyncConfig().ClientId,
+		ClientId:     authInfo.ClientId,
 		CodebasePath: workspacePath,
 		CodebaseName: filepath.Base(workspacePath),
 		RequestId:    requestId,
@@ -225,8 +226,9 @@ func (us *uploadService) uploadSingleFile(workspacePath string, filePath string,
 	us.logger.Info("file timestamp: %d", fileTimestamp)
 
 	// 6. 获取上传令牌
+	authInfo := config.GetAuthInfo()
 	tokenReq := dto.UploadTokenReq{
-		ClientId:     us.syncer.GetSyncConfig().ClientId,
+		ClientId:     authInfo.ClientId,
 		CodebasePath: workspacePath,
 		CodebaseName: filepath.Base(workspacePath),
 	}
@@ -244,7 +246,7 @@ func (us *uploadService) uploadSingleFile(workspacePath string, filePath string,
 
 	// 4. 创建临时的 codebase 配置
 	codebaseConfig := &config.CodebaseConfig{
-		ClientID:     us.syncer.GetSyncConfig().ClientId,
+		ClientID:     authInfo.ClientId,
 		CodebaseId:   filepath.Base(workspacePath),
 		CodebasePath: workspacePath,
 		CodebaseName: filepath.Base(workspacePath),
@@ -277,7 +279,7 @@ func (us *uploadService) uploadSingleFile(workspacePath string, filePath string,
 	us.logger.Info("upload request ID: %s", requestId)
 
 	uploadReq := dto.UploadReq{
-		ClientId:     us.syncer.GetSyncConfig().ClientId,
+		ClientId:     authInfo.ClientId,
 		CodebasePath: workspacePath,
 		CodebaseName: filepath.Base(workspacePath),
 		RequestId:    requestId,
@@ -523,8 +525,9 @@ func (us *uploadService) renameSingleFile(workspacePath string, oldFilePath stri
 	}
 
 	// 5. 创建临时的 codebase 配置
+	authInfo := config.GetAuthInfo()
 	codebaseConfig := &config.CodebaseConfig{
-		ClientID:     us.syncer.GetSyncConfig().ClientId,
+		ClientID:     authInfo.ClientId,
 		CodebaseId:   filepath.Base(workspacePath),
 		CodebasePath: workspacePath,
 		CodebaseName: filepath.Base(workspacePath),
@@ -550,7 +553,7 @@ func (us *uploadService) renameSingleFile(workspacePath string, oldFilePath stri
 
 	// 7. 获取上传令牌
 	tokenReq := dto.UploadTokenReq{
-		ClientId:     us.syncer.GetSyncConfig().ClientId,
+		ClientId:     authInfo.ClientId,
 		CodebasePath: workspacePath,
 		CodebaseName: filepath.Base(workspacePath),
 	}
@@ -567,7 +570,7 @@ func (us *uploadService) renameSingleFile(workspacePath string, oldFilePath stri
 		requestId = time.Now().Format("20060102150405000")
 	}
 	uploadReq := dto.UploadReq{
-		ClientId:     us.syncer.GetSyncConfig().ClientId,
+		ClientId:     authInfo.ClientId,
 		CodebasePath: workspacePath,
 		CodebaseName: filepath.Base(workspacePath),
 		RequestId:    requestId,

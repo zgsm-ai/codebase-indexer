@@ -44,14 +44,25 @@ func NewStatusCheckerJob(
 
 // Start 启动状态检查任务
 func (j *StatusCheckerJob) Start(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			j.logger.Error("recovered from panic in status checker job: %v", r)
+		}
+	}()
 	j.logger.Info("starting status checker job with interval: %v", j.interval)
 
 	// 立即执行一次检查
-	if j.interval > 0 && j.httpSync.GetSyncConfig() != nil {
+	authInfo := config.GetAuthInfo()
+	if j.interval > 0 && authInfo.ClientId != "" && authInfo.Token != "" && authInfo.ServerURL != "" {
 		j.checkBuildingStates(ctx)
 	}
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				j.logger.Error("recovered from panic in check building: %v", r)
+			}
+		}()
 		ticker := time.NewTicker(j.interval)
 		defer ticker.Stop()
 
@@ -61,8 +72,9 @@ func (j *StatusCheckerJob) Start(ctx context.Context) {
 				j.logger.Info("status checker task stopped")
 				return
 			case <-ticker.C:
-				if j.httpSync.GetSyncConfig() == nil {
-					j.logger.Warn("sync config is nil, skip status checker task")
+				authInfo := config.GetAuthInfo()
+				if authInfo.ClientId == "" || authInfo.Token == "" || authInfo.ServerURL == "" {
+					j.logger.Warn("auth info is nil, skip status checker task")
 					continue
 				}
 				j.checkBuildingStates(ctx)
