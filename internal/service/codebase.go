@@ -19,10 +19,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 
 	"codebase-indexer/internal/config"
 	"codebase-indexer/pkg/logger"
@@ -60,11 +61,14 @@ type CodebaseService interface {
 	// DeleteIndex 删除代码库的索引（支持按类型删除）
 	DeleteIndex(ctx context.Context, req *dto.DeleteIndexRequest) error
 	ExportIndex(c *gin.Context, d *dto.ExportIndexRequest) error
+	ReadCodeSnippets(c *gin.Context, d *dto.ReadCodeSnippetsRequest) (*dto.CodeSnippetsData, error)
 }
 
 const maxReadLine = 5000
 const maxLineLimit = 500
 const definitionFillContentNodeLimit = 100
+const DefaultMaxCodeSnippetLines = 500
+const DefaultMaxCodeSnippets = 200
 
 // NewCodebaseService 创建新的代码库服务
 func NewCodebaseService(logger logger.Logger,
@@ -89,9 +93,11 @@ type codebaseService struct {
 	indexer              *codegraph.Indexer
 }
 
-func (s *codebaseService) checkPath(ctx context.Context, workspacePath string, filePath string) error {
-	if filePath != types.EmptyString && !utils.IsSubdir(workspacePath, filePath) {
-		return fmt.Errorf("cannot access path %s which not in workspace %s", filePath, workspacePath)
+func (s *codebaseService) checkPath(ctx context.Context, workspacePath string, filePaths []string) error {
+	for _, filePath := range filePaths {
+		if filePath != types.EmptyString && !utils.IsSubdir(workspacePath, filePath) {
+			return fmt.Errorf("cannot access path %s which not in workspace %s", filePath, workspacePath)
+		}
 	}
 	_, err := s.workspaceRepository.GetWorkspaceByPath(workspacePath)
 	return err
@@ -209,7 +215,7 @@ func (l *codebaseService) GetFileContent(ctx context.Context, req *dto.GetFileCo
 	// 读取文件
 	filePath := req.FilePath
 	clientPath := req.CodebasePath
-	if err := l.checkPath(ctx, clientPath, filePath); err != nil {
+	if err := l.checkPath(ctx, clientPath, []string{filePath}); err != nil {
 		return nil, err
 	}
 
@@ -220,10 +226,66 @@ func (l *codebaseService) GetFileContent(ctx context.Context, req *dto.GetFileCo
 	return l.workspaceReader.ReadFile(ctx, filePath, types.ReadOptions{StartLine: req.StartLine, EndLine: req.EndLine})
 }
 
+func (l *codebaseService) ReadCodeSnippets(ctx *gin.Context, req *dto.ReadCodeSnippetsRequest) (*dto.CodeSnippetsData, error) {
+	workspacePath := req.WorkspacePath
+	snippets := req.CodeSnippets
+
+	// 添加空数组验证
+	if len(snippets) == 0 {
+		return nil, fmt.Errorf("codeSnippets array cannot be empty")
+	}
+
+	if len(snippets) > DefaultMaxCodeSnippets {
+		snippets = snippets[:DefaultMaxCodeSnippets]
+	}
+	filePaths := make([]string, 0)
+	for i, snippet := range snippets {
+		// 如果开始行小于等于0，让它等于1；
+		// 如果结束行小于等于开始行， 让它等于开始行；
+		// 如果结束行 - 开始行 > 默认最大值，让它等于最大值；
+		if snippet.StartLine <= 0 {
+			snippets[i].StartLine = 1
+		}
+		if snippet.EndLine <= snippet.StartLine {
+			snippets[i].EndLine = snippet.StartLine
+		}
+		if snippet.EndLine-snippet.StartLine > DefaultMaxCodeSnippetLines {
+			snippets[i].EndLine = snippet.StartLine + DefaultMaxCodeSnippetLines
+		}
+
+		filePaths = append(filePaths, snippet.FilePath)
+	}
+
+	if err := l.checkPath(ctx, workspacePath, filePaths); err != nil {
+		return nil, err
+	}
+
+	// 2. 从索引库查询代码片段
+	codeSnippets := make([]*dto.CodeSnippet, 0)
+	for _, snippet := range snippets {
+		bytes, err := l.workspaceReader.ReadFile(ctx, snippet.FilePath, types.ReadOptions{StartLine: snippet.StartLine, EndLine: snippet.EndLine})
+		if err != nil {
+			l.logger.Error("failed to read code snippet %s %v: %v", snippet.FilePath, snippet.StartLine, snippet.EndLine, err)
+			continue
+		}
+		codeSnippets = append(codeSnippets, &dto.CodeSnippet{
+			FilePath:  snippet.FilePath,
+			StartLine: snippet.StartLine,
+			EndLine:   snippet.EndLine,
+			Content:   string(bytes),
+		})
+	}
+
+	return &dto.CodeSnippetsData{
+		CodeSnippets: codeSnippets,
+	}, nil
+
+}
+
 func (l *codebaseService) GetCodebaseDirectoryTree(ctx context.Context, req *dto.GetCodebaseDirectoryRequest) (
 	resp *dto.DirectoryData, err error) {
 
-	if err = l.checkPath(ctx, req.CodebasePath, req.SubDir); err != nil {
+	if err = l.checkPath(ctx, req.CodebasePath, []string{req.SubDir}); err != nil {
 		return nil, err
 	}
 

@@ -48,6 +48,29 @@ type SearchDefinitionRequest struct {
 	CodeSnippet  string `form:"codeSnippet,omitempty"`
 }
 
+type ReadCodeSnippetsRequest struct {
+	ClientId      string              `json:"clientId" binding:"required"`
+	WorkspacePath string              `json:"workspacePath" binding:"required"`
+	CodeSnippets  []*CodeSnippetQuery `json:"codeSnippets"  binding:"required,min=1"`
+}
+
+type CodeSnippetQuery struct {
+	FilePath  string `json:"filePath" binding:"required"`        // 确保文件路径不为空
+	StartLine int    `json:"startLine" binding:"required,min=1"` // 行号至少为1
+	EndLine   int    `json:"endLine" binding:"required,min=1"`   // 结束行必须大于开始行
+}
+
+type CodeSnippetsData struct {
+	CodeSnippets []*CodeSnippet `json:"list"`
+}
+
+type CodeSnippet struct {
+	FilePath  string `json:"filePath"`  // 文件路径
+	StartLine int    `json:"startLine"` // 起始行号
+	EndLine   int    `json:"endLine"`   // 结束行号
+	Content   string `json:"content"`   // 代码片段内容
+}
+
 // DefinitionInfo 定义信息
 type DefinitionInfo struct {
 	FilePath string   `json:"filePath"`
