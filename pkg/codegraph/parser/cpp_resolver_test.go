@@ -573,3 +573,16 @@ func TestCPPResolver_ResolveClass(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveFile(t *testing.T) {
+	filePath := "G:\\tmp\\projects\\cpp\\grpc\\src\\compiler\\cpp_generator.cc"
+	logger := initLogger()
+	parser := NewSourceFileParser(logger)
+	sourceFile := &types.SourceFile{
+		Path:    filePath,
+		Content: readFile(filePath),
+	}
+	res, err := parser.Parse(context.Background(), sourceFile)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, res.Elements)
+}

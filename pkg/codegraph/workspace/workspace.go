@@ -20,7 +20,7 @@ var ErrPathNotExists = errors.New("no such file or directory")
 
 var DefaultVisitPattern = &types.VisitPattern{ExcludeDirs: []string{".git", ".idea", ".vscode", "node_modules", "vendor"}}
 
-const ReadFileMaxLine = 1_0000
+const ReadFileMaxLine = 5_000
 const MaxFileVisitLimit = 10_0000
 
 type WorkspaceReader struct {

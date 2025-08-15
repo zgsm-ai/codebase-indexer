@@ -60,10 +60,12 @@ func TestIndexGoProjects(t *testing.T) {
 
 	// 添加这一行 - 初始化工作空间数据库记录
 	err = initWorkspaceModel(env, filepath.Join(GoProjectRootDir, "kubernetes"))
+	err = initWorkspaceModel(env, filepath.Join(GoProjectRootDir, "kubernetes"))
 	assert.NoError(t, err)
 
 	indexer := createTestIndexer(env, &types.VisitPattern{
 		ExcludeDirs: defaultVisitPattern.ExcludeDirs,
+		//IncludeExts: []string{".go"},
 	})
 	testCases := []struct {
 		Name    string
@@ -76,9 +78,16 @@ func TestIndexGoProjects(t *testing.T) {
 			wantErr: nil,
 		},
 	}
+	// - 1W文件：
+	//   6min 100MB 使用1000个cache，没有则从磁盘读取
+	//   1min45s 500MB 使用500万个cache，没有则从磁盘读取
+	//   2min53s 120MB 仅缓存所有名字(初始化cache为1000)，第二次访问该元素时从磁盘加载
+	//   3min54s  150MB    初始化为1000，没有则从磁盘读取
+	// - 5W文件：
+	//    200MB+ 初始化为1000，缓存key和value，没有则从磁盘读取
+	//   1h      100MB     仅缓存名字，第二次访问从磁盘加载
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			fmt.Println("tc.path", tc.Path)
 			_, err = indexer.IndexWorkspace(context.Background(), tc.Path)
 			assert.NoError(t, err)
 		})

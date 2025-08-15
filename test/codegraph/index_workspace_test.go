@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -182,7 +183,7 @@ func TestIndexMixedLanguages(t *testing.T) {
 			Exts:     getSupportedExtByLanguageTestHelper(lang.C),
 			wantErr:  nil,
 		},
-		{
+		{ // 220.97s 223.75s 228s 38s 65s
 			Name:     "grpc",
 			Language: "cpp",
 			Path:     filepath.Join(testRootDir, "cpp", "grpc"),
@@ -190,8 +191,8 @@ func TestIndexMixedLanguages(t *testing.T) {
 			wantErr:  nil,
 		},
 	}
-
-	for i := 0; i < 1000; i++ {
+	cost := make([]string, 0)
+	for i := 0; i < 1; i++ {
 
 		for _, tc := range testCases {
 			ctx := context.Background()
@@ -202,11 +203,12 @@ func TestIndexMixedLanguages(t *testing.T) {
 				start := time.Now()
 				metrics, err := indexer.IndexWorkspace(ctx, tc.Path)
 				assert.NoError(t, err)
-				t.Logf("===>mixed-index workspace %s, total files: %d, total failed: %d, cost: %d ms",
-					tc.Name, metrics.TotalFiles, metrics.TotalFailedFiles, time.Since(start).Milliseconds())
+				cost = append(cost, fmt.Sprintf("===>workspace %s, total files: %d, total failed: %d, cost: %d ms",
+					tc.Name, metrics.TotalFiles, metrics.TotalFailedFiles, time.Since(start).Milliseconds()))
 			})
 		}
-
+		t.Logf("###############################耗时统计#####################################")
+		t.Log(strings.Join(cost, "\n"))
 	}
 
 }

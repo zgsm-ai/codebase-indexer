@@ -12,29 +12,31 @@ type node[T any] struct {
 	next  *node[T]
 }
 
-// LRUCache 带并发锁的LRU缓存
+// LRUCache 带并发锁的LRU缓存（仅限制最大容量，依赖map自动扩容）
 type LRUCache[T any] struct {
-	cache    map[string]*node[T] // 快速查找映射
-	head     *node[T]            // 头节点（最近使用）
-	tail     *node[T]            // 尾节点（最少使用）
-	capacity int                 // 最大容量
-	size     int                 // 当前大小
-	mu       sync.Mutex          // 互斥锁，保证并发安全
+	cache       map[string]*node[T] // 快速查找映射，依赖Go自动扩容
+	head        *node[T]            // 头节点（最近使用）
+	tail        *node[T]            // 尾节点（最少使用）
+	maxCapacity int                 // 最大元素数量（超过则淘汰）
+	size        int                 // 当前元素数量
+	mu          sync.Mutex          // 互斥锁，保证并发安全
 }
 
 // NewLRUCache 创建新的LRU缓存
-func NewLRUCache[T any](capacity int) *LRUCache[T] {
+// initCapacity: map初始容量（用于预分配，可填0，Go会自动扩容）
+// maxCapacity: 最大元素数量（必须>0）
+func NewLRUCache[T any](initCapacity, maxCapacity int) *LRUCache[T] {
 	head := &node[T]{}
 	tail := &node[T]{}
 	head.next = tail
 	tail.prev = head
 
 	return &LRUCache[T]{
-		cache:    make(map[string]*node[T], capacity),
-		head:     head,
-		tail:     tail,
-		capacity: capacity,
-		size:     0,
+		cache:       make(map[string]*node[T], initCapacity), // 用initCapacity预分配map
+		head:        head,
+		tail:        tail,
+		maxCapacity: maxCapacity,
+		size:        0,
 	}
 }
 
@@ -84,12 +86,14 @@ func (c *LRUCache[T]) Put(key string, value T) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// 若已存在，更新值并移到头部
 	if node, ok := c.cache[key]; ok {
 		node.value = value
 		c.moveToHead(node)
 		return
 	}
 
+	// 新增节点
 	newNode := &node[T]{
 		key:   key,
 		value: value,
@@ -98,29 +102,34 @@ func (c *LRUCache[T]) Put(key string, value T) {
 	c.addToHead(newNode)
 	c.size++
 
-	if c.size > c.capacity {
+	// 超过最大容量则淘汰最少使用节点（依赖map自动扩容，无需手动管理map容量）
+	if c.size > c.maxCapacity {
 		removedNode := c.removeTail()
 		delete(c.cache, removedNode.key)
 		c.size--
 	}
 }
 
-// Purge 清理所有
+// Purge 清理所有缓存
 func (c *LRUCache[T]) Purge() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// 1. 清空map（所有节点不再被引用，等待GC回收）
-	c.cache = make(map[string]*node[T], c.capacity)
-	// 2. 重置双向链表（仅保留头和尾哨兵节点，中间节点全部隔离）
+
+	// 用初始容量重新创建map（或保留原容量，根据需求选择）
+	c.cache = make(map[string]*node[T], len(c.cache))
 	c.head.next = c.tail
 	c.tail.prev = c.head
-	// 3. 重置当前大小为0
 	c.size = 0
 }
 
-// Len 返回当前缓存大小（用于测试）
+// Len 返回当前缓存大小
 func (c *LRUCache[T]) Len() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.size
+}
+
+// MaxCapacity 返回最大容量限制
+func (c *LRUCache[T]) MaxCapacity() int {
+	return c.maxCapacity // 只读字段，无需加锁
 }

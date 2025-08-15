@@ -11,6 +11,7 @@ const ( //
 
 type IndexTaskMetrics struct {
 	TotalFiles       int
+	TotalSymbols     int
 	TotalFailedFiles int
 	FailedFilePaths  []string
 }
