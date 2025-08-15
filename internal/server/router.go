@@ -89,6 +89,7 @@ func (s *server) setupMiddleware() {
 	s.engine.Use(LoggingMiddleware(s.logger))
 	s.engine.Use(CORSMiddleware())
 	s.engine.Use(SecurityMiddleware())
+	s.engine.Use(RateLimitMiddleware(s.logger))
 
 	// 健康检查
 	s.engine.GET("/health", func(c *gin.Context) {
@@ -122,8 +123,8 @@ func (s *server) setupSwaggerRoutes() {
 // setupRoutes 设置路由
 func (s *server) setupRoutes() {
 	// API路由
-	s.extensionHandler.SetupRoutes(s.engine)
-	s.backendHandler.SetupRoutes(s.engine)
+	SetupExtensionRoutes(s.engine, s.extensionHandler, s.logger)
+	SetupBackendRoutes(s.engine, s.backendHandler, s.logger)
 
 	// 404处理
 	s.engine.NoRoute(func(c *gin.Context) {

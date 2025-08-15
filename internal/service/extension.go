@@ -43,7 +43,7 @@ type ExtensionService interface {
 	TriggerIndex(ctx context.Context, workspacePath, indexType, clientID string) error
 
 	// GetIndexStatus 获取索引状态
-	GetIndexStatus(ctx context.Context, clientID, workspacePath string) (*dto.IndexStatusResponse, error)
+	GetIndexStatus(ctx context.Context, workspacePath string) (*dto.IndexStatusResponse, error)
 }
 
 // CheckIgnoreResult 检查结果
@@ -194,8 +194,8 @@ func (s *extensionService) SyncCodebase(ctx context.Context, clientID, workspace
 	var syncedConfigs []*config.CodebaseConfig
 
 	// 同步每个代码库
-	for _, config := range configs {
-		codebaseID := utils.GenerateCodebaseID(config.CodebasePath)
+	for _, codebaseConfig := range configs {
+		codebaseID := utils.GenerateCodebaseID(codebaseConfig.CodebasePath)
 
 		// 获取存储中的配置
 		storageConfig, err := s.storage.GetCodebaseConfig(codebaseID)
@@ -211,14 +211,14 @@ func (s *extensionService) SyncCodebase(ctx context.Context, clientID, workspace
 		}
 
 		// 检查同步配置是否设置
-		syncConfig := s.httpSync.GetSyncConfig()
-		if syncConfig == nil || syncConfig.ServerURL == "" || syncConfig.Token == "" {
-			s.logger.Warn("sync config not properly set for codebase %s", codebaseID)
+		authInfo := config.GetAuthInfo()
+		if authInfo.ServerURL == "" || authInfo.Token == "" {
+			s.logger.Warn("auth info not properly set for codebase %s", codebaseID)
 			continue
 		}
 
 		// 获取服务器哈希树
-		_, err = s.httpSync.FetchServerHashTree(config.CodebasePath)
+		_, err = s.httpSync.FetchServerHashTree(codebaseConfig.CodebasePath)
 		if err != nil {
 			s.logger.Error("failed to fetch server hash tree for %s: %v", codebaseID, err)
 			continue
@@ -232,7 +232,7 @@ func (s *extensionService) SyncCodebase(ctx context.Context, clientID, workspace
 		}
 
 		syncedConfigs = append(syncedConfigs, storageConfig)
-		s.logger.Info("synced codebase %s (%s) for client %s", config.CodebaseName, codebaseID, clientID)
+		s.logger.Info("synced codebase %s (%s) for client %s", codebaseConfig.CodebaseName, codebaseID, clientID)
 	}
 
 	return syncedConfigs, nil
@@ -291,7 +291,19 @@ func (s *extensionService) CheckIgnoreFiles(ctx context.Context, clientID, works
 		// If directory, append "/" and skip size check
 		if fileInfo.IsDir() {
 			checkPath = relPath + "/"
-		} else if fileInfo.Size() > maxFileSize {
+			// Check ignore rules
+			if ignore.MatchesPath(checkPath) {
+				s.logger.Info("ignore dir found: %s in codebase %s", checkPath, workspacePath)
+				return &CheckIgnoreResult{
+					ShouldIgnore: false,
+					Reason:       "ignore dir found: " + filePath,
+					IgnoredFiles: []string{filePath},
+				}, nil
+			}
+			continue
+		}
+
+		if fileInfo.Size() > maxFileSize {
 			// For regular files, check size limit
 			fileSizeKB := float64(fileInfo.Size()) / 1024
 			s.logger.Info("file size exceeded limit: %s (%.2fKB)", filePath, fileSizeKB)
@@ -307,17 +319,18 @@ func (s *extensionService) CheckIgnoreFiles(ctx context.Context, clientID, works
 			s.logger.Info("ignore file found: %s in codebase %s", checkPath, workspacePath)
 			return &CheckIgnoreResult{
 				ShouldIgnore: false,
-				Reason:       "ignore file found:" + filePath,
+				Reason:       "ignore file found: " + filePath,
 				IgnoredFiles: []string{filePath},
 			}, nil
 		}
 
 		if len(fileIncludeMap) > 0 {
-			if _, ok := fileIncludeMap[filePath]; !ok {
+			fileExt := filepath.Ext(filePath)
+			if _, ok := fileIncludeMap[fileExt]; !ok {
 				s.logger.Info("file not included: %s in codebase %s", filePath, workspacePath)
 				return &CheckIgnoreResult{
 					ShouldIgnore: true,
-					Reason:       "file not included:" + filePath,
+					Reason:       "file not included: " + filePath,
 					IgnoredFiles: []string{filePath},
 				}, nil
 			}
@@ -545,7 +558,12 @@ func (s *extensionService) shouldSkipEvent(event dto.WorkspaceEvent) bool {
 
 // tryUpdateExistingEvent 尝试更新现有事件
 func (s *extensionService) tryUpdateExistingEvent(workspacePath string, event dto.WorkspaceEvent) bool {
-	existingEvent, err := s.eventRepo.GetLatestEventByWorkspaceAndSourcePath(workspacePath, event.SourcePath)
+	relPath, err := filepath.Rel(workspacePath, event.SourcePath)
+	if err != nil {
+		s.logger.Error("failed to get relative path: %v", err)
+		return false
+	}
+	existingEvent, err := s.eventRepo.GetLatestEventByWorkspaceAndSourcePath(workspacePath, relPath)
 	if err != nil {
 		s.logger.Error("failed to get existing events: %v", err)
 		return false
@@ -776,7 +794,6 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 		}
 
 		if err := s.workspaceRepo.CreateWorkspace(newWorkspace); err != nil {
-			s.logger.Error("failed to create workspace: %v", err)
 			return fmt.Errorf("failed to create workspace: %w", err)
 		}
 
@@ -790,7 +807,6 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 				Active:        "true",
 			}
 			if err := s.workspaceRepo.UpdateWorkspace(updateWorkspace); err != nil {
-				s.logger.Error("failed to update workspace active status: %v", err)
 				return fmt.Errorf("failed to update workspace: %w", err)
 			}
 			s.logger.Info("updated workspace active status to true: %s", workspacePath)
@@ -798,19 +814,16 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 	}
 
 	if err := s.createCodebaseConfig(workspacePath, clientID); err != nil {
-		s.logger.Error("failed to create codebase config: %v", err)
 		return fmt.Errorf("failed to create codebase config: %w", err)
 	}
 
 	if err := s.createCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
-		s.logger.Error("failed to create codebase embedding config: %v", err)
 		return fmt.Errorf("failed to create codebase embedding config: %w", err)
 	}
 
 	// 判断open_workspace事件是否存在非进行中状态，若不存在则创建
 	existingOpenEvents, err := s.eventRepo.GetEventsByWorkspaceAndType(workspacePath, []string{model.EventTypeOpenWorkspace}, 1, true)
 	if err != nil {
-		s.logger.Error("failed to get existing open workspace events: %v", err)
 		return fmt.Errorf("failed to get existing open workspace events: %w", err)
 	}
 
@@ -852,8 +865,7 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 		}
 		// 保存事件到数据库
 		if err := s.eventRepo.CreateEvent(eventModel); err != nil {
-			s.logger.Error("failed to create open workspace event: %v", err)
-			return fmt.Errorf("failed to create event: %w", err)
+			return fmt.Errorf("failed to create open workspace event: %w", err)
 		}
 	}
 
@@ -882,8 +894,7 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 		nonProcessingCodegraphStatuses,
 	)
 	if err != nil {
-		s.logger.Error("failed to get non-processing events for deletion: %v", err)
-		return fmt.Errorf("failed to get non-processing events: %w", err)
+		return fmt.Errorf("failed to get non-processing events for deletion: %w", err)
 	}
 
 	// 删除这些事件（跳过新创建的事件）
@@ -897,7 +908,6 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 
 	if len(deleteEventIds) > 0 {
 		if err := s.eventRepo.BatchDeleteEvents(deleteEventIds); err != nil {
-			s.logger.Error("failed to batch delete non-processing events: %v", err)
 			return fmt.Errorf("failed to batch delete non-processing events: %w", err)
 		}
 	}
@@ -907,8 +917,8 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 }
 
 // GetIndexStatus 获取索引状态
-func (s *extensionService) GetIndexStatus(ctx context.Context, clientID, workspacePath string) (*dto.IndexStatusResponse, error) {
-	s.logger.Info("getting index status for client %s, workspace: %s", clientID, workspacePath)
+func (s *extensionService) GetIndexStatus(ctx context.Context, workspacePath string) (*dto.IndexStatusResponse, error) {
+	s.logger.Info("getting index status for workspace: %s", workspacePath)
 
 	// 获取工作区信息
 	workspace, err := s.workspaceRepo.GetWorkspaceByPath(workspacePath)

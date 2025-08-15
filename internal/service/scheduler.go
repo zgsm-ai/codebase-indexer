@@ -149,7 +149,8 @@ func (s *Scheduler) runScheduler(parentCtx context.Context, initial bool) {
 	s.logger.Info("starting sync scheduler with interval: %v", syncInterval)
 
 	// Perform immediate sync if this is the initial run
-	if initial && s.httpSync.GetSyncConfig() != nil {
+	authInfo := config.GetAuthInfo()
+	if initial && authInfo.ClientId != "" && authInfo.Token != "" && authInfo.ServerURL != "" {
 		s.performSync()
 	}
 
@@ -170,8 +171,9 @@ func (s *Scheduler) runScheduler(parentCtx context.Context, initial bool) {
 			time.Sleep(500 * time.Millisecond)
 			continue
 		case <-s.currentTicker.C:
-			if s.httpSync.GetSyncConfig() == nil {
-				s.logger.Warn("sync config not found, skipping sync")
+			authInfo := config.GetAuthInfo()
+			if authInfo.ClientId == "" || authInfo.Token == "" || authInfo.ServerURL == "" {
+				s.logger.Warn("auth info not properly set, skipping sync")
 				continue
 			}
 			s.performSync()

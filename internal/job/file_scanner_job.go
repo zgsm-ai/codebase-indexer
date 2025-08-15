@@ -46,14 +46,27 @@ func NewFileScanJob(
 
 // Start 启动文件扫描任务
 func (j *FileScanJob) Start(ctx context.Context) {
+	// 添加panic处理，防止程序崩溃
+	defer func() {
+		if r := recover(); r != nil {
+			j.logger.Error("recovered from panic in file scan job: %v", r)
+		}
+	}()
 	j.logger.Info("starting file scan job with interval: %v", j.interval)
 
 	// 立即执行一次扫描
-	if j.interval > 0 && j.httpSync.GetSyncConfig() != nil {
+	authInfo := config.GetAuthInfo()
+	if j.interval > 0 && authInfo.ClientId != "" && authInfo.Token != "" && authInfo.ServerURL != "" {
 		j.scanWorkspaces(ctx)
 	}
 
 	go func() {
+		// 添加panic处理，防止程序崩溃
+		defer func() {
+			if r := recover(); r != nil {
+				j.logger.Error("recovered from panic in scan workspaces: %v", r)
+			}
+		}()
 		ticker := time.NewTicker(j.interval)
 		defer ticker.Stop()
 
@@ -63,8 +76,9 @@ func (j *FileScanJob) Start(ctx context.Context) {
 				j.logger.Info("file scanner task stopped")
 				return
 			case <-ticker.C:
-				if j.httpSync.GetSyncConfig() == nil {
-					j.logger.Warn("sync config is nil, skip file scanner task")
+				authInfo := config.GetAuthInfo()
+				if authInfo.ClientId == "" || authInfo.Token == "" || authInfo.ServerURL == "" {
+					j.logger.Warn("auth info is nil, skip file scanner task")
 					continue
 				}
 				j.scanWorkspaces(ctx)
@@ -139,8 +153,6 @@ func (j *FileScanJob) scanWorkspaces(ctx context.Context) {
 
 // scanWorkspace 扫描单个工作区
 func (j *FileScanJob) scanWorkspace(workspace *model.Workspace) error {
-	j.logger.Info("scanning workspace: %s", workspace.WorkspacePath)
-
 	// 检测文件变更
 	events, err := j.scanner.DetectFileChanges(workspace)
 	if err != nil {
