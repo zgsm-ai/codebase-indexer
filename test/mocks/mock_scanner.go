@@ -3,6 +3,7 @@ package mocks
 import (
 	"codebase-indexer/internal/config"
 	"codebase-indexer/internal/utils"
+	"codebase-indexer/pkg/codegraph/types"
 
 	gitignore "github.com/sabhiram/go-gitignore"
 	"github.com/stretchr/testify/mock"
@@ -19,11 +20,6 @@ func (m *MockScanner) SetScannerConfig(config *config.ScannerConfig) {
 func (m *MockScanner) GetScannerConfig() *config.ScannerConfig {
 	args := m.Called()
 	return args.Get(0).(*config.ScannerConfig)
-}
-
-func (m *MockScanner) CalculateFileHash(filePath string) (string, error) {
-	args := m.Called(filePath)
-	return args.String(0), args.Error(1)
 }
 
 func (m *MockScanner) LoadIgnoreRules(codebasePath string) *gitignore.GitIgnore {
@@ -94,4 +90,20 @@ func (m *MockScanner) CalculateFileChangesWithoutDelete(local, remote map[string
 		return args.Get(0).([]*utils.FileStatus)
 	}
 	return nil
+}
+
+func (m *MockScanner) LoadIgnoreConfig(codebasePath string) *config.IgnoreConfig {
+	args := m.Called(codebasePath)
+	if args.Get(0) != nil {
+		return args.Get(0).(*config.IgnoreConfig)
+	}
+	return nil
+}
+
+func (m *MockScanner) CheckIgnoreFile(ignoreConfig *config.IgnoreConfig, codebasePath string, fileInfo *types.FileInfo) (bool, error) {
+	args := m.Called(ignoreConfig, codebasePath, fileInfo)
+	if args.Get(0) != nil {
+		return args.Bool(0), args.Error(1)
+	}
+	return false, nil
 }

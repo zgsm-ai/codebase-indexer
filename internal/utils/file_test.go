@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // verifyZipContent validates zip file contents
@@ -144,5 +147,28 @@ func TestAddFileToZip(t *testing.T) {
 		verifyZipContent(t, zipFile, map[string]string{
 			expectedPathInZip: "windows content",
 		})
+	})
+}
+
+func TestCalculateFileHash(t *testing.T) {
+	t.Run("calculate file hash", func(t *testing.T) {
+		tempDir := t.TempDir()
+		testFile := filepath.Join(tempDir, "test.txt")
+		if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		hash, err := CalculateFileHash(testFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		require.NoError(t, err)
+		assert.NotEmpty(t, hash)
+
+	})
+
+	t.Run("file not found", func(t *testing.T) {
+		_, err := CalculateFileHash("nonexistentfile.txt")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no such file or directory")
 	})
 }

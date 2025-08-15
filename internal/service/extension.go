@@ -504,6 +504,21 @@ func (s *extensionService) processEvents(workspacePath string, events []dto.Work
 	successCount := 0
 
 	for _, event := range events {
+		sourcePath := event.SourcePath
+		targetPath := event.TargetPath
+		sourceRelPath, err := filepath.Rel(workspacePath, sourcePath)
+		if err != nil {
+			s.logger.Error("failed to get relative path for source path: %s, error: %v", sourcePath, err)
+			continue
+		}
+		targetRelPath, err := filepath.Rel(workspacePath, targetPath)
+		if err != nil {
+			s.logger.Error("failed to get relative path for target path: %s, error: %v", targetPath, err)
+			continue
+		}
+		event.SourcePath = sourceRelPath
+		event.TargetPath = targetRelPath
+
 		if s.shouldSkipEvent(event) {
 			continue
 		}

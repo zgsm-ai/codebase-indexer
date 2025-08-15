@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	gitignore "github.com/sabhiram/go-gitignore"
+)
 
 // ScannerConfig holds the configuration for file scanning
 type ScannerConfig struct {
@@ -33,6 +37,7 @@ type CodebaseConfig struct {
 	RegisterTime time.Time         `json:"registerTime"`
 }
 
+// Codebase embedding config
 type CodebaseEmbeddingConfig struct {
 	ClientID     string            `json:"clientId"`
 	CodebaseName string            `json:"codebaseName"`
@@ -42,4 +47,12 @@ type CodebaseEmbeddingConfig struct {
 	SyncFiles    map[string]string `json:"syncFiles"`
 	SyncIds      []string          `json:"syncIds"`
 	FailedFiles  map[string]string `json:"failedFiles"`
+}
+
+// Ignore config
+type IgnoreConfig struct {
+	IgnoreRules  *gitignore.GitIgnore
+	IncludeRules []string
+	MaxFileCount int
+	MaxFileSize  int
 }
