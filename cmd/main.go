@@ -155,7 +155,7 @@ func main() {
 	// 创建依赖分析器
 	dependencyAnalyzer := analyzer.NewDependencyAnalyzer(appLogger, packageClassifier, workspaceReader, codegraphStore)
 
-	indexer := codegraph.NewCodeIndexer(sourceFileParser, dependencyAnalyzer, workspaceReader, codegraphStore,
+	indexer := codegraph.NewCodeIndexer(scanRepo, sourceFileParser, dependencyAnalyzer, workspaceReader, codegraphStore,
 		workspaceRepo, codegraph.IndexerConfig{VisitPattern: workspace.DefaultVisitPattern}, appLogger) //todo 文件忽略列表
 
 	codebaseService := service.NewCodebaseService(appLogger, workspaceReader, workspaceRepo, definition.NewDefinitionParser(), indexer)

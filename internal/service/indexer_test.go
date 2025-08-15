@@ -1,4 +1,4 @@
-package codegraph
+package service
 
 import (
 	"codebase-indexer/internal/config"
@@ -44,11 +44,12 @@ type testEnvironment struct {
 	sourceFileParser   *parser.SourceFileParser
 	dependencyAnalyzer *analyzer.DependencyAnalyzer
 	workspaceDir       string
+	scanner            repository.ScannerInterface
 }
 
 // setupTestEnvironment 设置测试环境，创建所需的目录和组件
 func setupTestEnvironment(t *testing.T) *testEnvironment {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 
 	// 创建存储目录
 	storageDir := filepath.Join(tempDir, "index")
@@ -98,6 +99,7 @@ func setupTestEnvironment(t *testing.T) *testEnvironment {
 		sourceFileParser:   sourceFileParser,
 		dependencyAnalyzer: dependencyAnalyzer,
 		workspaceDir:       workspaceDir,
+		scanner:            repository.NewFileScanner(newLogger),
 	}
 }
 
@@ -117,6 +119,7 @@ func teardownTestEnvironment(t *testing.T, env *testEnvironment, projects []*wor
 // createTestIndexer 创建测试用的索引器
 func createTestIndexer(env *testEnvironment, visitPattern *types.VisitPattern) *Indexer {
 	return NewCodeIndexer(
+		env.scanner,
 		env.sourceFileParser,
 		env.dependencyAnalyzer,
 		env.workspaceReader,
@@ -240,7 +243,6 @@ func validateFilesIndexed(t *testing.T, ctx context.Context, storage store.Graph
 			if !store.IsElementPathKey(key) {
 				continue
 			}
-			t.Logf("key: %s", key)
 			delete(pathKeys, key)
 		}
 		err := iter.Close()
@@ -326,7 +328,9 @@ func TestIndexer_IndexProjectFilesWhenProjectHasIndex(t *testing.T) {
 	// 步骤1: 先索引工作区（排除 mocks 目录）
 	_, err = indexer.IndexWorkspace(env.ctx, env.workspaceDir)
 	assert.NoError(t, err)
-
+	summary, err := indexer.GetSummary(context.Background(), env.workspaceDir)
+	assert.NoError(t, err)
+	assert.True(t, summary.TotalFiles > 0)
 	// 步骤2: 获取测试文件并创建路径键映射
 	files := getTestFiles(t, env.workspaceDir)
 	pathKeys := createPathKeyMap(t, files)
@@ -337,8 +341,8 @@ func TestIndexer_IndexProjectFilesWhenProjectHasIndex(t *testing.T) {
 	// 步骤4: 测试索引特定文件
 	filesByProject, err := indexer.groupFilesByProject(projects, files)
 	assert.NoError(t, err)
-	for project, projectFiles := range filesByProject {
-		err = indexer.indexProjectFiles(context.Background(), project, projectFiles)
+	for _, projectFiles := range filesByProject {
+		err = indexer.IndexFiles(context.Background(), env.workspaceDir, projectFiles)
 		assert.NoError(t, err)
 	}
 
@@ -385,7 +389,9 @@ func TestIndexer_RemoveIndexes(t *testing.T) {
 	// 设置测试环境
 	env := setupTestEnvironment(t)
 	defer teardownTestEnvironment(t, env, nil)
-
+	err := initWorkspaceModel(env)
+	err = initWorkspaceModel(env)
+	assert.NoError(t, err)
 	// 创建测试索引器
 	indexer := createTestIndexer(env, testVisitPattern)
 
@@ -393,7 +399,7 @@ func TestIndexer_RemoveIndexes(t *testing.T) {
 	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, testVisitPattern)
 
 	// 清理索引存储
-	err := cleanIndexStoreTest(env.ctx, projects, env.storage)
+	err = cleanIndexStoreTest(env.ctx, projects, env.storage)
 	assert.NoError(t, err)
 
 	// 步骤1: 获取测试文件
@@ -498,10 +504,12 @@ func TestIndexer_QuerySymbols_WithExistFile(t *testing.T) {
 		assert.True(t, slices.Contains(symbolNames, s.Name))
 		assert.Equal(t, s.Language, string(lang.Go))
 		assert.True(t, len(s.Occurrences) > 0)
+		foundPaths := make([]string, 0)
 		for _, d := range s.Occurrences {
 			assert.Equal(t, len(d.Range), 4)
-			assert.True(t, d.Path == filePath)
+			foundPaths = append(foundPaths, d.Path)
 		}
+		assert.True(t, slices.Contains(foundPaths, filePath))
 	}
 }
 

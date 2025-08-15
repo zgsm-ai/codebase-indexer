@@ -95,44 +95,50 @@ func IsElementPathKey(key string) bool {
 }
 
 func ToSymbolNameKey(key string) (SymbolNameKey, error) {
-	keySplit := strings.Split(key, types.Colon)
-	if len(key) != 3 {
+	// 查找第一个冒号位置
+	first := strings.Index(key, types.Colon)
+	if first == -1 {
 		return SymbolNameKey{}, fmt.Errorf("invalid symbol_name key: %s", key)
 	}
-	if keySplit[0] != SymKeySystemPrefix {
+	// 查找第二个冒号位置
+	second := strings.Index(key[first+1:], types.Colon)
+	if second == -1 {
 		return SymbolNameKey{}, fmt.Errorf("invalid symbol_name key: %s", key)
 	}
-	language, err := lang.ToLanguage(keySplit[1])
-	if err != nil {
-		return SymbolNameKey{}, lang.ErrUnSupportedLanguage
-	}
-	if keySplit[2] == types.EmptyString {
+
+	second += first + 1
+
+	if key[:first] != SymKeySystemPrefix {
 		return SymbolNameKey{}, fmt.Errorf("invalid symbol_name key: %s", key)
 	}
+
 	return SymbolNameKey{
-		Language: language,
-		Name:     keySplit[2],
+		Language: lang.Language(key[first+1 : second]),
+		Name:     key[second+1:],
 	}, nil
 }
 
 func ToElementPathKey(key string) (ElementPathKey, error) {
-	keySplit := strings.Split(key, types.Colon)
-	if len(key) != 3 {
+	// 查找第一个冒号位置
+	first := strings.Index(key, types.Colon)
+	if first == -1 {
 		return ElementPathKey{}, fmt.Errorf("invalid element_path key: %s", key)
 	}
-	if keySplit[0] != SymKeySystemPrefix {
+	// 查找第二个冒号位置
+	second := strings.Index(key[first+1:], types.Colon)
+	if second == -1 {
 		return ElementPathKey{}, fmt.Errorf("invalid element_path key: %s", key)
 	}
-	language, err := lang.ToLanguage(keySplit[1])
-	if err != nil {
-		return ElementPathKey{}, lang.ErrUnSupportedLanguage
-	}
-	if keySplit[2] == types.EmptyString {
+
+	second += first + 1
+
+	if key[:first] != PathKeySystemPrefix {
 		return ElementPathKey{}, fmt.Errorf("invalid element_path key: %s", key)
 	}
+
 	return ElementPathKey{
-		Language: language,
-		Path:     keySplit[2],
+		Language: lang.Language(key[first+1 : second]),
+		Path:     key[second+1:],
 	}, nil
 }
 

@@ -3,18 +3,14 @@ package dto
 
 import "codebase-indexer/pkg/codegraph/types"
 
-// SearchRelationRequest 关系检索请求
-type SearchRelationRequest struct {
-	ClientId       string `form:"clientId" binding:"required"`
-	CodebasePath   string `form:"codebasePath" binding:"required"`
-	FilePath       string `form:"filePath" binding:"required"`
-	StartLine      int    `form:"startLine" binding:"required"`
-	StartColumn    int    `form:"startColumn" binding:"required"`
-	EndLine        int    `form:"endLine" binding:"required"`
-	EndColumn      int    `form:"endColumn" binding:"required"`
-	SymbolName     string `form:"symbolName,omitempty"`
-	IncludeContent int    `form:"includeContent,omitempty"`
-	MaxLayer       int    `form:"maxLayer,omitempty"`
+// SearchReferenceRequest 关系检索请求
+type SearchReferenceRequest struct {
+	ClientId     string `form:"clientId" binding:"required"`
+	CodebasePath string `form:"codebasePath" binding:"required"`
+	FilePath     string `form:"filePath" binding:"required"`
+	StartLine    int    `form:"startLine" binding:"required"`
+	EndLine      int    `form:"endLine" binding:"required"`
+	SymbolName   string `form:"symbolName,omitempty"`
 }
 
 // RelationNode 关系节点
@@ -34,8 +30,8 @@ type Position struct {
 	EndColumn   int `json:"endColumn"`
 }
 
-type RelationData struct {
-	List []*types.GraphNode `json:"list"`
+type ReferenceData struct {
+	List []*types.RelationNode `json:"list"`
 }
 
 // SearchDefinitionRequest 获取定义请求

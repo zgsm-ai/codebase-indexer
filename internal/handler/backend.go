@@ -28,7 +28,7 @@ func NewBackendHandler(codebaseService service.CodebaseService, logger logger.Lo
 
 // ==================== 接口实现 ====================
 
-// SearchRelation 关系检索接口
+// SearchReference 关系检索接口
 // @Summary 关系检索
 // @Description 根据代码位置检索符号的关系信息
 // @Tags search
@@ -47,9 +47,9 @@ func NewBackendHandler(codebaseService service.CodebaseService, logger logger.Lo
 // @Success 200 {object} SearchRelationResponse "成功"
 // @Failure 400 {object} SearchRelationResponse "请求参数错误"
 // @Failure 500 {object} SearchRelationResponse "服务器内部错误"
-// @Router /codebase-indexer/api/v1/search/relation [get]
-func (h *BackendHandler) SearchRelation(c *gin.Context) {
-	var req dto.SearchRelationRequest
+// @Router /codebase-indexer/api/v1/search/reference [get]
+func (h *BackendHandler) SearchReference(c *gin.Context) {
+	var req dto.SearchReferenceRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
 		h.logger.Error("invalid request format: %v", err)
 		response.Error(c, http.StatusBadRequest, err)
@@ -58,7 +58,7 @@ func (h *BackendHandler) SearchRelation(c *gin.Context) {
 
 	h.logger.Info("relation search request: ClientId=%s, Workspace=%s, FilePath=%s", req.ClientId, req.CodebasePath, req.FilePath)
 
-	relations, err := h.codebaseService.QueryRelation(c, &req)
+	relations, err := h.codebaseService.QueryReference(c, &req)
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, err)
 		return
@@ -249,6 +249,23 @@ func (h *BackendHandler) ExportIndex(c *gin.Context) {
 		h.logger.Error("export index err: %v", err)
 		response.Error(c, http.StatusBadRequest, err)
 		return
+	}
+}
+
+// SetupRoutes 设置后端API路由
+// @Description 设置后端API路由
+func (h *BackendHandler) SetupRoutes(router *gin.Engine) {
+	api := router.Group("/codebase-indexer/api/v1")
+
+	{
+		api.GET("/search/reference", h.SearchReference)
+		api.GET("/search/definition", h.SearchDefinition)
+		api.GET("/files/content", h.GetFileContent)
+		api.POST("/snippets/read", h.ReadCodeSnippets)
+		api.GET("/codebases/directory", h.GetCodebaseDirectory)
+		api.GET("/files/structure", h.GetFileStructure)
+		api.GET("/index/summary", h.GetIndexSummary)
+		api.GET("/index/export", h.ExportIndex)
 	}
 }
 

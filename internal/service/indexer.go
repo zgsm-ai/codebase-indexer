@@ -1,4 +1,4 @@
-package codegraph
+package service
 
 import (
 	"codebase-indexer/internal/repository"
@@ -17,10 +17,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
+
+const maxQueryLineLimit = 200
 
 type IndexerConfig struct {
 	MaxConcurrency int // TODO 支持环境变量
@@ -33,12 +37,13 @@ type IndexerConfig struct {
 
 // Indexer 代码索引器
 type Indexer struct {
+	ignoreScanner       repository.ScannerInterface
 	parser              *parser.SourceFileParser     // 单文件语法解析
 	analyzer            *analyzer.DependencyAnalyzer // 跨文件依赖分析
 	workspaceReader     *workspace.WorkspaceReader   // 进行工作区的文件读取、项目识别、项目列表维护
 	storage             store.GraphStorage           // 存储
 	workspaceRepository repository.WorkspaceRepository
-	config              IndexerConfig
+	config              *IndexerConfig
 	logger              logger.Logger
 }
 
@@ -115,6 +120,7 @@ const (
 // TODO resolve_dependency 优化，内存飙升。
 // NewCodeIndexer 创建新的代码索引器
 func NewCodeIndexer(
+	ignoreScanner repository.ScannerInterface,
 	parser *parser.SourceFileParser,
 	analyzer *analyzer.DependencyAnalyzer,
 	workspaceReader *workspace.WorkspaceReader,
@@ -123,29 +129,70 @@ func NewCodeIndexer(
 	config IndexerConfig,
 	logger logger.Logger,
 ) *Indexer {
-	if config.MaxConcurrency <= 0 {
-		config.MaxConcurrency = defaultConcurrency
-	}
-	if config.MaxBatchSize <= 0 {
-		config.MaxBatchSize = defaultBatchSize
-	}
-	if config.MaxFiles <= 0 {
-		config.MaxFiles = defaultMaxFiles
-	}
-	if config.MaxProjects <= 0 {
-		config.MaxProjects = defaultMaxProjects
-	}
-	if config.CacheCapacity <= 0 {
-		config.CacheCapacity = defaultCacheCapacity
-	}
+	initConfig(&config)
 	return &Indexer{
+		ignoreScanner:       ignoreScanner,
 		parser:              parser,
 		analyzer:            analyzer,
 		workspaceReader:     workspaceReader,
 		storage:             storage,
 		workspaceRepository: workspaceRepository,
-		config:              config,
+		config:              &config,
 		logger:              logger,
+	}
+}
+
+// 初始化配置，增加环境变量读取逻辑
+func initConfig(config *IndexerConfig) {
+	// 从环境变量获取MaxConcurrency（环境变量名：MAX_CONCURRENCY）
+	if envVal, ok := os.LookupEnv("MAX_CONCURRENCY"); ok {
+		if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
+			config.MaxConcurrency = val
+		}
+	}
+	// 若环境变量未设置或无效，使用默认值（原逻辑）
+	if config.MaxConcurrency <= 0 {
+		config.MaxConcurrency = defaultConcurrency
+	}
+
+	// 从环境变量获取MaxBatchSize（环境变量名：MAX_BATCH_SIZE）
+	if envVal, ok := os.LookupEnv("MAX_BATCH_SIZE"); ok {
+		if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
+			config.MaxBatchSize = val
+		}
+	}
+	if config.MaxBatchSize <= 0 {
+		config.MaxBatchSize = defaultBatchSize
+	}
+
+	// 从环境变量获取MaxFiles（环境变量名：MAX_FILES）
+	if envVal, ok := os.LookupEnv("MAX_FILES"); ok {
+		if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
+			config.MaxFiles = val
+		}
+	}
+	if config.MaxFiles <= 0 {
+		config.MaxFiles = defaultMaxFiles
+	}
+
+	// 从环境变量获取MaxProjects（环境变量名：MAX_PROJECTS）
+	if envVal, ok := os.LookupEnv("MAX_PROJECTS"); ok {
+		if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
+			config.MaxProjects = val
+		}
+	}
+	if config.MaxProjects <= 0 {
+		config.MaxProjects = defaultMaxProjects
+	}
+
+	// 从环境变量获取CacheCapacity（环境变量名：CACHE_CAPACITY）
+	if envVal, ok := os.LookupEnv("CACHE_CAPACITY"); ok {
+		if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
+			config.CacheCapacity = val
+		}
+	}
+	if config.CacheCapacity <= 0 {
+		config.CacheCapacity = defaultCacheCapacity
 	}
 }
 
@@ -210,7 +257,7 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 	previousNum := workspaceModel.CodegraphFileNum
 
 	// 阶段0：收集要处理的源码文件
-	sourceFiles, err := i.collectFilePaths(ctx, project.Path, i.config.MaxFiles)
+	sourceFiles, err := i.collectFiles(ctx, workspacePath, project.Path, i.config.MaxFiles)
 	if err != nil {
 		return &types.IndexTaskMetrics{TotalFiles: 0}, []error{fmt.Errorf("index_project collect project files err:%v", err)}
 	}
@@ -369,7 +416,7 @@ func (i *Indexer) searchFileElementTablesByPath(ctx context.Context, puuid strin
 
 		if lang.IsUnSupportedFileError(err) || errors.Is(err, store.ErrKeyNotFound) {
 			// 精确匹配不到，使用前缀模糊匹配
-			i.logger.Info("indexer delete index, key path %s not found in store, use prefix search", filePath)
+			i.logger.Debug("indexer delete index, key path %s not found in store, use prefix search", filePath)
 			tables, errors_ := i.searchFileElementTablesByPathPrefix(ctx, puuid, filePath)
 			if len(errors_) > 0 {
 				errs = append(errs, errors_...)
@@ -410,7 +457,7 @@ func (i *Indexer) searchFileElementTablesByPathPrefix(ctx context.Context, proje
 		}
 		pathKey, err := store.ToElementPathKey(iter.Key())
 		if err != nil {
-			i.logger.Error("indexer delete index, parse element path key %s err:%v", iter.Key(), err)
+			i.logger.Debug("indexer delete index, parse element path key %s err:%v", iter.Key(), err)
 			continue
 		}
 		// path 可能包含分隔符，也可能不包含，统一处理
@@ -441,7 +488,7 @@ func (i *Indexer) cleanupSymbolOccurrences(ctx context.Context, projectUuid stri
 			if e.IsDefinition {
 				language := lang.Language(ft.Language)
 				sym, err := i.storage.Get(ctx, projectUuid, store.SymbolNameKey{Language: language, Name: e.GetName()})
-				if err != nil {
+				if err != nil && !errors.Is(err, store.ErrKeyNotFound) {
 					errs = append(errs, err)
 					continue
 				}
@@ -522,6 +569,7 @@ func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePath
 		for _, p := range projects {
 			if p.Uuid == projectUuid {
 				project = p
+				break
 			}
 		}
 		if project == nil {
@@ -569,8 +617,8 @@ func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePath
 	}
 
 	err = errors.Join(errs...)
-	i.logger.Info("index_files index workspace %s projectFiles successfully, cost %d ms, errors: %v", workspacePath, filePaths,
-		utils.TruncateError(err), time.Since(start).Milliseconds())
+	i.logger.Info("index_files index workspace %s projectFiles successfully, cost %d ms, errors: %v", workspacePath,
+		time.Since(start).Milliseconds(), utils.TruncateError(err))
 	return err
 }
 
@@ -749,112 +797,151 @@ func (i *Indexer) checkElementTables(elementTables []*parser.FileElementTable) {
 		len(elementTables), total, filtered, time.Since(start).Milliseconds())
 }
 
-//// QueryRelations 实现查询接口
-//func (b *Indexer) QueryRelations(ctx context.Context, opts *types.QueryRelationOptions) ([]*types.GraphNode, error) {
-//
-//	filePath := opts.FilePath
-//	// TODO projectUuid
-//	project, err := b.workspaceReader.GetProjectByFilePath(ctx, opts.Workspace, filePath)
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to get project by file: %s, err: %w", filePath, err)
-//	}
-//	projectUuid := project.Uuid
-//
-//	language, err := lang.InferLanguage(filePath)
-//	if err != nil {
-//		return nil, lang.ErrUnSupportedLanguage
-//	}
-//
-//	exists, err := b.storage.ExistsProject(projectUuid)
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to check project %s index store, err:%v", projectUuid, err)
-//	}
-//	if !exists {
-//		return nil, fmt.Errorf("project %s index not exists", projectUuid)
-//	}
-//
-//	startTime := time.Now()
-//	defer func() {
-//		b.logger.Info("QueryRelations execution time: %d ms", time.Since(startTime).Milliseconds())
-//	}()
-//
-//	// 1. 获取文档
-//	var fileElementTable codegraphpb.FileElementTable
-//	fileTableBytes, err := b.storage.Get(ctx, projectUuid, store.ElementPathKey{Language: language, Path: filePath})
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to get file %s element_table, err: %v", filePath, err)
-//	}
-//	if err = store.UnmarshalValue(fileTableBytes, &fileElementTable); err != nil {
-//		return nil, fmt.Errorf("failed to unmarshal file %s element_table value, err: %v", filePath, err)
-//	}
-//
-//	if err != nil {
-//		b.logger.Error("Failed to get document: %v", err)
-//		return nil, err
-//	}
-//
-//	var res []*types.GraphNode
-//	var foundSymbols []*codegraphpb.Element
-//
-//	// Find root symbols based on query options
-//	if opts.SymbolName != types.EmptyString {
-//		foundSymbols = b.querySymbolsByNameAndLine(&fileElementTable, opts)
-//		b.logger.Debug("Found %d symbols by name and line", len(foundSymbols))
-//	} else {
-//		foundSymbols = b.querySymbolsByPosition(ctx, &fileElementTable, opts)
-//		b.logger.Debug("Found %d symbols by position", len(foundSymbols))
-//	}
-//
-//	// Check if any root symbols were found
-//	if len(foundSymbols) == 0 {
-//		return nil, fmt.Errorf("symbol not found: name %s startLine %d in document %s", opts.SymbolName, opts.StartLine, opts.FilePath)
-//	}
-//
-//	// root
-//	// 找定义节点，以定义节点为根节点进行深度遍历
-//	for _, s := range foundSymbols {
-//		// 如果当前Symbol 就是定义，加入
-//		if s.IsDefinition {
-//			res = append(res, &types.GraphNode{
-//				FilePath:   fileElementTable.Path,
-//				SymbolName: s.Name,
-//				Position:   types.ToPosition(s.Range),
-//				NodeType:   string(types.NodeTypeDefinition),
-//			})
-//			continue
-//		}
-//		// 不是定义节点，找它的relation中的定义节点
-//		relations := s.Relations
-//		if len(relations) == 0 {
-//			continue
-//		}
-//		for _, r := range relations {
-//			if r.RelationType == codegraphpb.RelationType_RELATION_TYPE_DEFINITION {
-//				// 定义节点，加入root
-//				res = append(res, &types.GraphNode{
-//					FilePath:   r.ElementPath,
-//					SymbolName: r.ElementName,
-//					Position:   types.ToPosition(r.Range),
-//					NodeType:   string(types.NodeTypeDefinition),
-//				})
-//			}
-//		}
-//	}
-//
-//	b.logger.Debug("Found %d root nodes", len(res))
-//
-//	// Build the rest of the tree recursively
-//	// We need to build children for the root nodes found
-//	for _, rootNode := range res {
-//		// Pass the corresponding original symbol proto to the recursive function
-//		b.buildChildrenRecursive(ctx, projectUuid, language, rootNode, opts.MaxLayer)
-//	}
-//	return res, nil
-//}
+// QueryReferences 实现查询接口
+func (i *Indexer) QueryReferences(ctx context.Context, opts *types.QueryReferenceOptions) ([]*types.RelationNode, error) {
 
-// querySymbolsByPosition 按位置查询 occurrence
-func (i *Indexer) querySymbolsByPosition(ctx context.Context, fileTable *codegraphpb.FileElementTable,
-	opts *types.QueryRelationOptions) []*codegraphpb.Element {
+	startTime := time.Now()
+	filePath := opts.FilePath
+	if opts.StartLine <= 0 {
+		opts.StartLine = 1
+	}
+	if opts.EndLine <= 0 {
+		opts.EndLine = 1
+	}
+	if opts.EndLine < opts.StartLine {
+		opts.EndLine = opts.StartLine
+	}
+	if opts.EndLine-opts.StartLine > maxQueryLineLimit {
+		opts.EndLine = opts.StartLine + maxQueryLineLimit
+	}
+
+	// TODO projectUuid
+	project, err := i.workspaceReader.GetProjectByFilePath(ctx, opts.Workspace, filePath, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project by file: %s, err: %w", filePath, err)
+	}
+	projectUuid := project.Uuid
+
+	language, err := lang.InferLanguage(filePath)
+	if err != nil {
+		return nil, lang.ErrUnSupportedLanguage
+	}
+
+	exists, err := i.storage.ExistsProject(projectUuid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check project %s index store, err:%v", projectUuid, err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("project %s index not exists", projectUuid)
+	}
+
+	defer func() {
+		i.logger.Info("QueryReferences execution time: %d ms", time.Since(startTime).Milliseconds())
+	}()
+
+	// 1. 获取文档
+	var fileElementTable codegraphpb.FileElementTable
+	fileTableBytes, err := i.storage.Get(ctx, projectUuid, store.ElementPathKey{Language: language, Path: filePath})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file %s element_table, err: %v", filePath, err)
+	}
+	if err = store.UnmarshalValue(fileTableBytes, &fileElementTable); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal file %s element_table value, err: %v", filePath, err)
+	}
+
+	if err != nil {
+		i.logger.Error("Failed to get document: %v", err)
+		return nil, err
+	}
+
+	var definitions []*types.RelationNode
+	var foundSymbols []*codegraphpb.Element
+
+	// Find root symbols based on query options
+	if opts.SymbolName != types.EmptyString {
+		foundSymbols = i.querySymbolsByNameAndLine(&fileElementTable, opts)
+		i.logger.Debug("Found %d symbols by name and line", len(foundSymbols))
+	} else {
+		foundSymbols = i.querySymbolsByLines(ctx, &fileElementTable, opts)
+		i.logger.Debug("Found %d symbols by position", len(foundSymbols))
+	}
+
+	// Check if any root symbols were found
+	if len(foundSymbols) == 0 {
+		i.logger.Debug("symbol not found: name %s line %d:%d in document %s", opts.SymbolName,
+			opts.StartLine, opts.EndLine, opts.FilePath)
+		return definitions, nil
+	}
+
+	// root
+	definitionNames := make(map[string]*types.RelationNode, len(foundSymbols))
+	// 找定义节点，以定义节点为根节点进行深度遍历
+	for _, s := range foundSymbols {
+		// 定义作为根节点
+		if !s.IsDefinition {
+			continue
+		}
+		if s.ElementType != codegraphpb.ElementType_CLASS &&
+			s.ElementType != codegraphpb.ElementType_INTERFACE &&
+			s.ElementType != codegraphpb.ElementType_METHOD &&
+			s.ElementType != codegraphpb.ElementType_FUNCTION {
+			continue
+		} // 只处理 类、接口、函数、方法
+		// 是定义，查找它的引用。当前采用遍历的方式（通过import过滤）
+		def := &types.RelationNode{
+			FilePath:   fileElementTable.Path,
+			SymbolName: s.Name,
+			Position:   types.ToPosition(s.Range),
+			NodeType:   string(proto.ElementTypeFromProto(s.ElementType)),
+			Children:   make([]*types.RelationNode, 0),
+		}
+		definitions = append(definitions, def)
+		// TODO 未处理同名定义问题，存在覆盖情况
+		definitionNames[s.Name] = def
+	}
+	if len(definitions) == 0 {
+		return definitions, nil
+	}
+	iter := i.storage.Iter(ctx, projectUuid)
+	defer iter.Close()
+	for iter.Next() {
+		key := iter.Key()
+		if store.IsSymbolNameKey(key) {
+			continue
+		}
+		var elementTable codegraphpb.FileElementTable
+		if err = store.UnmarshalValue(iter.Value(), &elementTable); err != nil {
+			i.logger.Error("failed to unmarshal file %s element_table value, err: %v", filePath, err)
+			continue
+		}
+		// TODO 根据import 过滤
+
+		for _, element := range elementTable.Elements {
+			if !element.IsDefinition {
+				continue
+			}
+			if element.ElementType != codegraphpb.ElementType_REFERENCE &&
+				element.ElementType != codegraphpb.ElementType_CALL {
+				continue
+			}
+			// 引用
+			if v, ok := definitionNames[element.Name]; ok {
+				v.Children = append(v.Children, &types.RelationNode{
+					FilePath:   elementTable.Path,
+					SymbolName: element.Name,
+					Position:   types.ToPosition(element.Range),
+					NodeType:   string(proto.ElementTypeFromProto(element.ElementType)),
+				})
+			}
+		}
+	}
+
+	return definitions, nil
+}
+
+// querySymbolsByLines 按位置查询 occurrence
+func (i *Indexer) querySymbolsByLines(ctx context.Context, fileTable *codegraphpb.FileElementTable,
+	opts *types.QueryReferenceOptions) []*codegraphpb.Element {
 	var nodes []*codegraphpb.Element
 	if opts.StartLine <= 0 || opts.EndLine < opts.StartLine {
 		i.logger.Debug("query_symbol_by_position invalid opts startLine %d or endLine %d", opts.StartLine,
@@ -868,7 +955,7 @@ func (i *Indexer) querySymbolsByPosition(ctx context.Context, fileTable *codegra
 			i.logger.Debug("query_symbol_by_position invalid element %s %s position %v", fileTable.Path, s.Name, s.Range)
 			continue
 		}
-		if startLineRange >= s.Range[0] && endLineRange <= s.Range[2] {
+		if startLineRange <= s.Range[0] && endLineRange >= s.Range[2] {
 			nodes = append(nodes, s)
 		}
 
@@ -881,13 +968,13 @@ func isValidRange(range_ []int32) bool {
 }
 
 // querySymbolsByNameAndLine 通过 symbolName + startLine
-func (i *Indexer) querySymbolsByNameAndLine(doc *codegraphpb.FileElementTable, opts *types.QueryRelationOptions) []*codegraphpb.Element {
+func (i *Indexer) querySymbolsByNameAndLine(doc *codegraphpb.FileElementTable, opts *types.QueryReferenceOptions) []*codegraphpb.Element {
 	var nodes []*codegraphpb.Element
 	queryName := opts.SymbolName
 	// 根据名字和 行号， 找到symbol
 	for _, s := range doc.Elements {
-		// symbol 名字 模糊匹配
-		if strings.Contains(s.Name, queryName) {
+		// symbol 名字匹配
+		if s.Name == queryName {
 			symbolRange := s.Range
 			if symbolRange != nil && len(symbolRange) > 0 {
 				if symbolRange[0] == int32(opts.StartLine-1) {
@@ -900,9 +987,9 @@ func (i *Indexer) querySymbolsByNameAndLine(doc *codegraphpb.FileElementTable, o
 }
 
 //
-//// buildChildrenRecursive recursively builds the child nodes for a given GraphNode and its corresponding Symbol.
+//// buildChildrenRecursive recursively builds the child nodes for a given RelationNode and its corresponding Symbol.
 //func (i *Indexer) buildChildrenRecursive(ctx context.Context, projectUuid string,
-//	language lang.Language, node *types.GraphNode, maxLayer int) {
+//	language lang.Language, node *types.RelationNode, maxLayer int) {
 //	if maxLayer <= 0 || node == nil {
 //		i.logger.Debug("buildChildrenRecursive stopped: maxLayer=%d, node is nil=%v", maxLayer, node == nil)
 //		return
@@ -943,14 +1030,14 @@ func (i *Indexer) querySymbolsByNameAndLine(doc *codegraphpb.FileElementTable, o
 //		return
 //	}
 //
-//	var referenceChildren []*types.GraphNode
+//	var referenceChildren []*types.RelationNode
 //
 //	// 找到symbol 的relation. 只有定义的symbol 有reference，引用节点的relation是定义节点
 //	if len(symbol.Relations) > 0 {
 //		for _, r := range symbol.Relations {
 //			if r.RelationType == codegraphpb.RelationType_RELATION_TYPE_REFERENCE {
 //				// 引用节点，加入node的children
-//				referenceChildren = append(referenceChildren, &types.GraphNode{
+//				referenceChildren = append(referenceChildren, &types.RelationNode{
 //					FilePath:   r.ElementPath,
 //					SymbolName: r.ElementName,
 //					Position:   types.ToPosition(r.Range),
@@ -965,7 +1052,7 @@ func (i *Indexer) querySymbolsByNameAndLine(doc *codegraphpb.FileElementTable, o
 //		// 如果references 为空，说明当前 node 是引用节点， 找到它所属的函数/类/结构体的definition节点，再找引用
 //		foundDefSymbol := i.findReferenceSymbolBelonging(&elementTable, symbol)
 //		if foundDefSymbol != nil {
-//			referenceChildren = append(referenceChildren, &types.GraphNode{
+//			referenceChildren = append(referenceChildren, &types.RelationNode{
 //				FilePath:   elementTable.Path,
 //				SymbolName: foundDefSymbol.Name,
 //				Position:   types.ToPosition(foundDefSymbol.Range),
@@ -1578,10 +1665,26 @@ func (i *Indexer) processBatch(ctx context.Context, batchId int, params *BatchPr
 	}, nil
 }
 
-// collectFilePaths 收集源文件
-func (i *Indexer) collectFilePaths(ctx context.Context, projectPath string, maxFiles int) ([]string, error) {
+// collectFiles 收集源文件
+func (i *Indexer) collectFiles(ctx context.Context, workspacePath string, projectPath string, maxFiles int) ([]string, error) {
 	startTime := time.Now()
 	filePaths := make([]string, 0, 500)
+	ignoreConfig := i.ignoreScanner.LoadIgnoreConfig(workspacePath)
+	if ignoreConfig == nil {
+		i.logger.Error("collect_source_files ignore_config is nil")
+	}
+	visitPattern := i.config.VisitPattern
+	if visitPattern == nil {
+		visitPattern = workspace.DefaultVisitPattern
+	}
+
+	if ignoreConfig != nil {
+		visitPattern.SkipFunc = func(fileInfo *types.FileInfo) (bool, error) {
+			return i.ignoreScanner.CheckIgnoreFile(ignoreConfig, workspacePath, fileInfo)
+		}
+		visitPattern.MaxFileSize = ignoreConfig.MaxFileSize
+		maxFiles = ignoreConfig.MaxFileCount
+	}
 
 	err := i.workspaceReader.WalkFile(ctx, projectPath, func(walkCtx *types.WalkContext) error {
 		if walkCtx.Info.IsDir {
@@ -1593,7 +1696,7 @@ func (i *Indexer) collectFilePaths(ctx context.Context, projectPath string, maxF
 		}
 		filePaths = append(filePaths, walkCtx.Path)
 		return nil
-	}, types.WalkOptions{IgnoreError: true, VisitPattern: i.config.VisitPattern})
+	}, types.WalkOptions{IgnoreError: true, VisitPattern: visitPattern})
 
 	if err != nil {
 		return nil, err

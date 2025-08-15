@@ -58,10 +58,11 @@ type WalkOptions struct {
 	VisitPattern *VisitPattern
 }
 
-type SkipFunc func(path string) bool
+type SkipFunc func(fileInfo *FileInfo) (bool, error)
 
 type VisitPattern struct {
 	MaxFileLimit    int
+	MaxFileSize     int
 	ExcludeExts     []string
 	IncludeExts     []string
 	ExcludePrefixes []string
@@ -71,45 +72,52 @@ type VisitPattern struct {
 	SkipFunc        SkipFunc
 }
 
-func (v *VisitPattern) ShouldSkip(path string) bool {
+func (v *VisitPattern) ShouldSkip(fileInfo *FileInfo) (bool, error) {
+	if fileInfo == nil {
+		return false, nil
+	}
+	path := fileInfo.Path
 	base := filepath.Base(path)
 	fileExt := filepath.Ext(base)
 	if fileExt != EmptyString && slices.Contains(v.ExcludeExts, fileExt) {
-		return true
+		return true, nil
 	}
 
 	if len(v.IncludeExts) > 0 && fileExt != EmptyString && !slices.Contains(v.IncludeExts, fileExt) {
-		return true
+		return true, nil
 	}
 
-	if v.SkipFunc != nil && v.SkipFunc(base) {
-		return true
+	if v.SkipFunc != nil {
+		skip, err := v.SkipFunc(fileInfo)
+		if skip {
+			return true, err
+		}
 	}
 
 	for _, p := range v.ExcludeDirs {
 		if base == p {
-			return true
+			return true, nil
 		}
 	}
 
 	for _, p := range v.IncludeDirs {
 		if base != p {
-			return true
+			return true, nil
 		}
 	}
 
 	for _, p := range v.ExcludePrefixes {
 		if strings.HasPrefix(base, p) {
-			return true
+			return true, nil
 		}
 	}
 
 	for _, p := range v.IncludePrefixes {
 		if !strings.HasPrefix(base, p) {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 type ReadOptions struct {

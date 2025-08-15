@@ -39,26 +39,21 @@ type QueryDefinitionOptions struct {
 	CodeSnippet []byte
 }
 
-type QueryRelationOptions struct {
-	Workspace      string
-	FilePath       string
-	StartLine      int
-	StartColumn    int
-	EndLine        int
-	EndColumn      int
-	SymbolName     string
-	IncludeContent int // 是否返回代码内容（1=是，0=否，默认0）
-	MaxLayer       int // 最大层级数（默认1）
+type QueryReferenceOptions struct {
+	Workspace  string
+	FilePath   string
+	StartLine  int
+	EndLine    int
+	SymbolName string
 }
 
-type GraphNode struct {
-	FilePath   string       `json:"FilePath"`
-	SymbolName string       `json:"symbolName"`
-	Position   Position     `json:"position"`
-	Content    string       `json:"content"`
-	NodeType   string       `json:"nodeType"`
-	Children   []*GraphNode `json:"children"`
-	Caller     *GraphNode   `json:"caller,omitempty"`
+type RelationNode struct {
+	FilePath   string          `json:"FilePath"`
+	SymbolName string          `json:"symbolName"`
+	Position   Position        `json:"position"`
+	Content    string          `json:"content"`
+	NodeType   string          `json:"nodeType"`
+	Children   []*RelationNode `json:"children"`
 }
 
 type CodeGraphSummary struct {

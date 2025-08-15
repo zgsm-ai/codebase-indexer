@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/opt"
@@ -20,14 +21,30 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const (
+	// InactiveThreshold 定义数据库实例不活跃的时间阈值，超过这个时间将被清理
+	InactiveThreshold = 72 * time.Hour
+	// CleanupInterval 定义清理任务的执行间隔
+	CleanupInterval = time.Hour
+)
+
+// dbAccessRecord 记录数据库实例的访问信息
+type dbAccessRecord struct {
+	lastAccessTime time.Time
+	db             *leveldb.DB
+}
+
 // LevelDBStorage implements GraphStorage interface using LevelDB
 type LevelDBStorage struct {
-	baseDir   string
-	logger    logger.Logger
-	clients   sync.Map // projectUuid -> *leveldb.DB
-	closeOnce sync.Once
-	closed    bool
-	dbMutex   sync.Map // projectUuid -> *sync.Mutex
+	baseDir       string
+	logger        logger.Logger
+	clients       sync.Map // projectUuid -> *dbAccessRecord
+	closeOnce     sync.Once
+	closed        bool
+	dbMutex       sync.Map // projectUuid -> *sync.Mutex
+	cleanupCtx    context.Context
+	cleanupCancel context.CancelFunc
+	cleanupWG     sync.WaitGroup
 }
 
 // NewLevelDBStorage creates new LevelDB storage instance
@@ -47,6 +64,9 @@ func NewLevelDBStorage(baseDir string, logger logger.Logger) (*LevelDBStorage, e
 		logger:  logger,
 	}
 
+	// 启动后台清理任务
+	storage.startCleanupTask()
+
 	logger.Info("leveldb: initialized successfully baseDir %s", baseDir)
 	return storage, nil
 }
@@ -65,8 +85,13 @@ func (s *LevelDBStorage) getDB(projectUuid string) (*leveldb.DB, error) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
-	if db, exists := s.clients.Load(projectUuid); exists {
-		return db.(*leveldb.DB), nil
+	now := time.Now()
+
+	if record, exists := s.clients.Load(projectUuid); exists {
+		accessRecord := record.(*dbAccessRecord)
+		// 更新最后访问时间
+		accessRecord.lastAccessTime = now
+		return accessRecord.db, nil
 	}
 
 	db, err := s.createDB(projectUuid)
@@ -74,10 +99,15 @@ func (s *LevelDBStorage) getDB(projectUuid string) (*leveldb.DB, error) {
 		return nil, err
 	}
 
-	actual, loaded := s.clients.LoadOrStore(projectUuid, db)
+	accessRecord := &dbAccessRecord{
+		lastAccessTime: now,
+		db:             db,
+	}
+
+	actual, loaded := s.clients.LoadOrStore(projectUuid, accessRecord)
 	if loaded {
 		db.Close()
-		return actual.(*leveldb.DB), nil
+		return actual.(*dbAccessRecord).db, nil
 	}
 
 	return db, nil
@@ -357,10 +387,14 @@ func (s *LevelDBStorage) Close() error {
 
 	s.logger.Info("leveldb_close: closing all connections")
 
+	// 停止后台清理任务
+	s.stopCleanupTask()
+
 	var errs []error
 	s.clients.Range(func(key, value interface{}) bool {
 		projectID := key.(string)
-		db := value.(*leveldb.DB)
+		record := value.(*dbAccessRecord)
+		db := record.db
 
 		s.logger.Info("leveldb_close: closing database. projectUuid %s", projectID)
 		if err := db.Close(); err != nil {
@@ -383,6 +417,138 @@ func (s *LevelDBStorage) Close() error {
 
 	s.logger.Info("leveldb_close: storage closed successfully")
 	return nil
+}
+
+// cleanupInactiveDBs 清理不活跃的数据库实例
+func (s *LevelDBStorage) cleanupInactiveDBs() {
+	if s.closed {
+		return
+	}
+
+	now := time.Now()
+	var cleanedCount int
+
+	s.clients.Range(func(key, value interface{}) bool {
+		projectUuid := key.(string)
+		record := value.(*dbAccessRecord)
+
+		// 检查是否超过不活跃阈值
+		if now.Sub(record.lastAccessTime) > InactiveThreshold {
+			s.logger.Info("cleanup: cleaning up inactive database. project %s, last access: %v",
+				projectUuid, record.lastAccessTime)
+
+			// 获取项目级别的互斥锁
+			mutexInterface, _ := s.dbMutex.LoadOrStore(projectUuid, &sync.Mutex{})
+			mutex := mutexInterface.(*sync.Mutex)
+
+			// 加锁防止并发操作
+			mutex.Lock()
+
+			// 再次检查，防止在等待锁的过程中数据库被重新访问
+			if currentRecord, exists := s.clients.Load(projectUuid); exists {
+				currentAccessRecord := currentRecord.(*dbAccessRecord)
+				if now.Sub(currentAccessRecord.lastAccessTime) > InactiveThreshold {
+					// 清理数据库数据
+					if err := s.cleanupDBData(projectUuid, currentAccessRecord.db); err != nil {
+						s.logger.Error("cleanup: failed to cleanup database data. project %s, err: %v",
+							projectUuid, err)
+						mutex.Unlock()
+						return true // 继续处理其他数据库
+					}
+
+					// 关闭数据库连接
+					if err := currentAccessRecord.db.Close(); err != nil {
+						s.logger.Error("cleanup: failed to close database. project %s, err: %v",
+							projectUuid, err)
+					}
+
+					// 从内存中移除
+					s.clients.Delete(projectUuid)
+					s.dbMutex.Delete(projectUuid)
+					cleanedCount++
+					s.logger.Info("cleanup: successfully cleaned up inactive database. project %s", projectUuid)
+				}
+			}
+
+			mutex.Unlock()
+		}
+
+		return true
+	})
+
+	if cleanedCount > 0 {
+		s.logger.Info("cleanup: completed cleanup of %d inactive databases", cleanedCount)
+	}
+}
+
+// cleanupDBData 使用数据库的Delete方法清理数据
+func (s *LevelDBStorage) cleanupDBData(projectUuid string, db *leveldb.DB) error {
+	s.logger.Info("cleanup_db: starting data cleanup for project %s", projectUuid)
+
+	count := 0
+
+	// 创建迭代器遍历所有键
+	iter := db.NewIterator(nil, nil)
+	defer iter.Release()
+
+	for iter.Next() {
+		key := iter.Key()
+		// 使用Delete方法删除数据
+		if err := db.Delete(key, nil); err != nil {
+			s.logger.Error("cleanup_db: failed to delete key %s for project %s, err: %v",
+				string(key), projectUuid, err)
+			continue
+		}
+		count++
+	}
+
+	if err := iter.Error(); err != nil {
+		s.logger.Error("cleanup_db: iterator error for project %s, err: %v", projectUuid, err)
+		return fmt.Errorf("iterator error: %w", err)
+	}
+
+	s.logger.Info("cleanup_db: successfully deleted %d keys for project %s", count, projectUuid)
+	return nil
+}
+
+// startCleanupTask 启动后台清理任务
+func (s *LevelDBStorage) startCleanupTask() {
+	s.logger.Info("cleanup_task: starting background cleanup task")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	s.cleanupCtx = ctx
+	s.cleanupCancel = cancel
+
+	s.cleanupWG.Add(1)
+	go func() {
+		defer s.cleanupWG.Done()
+
+		ticker := time.NewTicker(CleanupInterval)
+		defer ticker.Stop()
+
+		s.logger.Info("cleanup_task: background cleanup task started, interval: %v", CleanupInterval)
+
+		for {
+			select {
+			case <-ctx.Done():
+				s.logger.Info("cleanup_task: background cleanup task stopped")
+				return
+			case <-ticker.C:
+				s.logger.Debug("cleanup_task: triggering cleanup check")
+				s.cleanupInactiveDBs()
+			}
+		}
+	}()
+}
+
+// stopCleanupTask 停止后台清理任务
+func (s *LevelDBStorage) stopCleanupTask() {
+	if s.cleanupCancel != nil {
+		s.logger.Info("cleanup_task: stopping background cleanup task")
+		s.cleanupCancel()
+		s.cleanupWG.Wait()
+		s.logger.Info("cleanup_task: background cleanup task stopped")
+	}
 }
 
 func (s *LevelDBStorage) ExistsProject(projectUuid string) (bool, error) {

@@ -37,7 +37,9 @@ func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, re
 
 	start := time.Now()
 	w.logger.Info("find_projects start to scan workspace：%s", workspace)
-
+	if visitPattern == nil {
+		visitPattern = DefaultVisitPattern
+	}
 	// 创建 ModuleResolver 实例
 	moduleResolver := NewModuleResolver(w.logger)
 
@@ -89,7 +91,8 @@ func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, re
 			currentDir := current.dir
 
 			// 应用过滤规则
-			if visitPattern.ShouldSkip(currentDir) {
+			if skip, _ := visitPattern.ShouldSkip(&types.FileInfo{
+				Path: currentDir, IsDir: true}); skip {
 				continue
 			}
 
@@ -298,12 +301,21 @@ func (w *WorkspaceReader) WalkFile(ctx context.Context, dir string, walkFn types
 			return nil
 		}
 
-		if walkOpts.VisitPattern.ShouldSkip(relativePath) {
+		skip, err := walkOpts.VisitPattern.ShouldSkip(
+			&types.FileInfo{
+				Name:  info.Name(),
+				Path:  relativePath,
+				IsDir: info.IsDir(),
+			})
+		if skip {
 			// 跳过目录
 			if info.IsDir() {
 				return filepath.SkipDir
 			}
 			return nil
+		}
+		if errors.Is(err, filepath.SkipDir) || errors.Is(err, filepath.SkipAll) {
+			return err
 		}
 
 		// Convert Windows filePath separators to forward slashes

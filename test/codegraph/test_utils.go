@@ -5,7 +5,7 @@ import (
 	"codebase-indexer/internal/database"
 	"codebase-indexer/internal/model"
 	"codebase-indexer/internal/repository"
-	"codebase-indexer/pkg/codegraph"
+	"codebase-indexer/internal/service"
 	"codebase-indexer/pkg/codegraph/analyzer"
 	packageclassifier "codebase-indexer/pkg/codegraph/analyzer/package_classifier"
 	"codebase-indexer/pkg/codegraph/lang"
@@ -44,6 +44,7 @@ type testEnvironment struct {
 	workspaceReader    *workspace.WorkspaceReader
 	sourceFileParser   *parser.SourceFileParser
 	dependencyAnalyzer *analyzer.DependencyAnalyzer
+	Scanner            repository.ScannerInterface
 }
 
 // setupTestEnvironment 设置测试环境，创建所需的目录和组件
@@ -95,18 +96,20 @@ func setupTestEnvironment() (*testEnvironment, error) {
 		workspaceReader:    workspaceReader,
 		sourceFileParser:   sourceFileParser,
 		dependencyAnalyzer: dependencyAnalyzer,
+		Scanner:            repository.NewFileScanner(newLogger),
 	}, nil
 }
 
 // createTestIndexer 创建测试用的索引器
-func createTestIndexer(env *testEnvironment, visitPattern *types.VisitPattern) *codegraph.Indexer {
-	return codegraph.NewCodeIndexer(
+func createTestIndexer(env *testEnvironment, visitPattern *types.VisitPattern) *service.Indexer {
+	return service.NewCodeIndexer(
+		env.Scanner,
 		env.sourceFileParser,
 		env.dependencyAnalyzer,
 		env.workspaceReader,
 		env.storage,
 		env.repository,
-		codegraph.IndexerConfig{VisitPattern: visitPattern, MaxBatchSize: 50, MaxConcurrency: 1},
+		service.IndexerConfig{VisitPattern: visitPattern, MaxBatchSize: 50, MaxConcurrency: 1},
 		// 2,2, 300s， 20% cpu ,500MB内存占用；
 		// 2
 

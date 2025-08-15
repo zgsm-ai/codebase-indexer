@@ -52,8 +52,8 @@ type CodebaseService interface {
 	// QueryDefinition 查询代码定义（支持按行号或代码片段检索）
 	QueryDefinition(ctx context.Context, req *dto.SearchDefinitionRequest) (*dto.DefinitionData, error)
 
-	// QueryRelation 查询代码间的关系（如调用、引用等）
-	QueryRelation(ctx context.Context, req *dto.SearchRelationRequest) (*dto.RelationData, error)
+	// QueryReference 查询代码间的关系（如调用、引用等）
+	QueryReference(ctx context.Context, req *dto.SearchReferenceRequest) (*dto.ReferenceData, error)
 
 	// Summarize 获取代码库索引摘要信息
 	Summarize(ctx context.Context, req *dto.GetIndexSummaryRequest) (*dto.IndexSummary, error)
@@ -456,54 +456,43 @@ func (l *codebaseService) convert2DefinitionInfo(ctx context.Context, nodes []*t
 
 const relationFillContentLayerLimit = 2
 const relationFillContentLayerNodeLimit = 10
-const maxLayerLimit = 5
 
-func (l *codebaseService) QueryRelation(ctx context.Context, req *dto.SearchRelationRequest) (resp *dto.RelationData, err error) {
+func (l *codebaseService) QueryReference(ctx context.Context, req *dto.SearchReferenceRequest) (resp *dto.ReferenceData, err error) {
 
-	return nil, fmt.Errorf("api not supported")
 	// 参数验证
-	//if req.ClientId == types.EmptyString {
-	//	return nil, errs.NewMissingParamError("clientId")
-	//}
-	//if req.CodebasePath == types.EmptyString {
-	//	return nil, errs.NewMissingParamError("codebasePath")
-	//}
-	//if req.MaxLayer <= 0 {
-	//	req.MaxLayer = 1
-	//}
-	//
-	//if req.MaxLayer > maxLayerLimit {
-	//	return nil, errs.NewInvalidParamErr("maxLayer", fmt.Sprintf("参数maxLayer非法，最大值为%d", maxLayerLimit))
-	//}
-	//
-	//if req.FilePath == types.EmptyString {
-	//	return nil, errs.NewMissingParamError("filePath")
-	//}
-	//
-	//nodes, err := l.indexer.QueryRelations(ctx, &types.QueryRelationOptions{
-	//	Workspace:      req.CodebasePath,
-	//	FilePath:       req.FilePath,
-	//	StartLine:      req.StartLine,
-	//	EndLine:        req.EndLine,
-	//	SymbolName:     req.SymbolName,
-	//	IncludeContent: req.IncludeContent,
-	//	MaxLayer:       req.MaxLayer,
-	//})
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//// 填充content，控制层数和节点数
-	//if err = l.fillContent(ctx, nodes, relationFillContentLayerLimit, relationFillContentLayerNodeLimit); err != nil {
-	//	l.logger.Error("fill graph query contents err:%v", err)
-	//}
-	//
-	//return &dto.RelationData{
-	//	List: nodes,
-	//}, nil
+	if req.ClientId == types.EmptyString {
+		return nil, errs.NewMissingParamError("clientId")
+	}
+	if req.CodebasePath == types.EmptyString {
+		return nil, errs.NewMissingParamError("codebasePath")
+	}
+
+	if req.FilePath == types.EmptyString {
+		return nil, errs.NewMissingParamError("filePath")
+	}
+
+	nodes, err := l.indexer.QueryReferences(ctx, &types.QueryReferenceOptions{
+		Workspace:  req.CodebasePath,
+		FilePath:   req.FilePath,
+		StartLine:  req.StartLine,
+		EndLine:    req.EndLine,
+		SymbolName: req.SymbolName,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 填充content，控制层数和节点数
+	if err = l.fillContent(ctx, nodes, relationFillContentLayerLimit, relationFillContentLayerNodeLimit); err != nil {
+		l.logger.Error("fill graph query contents err:%v", err)
+	}
+
+	return &dto.ReferenceData{
+		List: nodes,
+	}, nil
 }
 
-func (l *codebaseService) fillContent(ctx context.Context, nodes []*types.GraphNode, layerLimit, layerNodeLimit int) error {
+func (l *codebaseService) fillContent(ctx context.Context, nodes []*types.RelationNode, layerLimit, layerNodeLimit int) error {
 	if len(nodes) == 0 {
 		return nil
 	}

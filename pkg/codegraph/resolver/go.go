@@ -3,7 +3,6 @@ package resolver
 import (
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
-	"fmt"
 	"strings"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
@@ -201,9 +200,7 @@ func (r *GoResolver) processStructFields(structTypeNode *sitter.Node, element *C
 		if fieldNode != nil && types.ToNodeKind(fieldNode.Kind()) == types.NodeKindField {
 			// 获取字段名和类型
 			nameNode := fieldNode.ChildByFieldName("name")
-			if nameNode != nil {
-				fmt.Println("nameNode", nameNode.Utf8Text(rc.SourceFile.Content))
-			}
+
 			typeNode := fieldNode.ChildByFieldName("type")
 
 			if typeNode != nil {

@@ -139,7 +139,7 @@ func (p *SourceFileParser) processNode(
 	captureNames []string,
 	sourceFile *types.SourceFile) ([]resolver.Element, error) {
 	if len(match.Captures) == 0 || len(captureNames) == 0 {
-		fmt.Println("no captures", sourceFile.Path)
+		p.logger.Debug("no captures in file:%s", sourceFile.Path)
 		return nil, lang.ErrNoCaptures
 	} // root node
 	rootIndex := match.Captures[0].Index
