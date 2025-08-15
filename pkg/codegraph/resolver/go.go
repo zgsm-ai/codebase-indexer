@@ -238,13 +238,10 @@ func (r *GoResolver) processStructFields(structTypeNode *sitter.Node, element *C
 					fieldName = nameNode.Utf8Text(rc.SourceFile.Content)
 					fieldName = CleanParam(fieldName)
 					if !isPrimitiveType(fieldType) {
-						// 创建引用元素
-						fmt.Println("我进来了")
 						refPathMap := extractReferencePath(typeNode, rc.SourceFile.Content)
 						refPathMap["property"] = CleanParam(refPathMap["property"])
 						// 删除前后的数字
 						refPathMap["property"] = strings.TrimLeft(refPathMap["property"], "0123456789")
-						refPathMap["property"] = strings.TrimRight(refPathMap["property"], "0123456789")
 						ref := NewReference(element, typeNode, refPathMap["property"], refPathMap["object"])
 						newReferences = append(newReferences, ref)
 					}
