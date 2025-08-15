@@ -25,29 +25,6 @@ var (
 	}
 )
 
-func TestCalculateFileHash(t *testing.T) {
-	logger := &mocks.MockLogger{}
-	logger.On("Debug", mock.Anything, mock.Anything).Return()
-	fs := NewFileScanner(logger)
-
-	t.Run("Calculate file hash", func(t *testing.T) {
-		tempDir := t.TempDir()
-		testFile := filepath.Join(tempDir, "test.txt")
-		content := "test content"
-		require.NoError(t, os.WriteFile(testFile, []byte(content), 0644))
-
-		hash, err := fs.CalculateFileHash(testFile)
-		require.NoError(t, err)
-		assert.NotEmpty(t, hash)
-		logger.AssertCalled(t, "Debug", "file hash calculated for %s, time taken: %v, hash: %s", mock.Anything, mock.Anything)
-	})
-
-	t.Run("Handle nonexistent file", func(t *testing.T) {
-		_, err := fs.CalculateFileHash("nonexistent.txt")
-		assert.Error(t, err)
-	})
-}
-
 func TestLoadIgnoreRules(t *testing.T) {
 	logger := &mocks.MockLogger{}
 	logger.On("Warn", mock.Anything, mock.Anything).Return()

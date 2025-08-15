@@ -3,10 +3,7 @@ package repository
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"io/fs"
 	"maps"
 	"os"
@@ -18,6 +15,7 @@ import (
 	"codebase-indexer/internal/config"
 	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/codegraph/lang"
+	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/logger"
 
 	gitignore "github.com/sabhiram/go-gitignore"
@@ -26,7 +24,6 @@ import (
 type ScannerInterface interface {
 	SetScannerConfig(config *config.ScannerConfig)
 	GetScannerConfig() *config.ScannerConfig
-	CalculateFileHash(filePath string) (string, error)
 	LoadIgnoreRules(codebasePath string) *gitignore.GitIgnore
 	LoadFileIgnoreRules(codebasePath string) *gitignore.GitIgnore
 	LoadFolderIgnoreRules(codebasePath string) *gitignore.GitIgnore
@@ -35,9 +32,10 @@ type ScannerInterface interface {
 	ScanFilePaths(codebasePath string, filePaths []string) (map[string]string, error)
 	ScanDirectory(codebasePath, dirPath string) (map[string]string, error)
 	ScanFile(codebasePath, filePath string) (string, error)
-	IsIgnoreFile(codebasePath, filePath string) (bool, error)
 	CalculateFileChanges(local, remote map[string]string) []*utils.FileStatus
 	CalculateFileChangesWithoutDelete(local, remote map[string]string) []*utils.FileStatus
+	LoadIgnoreConfig(codebasePath string) *config.IgnoreConfig
+	CheckIgnoreFile(ignoreConfig *config.IgnoreConfig, codebasePath string, fileInfo *types.FileInfo) (bool, error)
 }
 
 type FileScanner struct {
@@ -95,26 +93,69 @@ func (s *FileScanner) GetScannerConfig() *config.ScannerConfig {
 	return s.scannerConfig
 }
 
-// CalculateFileHash calculates file hash value
-func (s *FileScanner) CalculateFileHash(filePath string) (string, error) {
-	startTime := time.Now()
+// LoadIgnoreConfig loads the ignore config
+func (s *FileScanner) LoadIgnoreConfig(codebasePath string) *config.IgnoreConfig {
+	return &config.IgnoreConfig{
+		IgnoreRules:  s.LoadIgnoreRules(codebasePath),
+		IncludeRules: s.LoadIncludeFiles(),
+		MaxFileCount: s.scannerConfig.MaxFileCount,
+		MaxFileSize:  s.scannerConfig.MaxFileSizeKB,
+	}
+}
 
-	file, err := os.Open(filePath)
+// CheckIgnoreFile checks if a file should be ignored based on the ignore config
+func (s *FileScanner) CheckIgnoreFile(ignoreConfig *config.IgnoreConfig, codebasePath string, fileInfo *types.FileInfo) (bool, error) {
+	if ignoreConfig == nil || codebasePath == "" || fileInfo == nil {
+		return false, fmt.Errorf("invalid ignore config or codebase path or file info")
+	}
+	maxFileSize := int64(ignoreConfig.MaxFileSize * 1024)
+	ignoreRules := ignoreConfig.IgnoreRules
+	if ignoreRules == nil {
+		return false, fmt.Errorf("ignore rules not loaded")
+	}
+	includeRules := ignoreConfig.IncludeRules
+	fileIncludeMap := utils.StringSlice2Map(includeRules)
+
+	filePath := fileInfo.Path
+	relPath, err := filepath.Rel(codebasePath, filePath)
 	if err != nil {
-		return "", fmt.Errorf("failed to open file %s: %v", filePath, err)
-	}
-	defer file.Close()
-
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", fmt.Errorf("failed to calculate hash for file %s: %v", filePath, err)
+		return false, fmt.Errorf("failed to get relative path: %v", err)
 	}
 
-	hashValue := hex.EncodeToString(hash.Sum(nil))
-	s.logger.Debug("file hash calculated for %s, time taken: %v, hash: %s",
-		filePath, time.Since(startTime), hashValue)
+	// If directory, append "/" and skip size check
+	checkPath := relPath
+	if fileInfo.IsDir {
+		checkPath = relPath + "/"
+		if ignoreRules.MatchesPath(checkPath) {
+			s.logger.Info("ignore file found: %s in codebase %s", checkPath, codebasePath)
+			return true, nil
+		}
+	}
 
-	return hashValue, nil
+	if fileInfo.Size > maxFileSize {
+		// For regular files, check size limit
+		fileSizeKB := float64(fileInfo.Size) / 1024
+		s.logger.Info("file size exceeded limit: %s (%.2fKB)", filePath, fileSizeKB)
+		return true, nil
+	}
+
+	if ignoreRules.MatchesPath(checkPath) {
+		s.logger.Info("ignore file found: %s in codebase %s", checkPath, codebasePath)
+		return true, nil
+	}
+
+	if len(fileIncludeMap) > 0 {
+		fileExt := filepath.Ext(filePath)
+		if _, ok := fileIncludeMap[fileExt]; ok {
+			s.logger.Info("file ext included: %s in codebase %s", filePath, codebasePath)
+			return false, nil
+		} else {
+			s.logger.Info("file ext not included: %s in codebase %s", filePath, codebasePath)
+			return true, nil
+		}
+	}
+
+	return false, fmt.Errorf("file not ignored")
 }
 
 // Load and combine default ignore rules with .gitignore rules
@@ -518,54 +559,6 @@ func (s *FileScanner) ScanFile(codebasePath, filePath string) (string, error) {
 		time.Since(startTime))
 
 	return strconv.FormatInt(hash, 10), nil
-}
-
-func (s *FileScanner) IsIgnoreFile(codebasePath, filePath string) (bool, error) {
-	maxFileSizeKB := s.scannerConfig.MaxFileSizeKB
-	maxFileSize := int64(maxFileSizeKB * 1024)
-	ignore := s.LoadIgnoreRules(codebasePath)
-	if ignore == nil {
-		return false, fmt.Errorf("ignore rules not loaded")
-	}
-	fileInclude := s.LoadIncludeFiles()
-	fileIncludeMap := utils.StringSlice2Map(fileInclude)
-
-	relPath, err := filepath.Rel(codebasePath, filePath)
-	if err != nil {
-		return false, fmt.Errorf("failed to get relative path: %v", err)
-	}
-	fileInfo, err := os.Stat(filePath)
-	if err != nil {
-		return false, fmt.Errorf("failed to get file info: %v", err)
-	}
-
-	// If directory, append "/" and skip size check
-	checkPath := relPath
-	if fileInfo.IsDir() {
-		checkPath = relPath + "/"
-	} else if fileInfo.Size() > maxFileSize {
-		// For regular files, check size limit
-		fileSizeKB := float64(fileInfo.Size()) / 1024
-		s.logger.Info("file size exceeded limit: %s (%.2fKB)", filePath, fileSizeKB)
-		return true, nil
-	}
-
-	if ignore.MatchesPath(checkPath) {
-		s.logger.Info("ignore file found: %s in codebase %s", checkPath, codebasePath)
-		return true, nil
-	}
-
-	if len(fileIncludeMap) > 0 {
-		if _, ok := fileIncludeMap[filePath]; ok {
-			s.logger.Info("file included: %s in codebase %s", filePath, codebasePath)
-			return false, nil
-		} else {
-			s.logger.Info("file not included: %s in codebase %s", filePath, codebasePath)
-			return true, nil
-		}
-	}
-
-	return false, fmt.Errorf("file not ignored")
 }
 
 // Calculate file differences

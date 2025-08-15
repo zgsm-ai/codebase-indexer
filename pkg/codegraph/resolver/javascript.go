@@ -163,7 +163,7 @@ func (js *JavaScriptResolver) resolveClass(ctx context.Context, element *Class, 
 			element.SuperClasses = append(element.SuperClasses, content)
 		}
 	}
-	cls, references := parseJavaScriptClassBody(&rootCapure.Node, rc.SourceFile.Content, element.BaseElement.Name)
+	cls, references := parseJavaScriptClassBody(&rootCapure.Node, rc.SourceFile.Content, element.BaseElement.Name, rc.SourceFile.Path)
 	element.Fields = cls.Fields
 	element.Methods = cls.Methods
 	// 收集所有引用元素
@@ -353,7 +353,7 @@ func containsModifier(content string, modifier string) bool {
 }
 
 // parseJavaScriptClassBody 解析JavaScript类体，提取字段和方法
-func parseJavaScriptClassBody(node *sitter.Node, content []byte, className string) (*Class, []Element) {
+func parseJavaScriptClassBody(node *sitter.Node, content []byte, className string, path string) (*Class, []Element) {
 	class := &Class{
 		BaseElement: &BaseElement{
 			Name:  className,
@@ -387,12 +387,13 @@ func parseJavaScriptClassBody(node *sitter.Node, content []byte, className strin
 			// 处理方法
 			method := parseJavaScriptMethodNode(memberNode, content, class.BaseElement.Name)
 			method.Owner = className
+			method.Path = path
 			if method != nil {
 				class.Methods = append(class.Methods, method)
 			}
 		case types.NodeKindFieldDefinition:
 			// 处理字段
-			field, ref := parseJavaScriptFieldNode(memberNode, content)
+			field, ref := parseJavaScriptFieldNode(memberNode, content, path)
 			if field != nil {
 				class.Fields = append(class.Fields, field)
 				// 如果存在引用元素，添加到引用列表中
@@ -456,7 +457,7 @@ func parseJavaScriptMethodNode(node *sitter.Node, content []byte, className stri
 }
 
 // parseJavaScriptFieldNode 解析JavaScript字段节点
-func parseJavaScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Reference) {
+func parseJavaScriptFieldNode(node *sitter.Node, content []byte, path string) (*Field, *Reference) {
 	field := &Field{}
 	var ref *Reference
 
@@ -511,6 +512,7 @@ func parseJavaScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Refer
 					ref = &Reference{
 						BaseElement: &BaseElement{
 							Type: types.ElementTypeReference,
+							Path: path,
 							Range: []int32{
 								int32(constructorNode.StartPosition().Row),
 								int32(constructorNode.StartPosition().Column),
@@ -543,6 +545,7 @@ func parseJavaScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Refer
 					BaseElement: &BaseElement{
 						Name: fieldType,
 						Type: types.ElementTypeReference,
+						Path: path,
 						Range: []int32{
 							int32(valueNode.StartPosition().Row),
 							int32(valueNode.StartPosition().Column),
@@ -563,6 +566,7 @@ func parseJavaScriptFieldNode(node *sitter.Node, content []byte) (*Field, *Refer
 				ref = &Reference{
 					BaseElement: &BaseElement{
 						Type: types.ElementTypeReference,
+						Path: path,
 						Range: []int32{
 							int32(valueNode.StartPosition().Row),
 							int32(valueNode.StartPosition().Column),
