@@ -5,7 +5,6 @@ import (
 	"codebase-indexer/internal/errs"
 	"codebase-indexer/internal/model"
 	"codebase-indexer/internal/repository"
-	"codebase-indexer/pkg/codegraph"
 	"codebase-indexer/pkg/codegraph/definition"
 	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
@@ -75,7 +74,7 @@ func NewCodebaseService(logger logger.Logger,
 	workspaceReader *workspace.WorkspaceReader,
 	workspaceRepository repository.WorkspaceRepository,
 	fileDefinitionParser *definition.DefParser,
-	indexer *codegraph.Indexer) CodebaseService {
+	indexer *Indexer) CodebaseService {
 	return &codebaseService{
 		logger:               logger,
 		workspaceReader:      workspaceReader,
@@ -90,7 +89,7 @@ type codebaseService struct {
 	workspaceReader      *workspace.WorkspaceReader
 	workspaceRepository  repository.WorkspaceRepository
 	fileDefinitionParser *definition.DefParser
-	indexer              *codegraph.Indexer
+	indexer              *Indexer
 }
 
 func (s *codebaseService) checkPath(ctx context.Context, workspacePath string, filePaths []string) error {

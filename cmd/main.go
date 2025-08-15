@@ -26,7 +26,6 @@ import (
 	"codebase-indexer/internal/server"
 	"codebase-indexer/internal/service"
 	"codebase-indexer/internal/utils"
-	"codebase-indexer/pkg/codegraph"
 	"codebase-indexer/pkg/codegraph/analyzer"
 	packageclassifier "codebase-indexer/pkg/codegraph/analyzer/package_classifier"
 	"codebase-indexer/pkg/codegraph/parser"
@@ -155,8 +154,8 @@ func main() {
 	// 创建依赖分析器
 	dependencyAnalyzer := analyzer.NewDependencyAnalyzer(appLogger, packageClassifier, workspaceReader, codegraphStore)
 
-	indexer := codegraph.NewCodeIndexer(scanRepo, sourceFileParser, dependencyAnalyzer, workspaceReader, codegraphStore,
-		workspaceRepo, codegraph.IndexerConfig{VisitPattern: workspace.DefaultVisitPattern}, appLogger) //todo 文件忽略列表
+	indexer := service.NewCodeIndexer(scanRepo, sourceFileParser, dependencyAnalyzer, workspaceReader, codegraphStore,
+		workspaceRepo, service.IndexerConfig{VisitPattern: workspace.DefaultVisitPattern}, appLogger) //todo 文件忽略列表
 
 	codebaseService := service.NewCodebaseService(appLogger, workspaceReader, workspaceRepo, definition.NewDefinitionParser(), indexer)
 	extensionService := service.NewExtensionService(storageManager, syncRepo, scanRepo, workspaceRepo, eventRepo, codebaseEmbeddingRepo, codebaseService, appLogger)

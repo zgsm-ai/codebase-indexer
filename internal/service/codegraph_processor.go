@@ -9,7 +9,6 @@ import (
 
 	"codebase-indexer/internal/model"
 	"codebase-indexer/internal/repository"
-	"codebase-indexer/pkg/codegraph"
 	"codebase-indexer/pkg/logger"
 )
 
@@ -26,7 +25,7 @@ type CodegraphProcessService interface {
 }
 
 type CodegraphProcessor struct {
-	indexer         *codegraph.Indexer
+	indexer         *Indexer
 	workspaceReader *workspace.WorkspaceReader
 	workspaceRepo   repository.WorkspaceRepository
 	eventRepo       repository.EventRepository
@@ -35,7 +34,7 @@ type CodegraphProcessor struct {
 
 func NewCodegraphProcessor(
 	workspaceReader *workspace.WorkspaceReader,
-	indexer *codegraph.Indexer,
+	indexer *Indexer,
 	workspaceRepo repository.WorkspaceRepository,
 	eventRepo repository.EventRepository,
 	logger logger.Logger,

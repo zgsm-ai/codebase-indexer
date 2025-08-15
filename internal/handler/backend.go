@@ -252,23 +252,6 @@ func (h *BackendHandler) ExportIndex(c *gin.Context) {
 	}
 }
 
-// SetupRoutes 设置后端API路由
-// @Description 设置后端API路由
-func (h *BackendHandler) SetupRoutes(router *gin.Engine) {
-	api := router.Group("/codebase-indexer/api/v1")
-
-	{
-		api.GET("/search/reference", h.SearchReference)
-		api.GET("/search/definition", h.SearchDefinition)
-		api.GET("/files/content", h.GetFileContent)
-		api.POST("/snippets/read", h.ReadCodeSnippets)
-		api.GET("/codebases/directory", h.GetCodebaseDirectory)
-		api.GET("/files/structure", h.GetFileStructure)
-		api.GET("/index/summary", h.GetIndexSummary)
-		api.GET("/index/export", h.ExportIndex)
-	}
-}
-
 func (h *BackendHandler) ReadCodeSnippets(c *gin.Context) {
 	var req dto.ReadCodeSnippetsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
