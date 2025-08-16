@@ -21,7 +21,7 @@ var ErrPathNotExists = errors.New("no such file or directory")
 var DefaultVisitPattern = &types.VisitPattern{ExcludeDirs: []string{".git", ".idea", ".vscode", "node_modules", "vendor"}}
 
 const ReadFileMaxLine = 5_000
-const MaxFileVisitLimit = 10_0000
+const MaxFileVisitLimit = 20_0000
 
 type WorkspaceReader struct {
 	logger logger.Logger
@@ -36,7 +36,7 @@ func NewWorkSpaceReader(logger logger.Logger) *WorkspaceReader {
 func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, resolveModule bool, visitPattern *types.VisitPattern) []*Project {
 
 	start := time.Now()
-	w.logger.Info("find_projects start to scan workspace：%s", workspace)
+	w.logger.Info("start to scan workspace：%s", workspace)
 	if visitPattern == nil {
 		visitPattern = DefaultVisitPattern
 	}
@@ -67,7 +67,7 @@ func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, re
 		projects = append(projects, project)
 		if resolveModule {
 			if err := moduleResolver.ResolveProjectModules(ctx, project, project.Path, 2); err != nil {
-				w.logger.Error("find_projects resolve project modules err:%v", err)
+				w.logger.Error("resolve project modules err:%v", err)
 			}
 		}
 
@@ -124,7 +124,7 @@ func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, re
 						projects = append(projects, project)
 						if resolveModule {
 							if err = moduleResolver.ResolveProjectModules(ctx, project, project.Path, 2); err != nil {
-								w.logger.Error("find_projects resolve project modules err:%v", err)
+								w.logger.Error("resolve project modules err:%v", err)
 							}
 						}
 
@@ -151,17 +151,19 @@ func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, re
 		projects = append(projects, project)
 		if resolveModule {
 			if err := moduleResolver.ResolveProjectModules(ctx, project, project.Path, 2); err != nil {
-				w.logger.Error("find_projects resolve project modules err:%v", err)
+				w.logger.Error("resolve project modules err:%v", err)
 			}
 		}
 	}
 
 	var projectNames string
+	var goModules []string
 	for _, p := range projects {
 		projectNames += p.Name + types.Space
+		goModules = append(goModules, p.GoModules...)
 	}
-	w.logger.Info("find_projects scan finish, cost %d ms, found projects：%s",
-		time.Since(start).Milliseconds(), projectNames)
+	w.logger.Info("scan finish, cost %d ms, found projects：%s, go modules:%s",
+		time.Since(start).Milliseconds(), projectNames, goModules)
 
 	return projects
 }
@@ -273,11 +275,11 @@ func (w *WorkspaceReader) WalkFile(ctx context.Context, dir string, walkFn types
 	if !exists {
 		return ErrPathNotExists
 	}
-	if walkOpts.VisitPattern.MaxFileLimit <= 0 {
-		walkOpts.VisitPattern.MaxFileLimit = MaxFileVisitLimit
+	if walkOpts.VisitPattern.MaxVisitLimit <= 0 {
+		walkOpts.VisitPattern.MaxVisitLimit = MaxFileVisitLimit
 	}
 
-	var fileVisitCount int
+	var visitCount int
 
 	return filepath.WalkDir(dir, func(filePath string, info fs.DirEntry, err error) error {
 		if err != nil && !walkOpts.IgnoreError {
@@ -304,7 +306,7 @@ func (w *WorkspaceReader) WalkFile(ctx context.Context, dir string, walkFn types
 		skip, err := walkOpts.VisitPattern.ShouldSkip(
 			&types.FileInfo{
 				Name:  info.Name(),
-				Path:  relativePath,
+				Path:  filePath,
 				IsDir: info.IsDir(),
 			})
 		if skip {
@@ -321,14 +323,14 @@ func (w *WorkspaceReader) WalkFile(ctx context.Context, dir string, walkFn types
 		// Convert Windows filePath separators to forward slashes
 		relativePath = filepath.ToSlash(relativePath)
 
+		visitCount++
+		if visitCount > walkOpts.VisitPattern.MaxVisitLimit {
+			return filepath.SkipAll
+		}
+
 		// 只处理文件，不处理目录
 		if info.IsDir() {
 			return nil
-		}
-
-		fileVisitCount++
-		if fileVisitCount > walkOpts.VisitPattern.MaxFileLimit {
-			return filepath.SkipAll
 		}
 
 		// 构建 WalkContext
@@ -424,7 +426,7 @@ func (l *WorkspaceReader) Tree(ctx context.Context, workspacePath string, subDir
 		var parts []string
 
 		// 如果是根目录本身，跳过
-		if walkBaseRelativePath == "." || utils.PathEqual(walkBaseRelativePath, subDir) {
+		if walkBaseRelativePath == types.Dot || utils.PathEqual(walkBaseRelativePath, subDir) {
 			return nil
 		}
 

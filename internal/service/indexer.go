@@ -67,14 +67,14 @@ type BatchProcessResult struct {
 
 // BatchProcessingParams 批处理阶段参数
 type BatchProcessingParams struct {
-	ProjectUuid   string
-	SourceFiles   []string
-	TotalFiles    int
-	PreviousNum   int
-	Project       *workspace.Project
-	WorkspacePath string
-	Concurrency   int
-	BatchSize     int
+	ProjectUuid          string
+	NeedIndexSourceFiles []string
+	TotalFilesCnt        int
+	PreviousFileNum      int
+	Project              *workspace.Project
+	WorkspacePath        string
+	Concurrency          int
+	BatchSize            int
 }
 
 // BatchProcessingResult 批处理阶段结果
@@ -116,8 +116,6 @@ const (
 	defaultCacheCapacity = defaultMaxFiles * 10 // 假定单个文件平均10个元素
 )
 
-// TODO 并行度、batch_size、cpu、内存使用优化。
-// TODO resolve_dependency 优化，内存飙升。
 // NewCodeIndexer 创建新的代码索引器
 func NewCodeIndexer(
 	ignoreScanner repository.ScannerInterface,
@@ -200,19 +198,19 @@ func initConfig(config *IndexerConfig) {
 func (i *Indexer) IndexWorkspace(ctx context.Context, workspacePath string) (*types.IndexTaskMetrics, error) {
 	taskMetrics := &types.IndexTaskMetrics{}
 	workspaceStart := time.Now()
-	i.logger.Info("index_workspace start to index workspace：%s", workspacePath)
+	i.logger.Info("start to index workspace：%s", workspacePath)
 	exists, err := i.workspaceReader.Exists(ctx, workspacePath)
 	if err == nil && !exists {
-		return taskMetrics, fmt.Errorf("index_workspace workspace %s not exists", workspacePath)
+		return taskMetrics, fmt.Errorf("workspace %s not exists", workspacePath)
 	}
 	projects := i.workspaceReader.FindProjects(ctx, workspacePath, true, workspace.DefaultVisitPattern)
 	projectsCnt := len(projects)
 	if projectsCnt == 0 {
-		return taskMetrics, fmt.Errorf("index_workspace find no projects in workspace: %s", workspacePath)
+		return taskMetrics, fmt.Errorf("find no projects in workspace: %s", workspacePath)
 	}
 	if projectsCnt > i.config.MaxProjects {
 		projects = projects[:i.config.MaxProjects]
-		i.logger.Debug("index_workspace %s found %d projects, exceed %d max_projects config, use config size.", workspacePath, projectsCnt)
+		i.logger.Debug("%s found %d projects, exceed %d max_projects config, use config size.", workspacePath, projectsCnt)
 	}
 
 	var errs []error
@@ -221,7 +219,7 @@ func (i *Indexer) IndexWorkspace(ctx context.Context, workspacePath string) (*ty
 	for _, project := range projects {
 		projectTaskMetrics, err := i.indexProject(ctx, workspacePath, project)
 		if err != nil {
-			i.logger.Error("index_workspace index project %s err: %v",
+			i.logger.Error("index project %s err: %v",
 				project.Path, utils.TruncateError(errors.Join(err...)))
 			errs = append(errs, err...)
 			continue
@@ -232,9 +230,10 @@ func (i *Indexer) IndexWorkspace(ctx context.Context, workspacePath string) (*ty
 		taskMetrics.FailedFilePaths = append(taskMetrics.FailedFilePaths, projectTaskMetrics.FailedFilePaths...)
 	}
 
-	i.logger.Info("index_workspace %s index workspace finish, cost %d ms, visit %d files, "+
-		"parsed %d files successfully, failed %d files", workspacePath, time.Since(workspaceStart).Milliseconds(),
-		taskMetrics.TotalFiles, taskMetrics.TotalFiles-taskMetrics.TotalFailedFiles, taskMetrics.TotalFailedFiles)
+	i.logger.Info("%s index end. cost %d ms, index %d projects, visit %d files, "+
+		"parsed %d files successfully, failed %d files", workspacePath, len(projects),
+		time.Since(workspaceStart).Milliseconds(), taskMetrics.TotalFiles,
+		taskMetrics.TotalFiles-taskMetrics.TotalFailedFiles, taskMetrics.TotalFailedFiles)
 	return taskMetrics, nil
 }
 
@@ -243,7 +242,7 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 	projectStart := time.Now()
 	projectUuid := project.Uuid
 
-	i.logger.Info("index_project start to index project：%s, max_concurrency: %d, batch_size: %d",
+	i.logger.Info("start to index project：%s, max_concurrency: %d, batch_size: %d",
 		project.Path, i.config.MaxConcurrency, i.config.MaxBatchSize)
 
 	// 获取工作区信息
@@ -252,34 +251,43 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 		return nil, []error{err}
 	}
 	if workspaceModel == nil {
-		return nil, []error{fmt.Errorf("index_project workspace %s not found in database", workspacePath)}
+		return nil, []error{fmt.Errorf("workspace %s not found in database", workspacePath)}
 	}
-	previousNum := workspaceModel.CodegraphFileNum
+	// 已有的文件数，如果工作区多个项目，需要累加
+	databasePreviousFileNum := workspaceModel.CodegraphFileNum
 
-	// 阶段0：收集要处理的源码文件
-	sourceFiles, err := i.collectFiles(ctx, workspacePath, project.Path, i.config.MaxFiles)
+	// 收集要处理的源码文件
+	sourceFileTimestamps, err := i.collectFiles(ctx, workspacePath, project.Path, i.config.MaxFiles)
 	if err != nil {
-		return &types.IndexTaskMetrics{TotalFiles: 0}, []error{fmt.Errorf("index_project collect project files err:%v", err)}
+		return &types.IndexTaskMetrics{TotalFiles: 0}, []error{fmt.Errorf("collect project files err:%v", err)}
 	}
-	totalFiles := len(sourceFiles)
-	if totalFiles == 0 {
-		i.logger.Info("index_project found no source files in project %s, not index.", project.Path)
+
+	totalFilesCnt := len(sourceFileTimestamps)
+	if totalFilesCnt == 0 {
+		i.logger.Info("found no source files in project %s, not index.", project.Path)
 		return &types.IndexTaskMetrics{TotalFiles: 0}, nil
 	}
+	// 校验文件时间戳和索引时间戳，比对需要索引
+	filterStart := time.Now()
+	needIndexFiles := i.filterSourceFilesByTimestamp(ctx, projectUuid, sourceFileTimestamps)
+	// gc
+	sourceFileTimestamps = nil
 
-	i.logger.Info("index_project collect project files finish. cost %d ms, found %d source files to index",
-		time.Since(projectStart).Milliseconds(), totalFiles)
+	filteredCnt := totalFilesCnt - len(needIndexFiles)
+
+	i.logger.Info("workspace %s filter files by timestamp cost %d ms, total %d files, remaining %d files, filtered %d files.", workspacePath,
+		time.Since(filterStart).Milliseconds(), totalFilesCnt, len(needIndexFiles), filteredCnt)
 
 	// 阶段1-3：批量处理文件（解析、检查、保存符号表）
 	batchParams := &BatchProcessingParams{
-		ProjectUuid:   projectUuid,
-		SourceFiles:   sourceFiles,
-		TotalFiles:    totalFiles,
-		Project:       project,
-		WorkspacePath: workspacePath,
-		PreviousNum:   previousNum,
-		Concurrency:   i.config.MaxConcurrency,
-		BatchSize:     i.config.MaxBatchSize,
+		ProjectUuid:          projectUuid,
+		NeedIndexSourceFiles: needIndexFiles,
+		TotalFilesCnt:        totalFilesCnt,
+		Project:              project,
+		WorkspacePath:        workspacePath,
+		PreviousFileNum:      databasePreviousFileNum + filteredCnt,
+		Concurrency:          i.config.MaxConcurrency,
+		BatchSize:            i.config.MaxBatchSize,
 	}
 
 	batchResult, err := i.indexFilesInBatches(ctx, batchParams)
@@ -288,43 +296,51 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 		return &types.IndexTaskMetrics{TotalFiles: 0}, []error{err}
 	}
 
-	i.logger.Info("index_project project %s files parse finish. cost %d ms, visit %d files, "+
+	i.logger.Info("project %s files parse finish. cost %d ms, visit %d files, "+
 		"parsed %d files successfully, failed %d files, total symbols: %d",
 		project.Path, time.Since(projectStart).Milliseconds(), batchResult.ProjectMetrics.TotalFiles,
 		batchResult.ProjectMetrics.TotalFiles-batchResult.ProjectMetrics.TotalFailedFiles,
 		batchResult.ProjectMetrics.TotalFailedFiles, batchResult.ProjectMetrics.TotalSymbols)
 
-	//if batchResult.ProjectMetrics.TotalFiles-batchResult.ProjectMetrics.TotalFailedFiles == 0 {
-	//	i.logger.Info("index_project project %s parse and save 0 element_tables successfully, process end.",
-	//		project.Path)
-	//	return batchResult.ProjectMetrics, allErrs
-	//}
-
-	//// sleep 5 秒，gc
-	//// 阶段4：依赖分析
-	//dependencyParams := &DependencyAnalysisParams{
-	//	ProjectUuid:    projectUuid,
-	//	Processed: batchResult.ParsedFilesCount,
-	//	WorkspacePath:  workspacePath,
-	//	PreviousNum:    previousNum,
-	//	BatchSize:      i.config.MaxBatchSize,
-	//}
-	//
-	//dependencyResult, err := i.processDependencyAnalysis(ctx, dependencyParams)
-	//if err != nil {
-	//	allErrs = append(allErrs, err)
-	//	return batchResult.ProjectMetrics, allErrs
-	//}
-	//
-	//allErrs = append(allErrs, dependencyResult.Errors...)
-	//
-	//i.logger.Debug("index_project project %s analyze dependency end, analyzed %d/%d element tables, cost %d ms.",
-	//	project.Path, dependencyResult.Total, batchResult.ParsedFilesCount, dependencyResult.Duration.Milliseconds())
-
-	i.logger.Info("index_project %s finish, cost %d ms, processed %d files.", project.Path,
-		time.Since(projectStart).Milliseconds(), batchResult.ParsedFilesCount)
-
 	return batchResult.ProjectMetrics, nil
+}
+
+func (i *Indexer) filterSourceFilesByTimestamp(ctx context.Context, projectUuid string, sourceFileTimestamps map[string]int64) []string {
+	iter := i.storage.Iter(ctx, projectUuid)
+	defer func(iter store.Iterator) {
+		err := iter.Close()
+		if err != nil {
+			i.logger.Error("project %s iter close err: %v", projectUuid, err)
+		}
+	}(iter)
+	for iter.Next() {
+		if !store.IsElementPathKey(iter.Key()) {
+			continue
+		}
+		key, err := store.ToElementPathKey(iter.Key())
+		if err != nil {
+			i.logger.Error("convert key %s to element_path_key err:%v", iter.Key(), err)
+			continue
+		}
+		fileTimestamp, ok := sourceFileTimestamps[key.Path]
+		if !ok {
+			continue
+		}
+		var elementTable codegraphpb.FileElementTable
+		if err = store.UnmarshalValue(iter.Value(), &elementTable); err != nil {
+			i.logger.Error("unmarshal key %s element_table value err:%v", iter.Key(), err)
+			continue
+		}
+		if elementTable.Timestamp == fileTimestamp {
+			delete(sourceFileTimestamps, key.Path)
+		}
+	}
+
+	needIndexFiles := make([]string, 0, len(sourceFileTimestamps))
+	for k := range sourceFileTimestamps {
+		needIndexFiles = append(needIndexFiles, k)
+	}
+	return needIndexFiles
 }
 
 // preprocessImports 预处理（过滤、转换分隔符）
@@ -588,19 +604,19 @@ func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePath
 		} else {
 			projectStart := time.Now()
 			i.logger.Info("index_files project %s has index, index projectFiles.", projectUuid)
-			i.logger.Info("index_project %s, concurrency: %d, batch_size: %d",
+			i.logger.Info("%s, concurrency: %d, batch_size: %d",
 				projectUuid, i.config.MaxConcurrency, i.config.MaxBatchSize)
 
 			// 阶段1-3：批量处理文件（解析、检查、保存符号表）
 			batchParams := &BatchProcessingParams{
-				ProjectUuid:   projectUuid,
-				SourceFiles:   projectFiles,
-				TotalFiles:    len(projectFiles),
-				Project:       project,
-				WorkspacePath: workspacePath,
-				PreviousNum:   0,
-				Concurrency:   i.config.MaxConcurrency,
-				BatchSize:     i.config.MaxBatchSize,
+				ProjectUuid:          projectUuid,
+				NeedIndexSourceFiles: projectFiles,
+				TotalFilesCnt:        len(projectFiles),
+				Project:              project,
+				WorkspacePath:        workspacePath,
+				PreviousFileNum:      0,
+				Concurrency:          i.config.MaxConcurrency,
+				BatchSize:            i.config.MaxBatchSize,
 			}
 
 			batchResult, err := i.indexFilesInBatches(ctx, batchParams)
@@ -609,7 +625,7 @@ func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePath
 				continue
 			}
 
-			i.logger.Info("index_project project %s projectFiles parse finish. cost %d ms, visit %d projectFiles, "+
+			i.logger.Info("project %s projectFiles parse finish. cost %d ms, visit %d projectFiles, "+
 				"parsed %d projectFiles successfully, failed %d projectFiles",
 				projectUuid, time.Since(projectStart).Milliseconds(), batchResult.ProjectMetrics.TotalFiles,
 				batchResult.ProjectMetrics.TotalFiles-batchResult.ProjectMetrics.TotalFailedFiles, batchResult.ProjectMetrics.TotalFailedFiles)
@@ -1548,7 +1564,7 @@ func (i *Indexer) parseFiles(ctx context.Context, filePaths []string) ([]*parser
 		if err != nil {
 			projectTaskMetrics.TotalFailedFiles++
 			projectTaskMetrics.FailedFilePaths = append(projectTaskMetrics.FailedFilePaths, path)
-			i.logger.Debug("index_project read file %s err:%v", path, err)
+			i.logger.Debug("read file %s err:%v", path, err)
 			continue
 		}
 
@@ -1563,7 +1579,7 @@ func (i *Indexer) parseFiles(ctx context.Context, filePaths []string) ([]*parser
 		if err != nil {
 			projectTaskMetrics.TotalFailedFiles++
 			projectTaskMetrics.FailedFilePaths = append(projectTaskMetrics.FailedFilePaths, path)
-			i.logger.Debug("index_project parse file %s err:%v", path, err)
+			i.logger.Debug("parse file %s err:%v", path, err)
 			// 显式清理内存
 			content = nil
 			sourceFile.Content = nil
@@ -1598,7 +1614,7 @@ func (i *Indexer) processBatch(ctx context.Context, batchId int, params *BatchPr
 	symbolCache *cache.LRUCache[*codegraphpb.SymbolOccurrence]) (*BatchProcessResult, error) {
 	batchStartTime := time.Now()
 
-	i.logger.Debug("index_project task-%d start, batch [%d:%d]/%d, batch_size %d",
+	i.logger.Info("batch-%d start, [%d:%d]/%d, batch_size %d",
 		batchId, params.BatchStart, params.BatchEnd, params.TotalFiles, params.BatchSize)
 
 	// 解析文件
@@ -1615,11 +1631,8 @@ func (i *Indexer) processBatch(ctx context.Context, batchId int, params *BatchPr
 		}, nil
 	}
 
-	i.logger.Debug("index_project task-%d batch [%d:%d]/%d parse files end, cost %d ms", batchId,
+	i.logger.Info("batch-%d [%d:%d]/%d parse files end, cost %d ms", batchId,
 		params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(batchStartTime).Milliseconds())
-
-	// 检查elements，剔除不合法的，并打印日志 在解析阶段检查
-	// i.checkElementTables(elementTables)
 
 	// 项目符号表存储
 	symbolStart := time.Now()
@@ -1630,12 +1643,12 @@ func (i *Indexer) processBatch(ctx context.Context, batchId int, params *BatchPr
 		return nil, fmt.Errorf("save symbol definitions failed: %w", err)
 	}
 	metrics.TotalSymbols += symbols
-	i.logger.Debug("index_project task-%d batch [%d:%d]/%d save symbols end, cost %d ms", batchId,
+	i.logger.Info("batch-%d batch [%d:%d]/%d save symbols end, cost %d ms", batchId,
 		params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(symbolStart).Milliseconds())
 
 	// 预处理 import
 	if err := i.preprocessImports(ctx, elementTables, params.Project); err != nil {
-		i.logger.Debug("index_project task-%d preprocess import error: %v", utils.TruncateError(err))
+		i.logger.Error("batch-%d preprocess import error: %v", utils.TruncateError(err))
 	}
 
 	// element存储，后面依赖分析，基于磁盘，避免大型项目占用太多内存
@@ -1648,15 +1661,9 @@ func (i *Indexer) processBatch(ctx context.Context, batchId int, params *BatchPr
 		return nil, fmt.Errorf("batch save element tables failed: %w", err)
 	}
 
-	// 优化：显式清理内存，帮助GC及时回收
-	elementTables = nil
-	protoElementTables = nil
-
-	i.logger.Debug("index_project task-%d batch [%d:%d]/%d save element_tables end, cost %d ms", batchId,
-		params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(batchSaveStart).Milliseconds())
-
-	i.logger.Debug("index_project task-%d batch [%d:%d]/%d end, cost %d ms", batchId,
-		params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(batchStartTime).Milliseconds())
+	i.logger.Info("batch-%d [%d:%d]/%d save element_tables end, cost %d ms, batch cost %d ms", batchId,
+		params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(batchSaveStart).Milliseconds(),
+		time.Since(batchStartTime).Milliseconds())
 
 	return &BatchProcessResult{
 		ElementTablesCnt: elementTablesCnt,
@@ -1666,9 +1673,9 @@ func (i *Indexer) processBatch(ctx context.Context, batchId int, params *BatchPr
 }
 
 // collectFiles 收集源文件
-func (i *Indexer) collectFiles(ctx context.Context, workspacePath string, projectPath string, maxFiles int) ([]string, error) {
+func (i *Indexer) collectFiles(ctx context.Context, workspacePath string, projectPath string, maxFiles int) (map[string]int64, error) {
 	startTime := time.Now()
-	filePaths := make([]string, 0, 500)
+	filePathModTimestamps := make(map[string]int64, 100)
 	ignoreConfig := i.ignoreScanner.LoadIgnoreConfig(workspacePath)
 	if ignoreConfig == nil {
 		i.logger.Error("collect_source_files ignore_config is nil")
@@ -1679,10 +1686,10 @@ func (i *Indexer) collectFiles(ctx context.Context, workspacePath string, projec
 	}
 
 	if ignoreConfig != nil {
+		visitPattern = &types.VisitPattern{}
 		visitPattern.SkipFunc = func(fileInfo *types.FileInfo) (bool, error) {
 			return i.ignoreScanner.CheckIgnoreFile(ignoreConfig, workspacePath, fileInfo)
 		}
-		visitPattern.MaxFileSize = ignoreConfig.MaxFileSize
 		maxFiles = ignoreConfig.MaxFileCount
 	}
 
@@ -1690,11 +1697,11 @@ func (i *Indexer) collectFiles(ctx context.Context, workspacePath string, projec
 		if walkCtx.Info.IsDir {
 			return nil
 		}
-		if len(filePaths) >= maxFiles {
-			i.logger.Debug("collect_source_files max files %d reached, return.", maxFiles)
+		if len(filePathModTimestamps) >= maxFiles {
+			i.logger.Info("collect_source_files max files %d reached, return.", maxFiles)
 			return filepath.SkipAll
 		}
-		filePaths = append(filePaths, walkCtx.Path)
+		filePathModTimestamps[walkCtx.Path] = walkCtx.Info.ModTime.Unix()
 		return nil
 	}, types.WalkOptions{IgnoreError: true, VisitPattern: visitPattern})
 
@@ -1702,27 +1709,27 @@ func (i *Indexer) collectFiles(ctx context.Context, workspacePath string, projec
 		return nil, err
 	}
 
-	i.logger.Debug("collect_source_files finished, collected %d files, cost %d ms",
-		len(filePaths), time.Since(startTime).Milliseconds())
+	i.logger.Info("collect project source files finish. cost %d ms, found %d source files to index, max_file_limit %d",
+		time.Since(startTime).Milliseconds(), len(filePathModTimestamps), maxFiles)
 
-	return filePaths, nil
+	return filePathModTimestamps, nil
 }
 
 // indexFilesInBatches 批量处理文件
 func (i *Indexer) indexFilesInBatches(ctx context.Context, params *BatchProcessingParams) (*BatchProcessingResult, error) {
 
-	i.logger.Info("index_project %s, concurrency: %d, batch_size: %d cache_capacity: %d",
+	i.logger.Info("%s, concurrency: %d, batch_size: %d cache_capacity: %d",
 		params.Project.Path, i.config.MaxConcurrency, i.config.MaxBatchSize, i.config.CacheCapacity)
 
 	startTime := time.Now()
-	totalFiles := len(params.SourceFiles)
+	totalNeedIndexFiles := len(params.NeedIndexSourceFiles)
 
 	// 基于文件数量预分配切片容量，优化内存使用
 	var errs []error
 
 	projectMetrics := &types.IndexTaskMetrics{
-		TotalFiles:      totalFiles,
-		FailedFilePaths: make([]string, 0, totalFiles/4), // 预估失败文件数约为文件数的25%
+		TotalFiles:      totalNeedIndexFiles,
+		FailedFilePaths: make([]string, 0, totalNeedIndexFiles/4), // 预估失败文件数约为文件数的25%
 	}
 	// 缓存
 	symbolCache := cache.NewLRUCache[*codegraphpb.SymbolOccurrence](1000, i.config.CacheCapacity)
@@ -1731,10 +1738,10 @@ func (i *Indexer) indexFilesInBatches(ctx context.Context, params *BatchProcessi
 	var processedFilesCnt int
 	var batchId int
 	// 处理批次
-	for m := 0; m < totalFiles; {
-		batch := utils.Min(totalFiles-m, params.BatchSize)
+	for m := 0; m < totalNeedIndexFiles; {
+		batch := utils.Min(totalNeedIndexFiles-m, params.BatchSize)
 		batchStart, batchEnd := m, m+batch
-		sourceFilesBatch := params.SourceFiles[batchStart:batchEnd]
+		sourceFilesBatch := params.NeedIndexSourceFiles[batchStart:batchEnd]
 		batchId++
 		// 构建批处理参数
 		batchParams := &BatchProcessParams{
@@ -1743,7 +1750,7 @@ func (i *Indexer) indexFilesInBatches(ctx context.Context, params *BatchProcessi
 			BatchStart:  batchStart,
 			BatchEnd:    batchEnd,
 			BatchSize:   batch,
-			TotalFiles:  totalFiles,
+			TotalFiles:  totalNeedIndexFiles,
 			Project:     params.Project,
 		}
 
@@ -1752,7 +1759,7 @@ func (i *Indexer) indexFilesInBatches(ctx context.Context, params *BatchProcessi
 			batchStartTime := time.Now()
 			result, err := i.processBatch(ctx, taskID, batchParams, symbolCache)
 			if err != nil {
-				i.logger.Debug("index_project task-%d process batch err:%v", taskID, err)
+				i.logger.Debug("task-%d process batch err:%v", taskID, err)
 				return fmt.Errorf("process batch err:%w", err)
 			}
 
@@ -1763,21 +1770,21 @@ func (i *Indexer) indexFilesInBatches(ctx context.Context, params *BatchProcessi
 			//TODO 更新进度
 			batchUpdateStart := time.Now()
 			if err := i.updateProgress(ctx, &ProgressInfo{
-				Total:         totalFiles,
+				Total:         totalNeedIndexFiles,
 				Processed:     processedFilesCnt,
-				PreviousNum:   params.PreviousNum,
+				PreviousNum:   params.PreviousFileNum,
 				WorkspacePath: params.WorkspacePath,
 			}); err != nil {
 				return fmt.Errorf("update progress failed: %w", err)
 			}
 
-			i.logger.Debug("update task-%d workspace %s successful, file num %d/%d, cache size %d, cost %d ms, batch %d cost %d ms",
-				taskID, params.WorkspacePath, processedFilesCnt+params.PreviousNum,
-				totalFiles, symbolCache.Len(), time.Since(batchUpdateStart).Milliseconds(), batch, time.Since(batchStartTime).Milliseconds())
+			i.logger.Info("update task-%d workspace %s successful, file num %d/%d, cache size %d, cost %d ms, batch %d cost %d ms",
+				taskID, params.WorkspacePath, processedFilesCnt+params.PreviousFileNum,
+				totalNeedIndexFiles, symbolCache.Len(), time.Since(batchUpdateStart).Milliseconds(), batch, time.Since(batchStartTime).Milliseconds())
 			return nil
 		}(ctx, batchId)
 		if err != nil {
-			i.logger.Debug("index_project %s submit task err:%v", params.ProjectUuid, err)
+			i.logger.Debug("%s submit task err:%v", params.ProjectUuid, err)
 		}
 
 		m += batch
@@ -1786,12 +1793,12 @@ func (i *Indexer) indexFilesInBatches(ctx context.Context, params *BatchProcessi
 	// 最终更新进度
 	// 最终更新
 	if err := i.updateProgress(ctx, &ProgressInfo{
-		Total:         totalFiles,
+		Total:         totalNeedIndexFiles,
 		Processed:     processedFilesCnt,
-		PreviousNum:   params.PreviousNum,
+		PreviousNum:   params.PreviousFileNum,
 		WorkspacePath: params.WorkspacePath,
 	}); err != nil {
-		i.logger.Debug("index_project %s update progress failed: %v", params.ProjectUuid, err)
+		i.logger.Debug("%s update progress failed: %v", params.ProjectUuid, err)
 	}
 
 	return &BatchProcessingResult{

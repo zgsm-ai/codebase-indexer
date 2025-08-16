@@ -69,12 +69,12 @@ func NewLogger(logsDir, level string) (Logger, error) {
 		TimeKey:        "time",
 		LevelKey:       "level",
 		NameKey:        "logger",
-		FunctionKey:    zapcore.OmitKey,
+		CallerKey:      "caller",
 		MessageKey:     "msg",
 		StacktraceKey:  "stacktrace",
 		LineEnding:     zapcore.DefaultLineEnding,
 		EncodeLevel:    zapcore.CapitalLevelEncoder,
-		EncodeTime:     zapcore.ISO8601TimeEncoder,
+		EncodeTime:     zapcore.TimeEncoderOfLayout("2006-01-02 15:04:05.000"),
 		EncodeDuration: zapcore.SecondsDurationEncoder,
 		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
@@ -98,7 +98,7 @@ func NewLogger(logsDir, level string) (Logger, error) {
 		),
 	)
 
-	zapLogger := zap.New(core)
+	zapLogger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1))
 	sugar := zapLogger.Sugar()
 
 	return &logger{

@@ -55,9 +55,12 @@ func setupTestEnvironment(t *testing.T) *testEnvironment {
 	storageDir := filepath.Join(tempDir, "index")
 	err := os.MkdirAll(storageDir, 0755)
 	assert.NoError(t, err)
-
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "debug"
+	}
 	// 创建日志器
-	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
+	newLogger, err := logger.NewLogger("/tmp/logs", logLevel)
 	assert.NoError(t, err)
 
 	// 创建存储

@@ -119,22 +119,22 @@ func (s *LevelDBStorage) generateDbPath(projectUuid string) string {
 
 // createDB creates new LevelDB instance
 func (s *LevelDBStorage) createDB(projectUuid string) (*leveldb.DB, error) {
-	s.logger.Info("create_db: creating project directory project %s", projectUuid)
+	s.logger.Info("creating project directory project %s", projectUuid)
 	projectDir := filepath.Join(s.baseDir, projectUuid)
 	if err := os.MkdirAll(projectDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create project directory %s: %w", projectDir, err)
 	}
 
 	dbPath := s.generateDbPath(projectUuid)
-	s.logger.Info("create_db: opening database project %s path %s", projectUuid, dbPath)
+	s.logger.Info("opening database project %s path %s", projectUuid, dbPath)
 
 	db, err := openLevelDB(dbPath)
 	if err != nil {
-		s.logger.Warn("create_db: database open failed, attempting to recreate. project %s err:%v", projectUuid, err)
+		s.logger.Warn("database open failed, attempting to recreate. project %s err:%v", projectUuid, err)
 
 		// 尝试删除损坏的数据库文件并重建
 		if removeErr := os.RemoveAll(dbPath); removeErr != nil {
-			s.logger.Error("create_db: failed to remove corrupted database. project %s err:%v", projectUuid, removeErr)
+			s.logger.Error("failed to remove corrupted database. project %s err:%v", projectUuid, removeErr)
 			return nil, fmt.Errorf("failed to open project database %s: %w (and failed to remove corrupted dir: %v)", dbPath, err, removeErr)
 		}
 
@@ -145,7 +145,7 @@ func (s *LevelDBStorage) createDB(projectUuid string) (*leveldb.DB, error) {
 		}
 	}
 
-	s.logger.Debug("create_db: created new project database. project %s path %s", projectUuid, dbPath)
+	s.logger.Debug("created new project database. project %s path %s", projectUuid, dbPath)
 	return db, nil
 }
 

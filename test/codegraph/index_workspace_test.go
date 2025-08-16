@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/stretchr/testify/assert"
-	"math"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -193,7 +192,7 @@ func TestIndexMixedLanguages(t *testing.T) {
 		},
 	}
 	cost := make([]string, 0)
-	for i := 0; i < math.MaxInt64; i++ {
+	for i := 0; i < 1; i++ {
 
 		for _, tc := range testCases {
 			ctx := context.Background()

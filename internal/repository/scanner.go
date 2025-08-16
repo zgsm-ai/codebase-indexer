@@ -127,7 +127,7 @@ func (s *FileScanner) CheckIgnoreFile(ignoreConfig *config.IgnoreConfig, codebas
 	if fileInfo.IsDir {
 		checkPath = relPath + "/"
 		if ignoreRules.MatchesPath(checkPath) {
-			s.logger.Info("ignore file found: %s in codebase %s", checkPath, codebasePath)
+			s.logger.Debug("ignore file found: %s in codebase %s", checkPath, codebasePath)
 			return true, nil
 		}
 	}
@@ -135,27 +135,26 @@ func (s *FileScanner) CheckIgnoreFile(ignoreConfig *config.IgnoreConfig, codebas
 	if fileInfo.Size > maxFileSize {
 		// For regular files, check size limit
 		fileSizeKB := float64(fileInfo.Size) / 1024
-		s.logger.Info("file size exceeded limit: %s (%.2fKB)", filePath, fileSizeKB)
+		s.logger.Debug("file size exceeded limit: %s (%.2fKB)", filePath, fileSizeKB)
 		return true, nil
 	}
 
 	if ignoreRules.MatchesPath(checkPath) {
-		s.logger.Info("ignore file found: %s in codebase %s", checkPath, codebasePath)
+		s.logger.Debug("ignore file found: %s in codebase %s", checkPath, codebasePath)
 		return true, nil
 	}
 
-	if len(fileIncludeMap) > 0 {
+	// 是文件，检查后缀
+	if !fileInfo.IsDir && len(fileIncludeMap) > 0 {
 		fileExt := filepath.Ext(filePath)
 		if _, ok := fileIncludeMap[fileExt]; ok {
-			s.logger.Info("file ext included: %s in codebase %s", filePath, codebasePath)
 			return false, nil
 		} else {
-			s.logger.Info("file ext not included: %s in codebase %s", filePath, codebasePath)
 			return true, nil
 		}
 	}
 
-	return false, fmt.Errorf("file not ignored")
+	return false, nil
 }
 
 type ignoreStu struct {

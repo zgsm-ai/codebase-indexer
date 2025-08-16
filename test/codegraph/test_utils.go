@@ -58,8 +58,13 @@ func setupTestEnvironment() (*testEnvironment, error) {
 		cancel()
 		return nil, err
 	}
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "debug"
+	}
+
 	// 创建日志器
-	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
+	newLogger, err := logger.NewLogger("/tmp/logs", logLevel)
 
 	// 创建存储
 	storage, err := store.NewLevelDBStorage(storageDir, newLogger)

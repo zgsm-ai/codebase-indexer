@@ -70,12 +70,15 @@ const DefaultMaxCodeSnippetLines = 500
 const DefaultMaxCodeSnippets = 200
 
 // NewCodebaseService 创建新的代码库服务
-func NewCodebaseService(logger logger.Logger,
+func NewCodebaseService(
+	manager repository.StorageInterface,
+	logger logger.Logger,
 	workspaceReader *workspace.WorkspaceReader,
 	workspaceRepository repository.WorkspaceRepository,
 	fileDefinitionParser *definition.DefParser,
 	indexer *Indexer) CodebaseService {
 	return &codebaseService{
+		manager:              manager,
 		logger:               logger,
 		workspaceReader:      workspaceReader,
 		workspaceRepository:  workspaceRepository,
@@ -85,6 +88,7 @@ func NewCodebaseService(logger logger.Logger,
 }
 
 type codebaseService struct {
+	manager              repository.StorageInterface
 	logger               logger.Logger
 	workspaceReader      *workspace.WorkspaceReader
 	workspaceRepository  repository.WorkspaceRepository
@@ -284,7 +288,7 @@ func (l *codebaseService) ReadCodeSnippets(ctx *gin.Context, req *dto.ReadCodeSn
 func (l *codebaseService) GetCodebaseDirectoryTree(ctx context.Context, req *dto.GetCodebaseDirectoryRequest) (
 	resp *dto.DirectoryData, err error) {
 
-	if err = l.checkPath(ctx, req.CodebasePath, []string{req.SubDir}); err != nil {
+	if err = l.checkPath(ctx, req.CodebasePath, []string{}); err != nil {
 		return nil, err
 	}
 
@@ -373,6 +377,11 @@ func (l *codebaseService) QueryDefinition(ctx context.Context, req *dto.SearchDe
 	// 1. 根据行号
 	// 2. 根据代码片段模糊检索（解析出其中的符号）
 
+	// 索引是否关闭
+	if l.manager.GetCodebaseEnv().Switch == dto.SwitchOff {
+		return nil, errs.ErrIndexDisabled
+	}
+
 	if req.StartLine <= 0 {
 		req.StartLine = 1
 	}
@@ -457,6 +466,10 @@ const relationFillContentLayerLimit = 2
 const relationFillContentLayerNodeLimit = 10
 
 func (l *codebaseService) QueryReference(ctx context.Context, req *dto.SearchReferenceRequest) (resp *dto.ReferenceData, err error) {
+
+	if l.manager.GetCodebaseEnv().Switch == dto.SwitchOff {
+		return nil, errs.ErrIndexDisabled
+	}
 
 	// 参数验证
 	if req.ClientId == types.EmptyString {

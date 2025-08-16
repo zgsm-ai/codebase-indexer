@@ -1,11 +1,13 @@
 package errs
 
 import (
+	"codebase-indexer/pkg/response"
 	"errors"
 	"fmt"
 )
 
-var ErrUnSupportedLanguage = errors.New("unsupported Language")
+var ErrUnSupportedLanguage = response.NewError("codebase-indexer.unsupported_language", "Unsupported Language")
+var ErrIndexDisabled = response.NewError("codebase-indexer.index_disabled", "Index is disabled")
 var ErrRecordNotFound = errors.New("record not found")
 
 var errorInvalidParamFmt = "invalid request params: %s %v"

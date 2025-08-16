@@ -1,10 +1,12 @@
 package service
 
 import (
+	"codebase-indexer/pkg/codegraph/utils"
 	"codebase-indexer/pkg/codegraph/workspace"
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"codebase-indexer/internal/model"
@@ -21,6 +23,7 @@ type CodegraphProcessService interface {
 	ProcessDeleteFileEvent(ctx context.Context, event *model.Event) error
 	ProcessRenameFileEvent(ctx context.Context, event *model.Event) error
 	ProcessOpenWorkspaceEvent(ctx context.Context, event *model.Event) error
+	ProcessRebuildWorkspaceEvent(ctx context.Context, event *model.Event) error
 	ProcessEvents(ctx context.Context, workspacePaths []string) error
 }
 
@@ -70,7 +73,7 @@ func (c *CodegraphProcessor) ProcessAddFileEvent(ctx context.Context, event *mod
 	fileInfo, err := c.workspaceReader.Stat(event.SourceFilePath)
 	if errors.Is(err, workspace.ErrPathNotExists) {
 		c.logger.Error("codegraph failed to process add event, file %s not exists.", event.SourceFilePath)
-		if err = c.updateEventFinally(event, err); err != nil {
+		if err = c.updateEventStatusFinally(event, err); err != nil {
 			return fmt.Errorf("codegraph update add event %d err: %w", event.ID, err)
 		}
 		return err
@@ -78,7 +81,7 @@ func (c *CodegraphProcessor) ProcessAddFileEvent(ctx context.Context, event *mod
 
 	if fileInfo.IsDir {
 		c.logger.Error("codegraph add event, file %s is dir, not process.", event.SourceFilePath)
-		if err = c.updateEventFinally(event, nil); err != nil {
+		if err = c.updateEventStatusFinally(event, nil); err != nil {
 			return fmt.Errorf("codegraph update add event %d err: %w", event.ID, err)
 		}
 		return nil
@@ -86,7 +89,7 @@ func (c *CodegraphProcessor) ProcessAddFileEvent(ctx context.Context, event *mod
 
 	// 使用索引器索引文件
 	err = c.indexer.IndexFiles(ctx, event.WorkspacePath, []string{event.SourceFilePath})
-	if err = c.updateEventFinally(event, err); err != nil {
+	if err = c.updateEventStatusFinally(event, err); err != nil {
 		return fmt.Errorf("codegraph update add event %d err: %w", event.ID, err)
 	}
 
@@ -98,7 +101,7 @@ func (c *CodegraphProcessor) ProcessModifyFileEvent(ctx context.Context, event *
 	fileInfo, err := c.workspaceReader.Stat(event.SourceFilePath)
 	if errors.Is(err, workspace.ErrPathNotExists) {
 		c.logger.Error("codegraph failed to process modify event, file %s not exists", event.SourceFilePath)
-		if err = c.updateEventFinally(event, err); err != nil {
+		if err = c.updateEventStatusFinally(event, err); err != nil {
 			return fmt.Errorf("codegraph update modify event err: %w", err)
 		}
 		return err
@@ -106,7 +109,7 @@ func (c *CodegraphProcessor) ProcessModifyFileEvent(ctx context.Context, event *
 
 	if fileInfo.IsDir {
 		c.logger.Error("codegraph modify event, file %s is dir, not process.", event.SourceFilePath)
-		if err = c.updateEventFinally(event, nil); err != nil {
+		if err = c.updateEventStatusFinally(event, nil); err != nil {
 			return fmt.Errorf("codegraph update modify event err: %w", err)
 		}
 		return nil
@@ -114,7 +117,7 @@ func (c *CodegraphProcessor) ProcessModifyFileEvent(ctx context.Context, event *
 
 	// 使用索引器重新索引文件
 	err = c.indexer.IndexFiles(ctx, event.WorkspacePath, []string{event.SourceFilePath})
-	if err = c.updateEventFinally(event, err); err != nil {
+	if err = c.updateEventStatusFinally(event, err); err != nil {
 		return fmt.Errorf("codegraph update modify event %d err: %w", event.ID, err)
 	}
 
@@ -125,7 +128,7 @@ func (c *CodegraphProcessor) ProcessModifyFileEvent(ctx context.Context, event *
 func (c *CodegraphProcessor) ProcessDeleteFileEvent(ctx context.Context, event *model.Event) error {
 	// 使用索引器删除文件索引
 	err := c.indexer.RemoveIndexes(ctx, event.WorkspacePath, []string{event.SourceFilePath})
-	if err = c.updateEventFinally(event, err); err != nil {
+	if err = c.updateEventStatusFinally(event, err); err != nil {
 		return fmt.Errorf("codegraph update delete event %d err: %w", event.ID, err)
 	}
 	return nil
@@ -134,8 +137,20 @@ func (c *CodegraphProcessor) ProcessDeleteFileEvent(ctx context.Context, event *
 // ProcessRenameFileEvent 处理重命名文件/目录事件
 func (c *CodegraphProcessor) ProcessRenameFileEvent(ctx context.Context, event *model.Event) error {
 	err := c.indexer.RenameIndexes(ctx, event.WorkspacePath, event.SourceFilePath, event.TargetFilePath)
-	if err = c.updateEventFinally(event, err); err != nil {
+	if err = c.updateEventStatusFinally(event, err); err != nil {
 		return fmt.Errorf("codegraph update rename event %d err: %w", event.ID, err)
+	}
+	return nil
+}
+
+func (c *CodegraphProcessor) ProcessRebuildWorkspaceEvent(ctx context.Context, event *model.Event) error {
+
+	if err := c.indexer.RemoveAllIndexes(ctx, event.WorkspacePath); err != nil {
+		return err
+	}
+
+	if err := c.ProcessOpenWorkspaceEvent(ctx, event); err != nil {
+		return err
 	}
 	return nil
 }
@@ -146,7 +161,7 @@ func (c *CodegraphProcessor) ProcessOpenWorkspaceEvent(ctx context.Context, even
 	if errors.Is(err, workspace.ErrPathNotExists) {
 		c.logger.Error("codegraph failed to process open_workspace event event, workspace %s not exists",
 			event.WorkspacePath)
-		if err = c.updateEventFinally(event, err); err != nil {
+		if err = c.updateEventStatusFinally(event, err); err != nil {
 			return fmt.Errorf("codegraph update open_workspace event err: %w", err)
 		}
 		return err
@@ -156,7 +171,7 @@ func (c *CodegraphProcessor) ProcessOpenWorkspaceEvent(ctx context.Context, even
 	if err != nil {
 		c.logger.Error("codegraph failed to process open_workspace event event, workspace %s reset successful file num failed, err:%v",
 			event.WorkspacePath, err)
-		if err = c.updateEventFinally(event, err); err != nil {
+		if err = c.updateEventStatusFinally(event, err); err != nil {
 			return fmt.Errorf("codegraph update open_workspace event err: %w", err)
 		}
 		return err
@@ -165,14 +180,14 @@ func (c *CodegraphProcessor) ProcessOpenWorkspaceEvent(ctx context.Context, even
 	if !fileInfo.IsDir {
 		c.logger.Error("codegraph open_workspace event, %s is file, not process.",
 			event.WorkspacePath)
-		if err = c.updateEventFinally(event, nil); err != nil {
+		if err = c.updateEventStatusFinally(event, nil); err != nil {
 			return fmt.Errorf("codegraph update open_workspace event err: %w", err)
 		}
 		return nil
 	}
 	// todo open_workspace过程中会更新进度，其余事件结束更新进度。
 	_, err = c.indexer.IndexWorkspace(ctx, event.WorkspacePath)
-	if err = c.updateEventFinally(event, err); err != nil {
+	if err = c.updateEventStatusFinally(event, err); err != nil {
 		return fmt.Errorf("codegraph update modify event %d err: %w", event.ID, err)
 	}
 
@@ -185,7 +200,29 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 	codegraphStatuses := []int{
 		model.CodegraphStatusInit,
 	}
-	// 1、打开工作区事件
+	// 重新构建事件
+	rebuildEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeRebuildWorkspace}, workspacePaths, 10,
+		false, nil, codegraphStatuses)
+
+	if err != nil {
+		c.logger.Error("failed to get rebuild_workspace events: %v", err)
+		return fmt.Errorf("failed to get rebuild_workspace events: %w", err)
+	}
+
+	// 处理重新构建事件
+	for _, event := range rebuildEvents {
+		// 转换路径
+		c.convertFilePathToAbs(event)
+		c.logger.Info("codegraph start to process rebuild_workspace event: %s", event.WorkspacePath)
+		err = c.ProcessRebuildWorkspaceEvent(ctx, event)
+		if err != nil {
+			c.logger.Error("failed to process rebuild_workspace event for codegraph: %v", err)
+			continue
+		}
+		c.logger.Info("codegraph process rebuild_workspace event successfully: %s", event.WorkspacePath)
+	}
+
+	// 打开工作区事件
 	openEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeOpenWorkspace}, workspacePaths, 10,
 		false, nil, codegraphStatuses)
 
@@ -194,8 +231,9 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 		return fmt.Errorf("failed to get open_workspace events: %w", err)
 	}
 
-	// 处理添加文件事件
+	// 处理打开工作区事件
 	for _, event := range openEvents {
+		c.convertFilePathToAbs(event)
 		c.logger.Info("codegraph start to process open_workspace event: %s", event.WorkspacePath)
 		err = c.ProcessOpenWorkspaceEvent(ctx, event)
 		if err != nil {
@@ -205,7 +243,7 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 		c.logger.Info("codegraph process open_workspace event successfully: %s", event.WorkspacePath)
 	}
 
-	// 2、添加文件事件
+	// 处理添加文件事件
 	addEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeAddFile}, workspacePaths, 10,
 		false, nil, codegraphStatuses)
 
@@ -216,6 +254,7 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 
 	// 处理添加文件事件
 	for _, event := range addEvents {
+		c.convertFilePathToAbs(event)
 		c.logger.Info("codegraph start to process add_file event: %s", event.SourceFilePath)
 		err = c.ProcessAddFileEvent(ctx, event)
 		if err != nil {
@@ -225,7 +264,7 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 		c.logger.Info("codegraph process add_file event successfully: %s", event.SourceFilePath)
 	}
 
-	// 3、修改文件事件
+	// 处理修改文件事件
 	modifyEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeModifyFile}, workspacePaths, 10,
 		false, nil, codegraphStatuses)
 
@@ -234,8 +273,8 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 		return fmt.Errorf("failed to get modify file events: %w", err)
 	}
 
-	// 处理修改文件事件
 	for _, event := range modifyEvents {
+		c.convertFilePathToAbs(event)
 		c.logger.Info("codegraph start to process modify_file event: %s", event.SourceFilePath)
 		err = c.ProcessModifyFileEvent(ctx, event)
 		if err != nil {
@@ -245,7 +284,7 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 		c.logger.Info("codegraph process modify_file event successfully: %s", event.SourceFilePath)
 	}
 
-	// 4、删除文件事件
+	// 处理删除文件事件
 	deleteEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeDeleteFile}, workspacePaths, 10,
 		false, nil, codegraphStatuses)
 
@@ -254,8 +293,8 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 		return fmt.Errorf("failed to get delete file events: %w", err)
 	}
 
-	// 处理删除文件事件
 	for _, event := range deleteEvents {
+		c.convertFilePathToAbs(event)
 		c.logger.Info("codegraph start to process delete_file event: %s", event.SourceFilePath)
 		err = c.ProcessDeleteFileEvent(ctx, event)
 		if err != nil {
@@ -265,7 +304,7 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 		c.logger.Info("codegraph process delete_file event successfully: %s", event.SourceFilePath)
 	}
 
-	// 5、重命名事件
+	// 处理重命名事件
 	renameEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeRenameFile}, workspacePaths, 10,
 		false, nil, codegraphStatuses)
 
@@ -274,8 +313,8 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 		return fmt.Errorf("failed to get rename file events: %w", err)
 	}
 
-	// 处理删除文件事件
 	for _, event := range renameEvents {
+		c.convertFilePathToAbs(event)
 		c.logger.Info("codegraph start to process rename_file event: source %s target %s",
 			event.SourceFilePath, event.TargetFilePath)
 		err = c.ProcessRenameFileEvent(ctx, event)
@@ -290,7 +329,7 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 	return nil
 }
 
-func (c *CodegraphProcessor) updateEventFinally(event *model.Event, err error) error {
+func (c *CodegraphProcessor) updateEventStatusFinally(event *model.Event, err error) error {
 	updatedEvent := &model.Event{ID: event.ID}
 	if err != nil {
 		// 更新事件
@@ -312,4 +351,16 @@ func (c *CodegraphProcessor) updateEventFinally(event *model.Event, err error) e
 		return fmt.Errorf("failed to update success processed event. update err: %w", updateErr)
 	}
 	return nil
+}
+
+func (c *CodegraphProcessor) convertFilePathToAbs(event *model.Event) {
+	sourcePath := event.SourceFilePath
+	targetPath := event.TargetFilePath
+	workspacePath := event.WorkspacePath
+	if !utils.IsSubdir(workspacePath, sourcePath) {
+		event.SourceFilePath = filepath.Join(sourcePath, event.SourceFilePath)
+	}
+	if !utils.IsSubdir(workspacePath, targetPath) {
+		event.TargetFilePath = filepath.Join(targetPath, event.TargetFilePath)
+	}
 }

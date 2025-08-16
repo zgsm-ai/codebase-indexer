@@ -48,7 +48,7 @@ func (mr *ModuleResolver) ResolveProjectModules(ctx context.Context, project *Pr
 	}
 	stat, err := os.Stat(path)
 	if err != nil {
-		mr.logger.Debug("module_resolver resolve project path %s err:%v", err)
+		mr.logger.Debug("resolve project path %s err:%v", err)
 		return nil
 	}
 	if !stat.IsDir() {
@@ -58,61 +58,61 @@ func (mr *ModuleResolver) ResolveProjectModules(ctx context.Context, project *Pr
 	// 解析Go模块
 	goModules, err := mr.resolveGoModules(ctx, path)
 	if err != nil {
-		mr.logger.Debug("module_resolver project path %s resolve go module err: %v", path, err)
+		mr.logger.Debug("project path %s resolve go module err: %v", path, err)
 	} else if len(goModules) > 0 {
 		project.GoModules = append(project.GoModules, goModules...)
-		mr.logger.Debug("module_resolver project path %s resolved go modules: %v", path, goModules)
+		mr.logger.Debug("project path %s resolved go modules: %v", path, goModules)
 	}
-	//mr.logger.Debug("module_resolver resolve project path %s go modules cost %d ms.", path, time.Since(goStart).Milliseconds())
+	//mr.logger.Debug("resolve project path %s go modules cost %d ms.", path, time.Since(goStart).Milliseconds())
 
 	//// 解析Java包前缀
 	//javaPrefixes, err := mr.resolveJavaPackagePrefixes(ctx, path)
 	//if err != nil {
-	//	mr.logger.Debug("module_resolver project path %s resolve java package prefixes err: %v", path, err)
+	//	mr.logger.Debug("project path %s resolve java package prefixes err: %v", path, err)
 	//} else if len(javaPrefixes) > 0 {
 	//	project.JavaPackagePrefix = append(project.JavaPackagePrefix, javaPrefixes...)
-	//	mr.logger.Debug("module_resolver project path %s resolved java package prefixes: %v", path, javaPrefixes)
+	//	mr.logger.Debug("project path %s resolved java package prefixes: %v", path, javaPrefixes)
 	//}
 	//
-	//mr.logger.Debug("module_resolver resolve project path %s java packages cost %d ms.", path, time.Since(goStart).Milliseconds())
+	//mr.logger.Debug("resolve project path %s java packages cost %d ms.", path, time.Since(goStart).Milliseconds())
 
 	//// 解析Python包
 	//pythonPackages, err := mr.resolvePythonPackages(ctx, path)
 	//if err != nil {
-	//	mr.logger.Debug("module_resolver project path %s resolved python packages err: %v", path, err)
+	//	mr.logger.Debug("project path %s resolved python packages err: %v", path, err)
 	//} else if len(pythonPackages) > 0 {
 	//	project.PythonPackages = append(project.PythonPackages, pythonPackages...)
-	//	mr.logger.Debug("module_resolver project path %s resolved python packages: %v", path, pythonPackages)
+	//	mr.logger.Debug("project path %s resolved python packages: %v", path, pythonPackages)
 	//}
 	//
-	//mr.logger.Debug("module_resolver resolve project path %s python packages cost %d ms.", path, time.Since(goStart).Milliseconds())
+	//mr.logger.Debug("resolve project path %s python packages cost %d ms.", path, time.Since(goStart).Milliseconds())
 	//
 	//// 解析C/C++头文件路径
 	//cppIncludes, err := mr.resolveCppIncludes(ctx, path)
 	//if err != nil {
-	//	mr.logger.Debug("module_resolver project path %s resolved c/cpp head dirEntries err: %v", path, err)
+	//	mr.logger.Debug("project path %s resolved c/cpp head dirEntries err: %v", path, err)
 	//} else if len(cppIncludes) > 0 {
 	//	project.CppIncludes = append(project.CppIncludes, cppIncludes...)
-	//	mr.logger.Debug("module_resolver project path %s resolved c/cpp head dirEntries: %v", path, cppIncludes)
+	//	mr.logger.Debug("project path %s resolved c/cpp head dirEntries: %v", path, cppIncludes)
 	//}
 	//
-	//mr.logger.Debug("module_resolver resolve project path %s cpp includes cost %d ms.", path, time.Since(goStart).Milliseconds())
+	//mr.logger.Debug("resolve project path %s cpp includes cost %d ms.", path, time.Since(goStart).Milliseconds())
 	//
 	//// 解析JavaScript/TypeScript包
 	//jsPackages, err := mr.resolveJsPackages(ctx, path)
 	//
 	//if err != nil {
-	//	mr.logger.Debug("module_resolver project path %s resolved ts/js package err: %v", path, err)
+	//	mr.logger.Debug("project path %s resolved ts/js package err: %v", path, err)
 	//} else if len(jsPackages) > 0 {
 	//	project.JsPackages = append(project.JsPackages, jsPackages...)
-	//	mr.logger.Debug("module_resolver project path %s resolved ts/js package err: %v", path, cppIncludes)
+	//	mr.logger.Debug("project path %s resolved ts/js package err: %v", path, cppIncludes)
 	//}
 
-	// mr.logger.Debug("module_resolver resolve project path %s js packages cost %d ms.", path, time.Since(goStart).Milliseconds())
+	// mr.logger.Debug("resolve project path %s js packages cost %d ms.", path, time.Since(goStart).Milliseconds())
 
 	dirEntries, err := os.ReadDir(path)
 	if err != nil {
-		mr.logger.Debug("module_resolver project path path %s list sub dirs err:%v", err)
+		mr.logger.Debug("project path path %s list sub dirs err:%v", err)
 		return nil
 	}
 
@@ -120,11 +120,11 @@ func (mr *ModuleResolver) ResolveProjectModules(ctx context.Context, project *Pr
 		if f.IsDir() {
 			subPath := filepath.Join(path, f.Name())
 			if utils.IsHiddenFile(subPath) {
-				mr.logger.Debug("module_resolver %s is hidden dir, skip.", subPath)
+				mr.logger.Debug("%s is hidden dir, skip.", subPath)
 				continue
 			}
 			if err = mr.ResolveProjectModules(ctx, project, subPath, maxDepth-1); err != nil {
-				mr.logger.Debug("module_resolver project path %s resolve err:%v", subPath, err)
+				mr.logger.Debug("project path %s resolve err:%v", subPath, err)
 			}
 		}
 	}
@@ -149,7 +149,7 @@ func (mr *ModuleResolver) resolveJavaPackagePrefixes(ctx context.Context, projec
 	if _, err := os.Stat(pomPath); err == nil {
 		pomPrefixes, err := mr.parsePomXML(pomPath)
 		if err != nil {
-			mr.logger.Error("module_resolver resolve pom.xml err: %v", err)
+			mr.logger.Error("resolve pom.xml err: %v", err)
 		} else if len(pomPrefixes) > 0 {
 			prefixes = append(prefixes, pomPrefixes...)
 		}
@@ -160,7 +160,7 @@ func (mr *ModuleResolver) resolveJavaPackagePrefixes(ctx context.Context, projec
 	if _, err := os.Stat(javaSrcPath); err == nil {
 		dirPrefixes, err := mr.inferJavaPrefixFromDir(javaSrcPath)
 		if err != nil {
-			mr.logger.Error("module_resolver resolve java package prefix err: %v", err)
+			mr.logger.Error("resolve java package prefix err: %v", err)
 		} else if len(dirPrefixes) > 0 {
 			prefixes = append(prefixes, dirPrefixes...)
 		}
@@ -174,12 +174,12 @@ func (mr *ModuleResolver) resolveJavaPackagePrefixes(ctx context.Context, projec
 func (mr *ModuleResolver) parsePomXML(pomPath string) ([]string, error) {
 	data, err := os.ReadFile(pomPath)
 	if err != nil {
-		return nil, fmt.Errorf("module_resolver read pom.xml err: %v", err)
+		return nil, fmt.Errorf("read pom.xml err: %v", err)
 	}
 
 	var pom PomXML
 	if err := xml.Unmarshal(data, &pom); err != nil {
-		return nil, fmt.Errorf("module_resolver parse pom.xml err: %v", err)
+		return nil, fmt.Errorf("parse pom.xml err: %v", err)
 	}
 
 	var prefixes []string
@@ -280,7 +280,7 @@ func (mr *ModuleResolver) resolvePythonPackages(ctx context.Context, projectPath
 	if _, err := os.Stat(setupPyPath); err == nil {
 		setupPackages, err := mr.parseSetupPy(setupPyPath)
 		if err != nil {
-			mr.logger.Error("module_resolver parse setup.py err: %v", err)
+			mr.logger.Error("parse setup.py err: %v", err)
 		} else if len(setupPackages) > 0 {
 			packages = append(packages, setupPackages...)
 		}
@@ -291,7 +291,7 @@ func (mr *ModuleResolver) resolvePythonPackages(ctx context.Context, projectPath
 	if _, err := os.Stat(pyprojectPath); err == nil {
 		pyprojectPackages, err := mr.parsePyProjectToml(pyprojectPath)
 		if err != nil {
-			mr.logger.Error("module_resolver parse pyproject.toml err: %v", err)
+			mr.logger.Error("parse pyproject.toml err: %v", err)
 		} else if len(pyprojectPackages) > 0 {
 			packages = append(packages, pyprojectPackages...)
 		}
@@ -300,7 +300,7 @@ func (mr *ModuleResolver) resolvePythonPackages(ctx context.Context, projectPath
 	// 3. 从项目目录结构查找Python包
 	dirPackages, err := mr.findPythonPackages(projectPath)
 	if err != nil {
-		mr.logger.Error("module_resolver find python packages err: %v", err)
+		mr.logger.Error("find python packages err: %v", err)
 	} else if len(dirPackages) > 0 {
 		packages = append(packages, dirPackages...)
 	}
@@ -315,7 +315,7 @@ func (mr *ModuleResolver) parseSetupPy(setupPyPath string) ([]string, error) {
 	// 这里使用简化的方法，只读取文件内容并尝试提取包名
 	data, err := os.ReadFile(setupPyPath)
 	if err != nil {
-		return nil, fmt.Errorf("module_resolver read setup.py err: %v", err)
+		return nil, fmt.Errorf("read setup.py err: %v", err)
 	}
 
 	content := string(data)
@@ -354,7 +354,7 @@ func (mr *ModuleResolver) parseSetupPy(setupPyPath string) ([]string, error) {
 func (mr *ModuleResolver) parsePyProjectToml(pyprojectPath string) ([]string, error) {
 	data, err := os.ReadFile(pyprojectPath)
 	if err != nil {
-		return nil, fmt.Errorf("module_resolver read pyproject.toml err: %v", err)
+		return nil, fmt.Errorf("read pyproject.toml err: %v", err)
 	}
 
 	var pyproject PyProjectToml
@@ -464,7 +464,7 @@ func (mr *ModuleResolver) resolveCppIncludes(ctx context.Context, projectPath st
 		if _, err := os.Stat(dirPath); err == nil {
 			relIncludes, err := mr.findCppHeadersInDir(projectPath, dirPath)
 			if err != nil {
-				mr.logger.Error("module_resolver find %s c/cpp head files err: %v", dir, err)
+				mr.logger.Error("find %s c/cpp head files err: %v", dir, err)
 			} else {
 				includes = append(includes, relIncludes...)
 			}
@@ -474,7 +474,7 @@ func (mr *ModuleResolver) resolveCppIncludes(ctx context.Context, projectPath st
 	// 检查项目根目录下的头文件
 	rootIncludes, err := mr.findCppHeadersInDir(projectPath, projectPath)
 	if err != nil {
-		mr.logger.Error("module_resolver find %s c/cpp head files err: %v", err)
+		mr.logger.Error("find %s c/cpp head files err: %v", err)
 	} else if len(rootIncludes) > 0 {
 		includes = append(includes, rootIncludes...)
 	}
@@ -540,7 +540,7 @@ func (mr *ModuleResolver) resolveJsPackages(ctx context.Context, projectPath str
 	if _, err := os.Stat(packageJsonPath); err == nil {
 		jsonPackages, err := mr.parsePackageJson(packageJsonPath)
 		if err != nil {
-			mr.logger.Error("module_resolver parse package.json err: %v", err)
+			mr.logger.Error("parse package.json err: %v", err)
 		} else if len(jsonPackages) > 0 {
 			packages = append(packages, jsonPackages...)
 		}
@@ -549,7 +549,7 @@ func (mr *ModuleResolver) resolveJsPackages(ctx context.Context, projectPath str
 	// 2. 从项目目录结构查找JavaScript/TypeScript包
 	dirPackages, err := mr.findJsPackages(projectPath)
 	if err != nil {
-		mr.logger.Error("module_resolver find js/ts package err: %v", err)
+		mr.logger.Error("find js/ts package err: %v", err)
 	} else if len(dirPackages) > 0 {
 		packages = append(packages, dirPackages...)
 	}
@@ -562,12 +562,12 @@ func (mr *ModuleResolver) resolveJsPackages(ctx context.Context, projectPath str
 func (mr *ModuleResolver) parsePackageJson(packageJsonPath string) ([]string, error) {
 	data, err := os.ReadFile(packageJsonPath)
 	if err != nil {
-		return nil, fmt.Errorf("module_resolver read package.json file err: %v", err)
+		return nil, fmt.Errorf("read package.json file err: %v", err)
 	}
 
 	var packageJson PackageJSON
 	if err := json.Unmarshal(data, &packageJson); err != nil {
-		return nil, fmt.Errorf("module_resolver parse package.json file err: %v", err)
+		return nil, fmt.Errorf("parse package.json file err: %v", err)
 	}
 
 	var packages []string
@@ -642,17 +642,17 @@ func (mr *ModuleResolver) resolveGoWorkspace(ctx context.Context, projectPath st
 		return nil, nil
 	}
 
-	mr.logger.Debug("module_resolver parsing go.work file: %s", goWorkPath)
+	mr.logger.Debug("parsing go.work file: %s", goWorkPath)
 
 	data, err := os.ReadFile(goWorkPath)
 	if err != nil {
-		return nil, fmt.Errorf("module_resolver read go.work file err: %v", err)
+		return nil, fmt.Errorf("read go.work file err: %v", err)
 	}
 
 	// 解析go.work文件
 	goWorkFile, err := modfile.ParseWork(goWorkPath, data, nil)
 	if err != nil {
-		return nil, fmt.Errorf("module_resolver parse go.work file err: %v", err)
+		return nil, fmt.Errorf("parse go.work file err: %v", err)
 	}
 
 	var modules []string
@@ -666,21 +666,21 @@ func (mr *ModuleResolver) resolveGoWorkspace(ctx context.Context, projectPath st
 		if _, err := os.Stat(goModPath); err == nil {
 			modData, err := os.ReadFile(goModPath)
 			if err != nil {
-				mr.logger.Debug("module_resolver read go.mod file %s err: %v", goModPath, err)
+				mr.logger.Debug("read go.mod file %s err: %v", goModPath, err)
 				continue
 			}
 
 			modulePath := modfile.ModulePath(modData)
 			if modulePath != "" {
 				modules = append(modules, modulePath)
-				mr.logger.Debug("module_resolver resolved go module from go.work: %s -> %s", use.Path, modulePath)
+				mr.logger.Debug("resolved go module from go.work: %s -> %s", use.Path, modulePath)
 			}
 		} else {
-			mr.logger.Debug("module_resolver go.mod file not found in use path: %s", usePath)
+			mr.logger.Debug("go.mod file not found in use path: %s", usePath)
 		}
 	}
 
-	mr.logger.Debug("module_resolver resolved %d modules from go.work file: %s", len(modules), goWorkPath)
+	mr.logger.Debug("resolved %d modules from go.work file: %s", len(modules), goWorkPath)
 
 	return modules, nil
 }
@@ -692,7 +692,7 @@ func (mr *ModuleResolver) resolveGoModules(ctx context.Context, projectPath stri
 	// 首先尝试解析go.work文件
 	goWorkModules, err := mr.resolveGoWorkspace(ctx, projectPath)
 	if err != nil {
-		mr.logger.Debug("module_resolver resolve go.work file err: %v", err)
+		mr.logger.Debug("resolve go.work file err: %v", err)
 	}
 	if len(goWorkModules) > 0 {
 		// 如果go.work文件存在且解析成功，直接返回结果
@@ -703,7 +703,7 @@ func (mr *ModuleResolver) resolveGoModules(ctx context.Context, projectPath stri
 	goModPath := filepath.Join(projectPath, "go.mod")
 
 	if _, err := os.Stat(goModPath); err == nil {
-		mr.logger.Debug("module_resolver parsing go.mod file: %s", goModPath)
+		mr.logger.Debug("parsing go.mod file: %s", goModPath)
 
 		data, err := os.ReadFile(goModPath)
 		if err != nil {
@@ -713,7 +713,7 @@ func (mr *ModuleResolver) resolveGoModules(ctx context.Context, projectPath stri
 		modulePath := modfile.ModulePath(data)
 		if modulePath != "" {
 			modules = append(modules, modulePath)
-			mr.logger.Debug("module_resolver resolved go module: %s", modulePath)
+			mr.logger.Debug("resolved go module: %s", modulePath)
 		}
 
 	}

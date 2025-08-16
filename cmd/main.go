@@ -157,7 +157,7 @@ func main() {
 	indexer := service.NewCodeIndexer(scanRepo, sourceFileParser, dependencyAnalyzer, workspaceReader, codegraphStore,
 		workspaceRepo, service.IndexerConfig{VisitPattern: workspace.DefaultVisitPattern}, appLogger) //todo 文件忽略列表
 
-	codebaseService := service.NewCodebaseService(appLogger, workspaceReader, workspaceRepo, definition.NewDefinitionParser(), indexer)
+	codebaseService := service.NewCodebaseService(storageManager, appLogger, workspaceReader, workspaceRepo, definition.NewDefinitionParser(), indexer)
 	extensionService := service.NewExtensionService(storageManager, syncRepo, scanRepo, workspaceRepo, eventRepo, codebaseEmbeddingRepo, codebaseService, appLogger)
 
 	codegraphProcessor := service.NewCodegraphProcessor(workspaceReader, indexer, workspaceRepo, eventRepo, appLogger)

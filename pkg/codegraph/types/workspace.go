@@ -61,8 +61,7 @@ type WalkOptions struct {
 type SkipFunc func(fileInfo *FileInfo) (bool, error)
 
 type VisitPattern struct {
-	MaxFileLimit    int
-	MaxFileSize     int
+	MaxVisitLimit   int
 	ExcludeExts     []string
 	IncludeExts     []string
 	ExcludePrefixes []string
@@ -76,6 +75,7 @@ func (v *VisitPattern) ShouldSkip(fileInfo *FileInfo) (bool, error) {
 	if fileInfo == nil {
 		return false, nil
 	}
+	isDir := fileInfo.IsDir
 	path := fileInfo.Path
 	base := filepath.Base(path)
 	fileExt := filepath.Ext(base)
@@ -94,15 +94,17 @@ func (v *VisitPattern) ShouldSkip(fileInfo *FileInfo) (bool, error) {
 		}
 	}
 
-	for _, p := range v.ExcludeDirs {
-		if base == p {
-			return true, nil
+	if isDir {
+		for _, p := range v.ExcludeDirs {
+			if base == p {
+				return true, nil
+			}
 		}
-	}
 
-	for _, p := range v.IncludeDirs {
-		if base != p {
-			return true, nil
+		for _, p := range v.IncludeDirs {
+			if base != p {
+				return true, nil
+			}
 		}
 	}
 
