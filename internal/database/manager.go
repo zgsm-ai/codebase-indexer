@@ -120,7 +120,7 @@ func (m *SQLiteManager) createTables() error {
 func (m *SQLiteManager) createWorkspacesTable() string {
 	return `
     CREATE TABLE IF NOT EXISTS workspaces (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id BIGINT PRIMARY KEY AUTOINCREMENT,
         workspace_name VARCHAR(255) NOT NULL,
         workspace_path VARCHAR(500) UNIQUE NOT NULL,
         active VARCHAR(10) NOT NULL DEFAULT 'true',
@@ -149,7 +149,7 @@ func (m *SQLiteManager) createWorkspacesTable() string {
 func (m *SQLiteManager) createEventsTable() string {
 	return `
     CREATE TABLE IF NOT EXISTS events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id BIGINT PRIMARY KEY AUTOINCREMENT,
         workspace_path VARCHAR(500) NOT NULL,
         event_type VARCHAR(100) NOT NULL,
         source_file_path VARCHAR(500) NOT NULL DEFAULT '',
