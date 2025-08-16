@@ -250,7 +250,7 @@ func (s *extensionService) UpdateSyncConfig(ctx context.Context, clientID, serve
 	}
 	s.httpSync.SetSyncConfig(syncConfig)
 
-	s.logger.Info("updated sync config for client %s with server %s", clientID, serverEndpoint)
+	s.logger.Info("updated sync config for client %s with server %s and access token %s", clientID, serverEndpoint, accessToken)
 	return nil
 }
 
@@ -396,45 +396,7 @@ func (s *extensionService) SwitchIndex(ctx context.Context, workspacePath, switc
 		}
 
 		// 事务处理新增open_worksapce事件，删除其余非进行中状态事件
-		// 定义非进行中状态
-		nonProcessingEmbeddingStatuses := []int{
-			model.EmbeddingStatusInit,
-			model.EmbeddingStatusUploadFailed,
-			model.EmbeddingStatusBuildFailed,
-			model.EmbeddingStatusSuccess,
-		}
-
-		nonProcessingCodegraphStatuses := []int{
-			model.CodegraphStatusInit,
-			model.CodegraphStatusFailed,
-			model.CodegraphStatusSuccess,
-		}
-
-		// 获取所有非进行中状态的事件
-		nonProcessingEvents, err := s.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(
-			[]string{},
-			[]string{workspacePath},
-			-1, // 足够大的限制值
-			false,
-			nonProcessingEmbeddingStatuses,
-			nonProcessingCodegraphStatuses,
-		)
-		if err != nil {
-			s.logger.Error("failed to get non-processing open workspace events: %v", err)
-		} else {
-			// 删除所有非进行中状态的事件
-			deleteEventIds := []int64{}
-			for _, event := range nonProcessingEvents {
-				deleteEventIds = append(deleteEventIds, event.ID)
-			}
-			if len(deleteEventIds) > 0 {
-				if err := s.eventRepo.BatchDeleteEvents(deleteEventIds); err != nil {
-					s.logger.Error("failed to batch delete non-processing open workspace events: %v", err)
-				} else {
-					s.logger.Debug("batch deleted %d non-processing open workspace events for workspace: %s", len(deleteEventIds), workspacePath)
-				}
-			}
-		}
+		s.deleteNonProcessingEvents(workspacePath)
 
 		// 创建新的open_workspace事件
 		newOpenWorkspaceEvent := &model.Event{
@@ -454,48 +416,53 @@ func (s *extensionService) SwitchIndex(ctx context.Context, workspacePath, switc
 		}
 	} else {
 		// 删除非进行中状态事件
-		// 定义非进行中状态
-		nonProcessingEmbeddingStatuses := []int{
-			model.EmbeddingStatusInit,
-			model.EmbeddingStatusUploadFailed,
-			model.EmbeddingStatusBuildFailed,
-			model.EmbeddingStatusSuccess,
-		}
-
-		nonProcessingCodegraphStatuses := []int{
-			model.CodegraphStatusInit,
-			model.CodegraphStatusFailed,
-			model.CodegraphStatusSuccess,
-		}
-
-		// 获取所有非进行中状态的事件
-		nonProcessingEvents, err := s.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(
-			[]string{}, // 空字符串表示所有事件类型
-			[]string{workspacePath},
-			-1, // 足够大的限制值
-			false,
-			nonProcessingEmbeddingStatuses,
-			nonProcessingCodegraphStatuses,
-		)
-		if err != nil {
-			s.logger.Error("failed to get non-processing events for deletion: %v", err)
-		} else {
-			// 删除所有非进行中状态的事件
-			deleteEventIds := []int64{}
-			for _, event := range nonProcessingEvents {
-				deleteEventIds = append(deleteEventIds, event.ID)
-			}
-			if len(deleteEventIds) > 0 {
-				if err := s.eventRepo.BatchDeleteEvents(deleteEventIds); err != nil {
-					s.logger.Error("failed to batch delete non-processing events: %v", err)
-				} else {
-					s.logger.Debug("batch deleted non-processing events for workspace: %s", workspacePath)
-				}
-			}
-		}
+		s.deleteNonProcessingEvents(workspacePath)
 	}
 
 	s.logger.Info("index switch for workspace %s set to %s", workspacePath, switchStatus)
+	return nil
+}
+
+func (s *extensionService) deleteNonProcessingEvents(workspacePath string) error {
+	// 定义非进行中状态
+	nonProcessingEmbeddingStatuses := []int{
+		model.EmbeddingStatusInit,
+		model.EmbeddingStatusUploadFailed,
+		model.EmbeddingStatusBuildFailed,
+		model.EmbeddingStatusSuccess,
+	}
+
+	nonProcessingCodegraphStatuses := []int{
+		model.CodegraphStatusInit,
+		model.CodegraphStatusFailed,
+		model.CodegraphStatusSuccess,
+	}
+
+	// 获取所有非进行中状态的事件
+	nonProcessingCodegraphEvents, err := s.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(
+		[]string{}, // 空字符串表示所有事件类型
+		[]string{workspacePath},
+		-1, // 足够大的限制值
+		false,
+		nonProcessingEmbeddingStatuses,
+		nonProcessingCodegraphStatuses,
+	)
+	if err != nil {
+		s.logger.Error("failed to get non-processing events for deletion: %v", err)
+	} else {
+		// 删除所有非进行中状态的事件
+		deleteEventIds := []int64{}
+		for _, event := range nonProcessingCodegraphEvents {
+			deleteEventIds = append(deleteEventIds, event.ID)
+		}
+		if len(deleteEventIds) > 0 {
+			if err := s.eventRepo.BatchDeleteEvents(deleteEventIds); err != nil {
+				s.logger.Error("failed to batch delete non-processing events: %v", err)
+			} else {
+				s.logger.Debug("batch deleted non-processing events for workspace: %s", workspacePath)
+			}
+		}
+	}
 	return nil
 }
 
@@ -659,6 +626,9 @@ func (s *extensionService) handleOpenWorkspaceEvent(workspacePath, clientID stri
 	if err := s.createCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
 		s.logger.Error("failed to create codebase embedding config: %v", err)
 	}
+
+	// 删除所有非进行中状态的事件
+	s.deleteNonProcessingEvents(workspacePath)
 }
 
 // handleCloseWorkspaceEvent 处理关闭工作区事件
@@ -672,6 +642,9 @@ func (s *extensionService) handleCloseWorkspaceEvent(workspacePath string) {
 		// 关闭工作区
 		s.deactivateWorkspace(workspacePath)
 	}
+
+	// 删除所有非进行中状态的事件
+	s.deleteNonProcessingEvents(workspacePath)
 }
 
 // createAndActivateWorkspace 创建并激活/关闭工作区
@@ -762,6 +735,9 @@ func (s *extensionService) createCodebaseEmbeddingConfig(workspacePath, clientID
 		CodebaseName: workspaceName,
 		CodebasePath: workspacePath,
 		HashTree:     make(map[string]string),
+		SyncFiles:    make(map[string]string),
+		SyncIds:      make(map[string]time.Time),
+		FailedFiles:  make(map[string]string),
 	}
 
 	// 保存到存储
@@ -802,9 +778,13 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 		// 工作区已存在，更新 active 状态
 		if workspace.Active != "true" {
 			updateWorkspace := &model.Workspace{
-				ID:            workspace.ID,
-				WorkspacePath: workspace.WorkspacePath,
-				Active:        "true",
+				ID:               workspace.ID,
+				WorkspacePath:    workspace.WorkspacePath,
+				Active:           "true",
+				EmbeddingFileNum: 0,
+				EmbeddingTs:      0,
+				CodegraphFileNum: 0,
+				CodegraphTs:      0,
 			}
 			if err := s.workspaceRepo.UpdateWorkspace(updateWorkspace); err != nil {
 				return fmt.Errorf("failed to update workspace: %w", err)
@@ -827,6 +807,7 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 		return fmt.Errorf("failed to get existing open workspace events: %w", err)
 	}
 
+	var openEventId int64
 	shouldCreateEvent := true
 	if len(existingOpenEvents) > 0 {
 		// 检查是否存在非进行中状态的open_workspace事件
@@ -836,7 +817,7 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 				event.CodegraphStatus != model.CodegraphStatusBuilding {
 				// 存在非进行中状态的事件，不需要创建新事件
 				shouldCreateEvent = false
-				s.logger.Info("found existing non-processing open workspace event for workspace: %s", workspacePath)
+				openEventId = event.ID
 				break
 			}
 		}
@@ -867,6 +848,7 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 		if err := s.eventRepo.CreateEvent(eventModel); err != nil {
 			return fmt.Errorf("failed to create open workspace event: %w", err)
 		}
+		openEventId = eventModel.ID
 	}
 
 	// 事务处理删除其他非进行中状态事件
@@ -900,7 +882,7 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 	// 删除这些事件（跳过新创建的事件）
 	deleteEventIds := []int64{}
 	for _, event := range eventsToDelete {
-		if shouldCreateEvent && event.ID == eventModel.ID {
+		if openEventId == event.ID {
 			continue // 跳过新创建的事件
 		}
 		deleteEventIds = append(deleteEventIds, event.ID)

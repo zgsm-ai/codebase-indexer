@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"codebase-indexer/internal/model"
 	"codebase-indexer/internal/repository"
@@ -367,13 +369,18 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePath(ctx context.Context, f
 	// 从 HashTree 中删除对应的文件路径记录
 	// TODO: 判断是否为目录，是则删除目录下所有文件的记录
 	updated := false
-	for _, filePath := range filePaths {
-		if _, exists := codebaseEmbeddingConfig.HashTree[filePath]; exists {
-			delete(codebaseEmbeddingConfig.HashTree, filePath)
-			updated = true
-			ep.logger.Debug("removed filepath from hash tree: %s", filePath)
+	if codebaseEmbeddingConfig.HashTree != nil {
+		for _, filePath := range filePaths {
+			if _, exists := codebaseEmbeddingConfig.HashTree[filePath]; exists {
+				delete(codebaseEmbeddingConfig.HashTree, filePath)
+				updated = true
+				ep.logger.Debug("removed filepath from hash tree: %s", filePath)
+			}
 		}
+	} else {
+		codebaseEmbeddingConfig.HashTree = make(map[string]string)
 	}
+
 	// 删除FailedFiles中对应的文件路径
 	if codebaseEmbeddingConfig.FailedFiles != nil {
 		for _, filePath := range filePaths {
@@ -383,19 +390,31 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePath(ctx context.Context, f
 				ep.logger.Debug("removed filepath from failed files: %s", filePath)
 			}
 		}
+	} else {
+		codebaseEmbeddingConfig.FailedFiles = make(map[string]string)
 	}
+
 	// 从SyncFiles中添加对应的文件路径
-	if codebaseEmbeddingConfig.SyncFiles != nil {
-		if _, exists := codebaseEmbeddingConfig.SyncFiles[fileStatus.Path]; !exists {
-			codebaseEmbeddingConfig.SyncFiles[fileStatus.Path] = fileStatus.Hash
-			updated = true
-		}
-	}
-	// 添加syncId到SyncIds中
-	if codebaseEmbeddingConfig.SyncIds != nil {
-		codebaseEmbeddingConfig.SyncIds = append(codebaseEmbeddingConfig.SyncIds, fileStatus.RequestId)
-		updated = true
-	}
+	// if codebaseEmbeddingConfig.SyncFiles != nil {
+	// 	if _, exists := codebaseEmbeddingConfig.SyncFiles[fileStatus.Path]; !exists {
+	// 		codebaseEmbeddingConfig.SyncFiles[fileStatus.Path] = fileStatus.Hash
+	// 		updated = true
+	// 	}
+	// } else {
+	// 	codebaseEmbeddingConfig.SyncFiles = make(map[string]string)
+	// 	codebaseEmbeddingConfig.SyncFiles[fileStatus.Path] = fileStatus.Hash
+	// 	updated = true
+	// }
+
+	// // 添加syncId到SyncIds中
+	// if codebaseEmbeddingConfig.SyncIds != nil {
+	// 	codebaseEmbeddingConfig.SyncIds[fileStatus.RequestId] = time.Now()
+	// 	updated = true
+	// } else {
+	// 	codebaseEmbeddingConfig.SyncIds = make(map[string]time.Time)
+	// 	codebaseEmbeddingConfig.SyncIds[fileStatus.RequestId] = time.Now()
+	// 	updated = true
+	// }
 
 	// 如果有更新，保存配置
 	if updated {
@@ -403,12 +422,29 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePath(ctx context.Context, f
 			ep.logger.Error("failed to save codebase embedding config after cleaning filepath: %v", err)
 			return fmt.Errorf("failed to save codebase embedding config: %w", err)
 		}
+
 		embeddingFileNum := len(codebaseEmbeddingConfig.HashTree)
-		updateWorkspace := model.Workspace{
-			WorkspacePath: event.WorkspacePath,
-			FileNum:       embeddingFileNum,
+		var embeddingFailedFilePaths string
+		var embeddingMessage string
+		embeddingFaildFiles := codebaseEmbeddingConfig.FailedFiles
+		failedKeys := make([]string, 0, len(embeddingFaildFiles))
+		failedValues := make([]string, 0, len(embeddingFaildFiles))
+		for k, v := range embeddingFaildFiles {
+			failedKeys = append(failedKeys, k)
+			failedValues = append(failedValues, v)
 		}
-		err = ep.workspaceRepo.UpdateWorkspace(&updateWorkspace)
+		if len(failedKeys) == 0 {
+			embeddingFailedFilePaths = ""
+			embeddingMessage = ""
+		} else if len(failedKeys) > 5 {
+			embeddingFailedFilePaths = strings.Join(failedKeys[:5], ",")
+			embeddingMessage = strings.Join(failedValues[:5], ",")
+		} else {
+			embeddingFailedFilePaths = strings.Join(failedKeys, ",")
+			embeddingMessage = strings.Join(failedValues, ",")
+		}
+
+		err = ep.workspaceRepo.UpdateEmbeddingInfo(event.WorkspacePath, embeddingFileNum, time.Now().Unix(), embeddingFailedFilePaths, embeddingMessage)
 		if err != nil {
 			ep.logger.Error("failed to update workspace file num: %v", err)
 			return fmt.Errorf("failed to update workspace file num: %w", err)
@@ -478,8 +514,8 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePaths(ctx context.Context, 
 			}
 			embeddingFileNum := len(codebaseEmbeddingConfig.HashTree)
 			updateWorkspace := model.Workspace{
-				WorkspacePath: codebaseEmbeddingConfig.CodebasePath,
-				FileNum:       embeddingFileNum,
+				WorkspacePath:    codebaseEmbeddingConfig.CodebasePath,
+				EmbeddingFileNum: embeddingFileNum,
 			}
 			err := ep.workspaceRepo.UpdateWorkspace(&updateWorkspace)
 			if err != nil {

@@ -39,14 +39,14 @@ type CodebaseConfig struct {
 
 // Codebase embedding config
 type CodebaseEmbeddingConfig struct {
-	ClientID     string            `json:"clientId"`
-	CodebaseName string            `json:"codebaseName"`
-	CodebasePath string            `json:"codebasePath"`
-	CodebaseId   string            `json:"codebaseId"`
-	HashTree     map[string]string `json:"hashTree"`
-	SyncFiles    map[string]string `json:"syncFiles"`
-	SyncIds      []string          `json:"syncIds"`
-	FailedFiles  map[string]string `json:"failedFiles"`
+	ClientID     string               `json:"clientId"`
+	CodebaseName string               `json:"codebaseName"`
+	CodebasePath string               `json:"codebasePath"`
+	CodebaseId   string               `json:"codebaseId"`
+	HashTree     map[string]string    `json:"hashTree"`
+	SyncFiles    map[string]string    `json:"syncFiles"`
+	SyncIds      map[string]time.Time `json:"syncIds"`
+	FailedFiles  map[string]string    `json:"failedFiles"`
 }
 
 // Ignore config

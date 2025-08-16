@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"time"
 
 	"codebase-indexer/internal/model"
 	"codebase-indexer/internal/repository"
@@ -83,6 +84,7 @@ func (ws *fileScanService) DetectFileChanges(workspace *model.Workspace) ([]*mod
 
 	// 更新哈希树
 	codebaseConfig.HashTree = currentHashTree
+	codebaseConfig.RegisterTime = time.Now()
 	err = ws.storage.SaveCodebaseConfig(codebaseConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save codebase config: %w", err)
@@ -149,6 +151,40 @@ func (ws *fileScanService) DetectFileChanges(workspace *model.Workspace) ([]*mod
 				continue
 			}
 			events = append(events, event)
+		}
+	}
+
+	// 查询 open_workspace 事件并更新状态为完成
+	openWorkspaceEvents, err := ws.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(
+		[]string{model.EventTypeOpenWorkspace},
+		[]string{workspace.WorkspacePath},
+		1, // 限制查询数量
+		false,
+		[]int{
+			model.EmbeddingStatusInit,
+			model.EmbeddingStatusUploading,
+			model.EmbeddingStatusBuilding,
+			model.EmbeddingStatusUploadFailed,
+			model.EmbeddingStatusBuildFailed,
+		},
+		[]int{},
+	)
+	if err != nil {
+		ws.logger.Error("failed to get open_workspace events: %v", err)
+	} else {
+		for _, event := range openWorkspaceEvents {
+			if event.EmbeddingStatus != model.EmbeddingStatusSuccess {
+				updateEvent := &model.Event{
+					ID:              event.ID,
+					EmbeddingStatus: model.EmbeddingStatusSuccess,
+				}
+				err := ws.eventRepo.UpdateEvent(updateEvent)
+				if err != nil {
+					ws.logger.Error("failed to update open_workspace event status: %v", err)
+				} else {
+					ws.logger.Info("updated open_workspace event status to success for workspace: %s", workspace.WorkspacePath)
+				}
+			}
 		}
 	}
 

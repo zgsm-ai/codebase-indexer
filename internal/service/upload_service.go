@@ -46,7 +46,7 @@ var DefaultUploadConfig = UploadConfig{
 	MaxRetries:      3,
 	BaseRetryDelay:  1 * time.Second,
 	FileSizeLimitMB: 10,
-	Timeout:         300 * time.Second,
+	Timeout:         60 * time.Second,
 	EnableRetry:     true,
 }
 

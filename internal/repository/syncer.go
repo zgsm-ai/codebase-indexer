@@ -75,20 +75,16 @@ func (hs *HTTPSync) calculateTimeout(fileSize int64) time.Duration {
 }
 
 // ValidateSyncConfig 验证同步配置
-func (hs *HTTPSync) ValidateSyncConfig() error {
-	if hs.syncConfig == nil {
-		return fmt.Errorf("sync config is nil")
-	}
-
-	if hs.syncConfig.ServerURL == "" {
+func (hs *HTTPSync) ValidateSyncConfig(authInfo config.AuthInfo) error {
+	if authInfo.ServerURL == "" {
 		return fmt.Errorf("serverURL is empty")
 	}
 
-	if hs.syncConfig.ClientId == "" {
+	if authInfo.ClientId == "" {
 		return fmt.Errorf("clientId is empty")
 	}
 
-	if hs.syncConfig.Token == "" {
+	if authInfo.Token == "" {
 		return fmt.Errorf("token is empty")
 	}
 
@@ -112,16 +108,17 @@ func (hs *HTTPSync) FetchServerHashTree(codebasePath string) (map[string]string,
 	hs.logger.Info("fetching hash tree from server: %s", codebasePath)
 
 	// 验证配置
-	if err := hs.ValidateSyncConfig(); err != nil {
+	authInfo := config.GetAuthInfo()
+	if err := hs.ValidateSyncConfig(authInfo); err != nil {
 		return nil, err
 	}
 
 	// 构建请求URL
-	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_GET_CODEBASE_HASH)
+	url := fmt.Sprintf("%s%s", authInfo.ServerURL, API_GET_CODEBASE_HASH)
 
 	// 构建查询参数
 	queryParams := map[string]string{
-		"clientId":     hs.syncConfig.ClientId,
+		"clientId":     authInfo.ClientId,
 		"codebasePath": codebasePath,
 	}
 
@@ -129,7 +126,7 @@ func (hs *HTTPSync) FetchServerHashTree(codebasePath string) (map[string]string,
 	var responseData dto.CodebaseHashResp
 	hs.logger.Info("sending HTTP %s request to: %s", "GET", url)
 	startTime := time.Now()
-	if err := hs.httpClient.DoGetRequest(url, queryParams, hs.syncConfig.Token, &responseData); err != nil {
+	if err := hs.httpClient.DoGetRequest(url, queryParams, authInfo.Token, &responseData); err != nil {
 		return nil, err
 	}
 	duration := time.Since(startTime)
@@ -164,7 +161,8 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq dto.UploadReq) error {
 	hs.logger.Info("uploading file: %s", filePath)
 
 	// 验证配置
-	if err := hs.ValidateSyncConfig(); err != nil {
+	authInfo := config.GetAuthInfo()
+	if err := hs.ValidateSyncConfig(authInfo); err != nil {
 		return err
 	}
 
@@ -214,7 +212,7 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq dto.UploadReq) error {
 	}
 
 	// 执行上传请求
-	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_UPLOAD_FILE)
+	url := fmt.Sprintf("%s%s", authInfo.ServerURL, API_UPLOAD_FILE)
 
 	// 创建带有超时的HTTP请求
 	httpReq := &utils.HTTPRequest{
@@ -229,7 +227,7 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq dto.UploadReq) error {
 
 	// 使用自定义执行方法处理multipart请求
 	hs.logger.Info("sending HTTP %s request to: %s", "POST", url)
-	if err := hs.executeMultipartUpload(httpReq, formData, file, counter); err != nil {
+	if err := hs.executeMultipartUpload(httpReq, formData, file, counter, authInfo.Token); err != nil {
 		return err
 	}
 
@@ -238,7 +236,7 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq dto.UploadReq) error {
 }
 
 // executeMultipartUpload 执行multipart上传
-func (hs *HTTPSync) executeMultipartUpload(httpReq *utils.HTTPRequest, formData *utils.MultipartFormData, file io.Reader, counter *writeCounter) error {
+func (hs *HTTPSync) executeMultipartUpload(httpReq *utils.HTTPRequest, formData *utils.MultipartFormData, file io.Reader, counter *writeCounter, token string) error {
 	// 创建multipart表单
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -274,7 +272,7 @@ func (hs *HTTPSync) executeMultipartUpload(httpReq *utils.HTTPRequest, formData 
 	httpReq.ContentType = writer.FormDataContentType()
 
 	// 执行请求
-	resp, err := hs.httpClient.DoHTTPRequest(httpReq, hs.syncConfig.Token)
+	resp, err := hs.httpClient.DoHTTPRequest(httpReq, token)
 	if err != nil {
 		return err
 	}
@@ -297,7 +295,8 @@ func (hs *HTTPSync) GetClientConfig() (config.ClientConfig, error) {
 	hs.logger.Info("fetching client config from server")
 
 	// 验证配置
-	if err := hs.ValidateSyncConfig(); err != nil {
+	authInfo := config.GetAuthInfo()
+	if err := hs.ValidateSyncConfig(authInfo); err != nil {
 		return config.ClientConfig{}, err
 	}
 
@@ -308,13 +307,13 @@ func (hs *HTTPSync) GetClientConfig() (config.ClientConfig, error) {
 		uri = fmt.Sprintf(API_GET_CLIENT_CONFIG, appInfo.Version+"/")
 	}
 
-	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, uri)
+	url := fmt.Sprintf("%s%s", authInfo.ServerURL, uri)
 
 	// 执行请求
 	var clientConfig config.ClientConfig
 	hs.logger.Info("sending HTTP %s request to: %s", "GET", url)
 	startTime := time.Now()
-	if err := hs.httpClient.DoGetRequest(url, nil, hs.syncConfig.Token, &clientConfig); err != nil {
+	if err := hs.httpClient.DoGetRequest(url, nil, authInfo.Token, &clientConfig); err != nil {
 		return config.ClientConfig{}, err
 	}
 	duration := time.Since(startTime)
@@ -328,18 +327,19 @@ func (hs *HTTPSync) FetchUploadToken(req dto.UploadTokenReq) (*dto.UploadTokenRe
 	hs.logger.Info("fetching upload token from server")
 
 	// 验证配置
-	if err := hs.ValidateSyncConfig(); err != nil {
+	authInfo := config.GetAuthInfo()
+	if err := hs.ValidateSyncConfig(authInfo); err != nil {
 		return nil, err
 	}
 
 	// 构建请求URL
-	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_UPLOAD_TOKEN)
+	url := fmt.Sprintf("%s%s", authInfo.ServerURL, API_UPLOAD_TOKEN)
 
 	// 执行JSON请求
 	var responseData dto.UploadTokenResp
 	hs.logger.Info("sending HTTP %s request to: %s", "GET", url)
 	startTime := time.Now()
-	if err := hs.httpClient.DoJSONRequest("POST", url, req, hs.syncConfig.Token, &responseData); err != nil {
+	if err := hs.httpClient.DoJSONRequest("POST", url, req, authInfo.Token, &responseData); err != nil {
 		return nil, err
 	}
 	duration := time.Since(startTime)
@@ -353,18 +353,19 @@ func (hs *HTTPSync) FetchFileStatus(req dto.FileStatusReq) (*dto.FileStatusResp,
 	hs.logger.Info("fetching file status from server")
 
 	// 验证配置
-	if err := hs.ValidateSyncConfig(); err != nil {
+	authInfo := config.GetAuthInfo()
+	if err := hs.ValidateSyncConfig(authInfo); err != nil {
 		return nil, err
 	}
 
 	// 构建请求URL
-	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_FILE_STATUS)
+	url := fmt.Sprintf("%s%s", authInfo.ServerURL, API_FILE_STATUS)
 
 	// 执行JSON请求
 	var responseData dto.FileStatusResp
 	hs.logger.Info("sending HTTP %s request to: %s", "POST", url)
 	startTime := time.Now()
-	if err := hs.httpClient.DoJSONRequest("POST", url, req, hs.syncConfig.Token, &responseData); err != nil {
+	if err := hs.httpClient.DoJSONRequest("POST", url, req, authInfo.Token, &responseData); err != nil {
 		return nil, err
 	}
 	duration := time.Since(startTime)
@@ -378,12 +379,13 @@ func (hs *HTTPSync) DeleteEmbedding(req dto.DeleteEmbeddingReq) (*dto.DeleteEmbe
 	hs.logger.Info("deleting embedding from server")
 
 	// 验证配置
-	if err := hs.ValidateSyncConfig(); err != nil {
+	authInfo := config.GetAuthInfo()
+	if err := hs.ValidateSyncConfig(authInfo); err != nil {
 		return nil, err
 	}
 
 	// 构建请求URL
-	url := fmt.Sprintf("%s%s", hs.syncConfig.ServerURL, API_DELETE_EMBEDDING)
+	url := fmt.Sprintf("%s%s", authInfo.ServerURL, API_DELETE_EMBEDDING)
 
 	// 构建查询参数
 	queryParams := map[string]string{
@@ -409,7 +411,7 @@ func (hs *HTTPSync) DeleteEmbedding(req dto.DeleteEmbeddingReq) (*dto.DeleteEmbe
 	// 执行请求
 	hs.logger.Info("sending HTTP %s request to: %s", "DELETE", url)
 	startTime := time.Now()
-	resp, err := hs.httpClient.DoHTTPRequest(httpReq, hs.syncConfig.Token)
+	resp, err := hs.httpClient.DoHTTPRequest(httpReq, authInfo.Token)
 	if err != nil {
 		return nil, err
 	}
