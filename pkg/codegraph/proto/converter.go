@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 )
 
 // ElementTypeToProto 将 types.ElementType 转换为 codegraphpb.ElementType
@@ -212,7 +211,7 @@ func FileElementTablesToProto(fileElementTables []*parser.FileElementTable) []*c
 		pft := &codegraphpb.FileElementTable{
 			Path:      ft.Path,
 			Language:  string(ft.Language),
-			Timestamp: time.Now().Unix(),
+			Timestamp: ft.Timestamp,
 			Elements:  make([]*codegraphpb.Element, len(ft.Elements)),
 			Imports:   make([]*codegraphpb.Import, len(ft.Imports)),
 		}

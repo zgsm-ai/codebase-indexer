@@ -7,11 +7,12 @@ import (
 )
 
 type FileElementTable struct {
-	Path     string
-	Package  *resolver.Package
-	Imports  []*resolver.Import
-	Language lang.Language
-	Elements []resolver.Element
+	Path      string
+	Timestamp int64
+	Package   *resolver.Package
+	Imports   []*resolver.Import
+	Language  lang.Language
+	Elements  []resolver.Element
 }
 
 func newRootElement(elementTypeValue string, rootIndex uint32) resolver.Element {

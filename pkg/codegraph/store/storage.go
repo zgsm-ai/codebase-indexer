@@ -3,7 +3,6 @@ package store
 import (
 	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/types"
-	"codebase-indexer/pkg/codegraph/utils"
 	"context"
 	"fmt"
 	"os"
@@ -68,7 +67,7 @@ func (p ElementPathKey) Get() (string, error) {
 	if p.Path == types.EmptyString {
 		return types.EmptyString, fmt.Errorf("ElementPathKey field Path must not be empty")
 	}
-	return fmt.Sprintf("%s:%s:%s", PathKeySystemPrefix, p.Language, utils.ToUnixPath(p.Path)), nil
+	return fmt.Sprintf("%s:%s:%s", PathKeySystemPrefix, p.Language, p.Path), nil
 }
 
 type SymbolNameKey struct {
