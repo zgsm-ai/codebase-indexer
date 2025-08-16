@@ -158,27 +158,6 @@ func (s *FileScanner) CheckIgnoreFile(ignoreConfig *config.IgnoreConfig, codebas
 	return false, fmt.Errorf("file not ignored")
 }
 
-type ignoreStu struct {
-	ignoreRules  *gitignore.GitIgnore
-	includeRules []string
-	maxFileCount int
-	maxFileSize  int
-}
-
-func (s *FileScanner) loadIngoreRules(codebasePath string) ignoreStu {
-	return ignoreStu{
-		ignoreRules:  s.LoadIgnoreRules(codebasePath),
-		includeRules: s.LoadIncludeFiles(),
-		maxFileCount: s.scannerConfig.MaxFileCount,
-		maxFileSize:  s.scannerConfig.MaxFileSizeKB,
-	}
-}
-
-// skipAll skipDir
-func (s *FileScanner) checkIgnoreRules(ignoreRules ignoreStu, filePath *types.FileInfo) (bool, error) {
-	return false, nil
-}
-
 // Load and combine default ignore rules with .gitignore rules
 func (s *FileScanner) LoadIgnoreRules(codebasePath string) *gitignore.GitIgnore {
 	// First create ignore object with default rules

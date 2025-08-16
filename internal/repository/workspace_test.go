@@ -298,7 +298,7 @@ func TestWorkspaceRepository(t *testing.T) {
 		// 更新语义构建信息
 		newFileNum := 15
 		newTimestamp := time.Now().Unix()
-		err = workspaceRepo.UpdateEmbeddingInfo(workspace.WorkspacePath, newFileNum, newTimestamp)
+		err = workspaceRepo.UpdateEmbeddingInfo(workspace.WorkspacePath, newFileNum, newTimestamp, "success", "")
 		require.NoError(t, err)
 
 		// 验证更新
@@ -391,7 +391,7 @@ func TestWorkspaceRepositoryErrorCases(t *testing.T) {
 
 	t.Run("UpdateEmbeddingInfoNotFound", func(t *testing.T) {
 		// 更新不存在的工作区的语义构建信息
-		err := workspaceRepo.UpdateEmbeddingInfo("/nonexistent/path", 10, time.Now().Unix())
+		err := workspaceRepo.UpdateEmbeddingInfo("/nonexistent/path", 10, time.Now().Unix(), "notfound", "")
 		assert.Error(t, err)
 	})
 

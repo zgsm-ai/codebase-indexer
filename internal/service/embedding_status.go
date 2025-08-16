@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"codebase-indexer/internal/config"
@@ -197,8 +198,8 @@ func (sc *embeddingStatusService) checkEventBuildStatus(workspacePath string, ev
 	// 当process为failed时，将event的embeddingstatus改为failed
 	if processStatus == dto.EmbeddingFailed {
 		sc.logger.Info("build failed for syncId: %s", event.SyncId)
-		updateEvent := &model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusBuildFailed}
 
+		updateEvent := &model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusBuildFailed}
 		// 更新event记录
 		err := sc.eventRepo.UpdateEvent(updateEvent)
 		if err != nil {
@@ -273,14 +274,20 @@ func (sc *embeddingStatusService) handleBuildCompletion(workspacePath string, ev
 	codebaseId := utils.GenerateCodebaseEmbeddingID(workspacePath)
 	codebaseEmbeddingConfig, err := sc.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseId)
 	if err != nil {
-		sc.logger.Error("failed to get codebase embedding config for workspace %s: %v", workspacePath, err)
-		return fmt.Errorf("failed to get codebase embedding config: %w", err)
+		return fmt.Errorf("failed to get codebase embedding config for workspace %s: %w", workspacePath, err)
 	}
 	if codebaseEmbeddingConfig.HashTree == nil {
 		codebaseEmbeddingConfig.HashTree = make(map[string]string)
 	}
+	if codebaseEmbeddingConfig.FailedFiles == nil {
+		codebaseEmbeddingConfig.FailedFiles = make(map[string]string)
+	}
 
-	codebaseEmbeddingConfig.HashTree[filePath] = event.FileHash
+	if status == dto.EmbeddingFailed {
+		codebaseEmbeddingConfig.FailedFiles[filePath] = dto.EmbeddingFailed
+	} else {
+		codebaseEmbeddingConfig.HashTree[filePath] = event.FileHash
+	}
 	// 保存 codebase embedding 配置
 	err = sc.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig)
 	if err != nil {
@@ -289,14 +296,28 @@ func (sc *embeddingStatusService) handleBuildCompletion(workspacePath string, ev
 	}
 
 	embeddingFileNum := len(codebaseEmbeddingConfig.HashTree)
-	updateWorkspace := model.Workspace{
-		WorkspacePath:    workspacePath,
-		EmbeddingFileNum: embeddingFileNum,
-		EmbeddingTs:      time.Now().Unix(),
+	var embeddingFailedFilePaths string
+	var embeddingMessage string
+	embeddingFaildFiles := codebaseEmbeddingConfig.FailedFiles
+	failedKeys := make([]string, 0, len(embeddingFaildFiles))
+	failedValues := make([]string, 0, len(embeddingFaildFiles))
+	for k, v := range embeddingFaildFiles {
+		failedKeys = append(failedKeys, k)
+		failedValues = append(failedValues, v)
 	}
-	err = sc.workspaceRepo.UpdateWorkspace(&updateWorkspace)
+	if len(failedKeys) == 0 {
+		embeddingFailedFilePaths = ""
+		embeddingMessage = ""
+	} else if len(failedKeys) > 5 {
+		embeddingFailedFilePaths = strings.Join(failedKeys[:5], ",")
+		embeddingMessage = strings.Join(failedValues[:5], ",")
+	} else {
+		embeddingFailedFilePaths = strings.Join(failedKeys, ",")
+		embeddingMessage = strings.Join(failedValues, ",")
+	}
+
+	err = sc.workspaceRepo.UpdateEmbeddingInfo(event.WorkspacePath, embeddingFileNum, time.Now().Unix(), embeddingFailedFilePaths, embeddingMessage)
 	if err != nil {
-		sc.logger.Error("failed to update workspace: %v", err)
 		return fmt.Errorf("failed to update workspace: %w", err)
 	}
 

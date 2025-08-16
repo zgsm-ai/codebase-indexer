@@ -28,7 +28,7 @@ type WorkspaceRepository interface {
 	// GetActiveWorkspaces 获取活跃的工作区
 	GetActiveWorkspaces() ([]*model.Workspace, error)
 	// UpdateEmbeddingInfo 更新语义构建信息
-	UpdateEmbeddingInfo(path string, fileNum int, timestamp int64) error
+	UpdateEmbeddingInfo(path string, fileNum int, timestamp int64, message, failedFilePaths string) error
 	// UpdateCodegraphInfo 更新代码构建信息
 	UpdateCodegraphInfo(path string, fileNum int, timestamp int64) error
 }
@@ -413,14 +413,14 @@ func (r *workspaceRepository) GetActiveWorkspaces() ([]*model.Workspace, error) 
 }
 
 // UpdateEmbeddingInfo 更新语义构建信息
-func (r *workspaceRepository) UpdateEmbeddingInfo(path string, fileNum int, timestamp int64) error {
+func (r *workspaceRepository) UpdateEmbeddingInfo(path string, fileNum int, timestamp int64, message, failedFilePaths string) error {
 	query := `
 		UPDATE workspaces 
-		SET embedding_file_num = ?, embedding_ts = ?, updated_at = ?
+		SET embedding_file_num = ?, embedding_ts = ?, embedding_message = ?, embedding_failed_file_paths = ?, updated_at = ?
 		WHERE workspace_path = ?
 	`
 
-	result, err := r.db.GetDB().Exec(query, fileNum, timestamp, time.Now(), path)
+	result, err := r.db.GetDB().Exec(query, fileNum, timestamp, message, failedFilePaths, time.Now(), path)
 	if err != nil {
 		r.logger.Error("Failed to update embedding info: %v", err)
 		return fmt.Errorf("failed to update embedding info: %w", err)

@@ -23,6 +23,7 @@ import (
 	"codebase-indexer/pkg/codegraph/parser"
 	"codebase-indexer/pkg/codegraph/store"
 	"codebase-indexer/pkg/codegraph/workspace"
+
 	"github.com/stretchr/testify/assert"
 )
 

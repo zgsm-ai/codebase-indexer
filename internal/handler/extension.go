@@ -186,7 +186,7 @@ func (h *ExtensionHandler) ShareAccessToken(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Error("invalid request format: %v", err)
 		c.JSON(http.StatusBadRequest, dto.ShareAccessTokenResponse{
-			Code:    http.StatusBadRequest,
+			Code:    "400",
 			Success: false,
 			Message: "invalid request format",
 		})
@@ -200,7 +200,7 @@ func (h *ExtensionHandler) ShareAccessToken(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("failed to update sync config: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.ShareAccessTokenResponse{
-			Code:    http.StatusInternalServerError,
+			Code:    "500",
 			Success: false,
 			Message: "failed to update sync config",
 		})
@@ -209,7 +209,7 @@ func (h *ExtensionHandler) ShareAccessToken(c *gin.Context) {
 
 	h.logger.Info("sync config updated successfully")
 	c.JSON(http.StatusOK, dto.ShareAccessTokenResponse{
-		Code:    http.StatusOK,
+		Code:    "0",
 		Success: true,
 		Message: "ok",
 	})
@@ -268,19 +268,6 @@ func (h *ExtensionHandler) GetVersion(c *gin.Context) {
 // @Failure 422 {object} CheckIgnoreFileResponse "文件被忽略"
 // @Router /codebase-indexer/api/v1/check-ignore [post]
 func (h *ExtensionHandler) CheckIgnoreFile(c *gin.Context) {
-	// 获取更新头信息
-	// err := h.UpdateSyncConfig(c)
-	// if err != nil {
-	// 	h.logger.Error("failed to update sync config: %v", err)
-	// 	c.JSON(http.StatusInternalServerError, dto.IndexSwitchResponse{
-	// 		Code:    "500",
-	// 		Success: false,
-	// 		Message: err.Error(),
-	// 		Data:    false,
-	// 	})
-	// 	return
-	// }
-
 	// 获取请求参数
 	var req dto.CheckIgnoreFileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -354,19 +341,6 @@ func (h *ExtensionHandler) CheckIgnoreFile(c *gin.Context) {
 // @Failure 500 {object} PublishEventsResponse "服务器内部错误"
 // @Router /codebase-indexer/api/v1/events [post]
 func (h *ExtensionHandler) PublishEvents(c *gin.Context) {
-	// 获取更新头信息
-	// err := h.UpdateSyncConfig(c)
-	// if err != nil {
-	// 	h.logger.Error("failed to update sync config: %v", err)
-	// 	c.JSON(http.StatusInternalServerError, dto.IndexSwitchResponse{
-	// 		Code:    "500",
-	// 		Success: false,
-	// 		Message: err.Error(),
-	// 		Data:    false,
-	// 	})
-	// 	return
-	// }
-
 	// 获取请求参数
 	var req dto.PublishEventsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -416,19 +390,6 @@ func (h *ExtensionHandler) PublishEvents(c *gin.Context) {
 // @Failure 500 {object} TriggerIndexResponse "服务器内部错误"
 // @Router /codebase-indexer/api/v1/index [post]
 func (h *ExtensionHandler) TriggerIndex(c *gin.Context) {
-	// 获取更新头信息
-	// err := h.UpdateSyncConfig(c)
-	// if err != nil {
-	// 	h.logger.Error("failed to update sync config: %v", err)
-	// 	c.JSON(http.StatusInternalServerError, dto.IndexSwitchResponse{
-	// 		Code:    "500",
-	// 		Success: false,
-	// 		Message: err.Error(),
-	// 		Data:    false,
-	// 	})
-	// 	return
-	// }
-
 	// 获取请求参数
 	var req dto.TriggerIndexRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -502,19 +463,6 @@ func (h *ExtensionHandler) TriggerIndex(c *gin.Context) {
 // @Failure 500 {object} IndexStatusResponse "服务器内部错误"
 // @Router /codebase-indexer/api/v1/index/status [get]
 func (h *ExtensionHandler) GetIndexStatus(c *gin.Context) {
-	// 获取更新头信息
-	// err := h.UpdateSyncConfig(c)
-	// if err != nil {
-	// 	h.logger.Error("failed to update sync config: %v", err)
-	// 	c.JSON(http.StatusInternalServerError, dto.IndexSwitchResponse{
-	// 		Code:    "500",
-	// 		Success: false,
-	// 		Message: err.Error(),
-	// 		Data:    false,
-	// 	})
-	// 	return
-	// }
-
 	// 获取请求参数
 	var query dto.IndexStatusQuery
 	if err := c.ShouldBindQuery(&query); err != nil {
@@ -554,19 +502,6 @@ func (h *ExtensionHandler) GetIndexStatus(c *gin.Context) {
 // @Failure 500 {object} IndexSwitchResponse "服务器内部错误"
 // @Router /codebase-indexer/api/v1/switch [get]
 func (h *ExtensionHandler) SwitchIndex(c *gin.Context) {
-	// 获取更新头信息
-	// err := h.UpdateSyncConfig(c)
-	// if err != nil {
-	// 	h.logger.Error("failed to update sync config: %v", err)
-	// 	c.JSON(http.StatusInternalServerError, dto.IndexSwitchResponse{
-	// 		Code:    "500",
-	// 		Success: false,
-	// 		Message: err.Error(),
-	// 		Data:    false,
-	// 	})
-	// 	return
-	// }
-
 	// 获取请求参数
 	var query dto.IndexSwitchQuery
 	if err := c.ShouldBindQuery(&query); err != nil {

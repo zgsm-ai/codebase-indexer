@@ -94,7 +94,7 @@ var DefaultFileIncludePatterns = []string{
 var DefaultConfigSync = ConfigSync{
 	IntervalMinutes:         5,  // Default sync interval in minutes
 	MaxFileSizeKB:           50, // Default maximum file size in KB
-	MaxFileCount:            50000,
+	MaxFileCount:            10000,
 	MaxRetries:              3,                           // Default maximum retry count
 	RetryDelaySeconds:       3,                           // Default retry delay in seconds
 	FileIgnorePatterns:      DefaultFileIgnorePatterns,   // Default file ignore patterns

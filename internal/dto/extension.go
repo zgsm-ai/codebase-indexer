@@ -126,7 +126,7 @@ type ShareAccessTokenRequest struct {
 type ShareAccessTokenResponse struct {
 	// 响应代码
 	// example: 0
-	Code int `json:"code"`
+	Code string `json:"code"`
 	// 是否成功
 	// example: true
 	Success bool `json:"success"`
@@ -234,7 +234,7 @@ type WorkspaceEvent struct {
 
 	// 源文件路径
 	// example: G:\projects\codebase-indexer\main.go
-	SourcePath string `json:"sourcePath" binding:"required"`
+	SourcePath string `json:"sourcePath"`
 
 	// 目标文件路径（重命名或移动时使用）
 	// example: G:\projects\codebase-indexer\new_main.go
