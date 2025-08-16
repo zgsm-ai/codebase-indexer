@@ -88,9 +88,15 @@ func (d *Daemon) Start() {
 	// Start config check task
 	d.wg.Add(1)
 	go func() {
-		defer d.wg.Done()
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
+
+		defer func() {
+			if r := recover(); r != nil {
+				d.logger.Error("config check task panic recovered: %v", r)
+			}
+			d.wg.Done()
+		}()
 
 		for {
 			select {
@@ -106,9 +112,15 @@ func (d *Daemon) Start() {
 	// Start fetch server hash tree task
 	d.wg.Add(1)
 	go func() {
-		defer d.wg.Done()
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
+
+		defer func() {
+			if r := recover(); r != nil {
+				d.logger.Error("fetch server hash task panic recovered: %v", r)
+			}
+			d.wg.Done()
+		}()
 
 		for {
 			select {
@@ -124,21 +136,36 @@ func (d *Daemon) Start() {
 	// 启动文件扫描任务（5分钟间隔）
 	d.wg.Add(1)
 	go func() {
-		defer d.wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				d.logger.Error("file scanner task panic recovered: %v", r)
+			}
+			d.wg.Done()
+		}()
 		d.startFileScannerTask()
 	}()
 
 	// 启动事件处理协程任务
 	d.wg.Add(1)
 	go func() {
-		defer d.wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				d.logger.Error("event processor task panic recovered: %v", r)
+			}
+			d.wg.Done()
+		}()
 		d.startEventProcessorTask()
 	}()
 
 	// 启动状态检查任务（3秒间隔）
 	d.wg.Add(1)
 	go func() {
-		defer d.wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				d.logger.Error("status checker task panic recovered: %v", r)
+			}
+			d.wg.Done()
+		}()
 		d.startStatusCheckerTask()
 	}()
 }
@@ -206,7 +233,12 @@ func (d *Daemon) checkAndLoadConfig() {
 	if currentConfig.Sync.IntervalMinutes != newConfig.Sync.IntervalMinutes {
 		d.schedWG.Add(1)
 		go func() {
-			defer d.schedWG.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					d.logger.Error("scheduler restart task panic recovered: %v", r)
+				}
+				d.schedWG.Done()
+			}()
 			d.scheduler.Restart(d.ctx)
 		}()
 	}
@@ -214,7 +246,10 @@ func (d *Daemon) checkAndLoadConfig() {
 	// Load latest configuration
 	d.scheduler.LoadConfig(d.ctx)
 
-	d.schedWG.Wait()
+	// Wait for scheduler restart to complete if it was triggered
+	if currentConfig.Sync.IntervalMinutes != newConfig.Sync.IntervalMinutes {
+		d.schedWG.Wait()
+	}
 	d.logger.Info("client config load completed")
 }
 
