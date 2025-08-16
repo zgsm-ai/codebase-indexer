@@ -287,7 +287,7 @@ func (hs *HTTPSync) executeMultipartUpload(httpReq *utils.HTTPRequest, formData 
 
 // Client config file URI
 const (
-	API_GET_CLIENT_CONFIG = "/shenma/api/v1/config/%scodebase-indexer-config.json"
+	API_GET_CLIENT_CONFIG = "/costrict/codebase-indexer/config/%scodebase-indexer-config.json"
 )
 
 // Value client configuration

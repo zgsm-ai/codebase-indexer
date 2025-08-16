@@ -194,7 +194,7 @@ func (ep *embeddingProcessService) ProcessRenameFileEvent(ctx context.Context, e
 	}
 
 	// 调用上报逻辑进行上报
-	fileStatus, err := ep.uploadService.UploadFileWithRetry(event.WorkspacePath, event.TargetFilePath, utils.FILE_STATUS_RENAME, 3)
+	fileStatus, err := ep.uploadService.RenameFileWithRetry(event.WorkspacePath, event.SourceFilePath, event.TargetFilePath, 3)
 	if err != nil {
 		// 上报失败，更新事件状态为上报失败
 		updateEvent := model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusUploadFailed}

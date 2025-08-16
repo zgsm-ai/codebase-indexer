@@ -13,6 +13,7 @@ import (
 	"codebase-indexer/internal/model"
 	"codebase-indexer/internal/repository"
 	"codebase-indexer/internal/utils"
+	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/logger"
 )
 
@@ -470,8 +471,7 @@ func (s *extensionService) deleteNonProcessingEvents(workspacePath string) error
 func (s *extensionService) PublishEvents(ctx context.Context, workspacePath, clientID string, events []dto.WorkspaceEvent) (int, error) {
 	s.logger.Info("publishing %d events for workspace: %s", len(events), workspacePath)
 
-	s.handleWorkspaceEvents(workspacePath, clientID, events)
-	successCount := s.processEvents(workspacePath, events)
+	successCount := s.processEvents(workspacePath, clientID, events)
 
 	s.logger.Info("successfully published %d/%d events for workspace: %s",
 		successCount, len(events), workspacePath)
@@ -480,30 +480,83 @@ func (s *extensionService) PublishEvents(ctx context.Context, workspacePath, cli
 }
 
 // processEvents 处理工作区事件
-func (s *extensionService) processEvents(workspacePath string, events []dto.WorkspaceEvent) int {
+func (s *extensionService) processEvents(workspacePath, clientID string, events []dto.WorkspaceEvent) int {
 	successCount := 0
 
+	ignoreConfig := s.fileScanner.LoadIgnoreConfig(workspacePath)
 	for _, event := range events {
+		if event.EventType == "" {
+			continue
+		}
+
+		if event.EventType == model.EventTypeCloseWorkspace {
+			s.handleCloseWorkspaceEvent(workspacePath)
+			successCount++
+			break
+		}
+
+		if event.EventType == model.EventTypeOpenWorkspace {
+			s.handleOpenWorkspaceEvent(workspacePath, clientID)
+			event.SourcePath = ""
+			event.TargetPath = ""
+			// 尝试更新现有事件
+			if updated := s.tryUpdateExistingEvent(workspacePath, event); updated {
+				successCount++
+				continue
+			}
+
+			// 创建新事件
+			if s.createNewEvent(workspacePath, event) {
+				successCount++
+			}
+			break
+		}
+
 		sourcePath := event.SourcePath
 		targetPath := event.TargetPath
+		// 校验路径是否在工作空间内，并获取相对路径
 		sourceRelPath, err := filepath.Rel(workspacePath, sourcePath)
 		if err != nil {
-			s.logger.Error("failed to get relative path for source path: %s, error: %v", sourcePath, err)
+			s.logger.Warn("failed to get relative path for source path: %s, error: %v", sourcePath, err)
 			continue
 		}
-		targetRelPath, err := filepath.Rel(workspacePath, targetPath)
-		if err != nil {
-			s.logger.Error("failed to get relative path for target path: %s, error: %v", targetPath, err)
-			continue
+		if targetPath != "" {
+			targetRelPath, err := filepath.Rel(workspacePath, targetPath)
+			if err != nil {
+				s.logger.Warn("failed to get relative path for target path: %s, error: %v", targetPath, err)
+				continue
+			}
+			event.TargetPath = targetRelPath
 		}
-		event.SourcePath = sourceRelPath
-		event.TargetPath = targetRelPath
-
-		if s.shouldSkipEvent(event) {
-			continue
+		// 判断是否为忽略文件
+		if event.EventType != model.EventTypeDeleteFile {
+			fileInfo := &types.FileInfo{
+				Path: sourcePath,
+			}
+			if event.EventType == model.EventTypeRenameFile {
+				fileInfo.Path = targetPath
+			}
+			// 判断fileInfo.Path是文件还是目录
+			if stat, err := os.Stat(fileInfo.Path); err == nil {
+				if stat.IsDir() {
+					fileInfo.IsDir = true
+				} else {
+					fileInfo.IsDir = false
+					fileInfo.Size = stat.Size()
+				}
+			}
+			ok, err := s.fileScanner.CheckIgnoreFile(ignoreConfig, workspacePath, fileInfo)
+			if err != nil {
+				s.logger.Warn("failed to check ignore file: %v", err)
+				continue
+			}
+			if ok {
+				continue
+			}
 		}
 
 		// 尝试更新现有事件
+		event.SourcePath = sourceRelPath
 		if updated := s.tryUpdateExistingEvent(workspacePath, event); updated {
 			successCount++
 			continue
@@ -518,19 +571,9 @@ func (s *extensionService) processEvents(workspacePath string, events []dto.Work
 	return successCount
 }
 
-// shouldSkipEvent 判断是否应该跳过事件
-func (s *extensionService) shouldSkipEvent(event dto.WorkspaceEvent) bool {
-	return event.EventType == "" || event.EventType == model.EventTypeCloseWorkspace
-}
-
 // tryUpdateExistingEvent 尝试更新现有事件
 func (s *extensionService) tryUpdateExistingEvent(workspacePath string, event dto.WorkspaceEvent) bool {
-	relPath, err := filepath.Rel(workspacePath, event.SourcePath)
-	if err != nil {
-		s.logger.Error("failed to get relative path: %v", err)
-		return false
-	}
-	existingEvent, err := s.eventRepo.GetLatestEventByWorkspaceAndSourcePath(workspacePath, relPath)
+	existingEvent, err := s.eventRepo.GetLatestEventByWorkspaceAndSourcePath(workspacePath, event.SourcePath)
 	if err != nil {
 		s.logger.Error("failed to get existing events: %v", err)
 		return false
@@ -539,7 +582,7 @@ func (s *extensionService) tryUpdateExistingEvent(workspacePath string, event dt
 	// 检查是否存在相同workspace和sourcePath的记录，且embeddingStatus和codegraphStatus都不为执行中状态
 	if existingEvent == nil ||
 		existingEvent.EmbeddingStatus == model.EmbeddingStatusUploading ||
-		existingEvent.EmbeddingStatus == model.CodegraphStatusBuilding ||
+		existingEvent.EmbeddingStatus == model.EmbeddingStatusBuilding ||
 		existingEvent.CodegraphStatus == model.CodegraphStatusBuilding {
 		return false
 	}
@@ -548,6 +591,7 @@ func (s *extensionService) tryUpdateExistingEvent(workspacePath string, event dt
 	updateEvent := &model.Event{
 		ID:              existingEvent.ID,
 		EventType:       event.EventType,
+		SourceFilePath:  event.SourcePath,
 		TargetFilePath:  event.TargetPath,
 		EmbeddingStatus: model.EmbeddingStatusInit,
 		CodegraphStatus: model.CodegraphStatusInit,
@@ -578,9 +622,6 @@ func (s *extensionService) createNewEvent(workspacePath string, event dto.Worksp
 		EmbeddingStatus: model.EmbeddingStatusInit, // 初始状态
 		CodegraphStatus: model.CodegraphStatusInit, // 初始状态
 	}
-	if event.EventType == model.EventTypeOpenWorkspace {
-		eventModel.EmbeddingStatus = model.EmbeddingStatusSuccess
-	}
 
 	// 保存事件到数据库
 	if err := s.eventRepo.CreateEvent(eventModel); err != nil {
@@ -591,18 +632,6 @@ func (s *extensionService) createNewEvent(workspacePath string, event dto.Worksp
 	s.logger.Debug("created event: type=%s, source=%s, target=%s",
 		event.EventType, event.SourcePath, event.TargetPath)
 	return true
-}
-
-// handleWorkspaceEvents 处理工作区相关事件（打开/关闭工作区）
-func (s *extensionService) handleWorkspaceEvents(workspacePath, clientID string, events []dto.WorkspaceEvent) {
-	for _, event := range events {
-		switch event.EventType {
-		case model.EventTypeOpenWorkspace:
-			s.handleOpenWorkspaceEvent(workspacePath, clientID)
-		case model.EventTypeCloseWorkspace:
-			s.handleCloseWorkspaceEvent(workspacePath)
-		}
-	}
 }
 
 // handleOpenWorkspaceEvent 处理打开工作区事件
