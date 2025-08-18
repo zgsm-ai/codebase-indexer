@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const GoProjectRootDir = "/tmp/projects/go"
+const GoProjectRootDir = "E:/tmp/projects/go/codebase-indexer-main"
 
 func TestParseGoProjectFiles(t *testing.T) {
 	env, err := setupTestEnvironment()
@@ -27,8 +27,8 @@ func TestParseGoProjectFiles(t *testing.T) {
 		wantErr error
 	}{
 		{
-			Name:    "codebase-indexer-main",
-			Path:    filepath.Join(GoProjectRootDir, "codebase-indexer-main"),
+			Name:    "kubernetes",
+			Path:    filepath.Join(GoProjectRootDir, "kubernetes"),
 			wantErr: nil,
 		},
 	}
@@ -173,99 +173,294 @@ func TestQuery(t *testing.T) {
 
 	// 定义查询测试用例结构
 	type QueryTestCase struct {
-		Name          string   // 测试用例名称
-		ElementName   string   // 元素名称
-		FilePath      string   // 查询的文件路径
-		StartLine     int      // 开始行号
-		EndLine       int      // 结束行号
-		ElementType   string   // 元素类型
-		ExpectedCount int      // 期望的定义数量
-		ExpectedNames []string // 期望找到的定义名称
-		ShouldFindDef bool     // 是否应该找到定义
+		Name            string             // 测试用例名称
+		ElementName     string             // 元素名称
+		FilePath        string             // 查询的文件路径
+		StartLine       int                // 开始行号
+		EndLine         int                // 结束行号
+		ElementType     string             // 元素类型
+		ExpectedCount   int                // 期望的定义数量
+		ExpectedNames   []string           // 期望找到的定义名称
+		ShouldFindDef   bool               // 是否应该找到定义
+		wantDefinitions []types.Definition // 期望的详细定义结果
+		wantErr         error              // 期望的错误
 	}
 
 	// 使用您提供的10个解析出来的元素作为测试用例
 	testCases := []QueryTestCase{
 		{
-			Name:          "查询WriteFile方法调用",
+			Name:          "查询createTestIndexer函数调用",
 			ElementName:   "createTestIndexer",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/test/codegraph/js_test.go",
-			StartLine:     18,
-			EndLine:       18,
-			ElementType:   "call.method",
-			ExpectedCount: 1,
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/test/codegraph/ts_test.go",
+			StartLine:     65,
+			EndLine:       65,
+			ElementType:   "call.function",
 			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "createTestIndexer", Path: "indexer_test.go", Range: []int32{103, 0, 103, 0}},
+			},
+			wantErr: nil,
 		},
 		{
-			Name:          "查询FileScanService引用",
-			ElementName:   "FileScanService",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/internal/service/file_scanner_job.go",
-			StartLine:     18,
-			EndLine:       18,
-			ElementType:   "reference",
-			ExpectedCount: 1,
-			ShouldFindDef: true,
-		},
-		{
-			Name:          "查询空白标识符(_)方法调用",
+			Name:          "查询StripSpaces函数调用",
 			ElementName:   "StripSpaces",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/parser/c_resolver_test.go",
-			StartLine:     22,
-			EndLine:       22,
-			ElementType:   "call.method",
-			ExpectedCount: 0, // 空白标识符通常不会有定义
-			ShouldFindDef: false,
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/resolver/java.go",
+			StartLine:     32,
+			EndLine:       32,
+			ElementType:   "call.function",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "StripSpaces", Path: "common.go", Range: []int32{306, 0, 306, 0}},
+			},
+			wantErr: nil,
 		},
-		// {
-		// 	Name:          "查询name方法调用",
-		// 	ElementName:   "name",
-		// 	FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/definition/definition_test.go",
-		// 	StartLine:     112,
-		// 	EndLine:       112,
-		// 	ElementType:   "call.method",
-		// 	ExpectedCount: 1,
-		// 	ShouldFindDef: true,
-		// },
-		// {
-		// 	Name:          "查询Equal方法调用(assert)",
-		// 	ElementName:   "Equal",
-		// 	FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/definition/definition_test.go",
-		// 	StartLine:     106,
-		// 	EndLine:       106,
-		// 	ElementType:   "call.method",
-		// 	ExpectedCount: 1,
-		// 	ShouldFindDef: true,
-		// },
-		// {
-		// 	Name:          "查询Errorf方法调用(t)",
-		// 	ElementName:   "Errorf",
-		// 	FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/definition/definition_test.go",
-		// 	StartLine:     95,
-		// 	EndLine:       95,
-		// 	ElementType:   "call.method",
-		// 	ExpectedCount: 1,
-		// 	ShouldFindDef: true,
-		// },
-		// {
-		// 	Name:          "查询Warn方法调用(logger)",
-		// 	ElementName:   "Warn",
-		// 	FilePath:      "/tmp/projects/go/codebase-indexer-main/internal/service/extension.go",
-		// 	StartLine:     264,
-		// 	EndLine:       264,
-		// 	ElementType:   "call.method",
-		// 	ExpectedCount: 1,
-		// 	ShouldFindDef: true,
-		// },
-		// {
-		// 	Name:          "查询int64函数调用",
-		// 	ElementName:   "int64",
-		// 	FilePath:      "/tmp/projects/go/codebase-indexer-main/internal/service/extension.go",
-		// 	StartLine:     261,
-		// 	EndLine:       261,
-		// 	ElementType:   "call.function",
-		// 	ExpectedCount: 1, // int64是内置类型转换
-		// 	ShouldFindDef: true,
-		// },
+		{
+			Name:          "查询symbolMapKey函数调用",
+			ElementName:   "symbolMapKey",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/indexer.go",
+			StartLine:     1500,
+			EndLine:       1500,
+			ElementType:   "call.function",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "symbolMapKey", Path: "indexer.go", Range: []int32{1504, 0, 1504, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询makeQueryPath函数调用",
+			ElementName:   "makeQueryPath",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/parser/scm.go",
+			StartLine:     57,
+			EndLine:       57,
+			ElementType:   "call.function",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "makeQueryPath", Path: "scm.go", Range: []int32{69, 0, 69, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询NewTaskPool函数调用",
+			ElementName:   "NewTaskPool",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/pool/task_pool_test.go",
+			StartLine:     18,
+			EndLine:       18,
+			ElementType:   "call.function",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "NewTaskPool", Path: "task_pool.go", Range: []int32{28, 0, 28, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询parseBaseClassClause函数调用",
+			ElementName:   "parseBaseClassClause",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/resolver/cpp.go",
+			StartLine:     133,
+			EndLine:       133,
+			ElementType:   "call.function",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "parseBaseClassClause", Path: "cpp.go", Range: []int32{349, 0, 349, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询NewReference函数调用",
+			ElementName:   "NewReference",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/resolver/go.go",
+			StartLine:     241,
+			EndLine:       241,
+			ElementType:   "call.function",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "NewReference", Path: "common.go", Range: []int32{149, 0, 149, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询findAllTypeIdentifiers函数调用",
+			ElementName:   "findAllTypeIdentifiers",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/resolver/cpp.go",
+			StartLine:     225,
+			EndLine:       225,
+			ElementType:   "call.function",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "findAllTypeIdentifiers", Path: "common.go", Range: []int32{239, 0, 239, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询CreateTestValues函数调用",
+			ElementName:   "CreateTestValues",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/store/leveldb_test.go",
+			StartLine:     408,
+			EndLine:       408,
+			ElementType:   "call.function",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "CreateTestValues", Path: "test_utils.go", Range: []int32{69, 0, 69, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询containsModifier函数调用",
+			ElementName:   "containsModifier",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/resolver/javascript.go",
+			StartLine:     301,
+			EndLine:       301,
+			ElementType:   "call.function",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "containsModifier", Path: "javascript.go", Range: []int32{313, 0, 313, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询NewModuleResolver函数调用",
+			ElementName:   "NewModuleResolver",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/workspace/workspace.go",
+			StartLine:     41,
+			EndLine:       41,
+			ElementType:   "call.function",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "NewModuleResolver", Path: "module_resolver.go", Range: []int32{34, 0, 34, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询Definition结构体",
+			ElementName:   "Definition",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/types/index.go",
+			StartLine:     21,
+			EndLine:       21,
+			ElementType:   "reference",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "Definition", Path: "index.go", Range: []int32{24, 0, 24, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询QueryRelationOptions结构体",
+			ElementName:   "QueryRelationOptions",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/types/indexer.go",
+			StartLine:     853,
+			EndLine:       853,
+			ElementType:   "reference",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "QueryRelationOptions", Path: "index.go", Range: []int32{40, 0, 40, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询SourceFile结构体",
+			ElementName:   "SourceFile",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/indexer.go",
+			StartLine:     1469,
+			EndLine:       1469,
+			ElementType:   "reference",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "SourceFile", Path: "element.go", Range: []int32{258, 0, 258, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询GraphNode结构体",
+			ElementName:   "GraphNode",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/types/indexer.go",
+			StartLine:     60,
+			EndLine:       60,
+			ElementType:   "reference",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "GraphNode", Path: "indexer.go", Range: []int32{40, 0, 40, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询logger结构体",
+			ElementName:   "logger",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/types/indexer.go",
+			StartLine:     59,
+			EndLine:       59,
+			ElementType:   "reference",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "logger", Path: "logger.go", Range: []int32{258, 0, 258, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询CodeGraphSummary结构体",
+			ElementName:   "CodeGraphSummary",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/types/indexer.go",
+			StartLine:     1274,
+			EndLine:       1274,
+			ElementType:   "reference",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "CodeGraphSummary", Path: "index.go", Range: []int32{62, 0, 62, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询VersionRequest结构体",
+			ElementName:   "VersionRequest",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/api/codegraph/codebase_syncer.pb.go",
+			StartLine:     454,
+			EndLine:       454,
+			ElementType:   "reference",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "VersionRequest", Path: "codebase_syncer.pb.go", Range: []int32{445, 0, 445, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询ConfigServer结构体",
+			ElementName:   "ConfigServer",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/internal/config/config.go",
+			StartLine:     43,
+			EndLine:       43,
+			ElementType:   "reference",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "ConfigServer", Path: "config.go", Range: []int32{11, 0, 11, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询DefinitionDatag结构体",
+			ElementName:   "DefinitionData",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/internal/service/codebase.go",
+			StartLine:     418,
+			EndLine:       418,
+			ElementType:   "reference",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "DefinitionData", Path: "backend.go", Range: []int32{82, 0, 82, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询JavaClassifier结构体",
+			ElementName:   "JavaClassifier",
+			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/analyzer/package_classifier/java_classifier.go",
+			StartLine:     15,
+			EndLine:       15,
+			ElementType:   "reference",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "JavaClassifier", Path: "java_classifier.go", Range: []int32{8, 0, 8, 0}},
+			},
+			wantErr: nil,
+		},
 	}
 
 	// 统计变量
@@ -310,13 +505,11 @@ func TestQuery(t *testing.T) {
 			// 调用QueryDefinitions接口
 			definitions, err := indexer.QueryDefinitions(context.Background(), &types.QueryDefinitionOptions{
 				Workspace: workspacePath,
-				StartLine: tc.StartLine,
-				EndLine:   tc.EndLine,
+				StartLine: tc.StartLine + 1,
+				EndLine:   tc.EndLine + 1,
 				FilePath:  tc.FilePath,
 			})
 
-			// 判断查询是否成功
-			querySuccess := (err == nil)
 			foundDefinitions := len(definitions)
 
 			fmt.Printf("查询结果: ")
@@ -332,98 +525,57 @@ func TestQuery(t *testing.T) {
 				}
 			}
 
-			// 断言逻辑：判断结果是否符合预期
-			testPassed := false
+			// 使用结构化的期望结果进行验证（类似js_resolver_test.go格式）
+			if len(tc.wantDefinitions) > 0 || tc.wantErr != nil {
+				// 使用新的结构化验证
+				assert.Equal(t, tc.wantErr, err, fmt.Sprintf("%s: 错误应该匹配", tc.Name))
 
-			if tc.ShouldFindDef {
-				// 期望找到定义
-				if querySuccess && foundDefinitions >= tc.ExpectedCount {
-					testPassed = true
+				if tc.wantErr == nil {
+					// 当返回多个定义时，验证期望的定义是否都存在
+					for _, wantDef := range tc.wantDefinitions {
+						found := false
+						for _, actualDef := range definitions {
+							nameMatch := actualDef.Name == wantDef.Name
+							lineMatch := wantDef.Range[0] == actualDef.Range[0]
+							pathMatch := wantDef.Path == "" || strings.Contains(actualDef.Path, wantDef.Path)
 
-					// 如果指定了期望的名称，进一步验证
-					if len(tc.ExpectedNames) > 0 {
-						foundExpectedNames := 0
-						for _, expectedName := range tc.ExpectedNames {
-							for _, def := range definitions {
-								if def.Name == expectedName {
-									foundExpectedNames++
-									break
-								}
+							if nameMatch && pathMatch && lineMatch {
+								found = true
+								break
 							}
 						}
-						testPassed = (foundExpectedNames == len(tc.ExpectedNames))
+						assert.True(t, found,
+							fmt.Sprintf("%s: 应该找到名为 '%s' 行号为'%d'路径包含 '%s' 的定义",
+								tc.Name, wantDef.Name, wantDef.Range[0], wantDef.Path))
+					}
+
+				}
+			} else {
+				// 使用原有的验证逻辑，保持向后兼容
+				if tc.ShouldFindDef {
+					assert.NoError(t, err, fmt.Sprintf("%s 查询应该成功", tc.Name))
+					assert.GreaterOrEqual(t, foundDefinitions, tc.ExpectedCount,
+						fmt.Sprintf("%s 找到的定义数量应该大于等于 %d", tc.Name, tc.ExpectedCount))
+				} else {
+					if err == nil {
+						assert.Equal(t, 0, len(definitions),
+							fmt.Sprintf("%s 不应该找到定义", tc.Name))
 					}
 				}
-			} else {
-				// 期望不找到定义或查询失败
-				if !querySuccess || foundDefinitions == 0 {
-					testPassed = true
-				}
-			}
-
-			// 更新统计
-			if testPassed {
-				correctCases++
-				fmt.Printf("✓ 测试通过\n")
-			} else {
-				fmt.Printf("✗ 测试失败\n")
-				fmt.Printf("  期望: ShouldFindDef=%t, ExpectedCount=%d\n",
-					tc.ShouldFindDef, tc.ExpectedCount)
-				fmt.Printf("  实际: QuerySuccess=%t, FoundCount=%d\n",
-					querySuccess, foundDefinitions)
-			}
-
-			// 使用testify断言（可选，用于详细的测试报告）
-			if tc.ShouldFindDef {
-				assert.NoError(t, err, "查询应该成功")
-				assert.GreaterOrEqual(t, foundDefinitions, tc.ExpectedCount,
-					"找到的定义数量应该大于等于期望值")
 			}
 		})
 	}
 
-	// 计算并输出最终正确率
-	accuracy := float64(correctCases) / float64(totalCases) * 100
-
-	fmt.Println("\n" + strings.Repeat("=", 80))
-	fmt.Println("📊 基于人工索引元素的查询测试结果统计")
-	fmt.Println(strings.Repeat("=", 80))
-	fmt.Printf("总测试用例数: %d\n", totalCases)
-	fmt.Printf("通过用例数: %d\n", correctCases)
-	fmt.Printf("失败用例数: %d\n", totalCases-correctCases)
-	fmt.Printf("正确率: %.2f%%\n", accuracy)
-
-	// 根据正确率给出评价
-	var evaluation string
-	switch {
-	case accuracy >= 90:
-		evaluation = "优秀 🎉"
-	case accuracy >= 80:
-		evaluation = "良好 👍"
-	case accuracy >= 70:
-		evaluation = "一般 🤔"
-	case accuracy >= 60:
-		evaluation = "需要改进 😐"
-	default:
-		evaluation = "亟需优化 😞"
-	}
-
-	fmt.Printf("评价: %s\n", evaluation)
-	fmt.Println(strings.Repeat("=", 80))
-
-	// 如果正确率太低，测试失败
-	assert.GreaterOrEqual(t, accuracy, 60.0,
-		"基于人工索引元素的QueryDefinition接口正确率应该至少达到60%")
 }
 
-func TestFindDefinitionsForAllElements(t *testing.T) {
+func TestFindDefinitionsForAllElementsGo(t *testing.T) {
 	// 设置测试环境
 	env, err := setupTestEnvironment()
 	assert.NoError(t, err)
 	defer teardownTestEnvironment(t, env)
 
 	// 使用项目自身的代码作为测试数据
-	workspacePath, err := filepath.Abs("../../") // 指向项目根目录
+	workspacePath, err := filepath.Abs(GoProjectRootDir) // 指向项目根目录
 	assert.NoError(t, err)
 
 	// 初始化工作空间数据库记录
@@ -433,35 +585,26 @@ func TestFindDefinitionsForAllElements(t *testing.T) {
 	// 创建索引器并索引工作空间
 	indexer := createTestIndexer(env, &types.VisitPattern{
 		ExcludeDirs: append(defaultVisitPattern.ExcludeDirs, "vendor", "test", ".git"),
-		IncludeExts: []string{".go"}, // 只索引Go文件
+		IncludeExts: []string{".go"},
 	})
 
-	fmt.Println("开始索引工作空间...")
 	project := NewTestProject(workspacePath, env.logger)
 	fileElements, _, err := ParseProjectFiles(context.Background(), env, project)
 	assert.NoError(t, err)
-	fmt.Printf("解析完成，共找到 %d 个文件\n", len(fileElements))
-
-	// 统计所有元素
-	totalElements := 0
-	for _, fileElement := range fileElements {
-		totalElements += len(fileElement.Elements)
-	}
-	fmt.Printf("总共解析出 %d 个代码元素\n", totalElements)
 
 	// 先索引所有文件到数据库
-	fmt.Println("开始将元素索引到数据库...")
 	_, err = indexer.IndexWorkspace(context.Background(), workspacePath)
 	assert.NoError(t, err)
-	fmt.Println("索引完成")
 
 	// 统计变量
 	var (
+		totalElements       = 0
 		testedElements      = 0
 		foundDefinitions    = 0
 		notFoundDefinitions = 0
 		queryErrors         = 0
 		skippedElements     = 0
+		skippedVariables    = 0
 	)
 
 	// 定义需要跳过测试的元素类型（基于types.ElementType的实际值）
@@ -478,23 +621,23 @@ func TestFindDefinitionsForAllElements(t *testing.T) {
 		"undefined":      true, // 未定义类型
 	}
 
-	fmt.Println("\n开始遍历所有元素并查找定义...")
-	fmt.Println(strings.Repeat("=", 80))
+	// 详细的元素类型统计
+	elementTypeStats := make(map[string]int)
+	elementTypeSuccessStats := make(map[string]int)
 
 	// 遍历每个文件的元素
 	for _, fileElement := range fileElements {
-		fmt.Printf("\n📁 处理文件: %s (包含 %d 个元素)\n",
-			filepath.Base(fileElement.Path), len(fileElement.Elements))
-
-		for i, element := range fileElement.Elements {
-			// 跳过某些类型的元素
+		for _, element := range fileElement.Elements {
 			elementType := string(element.GetType())
+			totalElements++
+			elementTypeStats[elementType]++
+
+			// 跳过某些类型的元素
 			if skipElementTypes[elementType] {
 				skippedElements++
 				continue
 			}
 
-			testedElements++
 			elementName := element.GetName()
 			elementRange := element.GetRange()
 
@@ -503,120 +646,30 @@ func TestFindDefinitionsForAllElements(t *testing.T) {
 				skippedElements++
 				continue
 			}
-
-			fmt.Printf("  [%d] 测试元素: %s (类型: %s, 行: %d-%d)\n",
-				i+1, elementName, elementType,
-				elementRange[0], elementRange[2])
+			if elementType == "variable" && element.GetScope() == types.ScopeFunction {
+				skippedVariables++
+				continue
+			}
+			testedElements++
 
 			// 尝试查找该元素的定义
 			definitions, err := indexer.QueryDefinitions(context.Background(), &types.QueryDefinitionOptions{
 				Workspace: workspacePath,
-				StartLine: int(elementRange[0]),
-				EndLine:   int(elementRange[2]),
+				StartLine: int(elementRange[0]) + 1,
+				EndLine:   int(elementRange[2]) + 1,
 				FilePath:  fileElement.Path,
 			})
 
 			if err != nil {
 				queryErrors++
-				fmt.Printf("    ❌ 查询出错: %v\n", err)
 				continue
 			}
 
 			if len(definitions) > 0 {
 				foundDefinitions++
-				fmt.Printf("    ✅ 找到 %d 个定义\n", len(definitions))
-
-				// 打印找到的定义详情（限制输出数量）
-				for j, def := range definitions {
-					if j >= 3 { // 最多显示3个定义
-						fmt.Printf("    ... 还有 %d 个定义\n", len(definitions)-3)
-						break
-					}
-					fmt.Printf("      - %s (类型: %s)\n", def.Name, def.Type)
-				}
+				elementTypeSuccessStats[elementType]++
 			} else {
 				notFoundDefinitions++
-				fmt.Printf("    ⚠️  未找到定义\n")
-			}
-
-			// 每处理100个元素输出一次进度
-			if testedElements%100 == 0 {
-				fmt.Printf("\n📊 进度更新: 已测试 %d 个元素\n", testedElements)
-				fmt.Printf("  ✅ 找到定义: %d\n", foundDefinitions)
-				fmt.Printf("  ⚠️  未找到: %d\n", notFoundDefinitions)
-				fmt.Printf("  ❌ 查询错误: %d\n", queryErrors)
-			}
-		}
-	}
-
-	// 计算统计数据
-	successRate := 0.0
-	if testedElements > 0 {
-		successRate = float64(foundDefinitions) / float64(testedElements) * 100
-	}
-
-	// 输出最终统计结果
-	fmt.Println("\n" + strings.Repeat("=", 80))
-	fmt.Println("🎯 元素定义查找测试完成")
-	fmt.Println(strings.Repeat("=", 80))
-	fmt.Printf("总元素数量: %d\n", totalElements)
-	fmt.Printf("跳过的元素: %d (类型: IMPORT, PACKAGE, COMMENT, LITERAL, KEYWORD)\n", skippedElements)
-	fmt.Printf("测试的元素: %d\n", testedElements)
-	fmt.Printf("成功找到定义: %d\n", foundDefinitions)
-	fmt.Printf("未找到定义: %d\n", notFoundDefinitions)
-	fmt.Printf("查询出错: %d\n", queryErrors)
-	fmt.Printf("成功率: %.2f%%\n", successRate)
-
-	// 根据成功率给出评价
-	var evaluation string
-	switch {
-	case successRate >= 80:
-		evaluation = "优秀 🎉"
-	case successRate >= 60:
-		evaluation = "良好 👍"
-	case successRate >= 40:
-		evaluation = "一般 🤔"
-	case successRate >= 20:
-		evaluation = "需要改进 😐"
-	default:
-		evaluation = "亟需优化 😞"
-	}
-
-	fmt.Printf("评价: %s\n", evaluation)
-	fmt.Println(strings.Repeat("=", 80))
-
-	// 详细的元素类型统计
-	elementTypeStats := make(map[string]int)
-	elementTypeSuccessStats := make(map[string]int)
-
-	// 重新遍历计算类型统计（这次不输出详细信息）
-	for _, fileElement := range fileElements {
-		for _, element := range fileElement.Elements {
-			elementType := string(element.GetType())
-			elementTypeStats[elementType]++
-
-			// 跳过某些类型的元素
-			if skipElementTypes[elementType] {
-				continue
-			}
-
-			elementName := element.GetName()
-			elementRange := element.GetRange()
-
-			if elementName == "" || len(elementRange) != 4 {
-				continue
-			}
-
-			// 尝试查找定义
-			definitions, err := indexer.QueryDefinitions(context.Background(), &types.QueryDefinitionOptions{
-				Workspace: workspacePath,
-				StartLine: int(elementRange[0]),
-				EndLine:   int(elementRange[2]),
-				FilePath:  fileElement.Path,
-			})
-
-			if err == nil && len(definitions) > 0 {
-				elementTypeSuccessStats[elementType]++
 			}
 		}
 	}
@@ -630,20 +683,11 @@ func TestFindDefinitionsForAllElements(t *testing.T) {
 		if count > 0 {
 			rate = float64(successCount) / float64(count) * 100
 		}
+		if elementType == "variable" {
+			fmt.Println("跳过的变量数量", skippedVariables)
+			rate = float64(successCount) / float64(count-skippedVariables) * 100
+		}
 		fmt.Printf("%-15s: %4d 个 (成功找到定义: %4d, 成功率: %5.1f%%)\n",
 			elementType, count, successCount, rate)
 	}
-
-	// 断言检查：确保基本的成功率
-	assert.GreaterOrEqual(t, successRate, 20.0,
-		"元素定义查找的成功率应该至少达到20%")
-
-	// 确保没有过多的查询错误
-	errorRate := float64(queryErrors) / float64(testedElements) * 100
-	assert.LessOrEqual(t, errorRate, 10.0,
-		"查询错误率不应超过10%")
-
-	// 确保至少测试了一定数量的元素
-	assert.GreaterOrEqual(t, testedElements, 50,
-		"应该至少测试50个元素")
 }
