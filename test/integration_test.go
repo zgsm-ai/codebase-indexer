@@ -62,7 +62,7 @@ func (s *IntegrationTestSuite) SetupTest() {
 
 	config.SetAppInfo(appInfo)
 
-	logger, err := logger.NewLogger(logPath, "info")
+	logger, err := logger.NewLogger(logPath, "info", "codebase-indexer")
 	if err != nil {
 		s.T().Fatalf("failed to initialize logger: %v", err)
 	}

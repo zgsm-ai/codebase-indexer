@@ -14,7 +14,7 @@ import (
 )
 
 func initLogger() logger.Logger {
-	logger, err := logger.NewLogger(utils.LogsDir, "info")
+	logger, err := logger.NewLogger(utils.LogsDir, "info", "codebase-indexer")
 	if err != nil {
 		panic(fmt.Sprintf("failed to initialize logging system: %v\n", err))
 	}

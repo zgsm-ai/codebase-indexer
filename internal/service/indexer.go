@@ -50,7 +50,7 @@ type Indexer struct {
 // BatchProcessParams 批处理参数
 type BatchProcessParams struct {
 	ProjectUuid string
-	SourceFiles []string
+	SourceFiles []*types.FileWithModTimestamp
 	BatchStart  int
 	BatchEnd    int
 	BatchSize   int
@@ -68,7 +68,7 @@ type BatchProcessResult struct {
 // BatchProcessingParams 批处理阶段参数
 type BatchProcessingParams struct {
 	ProjectUuid          string
-	NeedIndexSourceFiles []string
+	NeedIndexSourceFiles []*types.FileWithModTimestamp
 	TotalFilesCnt        int
 	PreviousFileNum      int
 	Project              *workspace.Project
@@ -231,8 +231,8 @@ func (i *Indexer) IndexWorkspace(ctx context.Context, workspacePath string) (*ty
 	}
 
 	i.logger.Info("%s index end. cost %d ms, index %d projects, visit %d files, "+
-		"parsed %d files successfully, failed %d files", workspacePath, len(projects),
-		time.Since(workspaceStart).Milliseconds(), taskMetrics.TotalFiles,
+		"parsed %d files successfully, failed %d files", workspacePath,
+		time.Since(workspaceStart).Milliseconds(), len(projects), taskMetrics.TotalFiles,
 		taskMetrics.TotalFiles-taskMetrics.TotalFailedFiles, taskMetrics.TotalFailedFiles)
 	return taskMetrics, nil
 }
@@ -305,7 +305,7 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 	return batchResult.ProjectMetrics, nil
 }
 
-func (i *Indexer) filterSourceFilesByTimestamp(ctx context.Context, projectUuid string, sourceFileTimestamps map[string]int64) []string {
+func (i *Indexer) filterSourceFilesByTimestamp(ctx context.Context, projectUuid string, sourceFileTimestamps map[string]int64) []*types.FileWithModTimestamp {
 	iter := i.storage.Iter(ctx, projectUuid)
 	defer func(iter store.Iterator) {
 		err := iter.Close()
@@ -336,9 +336,9 @@ func (i *Indexer) filterSourceFilesByTimestamp(ctx context.Context, projectUuid 
 		}
 	}
 
-	needIndexFiles := make([]string, 0, len(sourceFileTimestamps))
-	for k := range sourceFileTimestamps {
-		needIndexFiles = append(needIndexFiles, k)
+	needIndexFiles := make([]*types.FileWithModTimestamp, 0, len(sourceFileTimestamps))
+	for k, v := range sourceFileTimestamps {
+		needIndexFiles = append(needIndexFiles, &types.FileWithModTimestamp{Path: k, ModTime: v})
 	}
 	return needIndexFiles
 }
@@ -606,11 +606,11 @@ func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePath
 			i.logger.Info("project %s has index, index projectFiles.", projectUuid)
 			i.logger.Info("%s, concurrency: %d, batch_size: %d",
 				projectUuid, i.config.MaxConcurrency, i.config.MaxBatchSize)
-
+			fileWithTimestamps := i.convertToFileWithModTimestamp(projectFiles)
 			// 阶段1-3：批量处理文件（解析、检查、保存符号表）
 			batchParams := &BatchProcessingParams{
 				ProjectUuid:          projectUuid,
-				NeedIndexSourceFiles: projectFiles,
+				NeedIndexSourceFiles: fileWithTimestamps,
 				TotalFilesCnt:        len(projectFiles),
 				Project:              project,
 				WorkspacePath:        workspacePath,
@@ -848,26 +848,24 @@ func (i *Indexer) QueryReferences(ctx context.Context, opts *types.QueryReferenc
 		return nil, fmt.Errorf("failed to check project %s index store, err:%v", projectUuid, err)
 	}
 	if !exists {
-		return nil, fmt.Errorf("project %s index not exists", projectUuid)
+		return nil, fmt.Errorf("workspace %s index not exists", opts.Workspace)
 	}
 
 	defer func() {
 		i.logger.Info("Query_reference execution time: %d ms", time.Since(startTime).Milliseconds())
 	}()
 
-	// 1. 获取文档
+	// 1. 获取文件元素表
 	var fileElementTable codegraphpb.FileElementTable
 	fileTableBytes, err := i.storage.Get(ctx, projectUuid, store.ElementPathKey{Language: language, Path: filePath})
+	if errors.Is(err, store.ErrKeyNotFound) {
+		return nil, fmt.Errorf("index not found for file %s", filePath)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to get file %s element_table, err: %v", filePath, err)
+		return nil, fmt.Errorf("failed to get file %s index, err: %v", filePath, err)
 	}
 	if err = store.UnmarshalValue(fileTableBytes, &fileElementTable); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal file %s element_table value, err: %v", filePath, err)
-	}
-
-	if err != nil {
-		i.logger.Error("Failed to get document: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal file %s index value, err: %v", filePath, err)
 	}
 
 	var definitions []*types.RelationNode
@@ -875,7 +873,7 @@ func (i *Indexer) QueryReferences(ctx context.Context, opts *types.QueryReferenc
 
 	// Find root symbols based on query options
 	if opts.SymbolName != types.EmptyString {
-		foundSymbols = i.querySymbolsByNameAndLine(&fileElementTable, opts)
+		foundSymbols = i.querySymbolsByName(&fileElementTable, opts)
 		i.logger.Debug("Found %d symbols by name and line", len(foundSymbols))
 	} else {
 		foundSymbols = i.querySymbolsByLines(ctx, &fileElementTable, opts)
@@ -933,7 +931,7 @@ func (i *Indexer) QueryReferences(ctx context.Context, opts *types.QueryReferenc
 		// TODO 根据import 过滤
 
 		for _, element := range elementTable.Elements {
-			if !element.IsDefinition {
+			if element.IsDefinition {
 				continue
 			}
 			if element.ElementType != codegraphpb.ElementType_REFERENCE &&
@@ -983,20 +981,15 @@ func isValidRange(range_ []int32) bool {
 	return len(range_) == 4
 }
 
-// querySymbolsByNameAndLine 通过 symbolName + startLine
-func (i *Indexer) querySymbolsByNameAndLine(doc *codegraphpb.FileElementTable, opts *types.QueryReferenceOptions) []*codegraphpb.Element {
+// querySymbolsByName 通过 symbolName + startLine
+func (i *Indexer) querySymbolsByName(doc *codegraphpb.FileElementTable, opts *types.QueryReferenceOptions) []*codegraphpb.Element {
 	var nodes []*codegraphpb.Element
 	queryName := opts.SymbolName
 	// 根据名字和 行号， 找到symbol
 	for _, s := range doc.Elements {
 		// symbol 名字匹配
 		if s.Name == queryName {
-			symbolRange := s.Range
-			if symbolRange != nil && len(symbolRange) > 0 {
-				if symbolRange[0] == int32(opts.StartLine-1) {
-					nodes = append(nodes, s)
-				}
-			}
+			nodes = append(nodes, s)
 		}
 	}
 	return nodes
@@ -1107,7 +1100,7 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 		return nil, fmt.Errorf("failed to check project %s index store, err:%v", projectUuid, err)
 	}
 	if !exists {
-		return nil, fmt.Errorf("project %s index not exists", projectUuid)
+		return nil, fmt.Errorf("workspace %s index not exists", options.Workspace)
 	}
 
 	startTime := time.Now()
@@ -1165,10 +1158,10 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 		// 根据所找到的call 的name + currentImports， 去模糊匹配symbol
 		symDefs, err := i.searchSymbolNames(ctx, projectUuid, language, dependencyNames, currentImports)
 		if err != nil {
-			return nil, fmt.Errorf("failed to search function/method call names: %w", err)
+			return nil, fmt.Errorf("failed to search index by names: %w", err)
 		}
 		if len(symDefs) == 0 {
-			return nil, fmt.Errorf("failed to search symbol by function/method call names")
+			return res, nil
 		}
 		for name, def := range symDefs {
 			for _, d := range def {
@@ -1193,10 +1186,10 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 			return nil, fmt.Errorf("index not found for file %s", filePath)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("failed to get file %s element_table, err: %v", filePath, err)
+			return nil, fmt.Errorf("failed to get file %s index, err: %v", filePath, err)
 		}
 		if err = store.UnmarshalValue(fileTableBytes, &fileTable); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal file %s element_table value, err: %v", filePath, err)
+			return nil, fmt.Errorf("failed to unmarshal file %s index value, err: %v", filePath, err)
 		}
 
 		foundSymbols = i.findSymbolInDocByLineRange(ctx, &fileTable, queryStartLine, queryEndLine)
@@ -1274,7 +1267,7 @@ func (i *Indexer) searchSymbolNames(ctx context.Context, projectUuid string, lan
 
 		var symbolOccurrence codegraphpb.SymbolOccurrence
 		if err := store.UnmarshalValue(bytes, &symbolOccurrence); err != nil {
-			return nil, fmt.Errorf("failed to deserialize document: %w", err)
+			return nil, fmt.Errorf("failed to deserialize index: %w", err)
 		}
 
 		if len(symbolOccurrence.Occurrences) == 0 {
@@ -1540,8 +1533,8 @@ func (i *Indexer) getSymbolOccurrenceByName(ctx context.Context, projectUuid str
 }
 
 // parseFilesOptimized 优化版本的文件解析函数，减少内存分配
-func (i *Indexer) parseFiles(ctx context.Context, filePaths []string) ([]*parser.FileElementTable, *types.IndexTaskMetrics, error) {
-	totalFiles := len(filePaths)
+func (i *Indexer) parseFiles(ctx context.Context, files []*types.FileWithModTimestamp) ([]*parser.FileElementTable, *types.IndexTaskMetrics, error) {
+	totalFiles := len(files)
 
 	// 优化：预分配切片容量，减少动态扩容
 	fileElementTables := make([]*parser.FileElementTable, 0, totalFiles)
@@ -1553,46 +1546,37 @@ func (i *Indexer) parseFiles(ctx context.Context, filePaths []string) ([]*parser
 	// TODO 大量文件，会导致错误很多
 	var errs []error
 
-	for _, path := range filePaths {
-		language, err := lang.InferLanguage(path)
+	for _, f := range files {
+		language, err := lang.InferLanguage(f.Path)
 		if err != nil || language == types.EmptyString {
 			continue
 		}
 
 		// 直接读取文件并解析，避免不必要的中间变量
-		content, err := i.workspaceReader.ReadFile(ctx, path, types.ReadOptions{})
+		content, err := i.workspaceReader.ReadFile(ctx, f.Path, types.ReadOptions{})
 		if err != nil {
 			projectTaskMetrics.TotalFailedFiles++
-			projectTaskMetrics.FailedFilePaths = append(projectTaskMetrics.FailedFilePaths, path)
-			i.logger.Debug("read file %s err:%v", path, err)
+			projectTaskMetrics.FailedFilePaths = append(projectTaskMetrics.FailedFilePaths, f.Path)
+			i.logger.Debug("read file %s err:%v", f, err)
 			continue
 		}
-		var timestamp int64
-		fileInfo, err := i.workspaceReader.Stat(path)
-		if err == nil && fileInfo != nil {
-			timestamp = fileInfo.ModTime.Unix()
-		}
-
 		// 创建源文件对象并解析
 		sourceFile := &types.SourceFile{
-			Path:    path,
+			Path:    f.Path,
 			Content: content,
 		}
 
 		fileElementTable, err := i.parser.Parse(ctx, sourceFile)
 		if err != nil {
 			projectTaskMetrics.TotalFailedFiles++
-			projectTaskMetrics.FailedFilePaths = append(projectTaskMetrics.FailedFilePaths, path)
-			i.logger.Debug("parse file %s err:%v", path, err)
+			projectTaskMetrics.FailedFilePaths = append(projectTaskMetrics.FailedFilePaths, f.Path)
+			i.logger.Debug("parse file %s err:%v", f, err)
 			// 显式清理内存
 			content = nil
 			sourceFile.Content = nil
 			continue
 		}
-		if timestamp > 0 {
-			fileElementTable.Timestamp = timestamp
-		}
-
+		fileElementTable.Timestamp = f.ModTime
 		fileElementTables = append(fileElementTables, fileElementTable)
 	}
 
@@ -1660,7 +1644,9 @@ func (i *Indexer) processBatch(ctx context.Context, batchId int, params *BatchPr
 	// 关系索引存储
 	if err = i.storage.BatchSave(ctx, params.ProjectUuid, workspace.FileElementTables(protoElementTables)); err != nil {
 		metrics.TotalFailedFiles += params.BatchSize
-		metrics.FailedFilePaths = append(metrics.FailedFilePaths, params.SourceFiles...)
+		for _, f := range params.SourceFiles {
+			metrics.FailedFilePaths = append(metrics.FailedFilePaths, f.Path)
+		}
 		return nil, fmt.Errorf("batch save element tables failed: %w", err)
 	}
 
@@ -1826,4 +1812,20 @@ func (i *Indexer) updateProgress(ctx context.Context, progress *ProgressInfo) er
 
 func (i *Indexer) IndexIter(ctx context.Context, projectUuid string) store.Iterator {
 	return i.storage.Iter(ctx, projectUuid)
+}
+
+func (i *Indexer) convertToFileWithModTimestamp(files []string) []*types.FileWithModTimestamp {
+	var results []*types.FileWithModTimestamp
+	for _, file := range files {
+		timestamp := time.Now().Unix()
+		fileInfo, err := i.workspaceReader.Stat(file)
+		if err != nil {
+			i.logger.Warn("failed to stat file %s, err:%v", file, err)
+		} else {
+			timestamp = fileInfo.ModTime.Unix()
+		}
+
+		results = append(results, &types.FileWithModTimestamp{Path: file, ModTime: timestamp})
+	}
+	return results
 }

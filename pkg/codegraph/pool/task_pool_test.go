@@ -12,7 +12,7 @@ import (
 
 // 测试正常提交和执行任务
 func TestTaskPool_NormalExecution(t *testing.T) {
-	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
+	newLogger, err := logger.NewLogger("/tmp/logs", "debug", "codebase-indexer")
 	if err != nil {
 		panic(err)
 	}
@@ -40,7 +40,7 @@ func TestTaskPool_NormalExecution(t *testing.T) {
 
 // 测试任务在等待执行时被取消
 func TestTaskPool_CancelBeforeExecution(t *testing.T) {
-	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
+	newLogger, err := logger.NewLogger("/tmp/logs", "debug", "codebase-indexer")
 	if err != nil {
 		panic(err)
 	}
@@ -73,7 +73,7 @@ func TestTaskPool_CancelBeforeExecution(t *testing.T) {
 
 // 测试任务执行过程中超时
 func TestTaskPool_TaskTimeout(t *testing.T) {
-	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
+	newLogger, err := logger.NewLogger("/tmp/logs", "debug", "codebase-indexer")
 	if err != nil {
 		panic(err)
 	}
@@ -109,7 +109,7 @@ func TestTaskPool_TaskTimeout(t *testing.T) {
 
 // 测试任务执行过程中被取消
 func TestTaskPool_TaskCancelDuringExecution(t *testing.T) {
-	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
+	newLogger, err := logger.NewLogger("/tmp/logs", "debug", "codebase-indexer")
 	if err != nil {
 		panic(err)
 	}
@@ -149,7 +149,7 @@ func TestTaskPool_TaskCancelDuringExecution(t *testing.T) {
 
 // 测试关闭任务池后无法提交任务
 func TestTaskPool_SubmitAfterClose(t *testing.T) {
-	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
+	newLogger, err := logger.NewLogger("/tmp/logs", "debug", "codebase-indexer")
 	if err != nil {
 		panic(err)
 	}
@@ -168,7 +168,7 @@ func TestTaskPool_SubmitAfterClose(t *testing.T) {
 
 // 测试并发提交任务
 func TestTaskPool_ConcurrentSubmit(t *testing.T) {
-	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
+	newLogger, err := logger.NewLogger("/tmp/logs", "debug", "codebase-indexer")
 	if err != nil {
 		panic(err)
 	}
@@ -213,7 +213,7 @@ func TestTaskPool_ConcurrentSubmit(t *testing.T) {
 // 测试最大并发限制
 func TestTaskPool_MaxConcurrency(t *testing.T) {
 	maxConcurrency := 3
-	newLogger, err := logger.NewLogger("/tmp/logs", "debug")
+	newLogger, err := logger.NewLogger("/tmp/logs", "debug", "codebase-indexer")
 	if err != nil {
 		panic(err)
 	}

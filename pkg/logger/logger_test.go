@@ -13,7 +13,7 @@ import (
 func TestNewLogger(t *testing.T) {
 	t.Run("Successfully create log directory", func(t *testing.T) {
 		tempDir := t.TempDir()
-		_, err := NewLogger(tempDir, "debug")
+		_, err := NewLogger(tempDir, "debug", "codebase-indexer")
 		if err != nil {
 			t.Fatalf("Failed to create log: %v", err)
 		}
@@ -45,14 +45,14 @@ func TestNewLogger(t *testing.T) {
 		}
 
 		// Try to create log, should return error
-		_, err := NewLogger(fileAsCacheDirPath, "debug")
+		_, err := NewLogger(fileAsCacheDirPath, "debug", "codebase-indexer")
 		if err == nil {
 			t.Error("Expected error since cacheDir is a file")
 		}
 	})
 
 	t.Run("Invalid log directory returns error", func(t *testing.T) {
-		_, err := NewLogger("", "warn")
+		_, err := NewLogger("", "warn", "codebase-indexer")
 		if err == nil {
 			t.Error("Should return invalid log directory error")
 		}

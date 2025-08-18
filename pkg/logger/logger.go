@@ -35,10 +35,13 @@ type logger struct {
 }
 
 // NewLogger Create new logger instance
-func NewLogger(logsDir, level string) (Logger, error) {
+func NewLogger(logsDir, level, appName string) (Logger, error) {
 	// Ensure logs directory is valid and writable
 	if logsDir == "" || strings.Contains(logsDir, "\x00") {
 		return nil, fmt.Errorf("invalid log directory path")
+	}
+	if appName == "" {
+		return nil, fmt.Errorf("appname cannot be empty")
 	}
 
 	// Try to create directory to verify write permission
@@ -56,7 +59,7 @@ func NewLogger(logsDir, level string) (Logger, error) {
 
 	// Configure log output to both file and console
 	fileWriter := zapcore.AddSync(&lumberjack.Logger{
-		Filename:   filepath.Join(logsDir, "codebase-indexer.log"),
+		Filename:   filepath.Join(logsDir, fmt.Sprintf("%s.log", appName)),
 		MaxSize:    10, // megabytes
 		MaxBackups: 1,  // backups
 		MaxAge:     7,  // days

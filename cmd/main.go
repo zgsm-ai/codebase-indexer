@@ -100,7 +100,7 @@ func main() {
 	}
 
 	// Initialize logging system
-	appLogger, err := logger.NewLogger(utils.LogsDir, *logLevel)
+	appLogger, err := logger.NewLogger(utils.LogsDir, *logLevel, *appName)
 	if err != nil {
 		fmt.Printf("failed to initialize logging system: %v\n", err)
 		return

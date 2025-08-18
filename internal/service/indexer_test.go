@@ -61,7 +61,7 @@ func setupTestEnvironment(t *testing.T) *testEnvironment {
 		logLevel = "debug"
 	}
 	// 创建日志器
-	newLogger, err := logger.NewLogger("/tmp/logs", logLevel)
+	newLogger, err := logger.NewLogger("/tmp/logs", logLevel, "codebase-indexer")
 	assert.NoError(t, err)
 
 	// 创建存储

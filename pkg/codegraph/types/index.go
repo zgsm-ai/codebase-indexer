@@ -9,6 +9,11 @@ const ( //
 	NodeTypeImplementation NodeType = "implementation" // 实现关系（类 -> 接口）
 )
 
+type FileWithModTimestamp struct {
+	Path    string
+	ModTime int64
+}
+
 type IndexTaskMetrics struct {
 	TotalFiles       int
 	TotalSymbols     int

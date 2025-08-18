@@ -64,7 +64,7 @@ func setupTestEnvironment() (*testEnvironment, error) {
 	}
 
 	// 创建日志器
-	newLogger, err := logger.NewLogger("/tmp/logs", logLevel)
+	newLogger, err := logger.NewLogger("/tmp/logs", logLevel, "codebase-indexer-test")
 
 	// 创建存储
 	storage, err := store.NewLevelDBStorage(storageDir, newLogger)
