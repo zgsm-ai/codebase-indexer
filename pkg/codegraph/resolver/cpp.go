@@ -49,17 +49,16 @@ func (c *CppResolver) resolveFunction(ctx context.Context, element *Function, rc
 		if cap.Node.IsMissing() || cap.Node.IsError() {
 			continue
 		}
-		content := cap.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(captureName) {
 		case types.ElementTypeFunctionName:
-			element.BaseElement.Name = StripSpaces(content)
+			element.BaseElement.Name = findFirstIdentifier(&cap.Node, rc.SourceFile.Content)
 			element.Declaration.Name = element.BaseElement.Name
 		case types.ElementTypeFunctionReturnType:
 			typs := findAllTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
-			if len(typs) == 0 {
-				typs = []string{types.PrimitiveType}
-			}
 			element.Declaration.ReturnType = typs
+			if len(element.Declaration.ReturnType) == 0 {
+				element.Declaration.ReturnType = []string{types.PrimitiveType}
+			}
 		case types.ElementTypeFunctionParameters:
 			parameters := parseCppParameters(&cap.Node, rc.SourceFile.Content)
 			element.Declaration.Parameters = parameters
