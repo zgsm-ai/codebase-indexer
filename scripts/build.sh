@@ -58,12 +58,18 @@ echo "Starting Go build process for Version: $APP_VERSION, OS: $TARGET_OS, Arch:
 # Configure CC and CGO settings based on target OS and architecture
 export CGO_ENABLED=1
 
+# Add static build flags for Linux targets
+STATIC_BUILD_FLAGS=""
+STATIC_BUILD_TAGS=""
+
 case "$TARGET_OS" in
   "linux")
     case "$TARGET_ARCH" in
       "amd64")
-        export CC=gcc
+        export CC=musl-gcc
         export CGO_CFLAGS="-O2 -g"
+        STATIC_BUILD_FLAGS="-linkmode external -extldflags \"-static\""
+        STATIC_BUILD_TAGS="netgo osusergo static_build"
         ;;
       "arm64")
         export CC=aarch64-linux-gnu-gcc
@@ -123,7 +129,7 @@ case "$TARGET_OS" in
     echo "Warning: Unsupported target OS: $TARGET_OS, using default CC"
     ;;
 esac
-GOOS="$TARGET_OS" GOARCH="$TARGET_ARCH" go build -ldflags="$LD_FLAGS" -o "$PROJECT_ROOT/$OUTPUT_DIR/$OUTPUT_FILENAME" "$MAIN_PACKAGE_PATH"
+GOOS="$TARGET_OS" GOARCH="$TARGET_ARCH" go build -tags="$STATIC_BUILD_TAGS" -ldflags="$LD_FLAGS $STATIC_BUILD_FLAGS" -o "$PROJECT_ROOT/$OUTPUT_DIR/$OUTPUT_FILENAME" "$MAIN_PACKAGE_PATH"
 
 if [ $? -eq 0 ]; then
   echo "Build successful!"
