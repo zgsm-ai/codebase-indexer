@@ -197,15 +197,27 @@ func main() {
 	setupPprof(appLogger)
 
 	// Start HTTP server
+	httpErrChan := make(chan error, 1)
 	go func() {
 		if err := httpServerInstance.Start(*httpServer); err != nil && err != http.ErrServerClosed {
-			appLogger.Error("HTTP server error: %v", err)
+			httpErrChan <- err
 		}
+		close(httpErrChan)
 	}()
 
+	// 等待一小段时间检查HTTP服务器是否启动成功
+	select {
+	case err := <-httpErrChan:
+		if err != nil {
+			appLogger.Error("HTTP server failed to start: %v", err)
+			return
+		}
+	case <-time.After(2 * time.Second):
+		// 2秒内没有收到错误，认为服务器启动成功
+		appLogger.Info("HTTP server started successfully on %s", *httpServer)
+	}
+
 	appLogger.Info("application started successfully")
-	// appLogger.Info("gRPC server listening on %s", *grpcServer)
-	// appLogger.Info("HTTP server listening on %s", *httpServer)
 	if *enableSwagger {
 		appLogger.Info("swagger documentation available at http://localhost%s/docs", *httpServer)
 	}

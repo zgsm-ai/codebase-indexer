@@ -15,11 +15,12 @@ func TestCResolver(t *testing.T) {
 	logger := initLogger()                // 如果有日志初始化
 	parser := NewSourceFileParser(logger) // 假设有类似 Java 的解析器
 	res, err := parser.Parse(context.Background(), &types.SourceFile{
-		Path:    "testdata/c/test.c",
-		Content: readFile("testdata/c/test.c"),
+		Path:    "testdata/cpp/test.cpp",
+		Content: readFile("testdata/cpp/test.cpp"),
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
+	fmt.Println(len(res.Elements))
 	for _, elem := range res.Elements {
 		// if resolver.IsValidElement(elem) {
 		// 	fmt.Printf("📦 Type: %s | Name: %s | Path: %s\n", elem.GetType(), elem.GetName(), elem.GetPath())

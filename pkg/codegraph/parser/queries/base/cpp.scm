@@ -185,7 +185,11 @@
   declarator: [
     ;; 直接函数声明符（如：void func14(...)）
     (function_declarator
-      declarator: (identifier) @definition.function.name
+      declarator: [
+        (identifier) @definition.function.name
+        (qualified_identifier
+          name: (identifier) @definition.function.name)
+      ]
       parameters: (parameter_list) @definition.function.parameters
     )
     ;; 指针函数声明符（如：int *func(...)）

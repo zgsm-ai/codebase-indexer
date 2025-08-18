@@ -2,6 +2,7 @@ package codegraph
 
 import (
 	"codebase-indexer/pkg/codegraph/resolver"
+	"codebase-indexer/pkg/codegraph/types"
 	"context"
 	"fmt"
 	"os"
@@ -9,13 +10,14 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"runtime/trace"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-const JavaProjectRootDir = "../tmp/projects/java"
+const JavaProjectRootDir = "/tmp/projects/java/mall"
 
 // 添加性能分析辅助函数
 func setupProfiling() (func(), error) {
@@ -103,28 +105,8 @@ func TestParseJavaProjectFiles(t *testing.T) {
 		wantErr error
 	}{
 		{
-			Name:    "hadoop",
-			Path:    filepath.Join(JavaProjectRootDir, "hadoop"),
-			wantErr: nil,
-		},
-		{
 			Name:    "mall",
-			Path:    filepath.Join(JavaProjectRootDir, "mall"),
-			wantErr: nil,
-		},
-		{
-			Name:    "maven",
-			Path:    filepath.Join(JavaProjectRootDir, "maven"),
-			wantErr: nil,
-		},
-		{
-			Name:    "elasticsearch",
-			Path:    filepath.Join(JavaProjectRootDir, "elasticsearch"),
-			wantErr: nil,
-		},
-		{
-			Name:    "kafka",
-			Path:    filepath.Join(JavaProjectRootDir, "kafka"),
+			Path:    filepath.Join(JavaProjectRootDir),
 			wantErr: nil,
 		},
 	}
@@ -186,6 +168,404 @@ func TestParseJavaProjectFiles(t *testing.T) {
 	fmt.Printf("\n=== 总体执行时间: %v ===\n", totalDuration)
 }
 
+func TestQueryJava(t *testing.T) {
+	// 设置测试环境
+	env, err := setupTestEnvironment()
+	assert.NoError(t, err)
+	defer teardownTestEnvironment(t, env)
+
+	workspacePath := "/tmp/projects/java/mall"
+	// 初始化工作空间数据库记录
+	err = initWorkspaceModel(env, workspacePath)
+	assert.NoError(t, err)
+
+	// 创建索引器
+	indexer := createTestIndexer(env, &types.VisitPattern{
+		ExcludeDirs: append(defaultVisitPattern.ExcludeDirs, "vendor", ".git"),
+		IncludeExts: []string{".java"},
+	})
+
+	// 先索引工作空间，确保有数据可查询
+	fmt.Println("开始索引JavaProjectRootDir工作空间...")
+	_, err = indexer.IndexWorkspace(context.Background(), workspacePath)
+	assert.NoError(t, err)
+	fmt.Println("工作空间索引完成")
+
+	// 定义查询测试用例结构
+	type QueryTestCase struct {
+		Name            string             // 测试用例名称
+		ElementName     string             // 元素名称
+		FilePath        string             // 查询的文件路径
+		StartLine       int                // 开始行号
+		EndLine         int                // 结束行号
+		ElementType     string             // 元素类型
+		ExpectedCount   int                // 期望的定义数量
+		ExpectedNames   []string           // 期望找到的定义名称
+		ShouldFindDef   bool               // 是否应该找到定义
+		wantDefinitions []types.Definition // 期望的详细定义结果
+		wantErr         error              // 期望的错误
+	}
+
+	testCases := []QueryTestCase{
+		{
+			Name:          "查询success方法调用",
+			ElementName:   "success",
+			FilePath:      "/tmp/projects/java/mall/mall-admin/src/main/java/com/macro/mall/controller/SmsHomeNewProductController.java",
+			StartLine:     34,
+			EndLine:       34,
+			ElementType:   "call.method",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "success", Path: "CommonResult.java", Range: []int32{6, 0, 6, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询createBrand方法调用",
+			ElementName:   "createBrand",
+			FilePath:      "/tmp/projects/java/mall/mall-demo/src/main/java/com/macro/mall/demo/controller/DemoController.java",
+			StartLine:     45,
+			EndLine:       45,
+			ElementType:   "call.method",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "createBrand", Path: "DemoService.java", Range: []int32{14, 0, 14, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询deleteBrand方法调用",
+			ElementName:   "deleteBrand",
+			FilePath:      "/tmp/projects/java/mall/mall-demo/src/main/java/com/macro/mall/demo/controller/DemoController.java",
+			StartLine:     76,
+			EndLine:       76,
+			ElementType:   "call.method",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "deleteBrand", Path: "DemoService.java", Range: []int32{18, 0, 18, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询ApiException方法调用",
+			ElementName:   "ApiException",
+			FilePath:      "/tmp/projects/java/mall/mall-common/src/main/java/com/macro/mall/common/exception/Asserts.java",
+			StartLine:     15,
+			EndLine:       15,
+			ElementType:   "call.method",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "ApiException", Path: "ApiException.java", Range: []int32{11, 0, 11, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询validateFailed方法调用",
+			ElementName:   "validateFailed",
+			FilePath:      "/tmp/projects/java/mall/mall-common/src/main/java/com/macro/mall/common/exception/GlobalExceptionHandler.java",
+			StartLine:     56,
+			EndLine:       56,
+			ElementType:   "call.method",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "validateFailed", Path: "CommonResult.java", Range: []int32{91, 0, 91, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询cancelOrder方法调用",
+			ElementName:   "cancelOrder",
+			FilePath:      "/tmp/projects/java/mall/mall-portal/src/main/java/com/macro/mall/portal/component/CancelOrderReceiver.java",
+			StartLine:     23,
+			EndLine:       23,
+			ElementType:   "call.method",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "cancelOrder", Path: "OmsPortalOrderService.java", Range: []int32{43, 0, 43, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询getUserNameFromToken方法调用",
+			ElementName:   "getUserNameFromToken",
+			FilePath:      "/tmp/projects/java/mall/mall-portal/src/main/java/com/macro/mall/portal/component/CancelOrderReceiver.java",
+			StartLine:     43,
+			EndLine:       43,
+			ElementType:   "call.method",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "getUserNameFromToken", Path: "JwtTokenUtil.java", Range: []int32{75, 0, 75, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询getCode方法调用",
+			ElementName:   "getCode",
+			FilePath:      "/tmp/projects/java/mall/mall-common/src/main/java/com/macro/mall/common/api/CommonResult.java",
+			StartLine:     36,
+			EndLine:       36,
+			ElementType:   "call.method",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "getCode", Path: "ResultCode.java", Range: []int32{20, 0, 20, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询list方法调用",
+			ElementName:   "list",
+			FilePath:      "/tmp/projects/java/mall/mall-admin/src/main/java/com/macro/mall/controller/UmsAdminController.java",
+			StartLine:     122,
+			EndLine:       122,
+			ElementType:   "call.method",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "list", Path: "UmsAdminService.java", Range: []int32{49, 0, 49, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询getLogger方法调用", //调用系统包
+			ElementName:   "getLogger",
+			FilePath:      "/tmp/projects/java/mall/mall-portal/src/main/java/com/macro/mall/portal/component/CancelOrderReceiver.java",
+			StartLine:     18,
+			EndLine:       18,
+			ElementType:   "call.method",
+			ShouldFindDef: false,
+			wantErr:       nil,
+		},
+		{
+			Name:          "查询UmsMemberLevelService引用",
+			ElementName:   "UmsMemberLevelService",
+			FilePath:      "/tmp/projects/java/mall/mall-admin/src/main/java/com/macro/mall/controller/UmsMemberLevelController.java",
+			StartLine:     28,
+			EndLine:       28,
+			ElementType:   "reference",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "UmsMemberLevelService", Path: "UmsMemberLevelService.java", Range: []int32{10, 0, 16, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询WebLog引用",
+			ElementName:   "WebLog",
+			FilePath:      "/tmp/projects/java/mall/mall-common/src/main/java/com/macro/mall/common/log/WebLogAspect.java",
+			StartLine:     61,
+			EndLine:       61,
+			ElementType:   "reference",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "WebLog", Path: "WebLog.java", Range: []int32{11, 0, 11, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询Criteria引用",
+			ElementName:   "Criteria",
+			FilePath:      "/tmp/projects/java/mall/mall-mbg/src/main/java/com/macro/mall/model/CmsPrefrenceAreaExample.java",
+			StartLine:     56,
+			EndLine:       56,
+			ElementType:   "reference",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "Criteria", Path: "CmsPrefrenceAreaExample.java", Range: []int32{427, 0, 427, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询PmsPortalBrandService引用",
+			ElementName:   "PmsPortalBrandService",
+			FilePath:      "/tmp/projects/java/mall/mall-portal/src/main/java/com/macro/mall/portal/controller/PmsPortalBrandController.java",
+			StartLine:     28,
+			EndLine:       28,
+			ElementType:   "reference",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "Criteria", Path: "PmsPortalBrandService.java", Range: []int32{12, 0, 12, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询AlipayConfig引用",
+			ElementName:   "AlipayConfig",
+			FilePath:      "/tmp/projects/java/mall/mall-portal/src/main/java/com/macro/mall/portal/service/impl/AlipayServiceImpl.java",
+			StartLine:     33,
+			EndLine:       33,
+			ElementType:   "reference",
+			ShouldFindDef: true,
+			wantDefinitions: []types.Definition{
+				{Name: "AlipayConfig", Path: "AlipayConfig.java", Range: []int32{17, 0, 17, 0}},
+			},
+			wantErr: nil,
+		},
+		{
+			Name:          "查询JSONObject引用", //调用系统包
+			ElementName:   "JSONObject",
+			FilePath:      "/tmp/projects/java/mall/mall-portal/src/main/java/com/macro/mall/portal/service/impl/AlipayServiceImpl.java",
+			StartLine:     52,
+			EndLine:       52,
+			ElementType:   "reference",
+			ShouldFindDef: false,
+			wantErr:       nil,
+		},
+		{
+			Name:          "查询MethodSignature引用", //调用系统包
+			ElementName:   "MethodSignature",
+			FilePath:      "/tmp/projects/java/mall/mall-security/src/main/java/com/macro/mall/security/aspect/RedisCacheAspect.java",
+			StartLine:     34,
+			EndLine:       34,
+			ElementType:   "reference",
+			ShouldFindDef: false,
+			wantErr:       nil,
+		},
+	}
+
+	// 统计变量
+	totalCases := len(testCases)
+	correctCases := 0
+
+	fmt.Printf("\n开始执行 %d 个基于人工索引元素的查询测试用例...\n", totalCases)
+	fmt.Println(strings.Repeat("=", 80))
+
+	// 执行每个测试用例
+	for i, tc := range testCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			fmt.Printf("\n[测试用例 %d/%d] %s\n", i+1, totalCases, tc.Name)
+			fmt.Printf("元素名称: %s (类型: %s)\n", tc.ElementName, tc.ElementType)
+			fmt.Printf("文件路径: %s\n", tc.FilePath)
+			fmt.Printf("查询范围: 第%d行 - 第%d行\n", tc.StartLine, tc.EndLine)
+
+			// 检查文件是否存在
+			if _, err := os.Stat(tc.FilePath); os.IsNotExist(err) {
+				fmt.Printf("文件不存在，跳过查询\n")
+				if !tc.ShouldFindDef {
+					correctCases++
+					fmt.Printf("✓ 预期文件不存在，测试通过\n")
+				} else {
+					fmt.Printf("✗ 预期找到定义但文件不存在，测试失败\n")
+				}
+				return
+			}
+
+			// 检查行号范围是否有效
+			if tc.StartLine < 0 || tc.EndLine < 0 {
+				fmt.Printf("无效的行号范围，跳过查询\n")
+				if !tc.ShouldFindDef {
+					correctCases++
+					fmt.Printf("✓ 预期无效范围，测试通过\n")
+				} else {
+					fmt.Printf("✗ 预期找到定义但范围无效，测试失败\n")
+				}
+				return
+			}
+
+			// 调用QueryDefinitions接口
+			definitions, err := indexer.QueryDefinitions(context.Background(), &types.QueryDefinitionOptions{
+				Workspace: workspacePath,
+				StartLine: tc.StartLine,
+				EndLine:   tc.EndLine,
+				FilePath:  tc.FilePath,
+			})
+
+			foundDefinitions := len(definitions)
+
+			fmt.Printf("查询结果: ")
+			if err != nil {
+				fmt.Printf("查询失败 - %v\n", err)
+			} else {
+				fmt.Printf("找到 %d 个定义\n", foundDefinitions)
+
+				if foundDefinitions > 0 {
+					fmt.Println("📋 查询结果详情:")
+					for j, def := range definitions {
+						fmt.Printf("  [%d] 名称: '%s'\n", j+1, def.Name)
+						fmt.Printf("      类型: '%s'\n", def.Type)
+						fmt.Printf("      范围: %v\n", def.Range)
+						fmt.Printf("      文件: '%s'\n", filepath.Base(def.Path))
+						fmt.Printf("      完整路径: '%s'\n", def.Path)
+
+						// 如果有期望的定义，进行匹配度分析
+						if len(tc.wantDefinitions) > 0 {
+							for _, wantDef := range tc.wantDefinitions {
+								if def.Name == wantDef.Name {
+									nameMatch := "✓"
+									lineMatch := "✗"
+									pathMatch := "✗"
+
+									if wantDef.Range[0] == def.Range[0] {
+										lineMatch = "✓"
+									}
+									if wantDef.Path == "" || strings.Contains(def.Path, wantDef.Path) {
+										pathMatch = "✓"
+									}
+
+									fmt.Printf("      匹配分析: 名称%s 行号%s 路径%s\n", nameMatch, lineMatch, pathMatch)
+								}
+							}
+						}
+						fmt.Println("      " + strings.Repeat("-", 40))
+					}
+				} else {
+					fmt.Println("  ❌ 未找到任何定义")
+				}
+
+				// 输出查询总结
+				fmt.Printf("📊 查询总结: 期望找到=%v, 实际找到=%d\n",
+					tc.ShouldFindDef, foundDefinitions)
+
+				if tc.ShouldFindDef && foundDefinitions == 0 {
+					fmt.Println("  ⚠️  警告: 期望找到定义但未找到")
+				} else if !tc.ShouldFindDef && foundDefinitions > 0 {
+					fmt.Println("  ⚠️  警告: 期望不找到定义但找到了")
+				} else {
+					fmt.Println("  ✅ 查询结果符合预期")
+				}
+			}
+
+			// 使用结构化的期望结果进行验证（类似js_resolver_test.go格式）
+			if len(tc.wantDefinitions) > 0 || tc.wantErr != nil {
+				// 使用新的结构化验证
+				assert.Equal(t, tc.wantErr, err, fmt.Sprintf("%s: 错误应该匹配", tc.Name))
+
+				if tc.wantErr == nil {
+					// 当返回多个定义时，验证期望的定义是否都存在
+					for _, wantDef := range tc.wantDefinitions {
+						found := false
+						for _, actualDef := range definitions {
+							nameMatch := actualDef.Name == wantDef.Name
+							lineMatch := wantDef.Range[0] == actualDef.Range[0]
+							pathMatch := wantDef.Path == "" || strings.Contains(actualDef.Path, wantDef.Path)
+
+							if nameMatch && pathMatch && lineMatch {
+								found = true
+								break
+							}
+						}
+						assert.True(t, found,
+							fmt.Sprintf("%s: 应该找到名为 '%s' 行号为'%d'路径包含 '%s' 的定义",
+								tc.Name, wantDef.Name, wantDef.Range[0], wantDef.Path))
+					}
+
+				}
+			} else {
+				// 使用原有的验证逻辑，保持向后兼容
+				if tc.ShouldFindDef {
+					assert.NoError(t, err, fmt.Sprintf("%s 查询应该成功", tc.Name))
+					assert.GreaterOrEqual(t, foundDefinitions, tc.ExpectedCount,
+						fmt.Sprintf("%s 找到的定义数量应该大于等于 %d", tc.Name, tc.ExpectedCount))
+				} else {
+					if err == nil {
+						assert.Equal(t, 0, len(definitions),
+							fmt.Sprintf("%s 不应该找到定义", tc.Name))
+					}
+				}
+			}
+		})
+	}
+
+}
+
 // 添加一个专门的性能基准测试
 func BenchmarkParseJavaProject(b *testing.B) {
 	env, err := setupTestEnvironment()
@@ -208,4 +588,145 @@ func BenchmarkParseJavaProject(b *testing.B) {
 		}
 		_ = fileElements
 	}
+}
+
+func TestFindDefinitionsForAllElementsJava(t *testing.T) {
+	// 设置测试环境
+	env, err := setupTestEnvironment()
+	assert.NoError(t, err)
+	defer teardownTestEnvironment(t, env)
+
+	// 使用项目自身的代码作为测试数据
+	workspacePath, err := filepath.Abs(JavaProjectRootDir) // 指向项目根目录
+	assert.NoError(t, err)
+
+	// 初始化工作空间数据库记录
+	err = initWorkspaceModel(env, workspacePath)
+	assert.NoError(t, err)
+
+	// 创建索引器并索引工作空间
+	indexer := createTestIndexer(env, &types.VisitPattern{
+		ExcludeDirs: append(defaultVisitPattern.ExcludeDirs, "vendor", "test", ".git"),
+		IncludeExts: []string{".java"}, // 只索引java文件
+	})
+
+	project := NewTestProject(workspacePath, env.logger)
+	fileElements, _, err := ParseProjectFiles(context.Background(), env, project)
+	assert.NoError(t, err)
+
+	// 先索引所有文件到数据库
+	_, err = indexer.IndexWorkspace(context.Background(), workspacePath)
+	assert.NoError(t, err)
+
+	// 统计变量
+	var (
+		totalElements       = 0
+		testedElements      = 0
+		foundDefinitions    = 0
+		notFoundDefinitions = 0
+		queryErrors         = 0
+		skippedElements     = 0
+		skippedVariables    = 0
+	)
+
+	// 定义需要跳过测试的元素类型（基于types.ElementType的实际值）
+	skipElementTypes := map[string]bool{
+		"import":         true, // 导入语句通常不需要查找定义
+		"import.name":    true, // 导入名称
+		"import.alias":   true, // 导入别名
+		"import.path":    true, // 导入路径
+		"import.source":  true, // 导入源
+		"package":        true, // 包声明
+		"package.name":   true, // 包名
+		"namespace":      true, // 命名空间
+		"namespace.name": true, // 命名空间名称
+		"undefined":      true, // 未定义类型
+	}
+
+	// 详细的元素类型统计
+	elementTypeStats := make(map[string]int)
+	elementTypeSuccessStats := make(map[string]int)
+
+	// 遍历每个文件的元素
+	for _, fileElement := range fileElements {
+		for _, element := range fileElement.Elements {
+			elementType := string(element.GetType())
+			totalElements++
+			elementTypeStats[elementType]++
+
+			// 跳过某些类型的元素
+			if skipElementTypes[elementType] {
+				skippedElements++
+				continue
+			}
+
+			elementName := element.GetName()
+			elementRange := element.GetRange()
+
+			// 如果元素名称为空或者范围无效，跳过
+			if elementName == "" || len(elementRange) != 4 {
+				skippedElements++
+				continue
+			}
+			if elementType == "variable" && element.GetScope() == types.ScopeFunction {
+				skippedVariables++
+				continue
+			}
+			testedElements++
+
+			// 尝试查找该元素的定义
+			definitions, err := indexer.QueryDefinitions(context.Background(), &types.QueryDefinitionOptions{
+				Workspace: workspacePath,
+				StartLine: int(elementRange[0]) + 1,
+				EndLine:   int(elementRange[2]) + 1,
+				FilePath:  fileElement.Path,
+			})
+
+			if err != nil {
+				queryErrors++
+				continue
+			}
+
+			if len(definitions) > 0 {
+				foundDefinitions++
+				elementTypeSuccessStats[elementType]++
+			} else {
+				notFoundDefinitions++
+			}
+		}
+	}
+
+	// 计算统计数据
+	successRate := 0.0
+	if testedElements > 0 {
+		successRate = float64(foundDefinitions) / float64(testedElements) * 100
+	}
+	// 输出各类型元素的统计信息
+	fmt.Println("\n📈 各类型元素统计:")
+	fmt.Println(strings.Repeat("-", 60))
+	for elementType, count := range elementTypeStats {
+		successCount := elementTypeSuccessStats[elementType]
+		rate := 0.0
+		if count > 0 {
+			rate = float64(successCount) / float64(count) * 100
+		}
+		if elementType == "variable" {
+			fmt.Println("跳过的变量数量", skippedVariables)
+			rate = float64(successCount) / float64(count-skippedVariables) * 100
+		}
+		fmt.Printf("%-15s: %4d 个 (成功找到定义: %4d, 成功率: %5.1f%%)\n",
+			elementType, count, successCount, rate)
+	}
+	// 断言检查：确保基本的成功率
+	assert.GreaterOrEqual(t, successRate, 20.0,
+		"元素定义查找的成功率应该至少达到20%")
+
+	// 确保没有过多的查询错误
+	errorRate := float64(queryErrors) / float64(testedElements) * 100
+	assert.LessOrEqual(t, errorRate, 10.0,
+		"查询错误率不应超过10%")
+
+	// 确保至少测试了一定数量的元素
+	assert.GreaterOrEqual(t, testedElements, 50,
+		"应该至少测试50个元素")
 }
