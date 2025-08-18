@@ -153,9 +153,13 @@ func TestQuery(t *testing.T) {
 	defer teardownTestEnvironment(t, env)
 
 	// 使用codebase-indexer-main项目作为测试数据
-	workspacePath := "/tmp/projects/go/codebase-indexer-main"
+	workspacePath, err := filepath.Abs("../../")
+	if err != nil {
+		panic(err)
+	}
 
 	// 初始化工作空间数据库记录
+	err = initWorkspaceModel(env, workspacePath)
 	err = initWorkspaceModel(env, workspacePath)
 	assert.NoError(t, err)
 
@@ -191,7 +195,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询createTestIndexer函数调用",
 			ElementName:   "createTestIndexer",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/test/codegraph/ts_test.go",
+			FilePath:      filepath.Join(workspacePath, "test/codegraph/ts_test.go"),
 			StartLine:     65,
 			EndLine:       65,
 			ElementType:   "call.function",
@@ -204,7 +208,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询StripSpaces函数调用",
 			ElementName:   "StripSpaces",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/resolver/java.go",
+			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/resolver/java.go"),
 			StartLine:     32,
 			EndLine:       32,
 			ElementType:   "call.function",
@@ -217,7 +221,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询symbolMapKey函数调用",
 			ElementName:   "symbolMapKey",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/indexer.go",
+			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/indexer.go"),
 			StartLine:     1500,
 			EndLine:       1500,
 			ElementType:   "call.function",
@@ -230,7 +234,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询makeQueryPath函数调用",
 			ElementName:   "makeQueryPath",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/parser/scm.go",
+			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/parser/scm.go"),
 			StartLine:     57,
 			EndLine:       57,
 			ElementType:   "call.function",
@@ -243,7 +247,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询NewTaskPool函数调用",
 			ElementName:   "NewTaskPool",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/pool/task_pool_test.go",
+			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/pool/task_pool_test.go"),
 			StartLine:     18,
 			EndLine:       18,
 			ElementType:   "call.function",
@@ -256,7 +260,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询parseBaseClassClause函数调用",
 			ElementName:   "parseBaseClassClause",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/resolver/cpp.go",
+			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/resolver/cpp.go"),
 			StartLine:     133,
 			EndLine:       133,
 			ElementType:   "call.function",
@@ -269,7 +273,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询NewReference函数调用",
 			ElementName:   "NewReference",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/resolver/go.go",
+			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/resolver/go.go"),
 			StartLine:     241,
 			EndLine:       241,
 			ElementType:   "call.function",
@@ -282,7 +286,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询findAllTypeIdentifiers函数调用",
 			ElementName:   "findAllTypeIdentifiers",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/resolver/cpp.go",
+			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/resolver/cpp.go"),
 			StartLine:     225,
 			EndLine:       225,
 			ElementType:   "call.function",
@@ -295,7 +299,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询CreateTestValues函数调用",
 			ElementName:   "CreateTestValues",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/store/leveldb_test.go",
+			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/store/leveldb_test.go"),
 			StartLine:     408,
 			EndLine:       408,
 			ElementType:   "call.function",
@@ -308,7 +312,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询containsModifier函数调用",
 			ElementName:   "containsModifier",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/resolver/javascript.go",
+			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/resolver/javascript.go"),
 			StartLine:     301,
 			EndLine:       301,
 			ElementType:   "call.function",
@@ -321,7 +325,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询NewModuleResolver函数调用",
 			ElementName:   "NewModuleResolver",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/workspace/workspace.go",
+			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/workspace/workspace.go"),
 			StartLine:     41,
 			EndLine:       41,
 			ElementType:   "call.function",
@@ -334,7 +338,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询Definition结构体",
 			ElementName:   "Definition",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/types/index.go",
+			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/types/index.go"),
 			StartLine:     21,
 			EndLine:       21,
 			ElementType:   "reference",
@@ -347,7 +351,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询QueryRelationOptions结构体",
 			ElementName:   "QueryRelationOptions",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/types/indexer.go",
+			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/types/indexer.go"),
 			StartLine:     853,
 			EndLine:       853,
 			ElementType:   "reference",
@@ -360,7 +364,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询SourceFile结构体",
 			ElementName:   "SourceFile",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/indexer.go",
+			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/indexer.go"),
 			StartLine:     1469,
 			EndLine:       1469,
 			ElementType:   "reference",
@@ -373,7 +377,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询GraphNode结构体",
 			ElementName:   "GraphNode",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/types/indexer.go",
+			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/types/indexer.go"),
 			StartLine:     60,
 			EndLine:       60,
 			ElementType:   "reference",
@@ -386,7 +390,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询logger结构体",
 			ElementName:   "logger",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/types/indexer.go",
+			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/types/indexer.go"),
 			StartLine:     59,
 			EndLine:       59,
 			ElementType:   "reference",
@@ -399,7 +403,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询CodeGraphSummary结构体",
 			ElementName:   "CodeGraphSummary",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/types/indexer.go",
+			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/types/indexer.go"),
 			StartLine:     1274,
 			EndLine:       1274,
 			ElementType:   "reference",
@@ -412,7 +416,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询VersionRequest结构体",
 			ElementName:   "VersionRequest",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/api/codegraph/codebase_syncer.pb.go",
+			FilePath:      filepath.Join(workspacePath, "api/codegraph/codebase_syncer.pb.go"),
 			StartLine:     454,
 			EndLine:       454,
 			ElementType:   "reference",
@@ -425,7 +429,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询ConfigServer结构体",
 			ElementName:   "ConfigServer",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/internal/config/config.go",
+			FilePath:      filepath.Join(workspacePath, "internal/config/config.go"),
 			StartLine:     43,
 			EndLine:       43,
 			ElementType:   "reference",
@@ -438,7 +442,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询DefinitionDatag结构体",
 			ElementName:   "DefinitionData",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/internal/service/codebase.go",
+			FilePath:      filepath.Join(workspacePath, "internal/service/codebase.go"),
 			StartLine:     418,
 			EndLine:       418,
 			ElementType:   "reference",
@@ -451,7 +455,7 @@ func TestQuery(t *testing.T) {
 		{
 			Name:          "查询JavaClassifier结构体",
 			ElementName:   "JavaClassifier",
-			FilePath:      "/tmp/projects/go/codebase-indexer-main/pkg/codegraph/analyzer/package_classifier/java_classifier.go",
+			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/analyzer/package_classifier/java_classifier.go"),
 			StartLine:     15,
 			EndLine:       15,
 			ElementType:   "reference",

@@ -28,16 +28,16 @@ type CodegraphProcessService interface {
 }
 
 type CodegraphProcessor struct {
-	indexer         *Indexer
-	workspaceReader *workspace.WorkspaceReader
+	indexer         Indexer
+	workspaceReader workspace.WorkspaceReader
 	workspaceRepo   repository.WorkspaceRepository
 	eventRepo       repository.EventRepository
 	logger          logger.Logger
 }
 
 func NewCodegraphProcessor(
-	workspaceReader *workspace.WorkspaceReader,
-	indexer *Indexer,
+	workspaceReader workspace.WorkspaceReader,
+	indexer Indexer,
 	workspaceRepo repository.WorkspaceRepository,
 	eventRepo repository.EventRepository,
 	logger logger.Logger,
@@ -166,6 +166,16 @@ func (c *CodegraphProcessor) ProcessOpenWorkspaceEvent(ctx context.Context, even
 		}
 		return err
 	}
+
+	if !fileInfo.IsDir {
+		c.logger.Error("codegraph open_workspace event, %s is file, not process.",
+			event.WorkspacePath)
+		if err = c.updateEventStatusFinally(event, nil); err != nil {
+			return fmt.Errorf("codegraph update open_workspace event err: %w", err)
+		}
+		return nil
+	}
+
 	// 更新进度为0，成功后再更新总进度。
 	err = c.workspaceRepo.UpdateCodegraphInfo(event.WorkspacePath, 0, time.Now().Unix())
 	if err != nil {
@@ -175,15 +185,6 @@ func (c *CodegraphProcessor) ProcessOpenWorkspaceEvent(ctx context.Context, even
 			return fmt.Errorf("codegraph update open_workspace event err: %w", err)
 		}
 		return err
-	}
-
-	if !fileInfo.IsDir {
-		c.logger.Error("codegraph open_workspace event, %s is file, not process.",
-			event.WorkspacePath)
-		if err = c.updateEventStatusFinally(event, nil); err != nil {
-			return fmt.Errorf("codegraph update open_workspace event err: %w", err)
-		}
-		return nil
 	}
 	// todo open_workspace过程中会更新进度，其余事件结束更新进度。
 	_, err = c.indexer.IndexWorkspace(ctx, event.WorkspacePath)
@@ -212,7 +213,7 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 	// 处理重新构建事件
 	for _, event := range rebuildEvents {
 		// 转换路径
-		c.convertFilePathToAbs(event)
+		c.convertWorkspaceFilePathToAbs(event)
 		c.logger.Info("codegraph start to process rebuild_workspace event: %s", event.WorkspacePath)
 		err = c.ProcessRebuildWorkspaceEvent(ctx, event)
 		if err != nil {
@@ -233,7 +234,7 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 
 	// 处理打开工作区事件
 	for _, event := range openEvents {
-		c.convertFilePathToAbs(event)
+		c.convertWorkspaceFilePathToAbs(event)
 		c.logger.Info("codegraph start to process open_workspace event: %s", event.WorkspacePath)
 		err = c.ProcessOpenWorkspaceEvent(ctx, event)
 		if err != nil {
@@ -254,7 +255,7 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 
 	// 处理添加文件事件
 	for _, event := range addEvents {
-		c.convertFilePathToAbs(event)
+		c.convertWorkspaceFilePathToAbs(event)
 		c.logger.Info("codegraph start to process add_file event: %s", event.SourceFilePath)
 		err = c.ProcessAddFileEvent(ctx, event)
 		if err != nil {
@@ -274,7 +275,7 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 	}
 
 	for _, event := range modifyEvents {
-		c.convertFilePathToAbs(event)
+		c.convertWorkspaceFilePathToAbs(event)
 		c.logger.Info("codegraph start to process modify_file event: %s", event.SourceFilePath)
 		err = c.ProcessModifyFileEvent(ctx, event)
 		if err != nil {
@@ -294,7 +295,7 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 	}
 
 	for _, event := range deleteEvents {
-		c.convertFilePathToAbs(event)
+		c.convertWorkspaceFilePathToAbs(event)
 		c.logger.Info("codegraph start to process delete_file event: %s", event.SourceFilePath)
 		err = c.ProcessDeleteFileEvent(ctx, event)
 		if err != nil {
@@ -314,7 +315,7 @@ func (c *CodegraphProcessor) ProcessEvents(ctx context.Context, workspacePaths [
 	}
 
 	for _, event := range renameEvents {
-		c.convertFilePathToAbs(event)
+		c.convertWorkspaceFilePathToAbs(event)
 		c.logger.Info("codegraph start to process rename_file event: source %s target %s",
 			event.SourceFilePath, event.TargetFilePath)
 		err = c.ProcessRenameFileEvent(ctx, event)
@@ -353,14 +354,14 @@ func (c *CodegraphProcessor) updateEventStatusFinally(event *model.Event, err er
 	return nil
 }
 
-func (c *CodegraphProcessor) convertFilePathToAbs(event *model.Event) {
+func (c *CodegraphProcessor) convertWorkspaceFilePathToAbs(event *model.Event) {
 	sourcePath := event.SourceFilePath
 	targetPath := event.TargetFilePath
 	workspacePath := event.WorkspacePath
 	if !utils.IsSubdir(workspacePath, sourcePath) {
-		event.SourceFilePath = filepath.Join(sourcePath, event.SourceFilePath)
+		event.SourceFilePath = filepath.Join(workspacePath, event.SourceFilePath)
 	}
 	if !utils.IsSubdir(workspacePath, targetPath) {
-		event.TargetFilePath = filepath.Join(targetPath, event.TargetFilePath)
+		event.TargetFilePath = filepath.Join(workspacePath, event.TargetFilePath)
 	}
 }

@@ -22,6 +22,7 @@ func setupTestWorkspaceDB(t *testing.T) (database.DatabaseManager, func()) {
 
 	// 创建测试日志记录器
 	logger := &mocks.MockLogger{}
+	logger.On("Info", "Database initialized successfully").Return()
 
 	// 创建数据库配置
 	dbConfig := &config.DatabaseConfig{

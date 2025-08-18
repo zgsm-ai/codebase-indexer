@@ -20,7 +20,7 @@ import (
 
 type DependencyAnalyzer struct {
 	PackageClassifier *packageclassifier.PackageClassifier
-	workspaceReader   *workspace.WorkspaceReader
+	workspaceReader   workspace.WorkspaceReader
 	logger            logger.Logger
 	store             store.GraphStorage
 	loadThreshold     int
@@ -28,7 +28,7 @@ type DependencyAnalyzer struct {
 
 func NewDependencyAnalyzer(logger logger.Logger,
 	packageClassifier *packageclassifier.PackageClassifier,
-	reader *workspace.WorkspaceReader,
+	reader workspace.WorkspaceReader,
 	store store.GraphStorage) *DependencyAnalyzer {
 
 	return &DependencyAnalyzer{

@@ -18,22 +18,46 @@ import (
 
 var ErrPathNotExists = errors.New("no such file or directory")
 
-var DefaultVisitPattern = &types.VisitPattern{ExcludeDirs: []string{".git", ".idea", ".vscode", "node_modules", "vendor"}}
+var DefaultVisitPattern = &types.VisitPattern{ExcludeDirs: []string{".git", ".idea", ".vscode", "node_modules"}}
 
 const ReadFileMaxLine = 5_000
 const MaxFileVisitLimit = 20_0000
 
-type WorkspaceReader struct {
+// WorkspaceReader 定义工作区读取器接口
+type WorkspaceReader interface {
+	// FindProjects 查找工作区中的项目
+	FindProjects(ctx context.Context, workspace string, resolveModule bool, visitPattern *types.VisitPattern) []*Project
+	// ReadFile 读取文件内容
+	ReadFile(ctx context.Context, path string, option types.ReadOptions) ([]byte, error)
+	// Exists 检查文件或目录是否存在
+	Exists(ctx context.Context, path string) (bool, error)
+	// WalkFile 遍历目录下的文件
+	WalkFile(ctx context.Context, dir string, walkFn types.WalkFunc, walkOpts types.WalkOptions) error
+	// Tree 获取目录树结构
+	Tree(ctx context.Context, workspacePath string, subDir string, option types.TreeOptions) ([]*types.TreeNode, error)
+	// GetProjectByFilePath 根据文件路径获取所属项目
+	GetProjectByFilePath(ctx context.Context, workspace string, filePath string, resolveModule bool) (*Project, error)
+	// Stat 获取文件信息
+	Stat(filePath string) (*types.FileInfo, error)
+	// List 列出目录内容
+	List(ctx context.Context, path string) ([]*types.FileInfo, error)
+}
+
+// workspaceReader 工作区读取器实现
+type workspaceReader struct {
 	logger logger.Logger
 }
 
-func NewWorkSpaceReader(logger logger.Logger) *WorkspaceReader {
-	return &WorkspaceReader{
+// 确保 workspaceReader 实现了 WorkspaceReader 接口
+var _ WorkspaceReader = (*workspaceReader)(nil)
+
+func NewWorkSpaceReader(logger logger.Logger) WorkspaceReader {
+	return &workspaceReader{
 		logger: logger,
 	}
 }
 
-func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, resolveModule bool, visitPattern *types.VisitPattern) []*Project {
+func (w *workspaceReader) FindProjects(ctx context.Context, workspace string, resolveModule bool, visitPattern *types.VisitPattern) []*Project {
 
 	start := time.Now()
 	w.logger.Info("start to scan workspace：%s", workspace)
@@ -169,7 +193,7 @@ func (w *WorkspaceReader) FindProjects(ctx context.Context, workspace string, re
 }
 
 // ReadFile 读取单个文件
-func (w *WorkspaceReader) ReadFile(ctx context.Context, path string, option types.ReadOptions) ([]byte, error) {
+func (w *workspaceReader) ReadFile(ctx context.Context, path string, option types.ReadOptions) ([]byte, error) {
 
 	exists, err := w.Exists(ctx, path)
 	if err != nil {
@@ -246,7 +270,7 @@ func (w *WorkspaceReader) ReadFile(ctx context.Context, path string, option type
 }
 
 // Exists 判断文件/目录是否存在
-func (w *WorkspaceReader) Exists(ctx context.Context, path string) (bool, error) {
+func (w *workspaceReader) Exists(ctx context.Context, path string) (bool, error) {
 	if path == types.EmptyString {
 		return false, errors.New("path cannot be empty")
 	}
@@ -262,7 +286,7 @@ func (w *WorkspaceReader) Exists(ctx context.Context, path string) (bool, error)
 }
 
 // WalkFile 遍历目录下的文件
-func (w *WorkspaceReader) WalkFile(ctx context.Context, dir string, walkFn types.WalkFunc, walkOpts types.WalkOptions) error {
+func (w *workspaceReader) WalkFile(ctx context.Context, dir string, walkFn types.WalkFunc, walkOpts types.WalkOptions) error {
 	if dir == types.EmptyString {
 		return errors.New("dir cannot be empty")
 	}
@@ -355,7 +379,7 @@ func (w *WorkspaceReader) WalkFile(ctx context.Context, dir string, walkFn types
 	})
 }
 
-func (l *WorkspaceReader) Tree(ctx context.Context, workspacePath string, subDir string, option types.TreeOptions) ([]*types.TreeNode, error) {
+func (l *workspaceReader) Tree(ctx context.Context, workspacePath string, subDir string, option types.TreeOptions) ([]*types.TreeNode, error) {
 	if workspacePath == types.EmptyString {
 		return nil, errors.New("workspacePath cannot be empty")
 	}
@@ -504,7 +528,7 @@ func (l *WorkspaceReader) Tree(ctx context.Context, workspacePath string, subDir
 	return rootNodes, nil
 }
 
-func (w *WorkspaceReader) GetProjectByFilePath(ctx context.Context, workspace string, filePath string, resolveModule bool) (*Project, error) {
+func (w *workspaceReader) GetProjectByFilePath(ctx context.Context, workspace string, filePath string, resolveModule bool) (*Project, error) {
 	projects := w.FindProjects(ctx, workspace, resolveModule, DefaultVisitPattern)
 	if len(projects) == 0 {
 		return nil, fmt.Errorf("found no projects in workspace %s", workspace)
@@ -517,7 +541,7 @@ func (w *WorkspaceReader) GetProjectByFilePath(ctx context.Context, workspace st
 	return nil, fmt.Errorf("failed to find project which file %s belongs to in workspace %s", filePath, workspace)
 }
 
-func (w *WorkspaceReader) Stat(filePath string) (*types.FileInfo, error) {
+func (w *workspaceReader) Stat(filePath string) (*types.FileInfo, error) {
 	stat, err := os.Stat(filePath)
 	if os.IsNotExist(err) {
 		return nil, ErrPathNotExists
@@ -534,7 +558,7 @@ func (w *WorkspaceReader) Stat(filePath string) (*types.FileInfo, error) {
 	}, nil
 }
 
-func (w *WorkspaceReader) List(ctx context.Context, path string) ([]*types.FileInfo, error) {
+func (w *workspaceReader) List(ctx context.Context, path string) ([]*types.FileInfo, error) {
 	// 检查上下文是否已取消（尽早退出）
 	select {
 	case <-ctx.Done():

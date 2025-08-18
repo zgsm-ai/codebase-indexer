@@ -17,13 +17,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	_ "net/http/pprof" // 自动注册 pprof 接口
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var tempDir = "/tmp/"
@@ -41,7 +42,7 @@ type testEnvironment struct {
 	logger             logger.Logger
 	storage            store.GraphStorage
 	repository         repository.WorkspaceRepository
-	workspaceReader    *workspace.WorkspaceReader
+	workspaceReader    workspace.WorkspaceReader
 	sourceFileParser   *parser.SourceFileParser
 	dependencyAnalyzer *analyzer.DependencyAnalyzer
 	Scanner            repository.ScannerInterface
@@ -106,7 +107,7 @@ func setupTestEnvironment() (*testEnvironment, error) {
 }
 
 // createTestIndexer 创建测试用的索引器
-func createTestIndexer(env *testEnvironment, visitPattern *types.VisitPattern) *service.Indexer {
+func createTestIndexer(env *testEnvironment, visitPattern *types.VisitPattern) service.Indexer {
 	return service.NewCodeIndexer(
 		env.Scanner,
 		env.sourceFileParser,

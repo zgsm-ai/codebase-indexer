@@ -92,6 +92,36 @@ func (mr *MockGraphStorageMockRecorder) DeleteAll(ctx, projectUuid interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteAll", reflect.TypeOf((*MockGraphStorage)(nil).DeleteAll), ctx, projectUuid)
 }
 
+// Exists mocks base method.
+func (m *MockGraphStorage) Exists(ctx context.Context, projectUuid string, key store.Key) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Exists", ctx, projectUuid, key)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Exists indicates an expected call of Exists.
+func (mr *MockGraphStorageMockRecorder) Exists(ctx, projectUuid, key interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Exists", reflect.TypeOf((*MockGraphStorage)(nil).Exists), ctx, projectUuid, key)
+}
+
+// ExistsProject mocks base method.
+func (m *MockGraphStorage) ProjectIndexExists(projectUuid string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProjectIndexExists", projectUuid)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ExistsProject indicates an expected call of ExistsProject.
+func (mr *MockGraphStorageMockRecorder) ExistsProject(projectUuid interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProjectIndexExists", reflect.TypeOf((*MockGraphStorage)(nil).ProjectIndexExists), projectUuid)
+}
+
 // Get mocks base method.
 func (m *MockGraphStorage) Get(ctx context.Context, projectUuid string, key store.Key) ([]byte, error) {
 	m.ctrl.T.Helper()
@@ -121,32 +151,32 @@ func (mr *MockGraphStorageMockRecorder) Iter(ctx, projectUuid interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Iter", reflect.TypeOf((*MockGraphStorage)(nil).Iter), ctx, projectUuid)
 }
 
-// Save mocks base method.
-func (m *MockGraphStorage) Save(ctx context.Context, projectUuid string, entry *store.Entry) error {
+// Put mocks base method.
+func (m *MockGraphStorage) Put(ctx context.Context, projectUuid string, entry *store.Entry) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Put", ctx, projectUuid, entry)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// Save indicates an expected call of Save.
-func (mr *MockGraphStorageMockRecorder) Save(ctx, projectUuid, entry interface{}) *gomock.Call {
+// Put indicates an expected call of Put.
+func (mr *MockGraphStorageMockRecorder) Put(ctx, projectUuid, entry interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockGraphStorage)(nil).Save), ctx, projectUuid, entry)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockGraphStorage)(nil).Put), ctx, projectUuid, entry)
 }
 
 // Size mocks base method.
-func (m *MockGraphStorage) Size(ctx context.Context, projectUuid string) int {
+func (m *MockGraphStorage) Size(ctx context.Context, projectUuid, keyPrefix string) int {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Size", ctx, projectUuid)
+	ret := m.ctrl.Call(m, "Size", ctx, projectUuid, keyPrefix)
 	ret0, _ := ret[0].(int)
 	return ret0
 }
 
 // Size indicates an expected call of Size.
-func (mr *MockGraphStorageMockRecorder) Size(ctx, projectUuid interface{}) *gomock.Call {
+func (mr *MockGraphStorageMockRecorder) Size(ctx, projectUuid, keyPrefix interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Size", reflect.TypeOf((*MockGraphStorage)(nil).Size), ctx, projectUuid)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Size", reflect.TypeOf((*MockGraphStorage)(nil).Size), ctx, projectUuid, keyPrefix)
 }
 
 // MockIterator is a mock of Iterator interface.

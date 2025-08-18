@@ -11,6 +11,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3" // SQLite3驱动
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,6 +37,9 @@ func TestSQLiteManager(t *testing.T) {
 	dbManager := NewSQLiteManager(dbConfig, logger)
 
 	t.Run("Initialize", func(t *testing.T) {
+		// 设置 mock logger 预期
+		logger.On("Info", "Database initialized successfully", []interface{}(nil)).Return()
+
 		// 测试数据库初始化
 		err := dbManager.Initialize()
 		require.NoError(t, err)
@@ -99,6 +103,9 @@ func TestSQLiteManager(t *testing.T) {
 			ConnMaxLifetime: 30 * time.Minute,
 		}
 
+		// 设置 mock logger 预期
+		logger.On("Info", "Database initialized successfully", []interface{}(nil)).Return()
+
 		dbManager2 := NewSQLiteManager(dbConfig2, logger).(*SQLiteManager)
 		err = dbManager2.Initialize()
 		require.NoError(t, err)
@@ -122,6 +129,10 @@ func TestSQLiteManager(t *testing.T) {
 			MaxIdleConns:    5,
 			ConnMaxLifetime: 30 * time.Minute,
 		}
+
+		// 设置 mock logger 预期（对于无效路径，可能不会调用 Info）
+		logger.On("Info", "Database initialized successfully", []interface{}(nil)).Return().Maybe()
+		logger.On("Error", "Failed to create table: %v", mock.Anything).Return().Maybe()
 
 		invalidManager := NewSQLiteManager(invalidConfig, logger).(*SQLiteManager)
 		err = invalidManager.Initialize()
@@ -148,6 +159,9 @@ func TestSQLiteManagerTableCreation(t *testing.T) {
 	}
 
 	// 创建数据库管理器
+	// 设置 mock logger 预期
+	logger.On("Info", "Database initialized successfully", []interface{}(nil)).Return()
+
 	dbManager := NewSQLiteManager(dbConfig, logger).(*SQLiteManager)
 	err = dbManager.Initialize()
 	require.NoError(t, err)
@@ -287,6 +301,9 @@ func TestSQLiteManagerConcurrency(t *testing.T) {
 	}
 
 	// 创建数据库管理器
+	// 设置 mock logger 预期
+	logger.On("Info", "Database initialized successfully", []interface{}(nil)).Return()
+
 	dbManager := NewSQLiteManager(dbConfig, logger).(*SQLiteManager)
 	err = dbManager.Initialize()
 	require.NoError(t, err)

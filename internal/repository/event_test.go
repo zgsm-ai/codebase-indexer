@@ -33,6 +33,9 @@ func setupTestEventDB(t *testing.T) (database.DatabaseManager, func()) {
 		ConnMaxLifetime: 30 * time.Minute,
 	}
 
+	// 设置 mock logger 预期
+	logger.On("Info", "Database initialized successfully", []interface{}(nil)).Return()
+
 	// 创建数据库管理器
 	dbManager := database.NewSQLiteManager(dbConfig, logger)
 	err = dbManager.Initialize()
@@ -383,6 +386,11 @@ func TestEventRepository_GetEventsByWorkspaceForDeduplication(t *testing.T) {
 
 	// 创建测试日志记录器
 	logger := &mocks.MockLogger{}
+
+	// 设置 mock logger 预期
+	logger.On("Info", "Retrieved %d events for deduplication in workspace: %s", []interface{}{3, "/path/to/workspace-dedup"}).Return()
+	logger.On("Info", "Retrieved %d events for deduplication in workspace: %s", []interface{}{0, "/nonexistent/workspace"}).Return()
+	logger.On("Info", "Retrieved %d events for deduplication in workspace: %s", []interface{}{1200, "/path/to/workspace-large"}).Return()
 
 	// 创建事件Repository
 	eventRepo := NewEventRepository(dbManager, logger)

@@ -8,7 +8,10 @@ init:
 .PHONY:mock
 mock:
 	mockgen -source=./pkg/codegraph/store/storage.go -destination=./test/mocks/mock_graph_store.go -package=mocks
-
+	mockgen -source=./internal/repository/workspace.go -destination=./test/mocks/mock_workspace_repository.go -package=mocks
+	mockgen -source=./internal/repository/event.go -destination=test/mocks/mock_event_repository.go -package=mocks
+	mockgen -source=./internal/service/indexer.go -destination=test/mocks/mock_indexer.go -package=mocks
+	mockgen -source=./pkg/codegraph/workspace/workspace.go -destination=test/mocks/mock_workspace.go -package=mocks
 .PHONY:proto
 proto:
 	protoc --go_out=. pkg/codegraph/proto/file_element.proto
@@ -19,6 +22,7 @@ proto:
 .PHONY:test
 test:
 	go test ./internal/...
+	go test ./test/codegraph/...
 
 .PHONY:build
 build:

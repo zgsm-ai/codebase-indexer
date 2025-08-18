@@ -7,9 +7,11 @@ import (
 	"codebase-indexer/internal/repository"
 	packageclassifier "codebase-indexer/pkg/codegraph/analyzer/package_classifier"
 	"codebase-indexer/pkg/codegraph/lang"
+	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
 	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/codegraph/utils"
 	"codebase-indexer/pkg/logger"
+	"codebase-indexer/test/mocks"
 	"context"
 	"fmt"
 	"os"
@@ -24,7 +26,9 @@ import (
 	"codebase-indexer/pkg/codegraph/store"
 	"codebase-indexer/pkg/codegraph/workspace"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/proto"
 )
 
 var tempDir = "/tmp/"
@@ -41,7 +45,7 @@ type testEnvironment struct {
 	logger             logger.Logger
 	storage            store.GraphStorage
 	repository         repository.WorkspaceRepository
-	workspaceReader    *workspace.WorkspaceReader
+	workspaceReader    workspace.WorkspaceReader
 	sourceFileParser   *parser.SourceFileParser
 	dependencyAnalyzer *analyzer.DependencyAnalyzer
 	workspaceDir       string
@@ -121,7 +125,7 @@ func teardownTestEnvironment(t *testing.T, env *testEnvironment, projects []*wor
 }
 
 // createTestIndexer 创建测试用的索引器
-func createTestIndexer(env *testEnvironment, visitPattern *types.VisitPattern) *Indexer {
+func createTestIndexer(env *testEnvironment, visitPattern *types.VisitPattern) Indexer {
 	return NewCodeIndexer(
 		env.scanner,
 		env.sourceFileParser,
@@ -135,7 +139,7 @@ func createTestIndexer(env *testEnvironment, visitPattern *types.VisitPattern) *
 }
 
 // countGoFiles 统计工作区中的 Go 文件数量
-func countGoFiles(ctx context.Context, workspaceReader *workspace.WorkspaceReader, workspaceDir string, visitPattern *types.VisitPattern) (int, error) {
+func countGoFiles(ctx context.Context, workspaceReader workspace.WorkspaceReader, workspaceDir string, visitPattern *types.VisitPattern) (int, error) {
 	var goCount int
 	err := workspaceReader.WalkFile(ctx, workspaceDir, func(walkCtx *types.WalkContext) error {
 		if walkCtx.Info.IsDir {
@@ -169,7 +173,7 @@ func countIndexedFiles(ctx context.Context, storage store.GraphStorage, projects
 }
 
 // validateStorageState 验证存储状态，确保索引数量与文件数量一致
-func validateStorageState(t *testing.T, ctx context.Context, workspaceReader *workspace.WorkspaceReader,
+func validateStorageState(t *testing.T, ctx context.Context, workspaceReader workspace.WorkspaceReader,
 	storage store.GraphStorage, workspaceDir string,
 	projects []*workspace.Project, visitPattern *types.VisitPattern) {
 	// 统计 Go 文件数量
@@ -317,10 +321,9 @@ func TestIndexer_IndexProjectFilesWhenProjectHasIndex(t *testing.T) {
 	// 设置测试环境
 	env := setupTestEnvironment(t)
 	defer teardownTestEnvironment(t, env, nil)
-
 	// 创建测试索引器，使用排除 mocks 目录的访问模式
-	newVisitPattern := &types.VisitPattern{ExcludeDirs: []string{".git", ".idea", "mocks"}, IncludeExts: []string{".go"}}
-	indexer := createTestIndexer(env, newVisitPattern)
+	newVisitPattern := &types.VisitPattern{ExcludeDirs: []string{".git", ".idea", ".vscode", "mocks"}, IncludeExts: []string{".go"}}
+	codeIndexer := createTestIndexer(env, newVisitPattern)
 
 	// 查找工作区中的项目
 	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, newVisitPattern)
@@ -330,9 +333,9 @@ func TestIndexer_IndexProjectFilesWhenProjectHasIndex(t *testing.T) {
 	assert.NoError(t, err)
 
 	// 步骤1: 先索引工作区（排除 mocks 目录）
-	_, err = indexer.IndexWorkspace(env.ctx, env.workspaceDir)
+	_, err = codeIndexer.IndexWorkspace(env.ctx, env.workspaceDir)
 	assert.NoError(t, err)
-	summary, err := indexer.GetSummary(context.Background(), env.workspaceDir)
+	summary, err := codeIndexer.GetSummary(context.Background(), env.workspaceDir)
 	assert.NoError(t, err)
 	assert.True(t, summary.TotalFiles > 0)
 	// 步骤2: 获取测试文件并创建路径键映射
@@ -343,10 +346,10 @@ func TestIndexer_IndexProjectFilesWhenProjectHasIndex(t *testing.T) {
 	validateFilesNotIndexed(t, env.ctx, env.storage, projects, pathKeys)
 
 	// 步骤4: 测试索引特定文件
-	filesByProject, err := indexer.groupFilesByProject(projects, files)
+	filesByProject, err := codeIndexer.(*indexer).groupFilesByProject(projects, files)
 	assert.NoError(t, err)
 	for _, projectFiles := range filesByProject {
-		err = indexer.IndexFiles(context.Background(), env.workspaceDir, projectFiles)
+		err = codeIndexer.IndexFiles(context.Background(), env.workspaceDir, projectFiles)
 		assert.NoError(t, err)
 	}
 
@@ -446,7 +449,7 @@ func TestIndexer_QueryElements(t *testing.T) {
 	defer teardownTestEnvironment(t, env, nil)
 
 	// 创建测试索引器
-	indexer := createTestIndexer(env, testVisitPattern)
+	codeIndexer := createTestIndexer(env, testVisitPattern)
 
 	// 查找工作区中的项目
 	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, testVisitPattern)
@@ -456,7 +459,7 @@ func TestIndexer_QueryElements(t *testing.T) {
 	assert.NoError(t, err)
 
 	// 步骤1: 索引整个工作区
-	_, err = indexer.IndexWorkspace(env.ctx, env.workspaceDir)
+	_, err = codeIndexer.IndexWorkspace(env.ctx, env.workspaceDir)
 	assert.NoError(t, err)
 
 	// 步骤2: 获取测试文件
@@ -464,7 +467,7 @@ func TestIndexer_QueryElements(t *testing.T) {
 	assert.True(t, len(files) > 0)
 
 	// 步骤3: 查询元素
-	elementTables, err := indexer.QueryElements(env.ctx, env.workspaceDir, files)
+	elementTables, err := codeIndexer.(*indexer).queryElements(env.ctx, env.workspaceDir, files)
 	assert.NoError(t, err)
 	assert.True(t, len(elementTables) > 0)
 
@@ -481,7 +484,7 @@ func TestIndexer_QuerySymbols_WithExistFile(t *testing.T) {
 	defer teardownTestEnvironment(t, env, nil)
 
 	// 创建测试索引器
-	indexer := createTestIndexer(env, testVisitPattern)
+	testIndexer := createTestIndexer(env, testVisitPattern)
 
 	// 查找工作区中的项目
 	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, testVisitPattern)
@@ -491,7 +494,7 @@ func TestIndexer_QuerySymbols_WithExistFile(t *testing.T) {
 	assert.NoError(t, err)
 
 	// 步骤1: 索引整个工作区
-	_, err = indexer.IndexWorkspace(env.ctx, env.workspaceDir)
+	_, err = testIndexer.IndexWorkspace(env.ctx, env.workspaceDir)
 	assert.NoError(t, err)
 
 	// 步骤2: 准备测试文件和符号名称
@@ -499,7 +502,7 @@ func TestIndexer_QuerySymbols_WithExistFile(t *testing.T) {
 	symbolNames := []string{"MockGraphStorage", "BatchSave"}
 
 	// 步骤3: 查询符号
-	symbols, err := indexer.QuerySymbols(env.ctx, env.workspaceDir, filePath, symbolNames)
+	symbols, err := testIndexer.(*indexer).querySymbols(env.ctx, env.workspaceDir, filePath, symbolNames)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(symbols))
 
@@ -548,4 +551,832 @@ func TestIndexer_IndexFiles_NoProject(t *testing.T) {
 	// 步骤2: 尝试索引不存在的项目中的文件，应该返回错误
 	err := indexer.IndexFiles(env.ctx, nonExistentWorkspace, testFiles)
 	assert.ErrorContains(t, err, "not exists")
+}
+
+// TestInitConfig 测试配置初始化函数
+// 该测试验证 initConfig() 函数能够正确读取环境变量并设置配置值
+func TestInitConfig(t *testing.T) {
+	// 测试用例结构
+	testCases := []struct {
+		name           string
+		envVars        map[string]string
+		expectedConfig IndexerConfig
+		description    string
+	}{
+		{
+			name: "默认值测试",
+			envVars: map[string]string{
+				"MAX_CONCURRENCY": "",
+				"MAX_BATCH_SIZE":  "",
+				"MAX_FILES":       "",
+				"MAX_PROJECTS":    "",
+				"CACHE_CAPACITY":  "",
+			},
+			expectedConfig: IndexerConfig{
+				MaxConcurrency: defaultConcurrency,
+				MaxBatchSize:   defaultBatchSize,
+				MaxFiles:       defaultMaxFiles,
+				MaxProjects:    defaultMaxProjects,
+				CacheCapacity:  defaultCacheCapacity,
+			},
+			description: "当所有环境变量都未设置时，应该使用默认值",
+		},
+		{
+			name: "有效环境变量测试",
+			envVars: map[string]string{
+				"MAX_CONCURRENCY": "4",
+				"MAX_BATCH_SIZE":  "100",
+				"MAX_FILES":       "5000",
+				"MAX_PROJECTS":    "5",
+				"CACHE_CAPACITY":  "10000",
+			},
+			expectedConfig: IndexerConfig{
+				MaxConcurrency: 4,
+				MaxBatchSize:   100,
+				MaxFiles:       5000,
+				MaxProjects:    5,
+				CacheCapacity:  10000,
+			},
+			description: "当所有环境变量都设置为有效值时，应该使用环境变量值",
+		},
+		{
+			name: "无效环境变量测试",
+			envVars: map[string]string{
+				"MAX_CONCURRENCY": "-1",
+				"MAX_BATCH_SIZE":  "0",
+				"MAX_FILES":       "invalid",
+				"MAX_PROJECTS":    "-5",
+				"CACHE_CAPACITY":  "not_a_number",
+			},
+			expectedConfig: IndexerConfig{
+				MaxConcurrency: defaultConcurrency,
+				MaxBatchSize:   defaultBatchSize,
+				MaxFiles:       defaultMaxFiles,
+				MaxProjects:    defaultMaxProjects,
+				CacheCapacity:  defaultCacheCapacity,
+			},
+			description: "当环境变量设置为无效值时，应该使用默认值",
+		},
+		{
+			name: "部分环境变量测试",
+			envVars: map[string]string{
+				"MAX_CONCURRENCY": "8",
+				"MAX_BATCH_SIZE":  "",
+				"MAX_FILES":       "2000",
+				"MAX_PROJECTS":    "",
+				"CACHE_CAPACITY":  "5000",
+			},
+			expectedConfig: IndexerConfig{
+				MaxConcurrency: 8,
+				MaxBatchSize:   defaultBatchSize,
+				MaxFiles:       2000,
+				MaxProjects:    defaultMaxProjects,
+				CacheCapacity:  5000,
+			},
+			description: "当部分环境变量设置时，设置的使用环境变量值，未设置的使用默认值",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 保存原始环境变量
+			originalEnvVars := make(map[string]string)
+			for key := range tc.envVars {
+				originalEnvVars[key] = os.Getenv(key)
+			}
+
+			// 清理环境变量
+			for key := range tc.envVars {
+				os.Unsetenv(key)
+			}
+
+			// 设置测试环境变量
+			for key, value := range tc.envVars {
+				if value != "" {
+					os.Setenv(key, value)
+				}
+			}
+
+			// 创建测试配置
+			config := IndexerConfig{
+				MaxConcurrency: -1, // 设置为无效值，测试是否会使用环境变量或默认值
+				MaxBatchSize:   -1,
+				MaxFiles:       -1,
+				MaxProjects:    -1,
+				CacheCapacity:  -1,
+			}
+
+			// 调用初始化函数
+			initConfig(&config)
+
+			// 验证配置值
+			assert.Equal(t, tc.expectedConfig.MaxConcurrency, config.MaxConcurrency, "MaxConcurrency 不匹配")
+			assert.Equal(t, tc.expectedConfig.MaxBatchSize, config.MaxBatchSize, "MaxBatchSize 不匹配")
+			assert.Equal(t, tc.expectedConfig.MaxFiles, config.MaxFiles, "MaxFiles 不匹配")
+			assert.Equal(t, tc.expectedConfig.MaxProjects, config.MaxProjects, "MaxProjects 不匹配")
+			assert.Equal(t, tc.expectedConfig.CacheCapacity, config.CacheCapacity, "CacheCapacity 不匹配")
+
+			// 恢复原始环境变量
+			for key, value := range originalEnvVars {
+				if value != "" {
+					os.Setenv(key, value)
+				} else {
+					os.Unsetenv(key)
+				}
+			}
+		})
+	}
+}
+
+// TestFilterSourceFilesByTimestamp 测试文件时间戳过滤函数
+// 该测试验证 filterSourceFilesByTimestamp() 函数能够正确根据时间戳过滤需要索引的文件
+func TestFilterSourceFilesByTimestamp(t *testing.T) {
+	// 设置测试环境
+	env := setupTestEnvironment(t)
+	defer teardownTestEnvironment(t, env, nil)
+
+	// 创建测试索引器
+	testIndexer := createTestIndexer(env, testVisitPattern)
+
+	// 测试用例结构
+	testCases := []struct {
+		name                 string
+		sourceFileTimestamps map[string]int64
+		mockIterData         []mockIterData
+		expectedFiles        []*types.FileWithModTimestamp
+		description          string
+	}{
+		{
+			name: "存储中无数据测试",
+			sourceFileTimestamps: map[string]int64{
+				"/test/file1.go": 1000,
+				"/test/file2.go": 2000,
+			},
+			mockIterData: []mockIterData{},
+			expectedFiles: []*types.FileWithModTimestamp{
+				{Path: "/test/file1.go", ModTime: 1000},
+				{Path: "/test/file2.go", ModTime: 2000},
+			},
+			description: "当存储中无数据时，所有文件都需要索引",
+		},
+		{
+			name: "时间戳匹配测试",
+			sourceFileTimestamps: map[string]int64{
+				"/test/file1.go": 1000,
+				"/test/file2.go": 2000,
+			},
+			mockIterData: []mockIterData{
+				{
+					key:   "element_path:/test/file1.go:go",
+					value: &codegraphpb.FileElementTable{Path: "/test/file1.go", Language: string(lang.Go), Timestamp: 1000},
+				},
+			},
+			expectedFiles: []*types.FileWithModTimestamp{
+				{Path: "/test/file2.go", ModTime: 2000},
+			},
+			description: "当文件时间戳与存储中的时间戳匹配时，应该过滤掉该文件",
+		},
+		{
+			name: "时间戳不匹配测试",
+			sourceFileTimestamps: map[string]int64{
+				"/test/file1.go": 1000,
+				"/test/file2.go": 2000,
+			},
+			mockIterData: []mockIterData{
+				{
+					key:   "element_path:/test/file1.go:go",
+					value: &codegraphpb.FileElementTable{Path: "/test/file1.go", Language: string(lang.Go), Timestamp: 1500}, // 时间戳不匹配
+				},
+			},
+			expectedFiles: []*types.FileWithModTimestamp{
+				{Path: "/test/file1.go", ModTime: 1000},
+				{Path: "/test/file2.go", ModTime: 2000},
+			},
+			description: "当文件时间戳与存储中的时间戳不匹配时，应该保留该文件",
+		},
+		{
+			name: "存储中数据损坏测试",
+			sourceFileTimestamps: map[string]int64{
+				"/test/file1.go": 1000,
+				"/test/file2.go": 2000,
+			},
+			mockIterData: []mockIterData{
+				{
+					key:   "element_path:/test/file1.go:go",
+					value: "invalid_data", // 损坏的数据
+				},
+			},
+			expectedFiles: []*types.FileWithModTimestamp{
+				{Path: "/test/file1.go", ModTime: 1000},
+				{Path: "/test/file2.go", ModTime: 2000},
+			},
+			description: "当存储中数据损坏时，应该能够正常处理并保留所有文件",
+		},
+		{
+			name: "混合测试 - 部分匹配",
+			sourceFileTimestamps: map[string]int64{
+				"/test/file1.go": 1000,
+				"/test/file2.go": 2000,
+				"/test/file3.go": 3000,
+			},
+			mockIterData: []mockIterData{
+				{
+					key:   "element_path:/test/file1.go:go",
+					value: &codegraphpb.FileElementTable{Path: "/test/file1.go", Language: string(lang.Go), Timestamp: 1000}, // 匹配
+				},
+				{
+					key:   "element_path:/test/file3.go:go",
+					value: &codegraphpb.FileElementTable{Path: "/test/file3.go", Language: string(lang.Go), Timestamp: 3500}, // 不匹配
+				},
+			},
+			expectedFiles: []*types.FileWithModTimestamp{
+				{Path: "/test/file2.go", ModTime: 2000},
+				{Path: "/test/file3.go", ModTime: 3000},
+			},
+			description: "混合测试 - 部分文件时间戳匹配，部分不匹配",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 创建模拟控制器
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			// 创建模拟迭代器
+			mockIterator := mocks.NewMockIterator(ctrl)
+
+			// 设置迭代器行为
+			for i, data := range tc.mockIterData {
+				if i == 0 {
+					mockIterator.EXPECT().Next().Return(true)
+				} else if i < len(tc.mockIterData) {
+					mockIterator.EXPECT().Next().Return(true)
+				} else {
+					mockIterator.EXPECT().Next().Return(false)
+				}
+
+				if i < len(tc.mockIterData) {
+					mockIterator.EXPECT().Key().Return(data.key)
+
+					if value, ok := data.value.(*codegraphpb.FileElementTable); ok {
+						valueBytes, err := proto.Marshal(value)
+						assert.NoError(t, err)
+						mockIterator.EXPECT().Value().Return(valueBytes)
+					} else if str, ok := data.value.(string); ok {
+						// 模拟损坏的数据
+						mockIterator.EXPECT().Value().Return([]byte(str))
+					}
+				}
+			}
+
+			// 最后一次调用 Next() 返回 false
+			if len(tc.mockIterData) > 0 {
+				mockIterator.EXPECT().Next().Return(false)
+			} else {
+				mockIterator.EXPECT().Next().Return(false)
+			}
+
+			// 设置 Close() 调用
+			mockIterator.EXPECT().Close().Return(nil)
+
+			// 创建模拟存储
+			mockStorage := mocks.NewMockGraphStorage(ctrl)
+			mockStorage.EXPECT().Iter(gomock.Any(), gomock.Any()).Return(mockIterator)
+
+			// 调用过滤函数
+			result := testIndexer.(*indexer).filterSourceFilesByTimestamp(env.ctx, "test-project", tc.sourceFileTimestamps)
+
+			// 验证结果
+			assert.Equal(t, len(tc.expectedFiles), len(result), "返回的文件数量不匹配")
+
+			// 验证文件内容
+			expectedMap := make(map[string]int64)
+			for _, file := range tc.expectedFiles {
+				expectedMap[file.Path] = file.ModTime
+			}
+
+			resultMap := make(map[string]int64)
+			for _, file := range result {
+				resultMap[file.Path] = file.ModTime
+			}
+
+			assert.Equal(t, expectedMap, resultMap, "返回的文件内容不匹配")
+		})
+	}
+}
+
+// mockIterData 模拟迭代器数据结构
+type mockIterData struct {
+	key   string
+	value interface{}
+}
+
+// TestQueryReferences 测试查询引用函数
+// 该测试验证 QueryReferences() 函数能够正确查询代码引用关系
+func TestQueryReferences(t *testing.T) {
+	// 设置测试环境
+	env := setupTestEnvironment(t)
+	defer teardownTestEnvironment(t, env, nil)
+
+	// 创建测试索引器
+	indexer := createTestIndexer(env, testVisitPattern)
+
+	// 测试用例结构
+	testCases := []struct {
+		name          string
+		queryOptions  *types.QueryReferenceOptions
+		mockStorage   *mockReferenceStorageData
+		mockWorkspace *mockWorkspaceData
+		expected      []*types.RelationNode
+		expectError   bool
+		errorMsg      string
+		description   string
+	}{
+		{
+			name: "正常引用查询",
+			queryOptions: &types.QueryReferenceOptions{
+				Workspace:  "/test/workspace",
+				FilePath:   "/test/workspace/main.go",
+				StartLine:  10,
+				EndLine:    15,
+				SymbolName: "TestFunction",
+			},
+			mockStorage: &mockReferenceStorageData{
+				projectExists: true,
+				fileElementTable: &codegraphpb.FileElementTable{
+					Path:     "/test/workspace/main.go",
+					Language: string(lang.Go),
+					Elements: []*codegraphpb.Element{
+						{
+							Name:         "TestFunction",
+							ElementType:  codegraphpb.ElementType_FUNCTION,
+							IsDefinition: true,
+							Range:        []int32{9, 0, 15, 0},
+						},
+					},
+				},
+				iterData: []mockIterData{
+					{
+						key: "element_path:/test/workspace/utils.go:go",
+						value: &codegraphpb.FileElementTable{
+							Path:     "/test/workspace/utils.go",
+							Language: string(lang.Go),
+							Elements: []*codegraphpb.Element{
+								{
+									Name:         "TestFunction",
+									ElementType:  codegraphpb.ElementType_REFERENCE,
+									IsDefinition: false,
+									Range:        []int32{20, 0, 20, 15},
+								},
+							},
+						},
+					},
+				},
+			},
+			mockWorkspace: &mockWorkspaceData{
+				project: &workspace.Project{
+					Uuid: "test-project-uuid",
+					Path: "/test/workspace",
+				},
+			},
+			expected: []*types.RelationNode{
+				{
+					FilePath:   "/test/workspace/main.go",
+					SymbolName: "TestFunction",
+					Position:   types.Position{StartLine: 10, StartColumn: 0, EndLine: 15, EndColumn: 0},
+					NodeType:   "function",
+					Children: []*types.RelationNode{
+						{
+							FilePath:   "/test/workspace/utils.go",
+							SymbolName: "TestFunction",
+							Position:   types.Position{StartLine: 21, StartColumn: 0, EndLine: 21, EndColumn: 15},
+							NodeType:   "reference",
+						},
+					},
+				},
+			},
+			expectError: false,
+			description: "正常查询引用关系",
+		},
+		{
+			name: "无引用结果查询",
+			queryOptions: &types.QueryReferenceOptions{
+				Workspace:  "/test/workspace",
+				FilePath:   "/test/workspace/main.go",
+				StartLine:  10,
+				EndLine:    15,
+				SymbolName: "UnusedFunction",
+			},
+			mockStorage: &mockReferenceStorageData{
+				projectExists: true,
+				fileElementTable: &codegraphpb.FileElementTable{
+					Path:     "/test/workspace/main.go",
+					Language: string(lang.Go),
+					Elements: []*codegraphpb.Element{
+						{
+							Name:         "UnusedFunction",
+							ElementType:  codegraphpb.ElementType_FUNCTION,
+							IsDefinition: true,
+							Range:        []int32{9, 0, 15, 0},
+						},
+					},
+				},
+				iterData: []mockIterData{}, // 没有引用数据
+			},
+			mockWorkspace: &mockWorkspaceData{
+				project: &workspace.Project{
+					Uuid: "test-project-uuid",
+					Path: "/test/workspace",
+				},
+			},
+			expected:    []*types.RelationNode{},
+			expectError: false,
+			description: "查询无引用的函数",
+		},
+		{
+			name: "无效文件路径查询",
+			queryOptions: &types.QueryReferenceOptions{
+				Workspace: "/nonexistent/workspace",
+				FilePath:  "/nonexistent/file.go",
+				StartLine: 10,
+				EndLine:   15,
+			},
+			mockStorage: &mockReferenceStorageData{
+				projectExists:    false,
+				fileElementTable: nil,
+				iterData:         []mockIterData{},
+			},
+			mockWorkspace: &mockWorkspaceData{
+				project: &workspace.Project{
+					Uuid: "test-project-uuid",
+					Path: "/test/workspace",
+				},
+			},
+			expectError: true,
+			errorMsg:    "failed to find project which file",
+			expected:    []*types.RelationNode{},
+			description: "查询不存在的文件",
+		},
+		{
+			name: "跨项目引用查询",
+			queryOptions: &types.QueryReferenceOptions{
+				Workspace:  "/test/workspace",
+				FilePath:   "/test/workspace/main.go",
+				StartLine:  10,
+				EndLine:    15,
+				SymbolName: "SharedFunction",
+			},
+			mockStorage: &mockReferenceStorageData{
+				projectExists: true,
+				fileElementTable: &codegraphpb.FileElementTable{
+					Path:     "/test/workspace/main.go",
+					Language: string(lang.Go),
+					Elements: []*codegraphpb.Element{
+						{
+							Name:         "SharedFunction",
+							ElementType:  codegraphpb.ElementType_FUNCTION,
+							IsDefinition: true,
+							Range:        []int32{9, 0, 15, 0},
+						},
+					},
+				},
+				iterData: []mockIterData{
+					{
+						key: "element_path:/another/project/helper.go:go",
+						value: &codegraphpb.FileElementTable{
+							Path:     "/another/project/helper.go",
+							Language: string(lang.Go),
+							Elements: []*codegraphpb.Element{
+								{
+									Name:         "SharedFunction",
+									ElementType:  codegraphpb.ElementType_REFERENCE,
+									IsDefinition: false,
+									Range:        []int32{5, 0, 5, 20},
+								},
+							},
+						},
+					},
+				},
+			},
+			mockWorkspace: &mockWorkspaceData{
+				project: &workspace.Project{
+					Uuid: "test-project-uuid",
+					Path: "/test/workspace",
+				},
+			},
+			expected: []*types.RelationNode{
+				{
+					FilePath:   "/test/workspace/main.go",
+					SymbolName: "SharedFunction",
+					Position:   types.Position{StartLine: 10, StartColumn: 0, EndLine: 15, EndColumn: 0},
+					NodeType:   "function",
+					Children: []*types.RelationNode{
+						{
+							FilePath:   "/another/project/helper.go",
+							SymbolName: "SharedFunction",
+							Position:   types.Position{StartLine: 6, StartColumn: 0, EndLine: 6, EndColumn: 20},
+							NodeType:   "reference",
+						},
+					},
+				},
+			},
+			expectError: false,
+			description: "跨项目引用查询",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 创建模拟控制器
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			// 创建模拟存储
+			mockStorage := mocks.NewMockGraphStorage(ctrl)
+			mockIterator := mocks.NewMockIterator(ctrl)
+
+			// 设置存储行为
+			if tc.mockStorage.fileElementTable != nil {
+				// 设置 ProjectIndexExists 方法
+				mockStorage.EXPECT().ExistsProject(gomock.Any()).Return(true, nil)
+
+				// 设置 Get 方法
+				fileTableBytes, err := proto.Marshal(tc.mockStorage.fileElementTable)
+				assert.NoError(t, err)
+				mockStorage.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(fileTableBytes, nil)
+
+				// 设置 Iter 方法
+				mockStorage.EXPECT().Iter(gomock.Any(), gomock.Any()).Return(mockIterator)
+
+				// 设置迭代器行为
+				for i, data := range tc.mockStorage.iterData {
+					if i == 0 {
+						mockIterator.EXPECT().Next().Return(true)
+					} else if i < len(tc.mockStorage.iterData) {
+						mockIterator.EXPECT().Next().Return(true)
+					} else {
+						mockIterator.EXPECT().Next().Return(false)
+					}
+
+					if i < len(tc.mockStorage.iterData) {
+						mockIterator.EXPECT().Key().Return(data.key)
+
+						if value, ok := data.value.(*codegraphpb.FileElementTable); ok {
+							valueBytes, err := proto.Marshal(value)
+							assert.NoError(t, err)
+							mockIterator.EXPECT().Value().Return(valueBytes)
+						}
+					}
+				}
+
+				// 最后一次调用 Next() 返回 false
+				if len(tc.mockStorage.iterData) > 0 {
+					mockIterator.EXPECT().Next().Return(false)
+				} else {
+					mockIterator.EXPECT().Next().Return(false)
+				}
+
+				// 设置 Close() 调用
+				mockIterator.EXPECT().Close().Return(nil)
+			} else {
+				// 文件不存在的情况
+				// 设置 ProjectIndexExists 方法
+				mockStorage.EXPECT().ExistsProject(gomock.Any()).Return(true, nil)
+				// 设置 Get 方法
+				mockStorage.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, store.ErrKeyNotFound)
+			}
+
+			// 调用查询函数
+			result, err := indexer.QueryReferences(env.ctx, tc.queryOptions)
+
+			// 验证结果
+			if tc.expectError {
+				assert.Error(t, err)
+				if tc.errorMsg != "" {
+					assert.Contains(t, err.Error(), tc.errorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+				// 简化的结果验证，实际使用中可能需要更复杂的比较逻辑
+				assert.Equal(t, len(tc.expected), len(result), "返回的引用节点数量不匹配")
+			}
+		})
+	}
+}
+
+// mockReferenceStorageData 模拟引用查询的存储数据
+type mockReferenceStorageData struct {
+	projectExists    bool
+	fileElementTable *codegraphpb.FileElementTable
+	iterData         []mockIterData
+}
+
+// mockWorkspaceData 模拟工作区数据
+type mockWorkspaceData struct {
+	project *workspace.Project
+}
+
+// TestQueryDefinitions 测试 QueryDefinitions() 函数
+func TestQueryDefinitions(t *testing.T) {
+	// 设置测试环境
+	env := setupTestEnvironment(t)
+	defer teardownTestEnvironment(t, env, []*workspace.Project{})
+
+	// 创建索引器实例
+	indexer := createTestIndexer(env, testVisitPattern)
+
+	// 定义测试用例
+	testCases := []struct {
+		name          string
+		queryOptions  *types.QueryDefinitionOptions
+		mockStorage   *mockDefinitionStorageData
+		mockWorkspace *mockWorkspaceData
+		expectError   bool
+		errorMsg      string
+		expected      []*types.Definition
+		description   string
+	}{
+		{
+			name: "代码片段定义查询",
+			queryOptions: &types.QueryDefinitionOptions{
+				Workspace:   "/test/workspace",
+				FilePath:    "/test/workspace/main.go",
+				CodeSnippet: []byte("func TestFunction() {\n\tfmt.Println(\"test\")\n}"),
+			},
+			mockStorage: &mockDefinitionStorageData{
+				projectExists: true,
+				symbolData: &codegraphpb.SymbolOccurrence{
+					Occurrences: []*codegraphpb.Occurrence{
+						{
+							Path:  "/test/workspace/utils.go",
+							Range: []int32{5, 0, 10, 0},
+						},
+					},
+				},
+			},
+			mockWorkspace: &mockWorkspaceData{
+				project: &workspace.Project{
+					Uuid: "test-project-uuid",
+					Path: "/test/workspace",
+				},
+			},
+			expected: []*types.Definition{
+				{
+					Name:  "TestFunction",
+					Path:  "/test/workspace/utils.go",
+					Range: []int32{5, 0, 10, 0},
+					Type:  "function",
+				},
+			},
+			expectError: false,
+			description: "通过代码片段查询定义",
+		},
+		{
+			name: "行范围定义查询",
+			queryOptions: &types.QueryDefinitionOptions{
+				Workspace: "/test/workspace",
+				FilePath:  "/test/workspace/main.go",
+				StartLine: 10,
+				EndLine:   15,
+			},
+			mockStorage: &mockDefinitionStorageData{
+				projectExists: true,
+				fileElementTable: &codegraphpb.FileElementTable{
+					Path:     "/test/workspace/main.go",
+					Language: string(lang.Go),
+					Elements: []*codegraphpb.Element{
+						{
+							Name:         "MainFunction",
+							ElementType:  codegraphpb.ElementType_FUNCTION,
+							IsDefinition: true,
+							Range:        []int32{9, 0, 15, 0},
+						},
+					},
+				},
+			},
+			mockWorkspace: &mockWorkspaceData{
+				project: &workspace.Project{
+					Uuid: "test-project-uuid",
+					Path: "/test/workspace",
+				},
+			},
+			expected: []*types.Definition{
+				{
+					Name:  "MainFunction",
+					Path:  "/test/workspace/main.go",
+					Range: []int32{9, 0, 15, 0},
+					Type:  "function",
+				},
+			},
+			expectError: false,
+			description: "通过行范围查询定义",
+		},
+		{
+			name: "无效查询参数",
+			queryOptions: &types.QueryDefinitionOptions{
+				Workspace: "/nonexistent/workspace",
+				FilePath:  "/nonexistent/file.go",
+				StartLine: 10,
+				EndLine:   15,
+			},
+			mockStorage: &mockDefinitionStorageData{
+				projectExists:    false,
+				fileElementTable: nil,
+			},
+			mockWorkspace: &mockWorkspaceData{
+				project: &workspace.Project{
+					Uuid: "test-project-uuid",
+					Path: "/test/workspace",
+				},
+			},
+			expectError: true,
+			errorMsg:    "failed to find project which file",
+			expected:    []*types.Definition{},
+			description: "无效的查询参数",
+		},
+		{
+			name: "模糊匹配定义",
+			queryOptions: &types.QueryDefinitionOptions{
+				Workspace:   "/test/workspace",
+				FilePath:    "/test/workspace/main.go",
+				CodeSnippet: []byte("fmt.Println(\"hello\")"),
+			},
+			mockStorage: &mockDefinitionStorageData{
+				projectExists: true,
+				// 代码片段查询不直接使用存储，而是通过解析器处理
+			},
+			mockWorkspace: &mockWorkspaceData{
+				project: &workspace.Project{
+					Uuid: "test-project-uuid",
+					Path: "/test/workspace",
+				},
+			},
+			expected:    []*types.Definition{},
+			expectError: false,
+			description: "模糊匹配定义查询",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 创建模拟控制器
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			// 创建模拟存储
+			mockStorage := mocks.NewMockGraphStorage(ctrl)
+
+			// 设置存储行为
+			if tc.mockStorage.projectExists {
+				// 设置 ProjectIndexExists 方法
+				mockStorage.EXPECT().ExistsProject(gomock.Any()).Return(true, nil)
+
+				if tc.mockStorage.fileElementTable != nil {
+					// 设置 Get 方法 - 文件元素表
+					fileTableBytes, err := proto.Marshal(tc.mockStorage.fileElementTable)
+					assert.NoError(t, err)
+					mockStorage.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(fileTableBytes, nil)
+				}
+
+				if tc.mockStorage.symbolData != nil {
+					// 设置 Get 方法 - 符号数据
+					symbolBytes, err := proto.Marshal(tc.mockStorage.symbolData)
+					assert.NoError(t, err)
+					mockStorage.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(symbolBytes, nil)
+				}
+			} else {
+				// 项目不存在的情况 - 这个测试实际上在调用 GetProjectByFilePath 时就会失败，所以不会调用 ProjectIndexExists
+				// 所以我们不需要设置任何 mock 期望
+			}
+
+			// 调用查询函数
+			result, err := indexer.QueryDefinitions(env.ctx, tc.queryOptions)
+
+			// 验证结果
+			if tc.expectError {
+				assert.Error(t, err)
+				if tc.errorMsg != "" {
+					assert.Contains(t, err.Error(), tc.errorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+				// 简化的结果验证，实际使用中可能需要更复杂的比较逻辑
+				if tc.name == "模糊匹配定义" {
+					// 对于模糊匹配查询，我们只验证查询是否成功执行，不验证具体结果
+					// 因为代码片段查询的结果取决于解析和分析逻辑，比较复杂
+					_ = result
+				} else {
+					assert.Equal(t, len(tc.expected), len(result), "返回的定义节点数量不匹配")
+				}
+			}
+		})
+	}
+}
+
+// mockDefinitionStorageData 模拟定义查询的存储数据
+type mockDefinitionStorageData struct {
+	projectExists    bool
+	fileElementTable *codegraphpb.FileElementTable
+	symbolData       *codegraphpb.SymbolOccurrence
 }

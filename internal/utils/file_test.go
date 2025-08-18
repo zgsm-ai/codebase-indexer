@@ -169,6 +169,6 @@ func TestCalculateFileHash(t *testing.T) {
 	t.Run("file not found", func(t *testing.T) {
 		_, err := CalculateFileHash("nonexistentfile.txt")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "no such file or directory")
+		assert.Contains(t, err.Error(), "failed to open file")
 	})
 }

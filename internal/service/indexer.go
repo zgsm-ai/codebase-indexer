@@ -35,12 +35,42 @@ type IndexerConfig struct {
 	CacheCapacity  int
 }
 
-// Indexer 代码索引器
-type Indexer struct {
+// Indexer 定义代码索引器的接口，便于mock测试
+type Indexer interface {
+	// IndexWorkspace 索引整个工作区
+	IndexWorkspace(ctx context.Context, workspacePath string) (*types.IndexTaskMetrics, error)
+
+	// IndexFiles 根据工作区路径、文件路径，批量保存索引
+	IndexFiles(ctx context.Context, workspacePath string, filePaths []string) error
+
+	// RenameIndexes 重命名索引，根据路径（文件或文件夹）
+	RenameIndexes(ctx context.Context, workspacePath string, sourceFilePath string, targetFilePath string) error
+
+	// RemoveIndexes 根据工作区路径、文件路径/文件夹路径前缀，批量删除索引
+	RemoveIndexes(ctx context.Context, workspacePath string, filePaths []string) error
+
+	// RemoveAllIndexes 删除工作区的所有索引
+	RemoveAllIndexes(ctx context.Context, workspacePath string) error
+
+	// QueryReferences 查询引用
+	QueryReferences(ctx context.Context, opts *types.QueryReferenceOptions) ([]*types.RelationNode, error)
+
+	// QueryDefinitions 查询定义
+	QueryDefinitions(ctx context.Context, options *types.QueryDefinitionOptions) ([]*types.Definition, error)
+
+	// GetSummary 获取代码图摘要信息
+	GetSummary(ctx context.Context, workspacePath string) (*types.CodeGraphSummary, error)
+
+	// IndexIter 获取索引迭代器
+	IndexIter(ctx context.Context, projectUuid string) store.Iterator
+}
+
+// indexer 代码索引器
+type indexer struct {
 	ignoreScanner       repository.ScannerInterface
 	parser              *parser.SourceFileParser     // 单文件语法解析
 	analyzer            *analyzer.DependencyAnalyzer // 跨文件依赖分析
-	workspaceReader     *workspace.WorkspaceReader   // 进行工作区的文件读取、项目识别、项目列表维护
+	workspaceReader     workspace.WorkspaceReader    // 进行工作区的文件读取、项目识别、项目列表维护
 	storage             store.GraphStorage           // 存储
 	workspaceRepository repository.WorkspaceRepository
 	config              *IndexerConfig
@@ -121,14 +151,14 @@ func NewCodeIndexer(
 	ignoreScanner repository.ScannerInterface,
 	parser *parser.SourceFileParser,
 	analyzer *analyzer.DependencyAnalyzer,
-	workspaceReader *workspace.WorkspaceReader,
+	workspaceReader workspace.WorkspaceReader,
 	storage store.GraphStorage,
 	workspaceRepository repository.WorkspaceRepository,
 	config IndexerConfig,
 	logger logger.Logger,
-) *Indexer {
+) Indexer {
 	initConfig(&config)
-	return &Indexer{
+	return &indexer{
 		ignoreScanner:       ignoreScanner,
 		parser:              parser,
 		analyzer:            analyzer,
@@ -195,7 +225,7 @@ func initConfig(config *IndexerConfig) {
 }
 
 // IndexWorkspace 索引整个工作区
-func (i *Indexer) IndexWorkspace(ctx context.Context, workspacePath string) (*types.IndexTaskMetrics, error) {
+func (i *indexer) IndexWorkspace(ctx context.Context, workspacePath string) (*types.IndexTaskMetrics, error) {
 	taskMetrics := &types.IndexTaskMetrics{}
 	workspaceStart := time.Now()
 	i.logger.Info("start to index workspace：%s", workspacePath)
@@ -238,7 +268,7 @@ func (i *Indexer) IndexWorkspace(ctx context.Context, workspacePath string) (*ty
 }
 
 // indexProject 索引单个项目
-func (i *Indexer) indexProject(ctx context.Context, workspacePath string, project *workspace.Project) (*types.IndexTaskMetrics, []error) {
+func (i *indexer) indexProject(ctx context.Context, workspacePath string, project *workspace.Project) (*types.IndexTaskMetrics, []error) {
 	projectStart := time.Now()
 	projectUuid := project.Uuid
 
@@ -305,7 +335,7 @@ func (i *Indexer) indexProject(ctx context.Context, workspacePath string, projec
 	return batchResult.ProjectMetrics, nil
 }
 
-func (i *Indexer) filterSourceFilesByTimestamp(ctx context.Context, projectUuid string, sourceFileTimestamps map[string]int64) []*types.FileWithModTimestamp {
+func (i *indexer) filterSourceFilesByTimestamp(ctx context.Context, projectUuid string, sourceFileTimestamps map[string]int64) []*types.FileWithModTimestamp {
 	iter := i.storage.Iter(ctx, projectUuid)
 	defer func(iter store.Iterator) {
 		err := iter.Close()
@@ -344,7 +374,7 @@ func (i *Indexer) filterSourceFilesByTimestamp(ctx context.Context, projectUuid 
 }
 
 // preprocessImports 预处理（过滤、转换分隔符）
-func (i *Indexer) preprocessImports(ctx context.Context, elementTables []*parser.FileElementTable,
+func (i *indexer) preprocessImports(ctx context.Context, elementTables []*parser.FileElementTable,
 	project *workspace.Project) error {
 	var errs []error
 	for _, ft := range elementTables {
@@ -359,7 +389,7 @@ func (i *Indexer) preprocessImports(ctx context.Context, elementTables []*parser
 }
 
 // RemoveIndexes 根据工作区路径、文件路径/文件夹路径前缀，批量删除索引
-func (i *Indexer) RemoveIndexes(ctx context.Context, workspacePath string, filePaths []string) error {
+func (i *indexer) RemoveIndexes(ctx context.Context, workspacePath string, filePaths []string) error {
 	start := time.Now()
 	i.logger.Info("start to remove workspace %s files: %v", workspacePath, filePaths)
 
@@ -393,7 +423,7 @@ func (i *Indexer) RemoveIndexes(ctx context.Context, workspacePath string, fileP
 }
 
 // removeIndexByFilePaths 删除单个项目的索引
-func (i *Indexer) removeIndexByFilePaths(ctx context.Context, projectUuid string, filePaths []string) error {
+func (i *indexer) removeIndexByFilePaths(ctx context.Context, projectUuid string, filePaths []string) error {
 	// 1. 查询path相应的file_table
 	deleteFileTables, err := i.searchFileElementTablesByPath(ctx, projectUuid, filePaths)
 	if err != nil {
@@ -418,7 +448,7 @@ func (i *Indexer) removeIndexByFilePaths(ctx context.Context, projectUuid string
 }
 
 // searchFileElementTablesByPath 获取待删除的文件表和路径（包括文件夹）
-func (i *Indexer) searchFileElementTablesByPath(ctx context.Context, puuid string, filePaths []string) ([]*codegraphpb.FileElementTable, error) {
+func (i *indexer) searchFileElementTablesByPath(ctx context.Context, puuid string, filePaths []string) ([]*codegraphpb.FileElementTable, error) {
 	var deleteFileTables []*codegraphpb.FileElementTable
 	var errs []error
 
@@ -462,7 +492,7 @@ func (i *Indexer) searchFileElementTablesByPath(ctx context.Context, puuid strin
 	return deleteFileTables, nil
 }
 
-func (i *Indexer) searchFileElementTablesByPathPrefix(ctx context.Context, projectUuid string, path string) (
+func (i *indexer) searchFileElementTablesByPathPrefix(ctx context.Context, projectUuid string, path string) (
 	[]*codegraphpb.FileElementTable, []error) {
 	var errs []error
 	tables := make([]*codegraphpb.FileElementTable, 0)
@@ -495,7 +525,7 @@ func (i *Indexer) searchFileElementTablesByPathPrefix(ctx context.Context, proje
 }
 
 // cleanupSymbolOccurrences 清理符号定义
-func (i *Indexer) cleanupSymbolOccurrences(ctx context.Context, projectUuid string,
+func (i *indexer) cleanupSymbolOccurrences(ctx context.Context, projectUuid string,
 	deleteFileTables []*codegraphpb.FileElementTable, deletedPaths map[string]interface{}) error {
 	var errs []error
 
@@ -540,7 +570,7 @@ func (i *Indexer) cleanupSymbolOccurrences(ctx context.Context, projectUuid stri
 }
 
 // deleteFileIndexes 删除文件索引
-func (i *Indexer) deleteFileIndexes(ctx context.Context, puuid string, filePaths []string) error {
+func (i *indexer) deleteFileIndexes(ctx context.Context, puuid string, filePaths []string) error {
 	var errs []error
 
 	for _, fp := range filePaths {
@@ -562,16 +592,20 @@ func (i *Indexer) deleteFileIndexes(ctx context.Context, puuid string, filePaths
 }
 
 // IndexFiles 根据工作区路径、文件路径，批量保存索引
-func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePaths []string) error {
+func (i *indexer) IndexFiles(ctx context.Context, workspacePath string, filePaths []string) error {
 	start := time.Now()
 	i.logger.Info("start to index workspace %s projectFiles: %v", workspacePath, filePaths)
 	exists, err := i.workspaceReader.Exists(ctx, workspacePath)
 	if err == nil && !exists {
-		return fmt.Errorf("workspace %s not exists", workspacePath)
+		return fmt.Errorf("workspace path %s not exists", workspacePath)
 	}
 	projects := i.workspaceReader.FindProjects(ctx, workspacePath, true, workspace.DefaultVisitPattern)
 	if len(projects) == 0 {
 		return fmt.Errorf("no project found in workspace %s", workspacePath)
+	}
+	workspaceModel, err := i.workspaceRepository.GetWorkspaceByPath(workspacePath)
+	if err != nil {
+		return fmt.Errorf("get workspace err:%w", err)
 	}
 
 	var errs []error
@@ -606,7 +640,9 @@ func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePath
 			i.logger.Info("project %s has index, index projectFiles.", projectUuid)
 			i.logger.Info("%s, concurrency: %d, batch_size: %d",
 				projectUuid, i.config.MaxConcurrency, i.config.MaxBatchSize)
-			fileWithTimestamps := i.convertToFileWithModTimestamp(projectFiles)
+			// 根据规则过滤
+			fileWithTimestamps := i.filterSourceFiles(ctx, workspacePath, projectFiles)
+
 			// 阶段1-3：批量处理文件（解析、检查、保存符号表）
 			batchParams := &BatchProcessingParams{
 				ProjectUuid:          projectUuid,
@@ -614,7 +650,7 @@ func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePath
 				TotalFilesCnt:        len(projectFiles),
 				Project:              project,
 				WorkspacePath:        workspacePath,
-				PreviousFileNum:      0,
+				PreviousFileNum:      workspaceModel.FileNum - len(projectFiles),
 				Concurrency:          i.config.MaxConcurrency,
 				BatchSize:            i.config.MaxBatchSize,
 			}
@@ -638,8 +674,8 @@ func (i *Indexer) IndexFiles(ctx context.Context, workspacePath string, filePath
 	return err
 }
 
-// QueryElements 查询elements
-func (i *Indexer) QueryElements(ctx context.Context, workspacePath string, filePaths []string) ([]*codegraphpb.FileElementTable, error) {
+// queryElements 查询elements
+func (i *indexer) queryElements(ctx context.Context, workspacePath string, filePaths []string) ([]*codegraphpb.FileElementTable, error) {
 	i.logger.Info("start to query workspace %s files: %v", workspacePath, filePaths)
 
 	projects := i.workspaceReader.FindProjects(ctx, workspacePath, false, workspace.DefaultVisitPattern)
@@ -683,8 +719,8 @@ func (i *Indexer) QueryElements(ctx context.Context, workspacePath string, fileP
 	return results, nil
 }
 
-// QuerySymbols 查询symbols
-func (i *Indexer) QuerySymbols(ctx context.Context, workspacePath string, filePath string, symbolNames []string) ([]*codegraphpb.SymbolOccurrence, error) {
+// querySymbols 查询symbols
+func (i *indexer) querySymbols(ctx context.Context, workspacePath string, filePath string, symbolNames []string) ([]*codegraphpb.SymbolOccurrence, error) {
 	i.logger.Info("start to query workspace %s file %s symbols: %v", workspacePath, filePath, symbolNames)
 
 	projects := i.workspaceReader.FindProjects(ctx, workspacePath, false, workspace.DefaultVisitPattern)
@@ -737,7 +773,7 @@ func (i *Indexer) QuerySymbols(ctx context.Context, workspacePath string, filePa
 }
 
 // groupFilesByProject 根据项目对文件进行分组
-func (i *Indexer) groupFilesByProject(projects []*workspace.Project, filePaths []string) (map[string][]string, error) {
+func (i *indexer) groupFilesByProject(projects []*workspace.Project, filePaths []string) (map[string][]string, error) {
 	projectFilesMap := make(map[string][]string)
 	var errs []error
 
@@ -763,7 +799,7 @@ func (i *Indexer) groupFilesByProject(projects []*workspace.Project, filePaths [
 }
 
 // findProjectForFile 查找文件所属的项目
-func (i *Indexer) findProjectForFile(projects []*workspace.Project, filePath string) (*workspace.Project, string, error) {
+func (i *indexer) findProjectForFile(projects []*workspace.Project, filePath string) (*workspace.Project, string, error) {
 	for _, p := range projects {
 		if strings.HasPrefix(filePath, p.Path) {
 			return p, p.Uuid, nil
@@ -774,7 +810,7 @@ func (i *Indexer) findProjectForFile(projects []*workspace.Project, filePath str
 }
 
 // checkElementTables 检查element_tables
-func (i *Indexer) checkElementTables(elementTables []*parser.FileElementTable) {
+func (i *indexer) checkElementTables(elementTables []*parser.FileElementTable) {
 	start := time.Now()
 	total, filtered := 0, 0
 	for _, ft := range elementTables {
@@ -814,7 +850,7 @@ func (i *Indexer) checkElementTables(elementTables []*parser.FileElementTable) {
 }
 
 // QueryReferences 实现查询接口
-func (i *Indexer) QueryReferences(ctx context.Context, opts *types.QueryReferenceOptions) ([]*types.RelationNode, error) {
+func (i *indexer) QueryReferences(ctx context.Context, opts *types.QueryReferenceOptions) ([]*types.RelationNode, error) {
 
 	startTime := time.Now()
 	filePath := opts.FilePath
@@ -843,7 +879,7 @@ func (i *Indexer) QueryReferences(ctx context.Context, opts *types.QueryReferenc
 		return nil, lang.ErrUnSupportedLanguage
 	}
 
-	exists, err := i.storage.ExistsProject(projectUuid)
+	exists, err := i.storage.ProjectIndexExists(projectUuid)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check project %s index store, err:%v", projectUuid, err)
 	}
@@ -954,7 +990,7 @@ func (i *Indexer) QueryReferences(ctx context.Context, opts *types.QueryReferenc
 }
 
 // querySymbolsByLines 按位置查询 occurrence
-func (i *Indexer) querySymbolsByLines(ctx context.Context, fileTable *codegraphpb.FileElementTable,
+func (i *indexer) querySymbolsByLines(ctx context.Context, fileTable *codegraphpb.FileElementTable,
 	opts *types.QueryReferenceOptions) []*codegraphpb.Element {
 	var nodes []*codegraphpb.Element
 	if opts.StartLine <= 0 || opts.EndLine < opts.StartLine {
@@ -982,7 +1018,7 @@ func isValidRange(range_ []int32) bool {
 }
 
 // querySymbolsByName 通过 symbolName + startLine
-func (i *Indexer) querySymbolsByName(doc *codegraphpb.FileElementTable, opts *types.QueryReferenceOptions) []*codegraphpb.Element {
+func (i *indexer) querySymbolsByName(doc *codegraphpb.FileElementTable, opts *types.QueryReferenceOptions) []*codegraphpb.Element {
 	var nodes []*codegraphpb.Element
 	queryName := opts.SymbolName
 	// 根据名字和 行号， 找到symbol
@@ -997,7 +1033,7 @@ func (i *Indexer) querySymbolsByName(doc *codegraphpb.FileElementTable, opts *ty
 
 //
 //// buildChildrenRecursive recursively builds the child nodes for a given RelationNode and its corresponding Symbol.
-//func (i *Indexer) buildChildrenRecursive(ctx context.Context, projectUuid string,
+//func (i *indexer) buildChildrenRecursive(ctx context.Context, projectUuid string,
 //	language lang.Language, node *types.RelationNode, maxLayer int) {
 //	if maxLayer <= 0 || node == nil {
 //		i.logger.Debug("buildChildrenRecursive stopped: maxLayer=%d, node is nil=%v", maxLayer, node == nil)
@@ -1082,7 +1118,7 @@ func (i *Indexer) querySymbolsByName(doc *codegraphpb.FileElementTable, opts *ty
 //	}
 //}
 
-func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefinitionOptions) ([]*types.Definition, error) {
+func (i *indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefinitionOptions) ([]*types.Definition, error) {
 	filePath := options.FilePath
 	project, err := i.workspaceReader.GetProjectByFilePath(ctx, options.Workspace, filePath, true)
 	if err != nil {
@@ -1095,7 +1131,7 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 		return nil, lang.ErrUnSupportedLanguage
 	}
 
-	exists, err := i.storage.ExistsProject(projectUuid)
+	exists, err := i.storage.ProjectIndexExists(projectUuid)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check project %s index store, err:%v", projectUuid, err)
 	}
@@ -1246,7 +1282,7 @@ func (i *Indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 	return res, nil
 }
 
-func (i *Indexer) searchSymbolNames(ctx context.Context, projectUuid string, language lang.Language, names []string, imports []*codegraphpb.Import) (
+func (i *indexer) searchSymbolNames(ctx context.Context, projectUuid string, language lang.Language, names []string, imports []*codegraphpb.Import) (
 	map[string][]*codegraphpb.Occurrence, error) {
 
 	start := time.Now()
@@ -1305,7 +1341,7 @@ func (i *Indexer) searchSymbolNames(ctx context.Context, projectUuid string, lan
 	return found, nil
 }
 
-func (i *Indexer) findSymbolInDocByRange(fileElementTable *codegraphpb.FileElementTable, symbolRange []int32) *codegraphpb.Element {
+func (i *indexer) findSymbolInDocByRange(fileElementTable *codegraphpb.FileElementTable, symbolRange []int32) *codegraphpb.Element {
 	//TODO 二分查找
 	for _, s := range fileElementTable.Elements {
 		// 开始行
@@ -1321,7 +1357,7 @@ func (i *Indexer) findSymbolInDocByRange(fileElementTable *codegraphpb.FileEleme
 	return nil
 }
 
-func (i *Indexer) findSymbolInDocByLineRange(ctx context.Context,
+func (i *indexer) findSymbolInDocByLineRange(ctx context.Context,
 	fileElementTable *codegraphpb.FileElementTable, startLine int32, endLine int32) []*codegraphpb.Element {
 	var res []*codegraphpb.Element
 	for _, s := range fileElementTable.Elements {
@@ -1342,7 +1378,7 @@ func (i *Indexer) findSymbolInDocByLineRange(ctx context.Context,
 	return res
 }
 
-func (i *Indexer) findReferenceSymbolBelonging(f *codegraphpb.FileElementTable,
+func (i *indexer) findReferenceSymbolBelonging(f *codegraphpb.FileElementTable,
 	referenceElement *codegraphpb.Element) *codegraphpb.Element {
 	if len(referenceElement.GetRange()) < 3 {
 		i.logger.Debug("find symbol belong %s invalid referenceElement range %s %s %v",
@@ -1365,7 +1401,7 @@ func (i *Indexer) findReferenceSymbolBelonging(f *codegraphpb.FileElementTable,
 	return nil
 }
 
-func (i *Indexer) GetSummary(ctx context.Context, workspacePath string) (*types.CodeGraphSummary, error) {
+func (i *indexer) GetSummary(ctx context.Context, workspacePath string) (*types.CodeGraphSummary, error) {
 	projects := i.workspaceReader.FindProjects(ctx, workspacePath, false, workspace.DefaultVisitPattern)
 	if len(projects) == 0 {
 		return nil, fmt.Errorf("found no projects in workspace %s", workspacePath)
@@ -1377,7 +1413,7 @@ func (i *Indexer) GetSummary(ctx context.Context, workspacePath string) (*types.
 	return summary, nil
 }
 
-func (i *Indexer) RemoveAllIndexes(ctx context.Context, workspacePath string) error {
+func (i *indexer) RemoveAllIndexes(ctx context.Context, workspacePath string) error {
 	projects := i.workspaceReader.FindProjects(ctx, workspacePath, false, workspace.DefaultVisitPattern)
 	if len(projects) == 0 {
 		i.logger.Info("found no projects in workspace %s", workspacePath)
@@ -1391,7 +1427,7 @@ func (i *Indexer) RemoveAllIndexes(ctx context.Context, workspacePath string) er
 }
 
 // RenameIndexes 重命名索引，根据路径（文件或文件夹）
-func (i *Indexer) RenameIndexes(ctx context.Context, workspacePath string, sourceFilePath string, targetFilePath string) error {
+func (i *indexer) RenameIndexes(ctx context.Context, workspacePath string, sourceFilePath string, targetFilePath string) error {
 	//TODO 查出来source，删除、重命名相关path、写入，更新symbol中指向source的路径为target（迭代式进行）
 	projects := i.workspaceReader.FindProjects(ctx, workspacePath, false, workspace.DefaultVisitPattern)
 	if len(projects) == 0 {
@@ -1505,7 +1541,7 @@ func (i *Indexer) RenameIndexes(ctx context.Context, workspacePath string, sourc
 }
 
 // getFileElementTableByPath 通过路径获取FileElementTable
-func (i *Indexer) getFileElementTableByPath(ctx context.Context, projectUuid string, filePath string) (*codegraphpb.FileElementTable, error) {
+func (i *indexer) getFileElementTableByPath(ctx context.Context, projectUuid string, filePath string) (*codegraphpb.FileElementTable, error) {
 	language, err := lang.InferLanguage(filePath)
 	if err != nil {
 		return nil, err
@@ -1520,7 +1556,7 @@ func (i *Indexer) getFileElementTableByPath(ctx context.Context, projectUuid str
 }
 
 // getFileElementTableByPath 通过路径获取FileElementTable
-func (i *Indexer) getSymbolOccurrenceByName(ctx context.Context, projectUuid string,
+func (i *indexer) getSymbolOccurrenceByName(ctx context.Context, projectUuid string,
 	language lang.Language, symbolName string) (*codegraphpb.SymbolOccurrence, error) {
 
 	bytes, err := i.storage.Get(ctx, projectUuid, store.SymbolNameKey{Language: language, Name: symbolName})
@@ -1533,7 +1569,7 @@ func (i *Indexer) getSymbolOccurrenceByName(ctx context.Context, projectUuid str
 }
 
 // parseFilesOptimized 优化版本的文件解析函数，减少内存分配
-func (i *Indexer) parseFiles(ctx context.Context, files []*types.FileWithModTimestamp) ([]*parser.FileElementTable, *types.IndexTaskMetrics, error) {
+func (i *indexer) parseFiles(ctx context.Context, files []*types.FileWithModTimestamp) ([]*parser.FileElementTable, *types.IndexTaskMetrics, error) {
 	totalFiles := len(files)
 
 	// 优化：预分配切片容量，减少动态扩容
@@ -1597,8 +1633,8 @@ func symbolMapKey(filePath string, ranges []int32) string {
 }
 
 // processBatch 处理单个批次的文件
-func (i *Indexer) processBatch(ctx context.Context, batchId int, params *BatchProcessParams,
-	symbolCache *cache.LRUCache[*codegraphpb.SymbolOccurrence]) (*BatchProcessResult, error) {
+func (i *indexer) processBatch(ctx context.Context, batchId int, params *BatchProcessParams,
+	symbolCache *cache.LRUCache[*codegraphpb.SymbolOccurrence]) (*types.IndexTaskMetrics, error) {
 	batchStartTime := time.Now()
 
 	i.logger.Info("batch-%d start, [%d:%d]/%d, batch_size %d",
@@ -1609,13 +1645,8 @@ func (i *Indexer) processBatch(ctx context.Context, batchId int, params *BatchPr
 	if err != nil {
 		return nil, fmt.Errorf("parse files failed: %w", err)
 	}
-	elementTablesCnt := len(elementTables)
 	if len(elementTables) == 0 {
-		return &BatchProcessResult{
-			ElementTablesCnt: elementTablesCnt,
-			Metrics:          metrics,
-			Duration:         time.Since(batchStartTime),
-		}, nil
+		return metrics, nil
 	}
 
 	i.logger.Info("batch-%d [%d:%d]/%d parse files end, cost %d ms", batchId,
@@ -1654,15 +1685,11 @@ func (i *Indexer) processBatch(ctx context.Context, batchId int, params *BatchPr
 		params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(batchSaveStart).Milliseconds(),
 		time.Since(batchStartTime).Milliseconds())
 
-	return &BatchProcessResult{
-		ElementTablesCnt: elementTablesCnt,
-		Metrics:          metrics,
-		Duration:         time.Since(batchStartTime),
-	}, nil
+	return metrics, nil
 }
 
 // collectFiles 收集源文件
-func (i *Indexer) collectFiles(ctx context.Context, workspacePath string, projectPath string, maxFiles int) (map[string]int64, error) {
+func (i *indexer) collectFiles(ctx context.Context, workspacePath string, projectPath string, maxFiles int) (map[string]int64, error) {
 	startTime := time.Now()
 	filePathModTimestamps := make(map[string]int64, 100)
 	ignoreConfig := i.ignoreScanner.LoadIgnoreConfig(workspacePath)
@@ -1675,7 +1702,6 @@ func (i *Indexer) collectFiles(ctx context.Context, workspacePath string, projec
 	}
 
 	if ignoreConfig != nil {
-		visitPattern = &types.VisitPattern{}
 		visitPattern.SkipFunc = func(fileInfo *types.FileInfo) (bool, error) {
 			return i.ignoreScanner.CheckIgnoreFile(ignoreConfig, workspacePath, fileInfo)
 		}
@@ -1705,7 +1731,7 @@ func (i *Indexer) collectFiles(ctx context.Context, workspacePath string, projec
 }
 
 // indexFilesInBatches 批量处理文件
-func (i *Indexer) indexFilesInBatches(ctx context.Context, params *BatchProcessingParams) (*BatchProcessingResult, error) {
+func (i *indexer) indexFilesInBatches(ctx context.Context, params *BatchProcessingParams) (*BatchProcessingResult, error) {
 
 	i.logger.Info("%s, concurrency: %d, batch_size: %d cache_capacity: %d",
 		params.Project.Path, i.config.MaxConcurrency, i.config.MaxBatchSize, i.config.CacheCapacity)
@@ -1752,10 +1778,10 @@ func (i *Indexer) indexFilesInBatches(ctx context.Context, params *BatchProcessi
 				return fmt.Errorf("process batch err:%w", err)
 			}
 
-			processedFilesCnt += result.ElementTablesCnt
-			projectMetrics.TotalFailedFiles += result.Metrics.TotalFailedFiles
-			projectMetrics.TotalSymbols += result.Metrics.TotalSymbols
-			projectMetrics.FailedFilePaths = append(projectMetrics.FailedFilePaths, result.Metrics.FailedFilePaths...)
+			processedFilesCnt += result.TotalFiles - result.TotalFailedFiles
+			projectMetrics.TotalFailedFiles += result.TotalFailedFiles
+			projectMetrics.TotalSymbols += result.TotalSymbols
+			projectMetrics.FailedFilePaths = append(projectMetrics.FailedFilePaths, result.FailedFilePaths...)
 			//TODO 更新进度
 			batchUpdateStart := time.Now()
 			if err := i.updateProgress(ctx, &ProgressInfo{
@@ -1798,7 +1824,7 @@ func (i *Indexer) indexFilesInBatches(ctx context.Context, params *BatchProcessi
 }
 
 // updateProgress 更新进度
-func (i *Indexer) updateProgress(ctx context.Context, progress *ProgressInfo) error {
+func (i *indexer) updateProgress(ctx context.Context, progress *ProgressInfo) error {
 
 	if err := i.workspaceRepository.UpdateCodegraphInfo(progress.WorkspacePath,
 		progress.Processed+progress.PreviousNum, time.Now().Unix()); err != nil {
@@ -1810,22 +1836,41 @@ func (i *Indexer) updateProgress(ctx context.Context, progress *ProgressInfo) er
 	return nil
 }
 
-func (i *Indexer) IndexIter(ctx context.Context, projectUuid string) store.Iterator {
+func (i *indexer) IndexIter(ctx context.Context, projectUuid string) store.Iterator {
 	return i.storage.Iter(ctx, projectUuid)
 }
 
-func (i *Indexer) convertToFileWithModTimestamp(files []string) []*types.FileWithModTimestamp {
+func (i *indexer) filterSourceFiles(ctx context.Context, workspacePath string, files []string) []*types.FileWithModTimestamp {
+	visitPattern := i.config.VisitPattern
+	if visitPattern == nil {
+		visitPattern = workspace.DefaultVisitPattern
+	}
+	ignoreConfig := i.ignoreScanner.LoadIgnoreConfig(workspacePath)
+	maxFilesLimit := defaultMaxFiles
+	if ignoreConfig != nil {
+		visitPattern.SkipFunc = func(fileInfo *types.FileInfo) (bool, error) {
+			return i.ignoreScanner.CheckIgnoreFile(ignoreConfig, workspacePath, fileInfo)
+		}
+		maxFilesLimit = ignoreConfig.MaxFileCount
+	}
 	var results []*types.FileWithModTimestamp
 	for _, file := range files {
-		timestamp := time.Now().Unix()
 		fileInfo, err := i.workspaceReader.Stat(file)
 		if err != nil {
 			i.logger.Warn("failed to stat file %s, err:%v", file, err)
-		} else {
-			timestamp = fileInfo.ModTime.Unix()
+			continue
 		}
-
-		results = append(results, &types.FileWithModTimestamp{Path: file, ModTime: timestamp})
+		skip, err := visitPattern.ShouldSkip(fileInfo)
+		if errors.Is(err, filepath.SkipAll) || errors.Is(err, filepath.SkipDir) {
+			continue
+		}
+		if skip {
+			continue
+		}
+		if len(results) >= maxFilesLimit {
+			break
+		}
+		results = append(results, &types.FileWithModTimestamp{Path: file, ModTime: fileInfo.ModTime.Unix()})
 	}
 	return results
 }

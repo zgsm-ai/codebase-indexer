@@ -2,9 +2,12 @@ package api
 
 import (
 	"bytes"
+	"codebase-indexer/internal/utils"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -16,6 +19,7 @@ type GetSnippetsIntegrationTestSuite struct {
 	suite.Suite
 	baseURL       string
 	workspacePath string
+	extraHeaders  map[string]string
 }
 
 func (s *GetSnippetsIntegrationTestSuite) SetupSuite() {
@@ -24,6 +28,23 @@ func (s *GetSnippetsIntegrationTestSuite) SetupSuite() {
 
 	// 设置工作目录路径
 	s.workspacePath = "g:\\tmp\\projects\\go\\kubernetes"
+	s.extraHeaders = make(map[string]string)
+	rootDir, err := utils.GetRootDir("codebase_indexer_test")
+	if err != nil {
+		panic(err)
+	}
+	authJsonPath := filepath.Join(rootDir, "share", "auth.json")
+	file, err := os.ReadFile(authJsonPath)
+	if err != nil {
+		panic(err)
+	}
+	authConfig := make(map[string]string)
+	if err = json.Unmarshal(file, &authConfig); err != nil {
+		panic(err)
+	}
+	s.extraHeaders["Client-ID"] = authConfig["machine_id"]
+	s.extraHeaders["Server-Endpoint"] = authConfig["base_url"]
+	s.extraHeaders["Authorization"] = fmt.Sprintf("Bearer %s", authConfig["access_token"])
 }
 
 type testCase struct {

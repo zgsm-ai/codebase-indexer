@@ -73,10 +73,10 @@ const DefaultMaxCodeSnippets = 200
 func NewCodebaseService(
 	manager repository.StorageInterface,
 	logger logger.Logger,
-	workspaceReader *workspace.WorkspaceReader,
+	workspaceReader workspace.WorkspaceReader,
 	workspaceRepository repository.WorkspaceRepository,
 	fileDefinitionParser *definition.DefParser,
-	indexer *Indexer) CodebaseService {
+	indexer Indexer) CodebaseService {
 	return &codebaseService{
 		manager:              manager,
 		logger:               logger,
@@ -90,10 +90,10 @@ func NewCodebaseService(
 type codebaseService struct {
 	manager              repository.StorageInterface
 	logger               logger.Logger
-	workspaceReader      *workspace.WorkspaceReader
+	workspaceReader      workspace.WorkspaceReader
 	workspaceRepository  repository.WorkspaceRepository
 	fileDefinitionParser *definition.DefParser
-	indexer              *Indexer
+	indexer              Indexer
 }
 
 func (s *codebaseService) checkPath(ctx context.Context, workspacePath string, filePaths []string) error {

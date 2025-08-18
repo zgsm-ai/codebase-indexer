@@ -20,6 +20,7 @@ var (
 		// IgnorePatterns: []string{".git", ".idea", "node_modules/", "vendor/", "dist/", "build/"},
 		FileIgnorePatterns:   []string{".*", "*.bak"},
 		FolderIgnorePatterns: []string{".*", "build/", "dist/", "node_modules/", "vendor/"},
+		FileIncludePatterns:  []string{".go"},
 		// MaxFileSizeMB:  10,
 		MaxFileSizeKB: 100,
 	}
@@ -27,7 +28,8 @@ var (
 
 func TestLoadIgnoreRules(t *testing.T) {
 	logger := &mocks.MockLogger{}
-	logger.On("Warn", mock.Anything, mock.Anything).Return()
+	logger.On("Warn", "Failed to read .gitignore file: %v", mock.Anything).Return()
+	logger.On("Warn", "Failed to read .coignore file: %v", mock.Anything).Return()
 	fs := &FileScanner{scannerConfig: scannerConfig, logger: logger}
 
 	t.Run("Use default rules only", func(t *testing.T) {
@@ -64,7 +66,7 @@ func TestScanDirectory(t *testing.T) {
 	logger := &mocks.MockLogger{}
 	logger.On("Info", mock.Anything, mock.Anything).Return()
 	logger.On("Debug", mock.Anything, mock.Anything).Return()
-	fs := NewFileScanner(logger)
+	_ = NewFileScanner(logger)
 
 	setupTestDir := func(t *testing.T) string {
 		tempDir := t.TempDir()
@@ -92,10 +94,56 @@ func TestScanDirectory(t *testing.T) {
 	}
 
 	t.Run("Scan codebase and filter files", func(t *testing.T) {
+		logger := &mocks.MockLogger{}
+		logger.On("Warn", "Failed to read .gitignore file: %v", mock.Anything).Return()
+		logger.On("Warn", "Failed to read .coignore file: %v", mock.Anything).Return()
+		logger.On("Warn", "reached maximum file count limit: %d, stopping scan, time taken: %v", mock.Anything, mock.Anything).Return()
+		logger.On("Info", "starting codebase scan: %s", mock.Anything).Return()
+		logger.On("Debug", "skipping file excluded by ignore: %s", mock.Anything).Return()
+		logger.On("Debug", "skipping ignored directory: %s", mock.Anything).Return()
+		logger.On("Debug", mock.Anything, mock.Anything).Return()
+
 		codebasePath := setupTestDir(t)
+		fs := &FileScanner{scannerConfig: scannerConfig, logger: logger}
+
+		// Debug: check file include patterns
+		includeFiles := fs.LoadIncludeFiles()
+		t.Logf("File include patterns: %v", includeFiles)
+
+		// Debug: check ignore rules
+		ignore := fs.LoadIgnoreRules(codebasePath)
+		t.Logf("Ignore rules loaded: %v", ignore != nil)
+		if ignore != nil {
+			t.Logf("Ignore patterns:")
+			// Note: We can't easily inspect the internal patterns of the ignore object
+			// but we can test specific paths
+			t.Logf("  src/main.go matches: %v", ignore.MatchesPath("src/main.go"))
+			t.Logf("  src/pkg/utils.go matches: %v", ignore.MatchesPath("src/pkg/utils.go"))
+		}
+
+		// Debug: check scanner config
+		t.Logf("MaxFileSizeKB: %d", scannerConfig.MaxFileSizeKB)
+		t.Logf("MaxFileCount: %d", scannerConfig.MaxFileCount)
+
+		// Debug: check actual file sizes
+		mainGoPath := filepath.Join(codebasePath, "src", "main.go")
+		utilsGoPath := filepath.Join(codebasePath, "src", "pkg", "utils.go")
+		if info, err := os.Stat(mainGoPath); err == nil {
+			t.Logf("src/main.go size: %d bytes", info.Size())
+		}
+		if info, err := os.Stat(utilsGoPath); err == nil {
+			t.Logf("src/pkg/utils.go size: %d bytes", info.Size())
+		}
+
 		hashTree, err := fs.ScanCodebase(codebasePath)
 		logger.AssertCalled(t, "Info", "starting codebase scan: %s", mock.Anything)
 		require.NoError(t, err)
+
+		// Debug: print all files in hashTree
+		t.Logf("Files in hashTree:")
+		for path := range hashTree {
+			t.Logf("  %s", path)
+		}
 
 		// Verify included files
 		_, ok := hashTree[filepath.Join("src", "main.go")]
@@ -115,12 +163,23 @@ func TestScanDirectory(t *testing.T) {
 		if runtime.GOOS != "windows" {
 			t.Skip("skip: only run on Windows system")
 		}
+		logger := &mocks.MockLogger{}
+		logger.On("Warn", "Failed to read .gitignore file: %v", mock.Anything).Return()
+		logger.On("Warn", "Failed to read .coignore file: %v", mock.Anything).Return()
+		logger.On("Warn", "reached maximum file count limit: %d, stopping scan, time taken: %v", mock.Anything, mock.Anything).Return()
+		logger.On("Info", "starting codebase scan: %s", mock.Anything).Return()
+		logger.On("Debug", "skipping file excluded by ignore: %s", mock.Anything).Return()
+		logger.On("Debug", "skipping ignored directory: %s", mock.Anything).Return()
+		logger.On("Debug", mock.Anything, mock.Anything).Return()
+
 		codebasePath := setupTestDir(t)
+		fs := &FileScanner{scannerConfig: scannerConfig, logger: logger}
 		hashTree, err := fs.ScanCodebase(codebasePath)
 		require.NoError(t, err)
 
 		// Verify with Windows-style paths
-		_, ok := hashTree["src\\main.go"]
+		windowsPath := filepath.Join("src", "main.go")
+		_, ok := hashTree[windowsPath]
 		assert.True(t, ok, "should recognize Windows path format")
 	})
 }

@@ -24,7 +24,7 @@ type GraphStorage interface {
 	Iter(ctx context.Context, projectUuid string) Iterator
 	Size(ctx context.Context, projectUuid string, keyPrefix string) int
 	Close() error
-	ExistsProject(projectUuid string) (bool, error)
+	ProjectIndexExists(projectUuid string) (bool, error)
 }
 
 // Iterator 定义了遍历存储中元素的接口

@@ -551,7 +551,7 @@ func (s *LevelDBStorage) stopCleanupTask() {
 	}
 }
 
-func (s *LevelDBStorage) ExistsProject(projectUuid string) (bool, error) {
+func (s *LevelDBStorage) ProjectIndexExists(projectUuid string) (bool, error) {
 	dbPath := s.generateDbPath(projectUuid)
 	// 调用os.Stat获取路径信息
 	_, err := os.Stat(dbPath)
