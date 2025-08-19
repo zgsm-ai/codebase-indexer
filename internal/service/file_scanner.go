@@ -99,6 +99,8 @@ func (ws *fileScanService) DetectFileChanges(workspace *model.Workspace) ([]*mod
 	// 计算文件变更
 	changes := ws.fileScanner.CalculateFileChanges(currentHashTree, codebaseEmbeddingConfig.HashTree)
 	if len(changes) == 0 {
+		// 查询 open_workspace 事件并更新状态为完成
+		ws.updateNonSuccessOpenOrRebuildEventStatus(workspace.WorkspacePath)
 		return nil, nil
 	}
 
@@ -155,9 +157,15 @@ func (ws *fileScanService) DetectFileChanges(workspace *model.Workspace) ([]*mod
 	}
 
 	// 查询 open_workspace 事件并更新状态为完成
+	ws.updateNonSuccessOpenOrRebuildEventStatus(workspace.WorkspacePath)
+
+	return events, nil
+}
+
+func (ws *fileScanService) updateNonSuccessOpenOrRebuildEventStatus(workspacePath string) {
 	openWorkspaceEvents, err := ws.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(
-		[]string{model.EventTypeOpenWorkspace},
-		[]string{workspace.WorkspacePath},
+		[]string{model.EventTypeOpenWorkspace, model.EventTypeRebuildWorkspace},
+		[]string{workspacePath},
 		1, // 限制查询数量
 		false,
 		[]int{
@@ -171,24 +179,22 @@ func (ws *fileScanService) DetectFileChanges(workspace *model.Workspace) ([]*mod
 	)
 	if err != nil {
 		ws.logger.Error("failed to get open_workspace events: %v", err)
-	} else {
-		for _, event := range openWorkspaceEvents {
-			if event.EmbeddingStatus != model.EmbeddingStatusSuccess {
-				updateEvent := &model.Event{
-					ID:              event.ID,
-					EmbeddingStatus: model.EmbeddingStatusSuccess,
-				}
-				err := ws.eventRepo.UpdateEvent(updateEvent)
-				if err != nil {
-					ws.logger.Error("failed to update open_workspace event status: %v", err)
-				} else {
-					ws.logger.Info("updated open_workspace event status to success for workspace: %s", workspace.WorkspacePath)
-				}
+	}
+	for _, event := range openWorkspaceEvents {
+		ws.logger.Info("non-success open_workspace or rebuild_workspace event: %v", event)
+		if event.EmbeddingStatus != model.EmbeddingStatusSuccess {
+			updateEvent := &model.Event{
+				ID:              event.ID,
+				EmbeddingStatus: model.EmbeddingStatusSuccess,
+			}
+			err := ws.eventRepo.UpdateEvent(updateEvent)
+			if err != nil {
+				ws.logger.Error("failed to update open_workspace event status: %v", err)
+			} else {
+				ws.logger.Info("updated open_workspace event status to success for workspace: %s", workspacePath)
 			}
 		}
 	}
-
-	return events, nil
 }
 
 // MapFileStatusToEventType 映射文件状态到事件类型
@@ -253,6 +259,9 @@ func (ws *fileScanService) handleEventsWithoutDeduplication(changes []*utils.Fil
 
 		events = append(events, event)
 	}
+
+	// 查询 open_workspace 事件并更新状态为完成
+	ws.updateNonSuccessOpenOrRebuildEventStatus(workspace.WorkspacePath)
 
 	return events, nil
 }

@@ -750,17 +750,17 @@ func (s *extensionService) createCodebaseConfig(workspacePath, clientID string) 
 
 func (s *extensionService) createCodebaseEmbeddingConfig(workspacePath, clientID string) error {
 	workspaceName := filepath.Base(workspacePath)
-	codebaseID := utils.GenerateCodebaseEmbeddingID(workspacePath)
+	codebaseEmbeddingID := utils.GenerateCodebaseEmbeddingID(workspacePath)
 
-	_, err := s.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseID)
+	_, err := s.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseEmbeddingID)
 	if err == nil {
-		s.logger.Info("codebase embedding config for %s already exists", codebaseID)
+		s.logger.Info("codebase embedding config for %s already exists", codebaseEmbeddingID)
 		return nil
 	}
 
 	codebaseEmbeddingConfig := &config.CodebaseEmbeddingConfig{
 		ClientID:     clientID,
-		CodebaseId:   codebaseID,
+		CodebaseId:   codebaseEmbeddingID,
 		CodebaseName: workspaceName,
 		CodebasePath: workspacePath,
 		HashTree:     make(map[string]string),
@@ -775,14 +775,37 @@ func (s *extensionService) createCodebaseEmbeddingConfig(workspacePath, clientID
 		return fmt.Errorf("failed to save codebase embedding config: %w", err)
 	}
 
-	s.logger.Info("created codebase embedding config for %s (%s)", workspaceName, codebaseID)
+	s.logger.Info("created codebase embedding config for %s (%s)", workspaceName, codebaseEmbeddingID)
+	return nil
+}
+
+func (s *extensionService) initCodebaseEmbeddingConfig(workspacePath, clientID string) error {
+	workspaceName := filepath.Base(workspacePath)
+	codebaseEmbeddingID := utils.GenerateCodebaseEmbeddingID(workspacePath)
+	codebaseEmbeddingConfig := &config.CodebaseEmbeddingConfig{
+		ClientID:     clientID,
+		CodebaseId:   codebaseEmbeddingID,
+		CodebaseName: workspaceName,
+		CodebasePath: workspacePath,
+		HashTree:     make(map[string]string),
+		SyncFiles:    make(map[string]string),
+		SyncIds:      make(map[string]time.Time),
+		FailedFiles:  make(map[string]string),
+	}
+
+	// 保存到存储
+	if err := s.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig); err != nil {
+		return fmt.Errorf("failed to save codebase embedding config: %w", err)
+	}
+
+	s.logger.Info("created codebase embedding config for %s (%s)", workspaceName, codebaseEmbeddingID)
 	return nil
 }
 
 // TriggerIndex 触发索引构建
 func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, indexType, clientID string) error {
 	// 检查工作区是否已存在
-	workspace, err := s.workspaceRepo.GetWorkspaceByPath(workspacePath)
+	_, err := s.workspaceRepo.GetWorkspaceByPath(workspacePath)
 	if err != nil {
 		// 工作区不存在，创建新的工作区
 		s.logger.Info("workspace not found, creating new workspace: %s", workspacePath)
@@ -804,49 +827,66 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 
 		s.logger.Info("created new workspace: %s", workspacePath)
 	} else {
-		// 工作区已存在，更新 active 状态
-		if workspace.Active != "true" {
-			updateWorkspace := &model.Workspace{
-				ID:               workspace.ID,
-				WorkspacePath:    workspace.WorkspacePath,
-				Active:           "true",
-				EmbeddingFileNum: 0,
-				EmbeddingTs:      0,
-				CodegraphFileNum: 0,
-				CodegraphTs:      0,
-			}
-			if err := s.workspaceRepo.UpdateWorkspace(updateWorkspace); err != nil {
-				return fmt.Errorf("failed to update workspace: %w", err)
-			}
-			s.logger.Info("updated workspace active status to true: %s", workspacePath)
+		updateWorksapce := map[string]interface{}{
+			"active":                      "true",
+			"embedding_file_num":          0,
+			"embedding_ts":                0,
+			"embedding_message":           "",
+			"embedding_failed_file_paths": "",
+			"codegraph_file_num":          0,
+			"codegraph_ts":                0,
+			"codegraph_message":           "",
+			"codegraph_failed_file_paths": "",
 		}
+		if err := s.workspaceRepo.UpdateWorkspaceByMap(workspacePath, updateWorksapce); err != nil {
+			return fmt.Errorf("failed to update workspace: %w", err)
+		}
+		s.logger.Info("updated workspace active status to true: %s", workspacePath)
 	}
 
 	if err := s.createCodebaseConfig(workspacePath, clientID); err != nil {
 		return fmt.Errorf("failed to create codebase config: %w", err)
 	}
 
-	if err := s.createCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
-		return fmt.Errorf("failed to create codebase embedding config: %w", err)
+	if err := s.initCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
+		return fmt.Errorf("failed to init codebase embedding config: %w", err)
 	}
 
-	// 判断open_workspace事件是否存在非进行中状态，若不存在则创建
-	existingOpenEvents, err := s.eventRepo.GetEventsByWorkspaceAndType(workspacePath, []string{model.EventTypeOpenWorkspace}, 1, true)
+	// 判断rebuild_workspace事件是否存在非进行中状态，若不存在则创建
+	existingRebuildEvents, err := s.eventRepo.GetEventsByWorkspaceAndType(workspacePath, []string{model.EventTypeRebuildWorkspace}, 1, true)
 	if err != nil {
-		return fmt.Errorf("failed to get existing open workspace events: %w", err)
+		return fmt.Errorf("failed to get existing rebuild workspace events: %w", err)
 	}
 
-	var openEventId int64
+	embeddingStatus := model.EmbeddingStatusInit
+	codegraphStatus := model.CodegraphStatusInit
+	switch indexType {
+	case dto.IndexTypeEmbedding:
+		codegraphStatus = model.CodegraphStatusSuccess
+	case dto.IndexTypeCodegraph:
+		embeddingStatus = model.EmbeddingStatusSuccess
+	}
+
+	var rebuildEventId int64
 	shouldCreateEvent := true
-	if len(existingOpenEvents) > 0 {
-		// 检查是否存在非进行中状态的open_workspace事件
-		for _, event := range existingOpenEvents {
+	if len(existingRebuildEvents) > 0 {
+		// 检查是否存在非进行中状态的rebuild_workspace事件
+		for _, event := range existingRebuildEvents {
 			if event.EmbeddingStatus != model.EmbeddingStatusUploading &&
 				event.EmbeddingStatus != model.EmbeddingStatusBuilding &&
 				event.CodegraphStatus != model.CodegraphStatusBuilding {
-				// 存在非进行中状态的事件，不需要创建新事件
+				// 存在非进行中状态的事件，不需要创建新事件，只更新事件状态
+				updateEvent := &model.Event{
+					ID:              event.ID,
+					EmbeddingStatus: embeddingStatus,
+					CodegraphStatus: codegraphStatus,
+				}
+				err := s.eventRepo.UpdateEvent(updateEvent)
+				if err != nil {
+					return fmt.Errorf("failed to update event: %w", err)
+				}
 				shouldCreateEvent = false
-				openEventId = event.ID
+				rebuildEventId = event.ID
 				break
 			}
 		}
@@ -856,28 +896,19 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 	if shouldCreateEvent {
 		// 创建打开工作区事件
 		eventModel = &model.Event{
-			WorkspacePath:  workspacePath,
-			EventType:      model.EventTypeOpenWorkspace,
-			SourceFilePath: "",
-			TargetFilePath: "",
-			SyncId:         "", // 暂时为空，后续可以生成
-		}
-		switch indexType {
-		case dto.IndexTypeEmbedding:
-			eventModel.EmbeddingStatus = model.EmbeddingStatusInit
-			eventModel.CodegraphStatus = model.CodegraphStatusSuccess
-		case dto.IndexTypeCodegraph:
-			eventModel.EmbeddingStatus = model.EmbeddingStatusSuccess
-			eventModel.CodegraphStatus = model.CodegraphStatusInit
-		default:
-			eventModel.EmbeddingStatus = model.EmbeddingStatusInit
-			eventModel.CodegraphStatus = model.CodegraphStatusInit
+			WorkspacePath:   workspacePath,
+			EventType:       model.EventTypeRebuildWorkspace,
+			SourceFilePath:  "",
+			TargetFilePath:  "",
+			SyncId:          "", // 暂时为空，后续可以生成
+			EmbeddingStatus: embeddingStatus,
+			CodegraphStatus: codegraphStatus,
 		}
 		// 保存事件到数据库
 		if err := s.eventRepo.CreateEvent(eventModel); err != nil {
 			return fmt.Errorf("failed to create open workspace event: %w", err)
 		}
-		openEventId = eventModel.ID
+		rebuildEventId = eventModel.ID
 	}
 
 	// 事务处理删除其他非进行中状态事件
@@ -911,7 +942,7 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 	// 删除这些事件（跳过新创建的事件）
 	deleteEventIds := []int64{}
 	for _, event := range eventsToDelete {
-		if openEventId == event.ID {
+		if rebuildEventId == event.ID {
 			continue // 跳过新创建的事件
 		}
 		deleteEventIds = append(deleteEventIds, event.ID)
@@ -995,6 +1026,8 @@ func (s *extensionService) calculateEmbeddingStatus(workspace *model.Workspace, 
 		status.Process = float32(workspace.EmbeddingFileNum) / float32(workspace.FileNum) * 100
 		if status.Process > 100 { // 进度不能超过100%
 			status.Process = 100
+			status.Status = dto.ProcessStatusSuccess
+			return status
 		}
 	} else {
 		status.Process = 0
@@ -1013,7 +1046,6 @@ func (s *extensionService) calculateEmbeddingStatus(workspace *model.Workspace, 
 	buildingCount := 0
 	uploadFailedCount := 0
 	buildFailedCount := 0
-	successCount := 0
 
 	for _, event := range events {
 		switch event.EmbeddingStatus {
@@ -1027,8 +1059,6 @@ func (s *extensionService) calculateEmbeddingStatus(workspace *model.Workspace, 
 			uploadFailedCount++
 		case model.EmbeddingStatusBuildFailed:
 			buildFailedCount++
-		case model.EmbeddingStatusSuccess:
-			successCount++
 		}
 	}
 
@@ -1038,7 +1068,8 @@ func (s *extensionService) calculateEmbeddingStatus(workspace *model.Workspace, 
 		status.Status = dto.ProcessStatusRunning
 	} else if uploadFailedCount > 0 || buildFailedCount > 0 {
 		// 存在失败状态时，判断比较 process 和配置中的百分比阈值
-		embeddingSuccessPercent := config.GetClientConfig().Sync.EmbeddingSuccessPercent
+		clientConfig := config.GetClientConfig()
+		embeddingSuccessPercent := clientConfig.Sync.EmbeddingSuccessPercent
 		if status.Process < embeddingSuccessPercent {
 			status.Status = dto.ProcessStatusFailed
 			status.TotalFailed = totalFailed
@@ -1069,6 +1100,8 @@ func (s *extensionService) calculateCodegraphStatus(workspace *model.Workspace, 
 		status.Process = float32(workspace.CodegraphFileNum) / float32(workspace.FileNum) * 100
 		if status.Process > 100 { // 进度不能超过100%
 			status.Process = 100
+			status.Status = dto.ProcessStatusSuccess
+			return status
 		}
 	} else {
 		status.Process = 0
@@ -1085,7 +1118,6 @@ func (s *extensionService) calculateCodegraphStatus(workspace *model.Workspace, 
 	initCount := 0
 	buildingCount := 0
 	failedCount := 0
-	successCount := 0
 
 	for _, event := range events {
 		switch event.CodegraphStatus {
@@ -1095,8 +1127,6 @@ func (s *extensionService) calculateCodegraphStatus(workspace *model.Workspace, 
 			buildingCount++
 		case model.CodegraphStatusFailed:
 			failedCount++
-		case model.CodegraphStatusSuccess:
-			successCount++
 		}
 	}
 
@@ -1106,7 +1136,8 @@ func (s *extensionService) calculateCodegraphStatus(workspace *model.Workspace, 
 		status.Status = dto.ProcessStatusRunning
 	} else if failedCount > 0 {
 		// 存在失败状态时，判断比较 process 和配置中的百分比阈值
-		codegraphSuccessPercent := config.GetClientConfig().Sync.CodegraphSuccessPercent
+		clientConfig := config.GetClientConfig()
+		codegraphSuccessPercent := clientConfig.Sync.CodegraphSuccessPercent
 		if status.Process < codegraphSuccessPercent {
 			status.Status = dto.ProcessStatusFailed
 			status.TotalFailed = totalFailed

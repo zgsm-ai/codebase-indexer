@@ -21,6 +21,8 @@ type WorkspaceRepository interface {
 	GetWorkspaceByID(id int64) (*model.Workspace, error)
 	// UpdateWorkspace 更新工作区
 	UpdateWorkspace(workspace *model.Workspace) error
+	// UpdateWorkspaceByMap 根据map更新工作区
+	UpdateWorkspaceByMap(path string, updates map[string]interface{}) error
 	// DeleteWorkspace 删除工作区
 	DeleteWorkspace(path string) error
 	// ListWorkspaces 列出所有工作区
@@ -275,6 +277,73 @@ func (r *workspaceRepository) UpdateWorkspace(workspace *model.Workspace) error 
 
 	if rowsAffected == 0 {
 		return fmt.Errorf("workspace not found: %s", workspace.WorkspacePath)
+	}
+
+	return nil
+}
+
+// UpdateWorkspaceByMap 根据map更新工作区
+func (r *workspaceRepository) UpdateWorkspaceByMap(path string, updates map[string]interface{}) error {
+	// 如果没有需要更新的字段，直接返回
+	if len(updates) == 0 {
+		return nil
+	}
+
+	// 构建SET子句和参数
+	var setClauses []string
+	var args []interface{}
+
+	// 支持的字段映射
+	fieldMapping := map[string]string{
+		"workspace_name":              "workspace_name",
+		"active":                      "active",
+		"file_num":                    "file_num",
+		"embedding_file_num":          "embedding_file_num",
+		"embedding_ts":                "embedding_ts",
+		"embedding_message":           "embedding_message",
+		"embedding_failed_file_paths": "embedding_failed_file_paths",
+		"codegraph_file_num":          "codegraph_file_num",
+		"codegraph_ts":                "codegraph_ts",
+		"codegraph_message":           "codegraph_message",
+		"codegraph_failed_file_paths": "codegraph_failed_file_paths",
+	}
+
+	// 遍历updates map，构建SET子句
+	for key, value := range updates {
+		if fieldName, exists := fieldMapping[key]; exists {
+			setClauses = append(setClauses, fmt.Sprintf("%s = ?", fieldName))
+			args = append(args, value)
+		}
+	}
+
+	// 如果没有有效的字段需要更新，直接返回
+	if len(setClauses) == 0 {
+		return nil
+	}
+
+	// 添加updated_at字段
+	setClauses = append(setClauses, "updated_at = ?")
+	nowTime := time.Now()
+	args = append(args, nowTime)
+
+	// 构建完整查询
+	query := fmt.Sprintf("UPDATE workspaces SET %s WHERE workspace_path = ?", strings.Join(setClauses, ", "))
+	args = append(args, path)
+
+	result, err := r.db.GetDB().Exec(query, args...)
+	if err != nil {
+		r.logger.Error("Failed to update workspace by map: %v", err)
+		return fmt.Errorf("failed to update workspace by map: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		r.logger.Error("Failed to get rows affected: %v", err)
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("workspace not found: %s", path)
 	}
 
 	return nil

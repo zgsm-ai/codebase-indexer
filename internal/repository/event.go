@@ -31,6 +31,8 @@ type EventRepository interface {
 	GetEventsByTypeAndStatusAndWorkspaces(eventTypes []string, workspacePaths []string, limit int, isDesc bool, embeddingStatuses []int, codegraphStatuses []int) ([]*model.Event, error)
 	// UpdateEvent 更新事件
 	UpdateEvent(event *model.Event) error
+	// UpdateEventByMap 根据map更新事件
+	UpdateEventByMap(id int64, updates map[string]interface{}) error
 	// DeleteEvent 删除事件
 	DeleteEvent(id int64) error
 	// GetRecentEvents 获取最近的事件
@@ -861,6 +863,70 @@ func (r *eventRepository) UpdateEvent(event *model.Event) error {
 
 	if rowsAffected == 0 {
 		return fmt.Errorf("event not found: %d", event.ID)
+	}
+
+	return nil
+}
+
+// UpdateEventByMap 根据map更新事件
+func (r *eventRepository) UpdateEventByMap(id int64, updates map[string]interface{}) error {
+	// 如果没有需要更新的字段，直接返回
+	if len(updates) == 0 {
+		return nil
+	}
+
+	// 构建SET子句和参数
+	var setClauses []string
+	var args []interface{}
+
+	// 支持的字段映射
+	fieldMapping := map[string]string{
+		"workspace_path":   "workspace_path",
+		"event_type":       "event_type",
+		"source_file_path": "source_file_path",
+		"target_file_path": "target_file_path",
+		"embedding_status": "embedding_status",
+		"codegraph_status": "codegraph_status",
+		"sync_id":          "sync_id",
+		"file_hash":        "file_hash",
+	}
+
+	// 遍历updates map，构建SET子句
+	for key, value := range updates {
+		if fieldName, exists := fieldMapping[key]; exists {
+			setClauses = append(setClauses, fmt.Sprintf("%s = ?", fieldName))
+			args = append(args, value)
+		}
+	}
+
+	// 如果没有有效的字段需要更新，直接返回
+	if len(setClauses) == 0 {
+		return nil
+	}
+
+	// 添加updated_at字段
+	setClauses = append(setClauses, "updated_at = ?")
+	nowTime := time.Now()
+	args = append(args, nowTime)
+
+	// 构建完整查询
+	query := fmt.Sprintf("UPDATE events SET %s WHERE id = ?", strings.Join(setClauses, ", "))
+	args = append(args, id)
+
+	result, err := r.db.GetDB().Exec(query, args...)
+	if err != nil {
+		r.logger.Error("Failed to update event by map: %v", err)
+		return fmt.Errorf("failed to update event by map: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		r.logger.Error("Failed to get rows affected: %v", err)
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("event not found: %d", id)
 	}
 
 	return nil
