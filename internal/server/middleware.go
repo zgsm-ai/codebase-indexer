@@ -10,6 +10,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"codebase-indexer/internal/config"
+	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/logger"
 )
 
@@ -94,11 +95,7 @@ func AuthMiddleware(logger logger.Logger) gin.HandlerFunc {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			logger.Error("missing Authorization header")
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"success": false,
-				"code":    "401",
-				"message": "Authorization header is required",
-			})
+			utils.Unauthorized(c, "Authorization header is required")
 			c.Abort()
 			return
 		}
@@ -114,11 +111,7 @@ func AuthMiddleware(logger logger.Logger) gin.HandlerFunc {
 		// 验证token是否匹配
 		if token != configToken {
 			logger.Error("expired token: %s", token)
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"success": false,
-				"code":    "401",
-				"message": "Invalid or expired token",
-			})
+			utils.Unauthorized(c, "Invalid or expired token")
 			c.Abort()
 			return
 		}
@@ -134,11 +127,8 @@ func RateLimitMiddleware(logger logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !limiter.Allow() {
 			logger.Error("rate limit exceeded")
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-				"success": false,
-				"code":    "429",
-				"message": "too many requests",
-			})
+			utils.TooManyRequests(c, "too many requests")
+			c.Abort()
 			return
 		}
 		c.Next()
@@ -157,33 +147,21 @@ func HeaderConfigMiddleware(logger logger.Logger) gin.HandlerFunc {
 		// 检查三个头信息是否都存在
 		if clientID == "" {
 			logger.Error("missing Client-ID header")
-			c.JSON(http.StatusBadRequest, gin.H{
-				"success": false,
-				"code":    "400",
-				"message": "Client-ID header is required",
-			})
+			utils.BadRequest(c, "Client-ID header is required")
 			c.Abort()
 			return
 		}
 
 		if authorization == "" {
 			logger.Error("missing Authorization header")
-			c.JSON(http.StatusBadRequest, gin.H{
-				"success": false,
-				"code":    "400",
-				"message": "Authorization header is required",
-			})
+			utils.BadRequest(c, "Authorization header is required")
 			c.Abort()
 			return
 		}
 
 		if serverEndpoint == "" {
 			logger.Error("missing Server-Endpoint header")
-			c.JSON(http.StatusBadRequest, gin.H{
-				"success": false,
-				"code":    "400",
-				"message": "Server-Endpoint header is required",
-			})
+			utils.BadRequest(c, "Server-Endpoint header is required")
 			c.Abort()
 			return
 		}

@@ -27,11 +27,15 @@ func Success(c *gin.Context, data interface{}) {
 	})
 }
 
-// Fail 返回失败响应
-func Fail(c *gin.Context, message string) {
+// BadRequest 400 错误请求
+func BadRequest(c *gin.Context, message string) {
+	if message == "" {
+		message = "bad request"
+	}
+
 	c.JSON(http.StatusBadRequest, APIResponse{
 		Success:   false,
-		Code:      "4001",
+		Code:      "400",
 		Message:   message,
 		Data:      nil,
 		Timestamp: time.Now().Format(time.RFC3339),
@@ -54,7 +58,31 @@ func NotFound(c *gin.Context, message string) {
 	if message == "" {
 		message = "resource not found"
 	}
-	FailWithCode(c, "4041", message, http.StatusNotFound)
+	FailWithCode(c, "404", message, http.StatusNotFound)
+}
+
+// Unauthorized 返回401响应
+func Unauthorized(c *gin.Context, message string) {
+	if message == "" {
+		message = "unauthorized"
+	}
+	FailWithCode(c, "401", message, http.StatusUnauthorized)
+}
+
+// MethodNotAllowed 返回405响应
+func MethodNotAllowed(c *gin.Context, message string) {
+	if message == "" {
+		message = "method not allowed"
+	}
+	FailWithCode(c, "405", message, http.StatusMethodNotAllowed)
+}
+
+// TooManyRequests 返回429响应
+func TooManyRequests(c *gin.Context, message string) {
+	if message == "" {
+		message = "too many requests"
+	}
+	FailWithCode(c, "429", message, http.StatusTooManyRequests)
 }
 
 // InternalError 返回500响应
@@ -62,7 +90,7 @@ func InternalError(c *gin.Context, message string) {
 	if message == "" {
 		message = "internal server error"
 	}
-	FailWithCode(c, "5001", message, http.StatusInternalServerError)
+	FailWithCode(c, "500", message, http.StatusInternalServerError)
 }
 
 // ValidationError 返回参数验证错误

@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"codebase-indexer/internal/handler"
+	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/logger"
 )
 
@@ -89,16 +90,10 @@ func (s *server) setupMiddleware() {
 	s.engine.Use(LoggingMiddleware(s.logger))
 	s.engine.Use(CORSMiddleware())
 	s.engine.Use(SecurityMiddleware())
-	s.engine.Use(RateLimitMiddleware(s.logger))
 
 	// 健康检查
 	s.engine.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"code":    0,
-			"message": "ok",
-			"success": true,
-			"time":    time.Now().Format(time.RFC3339),
-		})
+		utils.Success(c, nil)
 	})
 
 	// Swagger文档路由
@@ -128,18 +123,12 @@ func (s *server) setupRoutes() {
 
 	// 404处理
 	s.engine.NoRoute(func(c *gin.Context) {
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"message": "endpoint not found",
-		})
+		utils.NotFound(c, "endpoint not found")
 	})
 
 	// 405处理
 	s.engine.NoMethod(func(c *gin.Context) {
-		c.JSON(http.StatusMethodNotAllowed, gin.H{
-			"success": false,
-			"message": "method not allowed",
-		})
+		utils.MethodNotAllowed(c, "method not allowed")
 	})
 }
 
