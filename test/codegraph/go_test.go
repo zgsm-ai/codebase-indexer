@@ -27,8 +27,8 @@ func TestParseGoProjectFiles(t *testing.T) {
 		wantErr error
 	}{
 		{
-			Name:    "kubernetes",
-			Path:    filepath.Join(GoProjectRootDir, "kubernetes"),
+			Name:    "codebase-indexer-main",
+			Path:    filepath.Join(GoProjectRootDir, "codebase-indexer-main"),
 			wantErr: nil,
 		},
 	}
@@ -195,12 +195,12 @@ func TestQuery(t *testing.T) {
 			Name:          "查询createTestIndexer函数调用",
 			ElementName:   "createTestIndexer",
 			FilePath:      filepath.Join(workspacePath, "test/codegraph/ts_test.go"),
-			StartLine:     65,
-			EndLine:       65,
+			StartLine:     66,
+			EndLine:       66,
 			ElementType:   "call.function",
 			ShouldFindDef: true,
 			wantDefinitions: []types.Definition{
-				{Name: "createTestIndexer", Path: "indexer_test.go", Range: []int32{103, 0, 103, 0}},
+				{Name: "createTestIndexer", Path: "indexer_test.go", Range: []int32{109, 0, 109, 0}},
 			},
 			wantErr: nil,
 		},
@@ -208,8 +208,8 @@ func TestQuery(t *testing.T) {
 			Name:          "查询StripSpaces函数调用",
 			ElementName:   "StripSpaces",
 			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/resolver/java.go"),
-			StartLine:     32,
-			EndLine:       32,
+			StartLine:     33,
+			EndLine:       33,
 			ElementType:   "call.function",
 			ShouldFindDef: true,
 			wantDefinitions: []types.Definition{
@@ -265,7 +265,7 @@ func TestQuery(t *testing.T) {
 			ElementType:   "call.function",
 			ShouldFindDef: true,
 			wantDefinitions: []types.Definition{
-				{Name: "parseBaseClassClause", Path: "cpp.go", Range: []int32{349, 0, 349, 0}},
+				{Name: "parseBaseClassClause", Path: "cpp.go", Range: []int32{348, 0, 348, 0}},
 			},
 			wantErr: nil,
 		},
@@ -299,8 +299,8 @@ func TestQuery(t *testing.T) {
 			Name:          "查询CreateTestValues函数调用",
 			ElementName:   "CreateTestValues",
 			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/store/leveldb_test.go"),
-			StartLine:     408,
-			EndLine:       408,
+			StartLine:     409,
+			EndLine:       409,
 			ElementType:   "call.function",
 			ShouldFindDef: true,
 			wantDefinitions: []types.Definition{
