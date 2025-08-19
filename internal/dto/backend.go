@@ -8,8 +8,8 @@ type SearchReferenceRequest struct {
 	ClientId     string `form:"clientId" binding:"required"`
 	CodebasePath string `form:"codebasePath" binding:"required"`
 	FilePath     string `form:"filePath" binding:"required"`
-	StartLine    int    `form:"startLine" binding:"required"`
-	EndLine      int    `form:"endLine" binding:"required"`
+	StartLine    int    `form:"startLine,omitempty"`
+	EndLine      int    `form:"endLine,omitempty"`
 	SymbolName   string `form:"symbolName,omitempty"`
 }
 

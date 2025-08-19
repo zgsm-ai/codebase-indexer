@@ -7,7 +7,7 @@ import (
 )
 
 var ErrUnSupportedLanguage = response.NewError("codebase-indexer.unsupported_language", "Unsupported Language")
-var ErrIndexDisabled = response.NewError("codebase-indexer.index_disabled", "Index is disabled")
+var ErrIndexDisabled = response.NewError("codebase-indexer.index_disabled", "index is disabled")
 var ErrRecordNotFound = errors.New("record not found")
 
 var errorInvalidParamFmt = "invalid request params: %s %v"

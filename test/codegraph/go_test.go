@@ -62,10 +62,9 @@ func TestIndexGoProjects(t *testing.T) {
 	err = initWorkspaceModel(env, filepath.Join(GoProjectRootDir, "kubernetes"))
 	err = initWorkspaceModel(env, filepath.Join(GoProjectRootDir, "kubernetes"))
 	assert.NoError(t, err)
-
 	indexer := createTestIndexer(env, &types.VisitPattern{
 		ExcludeDirs: defaultVisitPattern.ExcludeDirs,
-		//IncludeExts: []string{".go"},
+		IncludeExts: []string{".go"},
 	})
 	testCases := []struct {
 		Name    string

@@ -400,6 +400,9 @@ func (l *codebaseService) QueryDefinition(ctx context.Context, req *dto.SearchDe
 	if req.FilePath == types.EmptyString {
 		return nil, fmt.Errorf("missing param: filePath")
 	}
+	if req.CodebasePath == types.EmptyString {
+		return nil, fmt.Errorf("missing param: codebasePath")
+	}
 
 	_, err = lang.InferLanguage(req.FilePath)
 	if err != nil {
@@ -471,10 +474,6 @@ func (l *codebaseService) QueryReference(ctx context.Context, req *dto.SearchRef
 		return nil, errs.ErrIndexDisabled
 	}
 
-	// 参数验证
-	if req.ClientId == types.EmptyString {
-		return nil, errs.NewMissingParamError("clientId")
-	}
 	if req.CodebasePath == types.EmptyString {
 		return nil, errs.NewMissingParamError("codebasePath")
 	}

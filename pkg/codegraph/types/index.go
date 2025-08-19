@@ -53,12 +53,12 @@ type QueryReferenceOptions struct {
 }
 
 type RelationNode struct {
-	FilePath   string          `json:"FilePath"`
-	SymbolName string          `json:"symbolName"`
-	Position   Position        `json:"position"`
-	Content    string          `json:"content"`
-	NodeType   string          `json:"nodeType"`
-	Children   []*RelationNode `json:"children"`
+	FilePath   string          `json:"filePath,omitempty"`
+	SymbolName string          `json:"symbolName,omitempty"`
+	Position   Position        `json:"position,omitempty"`
+	Content    string          `json:"content,omitempty"`
+	NodeType   string          `json:"nodeType,omitempty"`
+	Children   []*RelationNode `json:"children,omitempty"`
 }
 
 type CodeGraphSummary struct {
