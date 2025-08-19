@@ -27,10 +27,10 @@ import (
 const maxQueryLineLimit = 200
 
 type IndexerConfig struct {
-	MaxConcurrency int // TODO 支持环境变量
-	MaxBatchSize   int // TODO 支持环境变量
-	MaxFiles       int // TODO 支持环境变量
-	MaxProjects    int // TODO 支持环境变量
+	MaxConcurrency int
+	MaxBatchSize   int
+	MaxFiles       int
+	MaxProjects    int
 	VisitPattern   *types.VisitPattern
 	CacheCapacity  int
 }
@@ -143,7 +143,7 @@ const (
 	defaultBatchSize     = 50
 	defaultMaxFiles      = 10000
 	defaultMaxProjects   = 3
-	defaultCacheCapacity = defaultMaxFiles * 10 // 假定单个文件平均10个元素
+	defaultCacheCapacity = 10_0000 // 假定单个文件平均10个元素,1万个文件
 )
 
 // NewCodeIndexer 创建新的代码索引器
@@ -198,9 +198,6 @@ func initConfig(config *IndexerConfig) {
 		if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
 			config.MaxFiles = val
 		}
-	}
-	if config.MaxFiles <= 0 {
-		config.MaxFiles = defaultMaxFiles
 	}
 
 	// 从环境变量获取MaxProjects（环境变量名：MAX_PROJECTS）
@@ -287,7 +284,7 @@ func (i *indexer) indexProject(ctx context.Context, workspacePath string, projec
 	databasePreviousFileNum := workspaceModel.CodegraphFileNum
 
 	// 收集要处理的源码文件
-	sourceFileTimestamps, err := i.collectFiles(ctx, workspacePath, project.Path, i.config.MaxFiles)
+	sourceFileTimestamps, err := i.collectFiles(ctx, workspacePath, project.Path)
 	if err != nil {
 		return &types.IndexTaskMetrics{TotalFiles: 0}, []error{fmt.Errorf("collect project files err:%v", err)}
 	}
@@ -870,7 +867,7 @@ func (i *indexer) QueryReferences(ctx context.Context, opts *types.QueryReferenc
 	// TODO projectUuid
 	project, err := i.workspaceReader.GetProjectByFilePath(ctx, opts.Workspace, filePath, true)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get project by file: %s, err: %w", filePath, err)
+		return nil, err
 	}
 	projectUuid := project.Uuid
 
@@ -1122,7 +1119,7 @@ func (i *indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 	filePath := options.FilePath
 	project, err := i.workspaceReader.GetProjectByFilePath(ctx, options.Workspace, filePath, true)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get project by file: %s, err: %w", filePath, err)
+		return nil, err
 	}
 	projectUuid := project.Uuid
 
@@ -1688,8 +1685,8 @@ func (i *indexer) processBatch(ctx context.Context, batchId int, params *BatchPr
 	return metrics, nil
 }
 
-// collectFiles 收集源文件
-func (i *indexer) collectFiles(ctx context.Context, workspacePath string, projectPath string, maxFiles int) (map[string]int64, error) {
+// collectFiles 收集文件用于index
+func (i *indexer) collectFiles(ctx context.Context, workspacePath string, projectPath string) (map[string]int64, error) {
 	startTime := time.Now()
 	filePathModTimestamps := make(map[string]int64, 100)
 	ignoreConfig := i.ignoreScanner.LoadIgnoreConfig(workspacePath)
@@ -1700,7 +1697,7 @@ func (i *indexer) collectFiles(ctx context.Context, workspacePath string, projec
 	if visitPattern == nil {
 		visitPattern = workspace.DefaultVisitPattern
 	}
-
+	maxFiles := defaultMaxFiles
 	if ignoreConfig != nil {
 		visitPattern.SkipFunc = func(fileInfo *types.FileInfo) (bool, error) {
 			return i.ignoreScanner.CheckIgnoreFile(ignoreConfig, workspacePath, fileInfo)
@@ -1708,11 +1705,9 @@ func (i *indexer) collectFiles(ctx context.Context, workspacePath string, projec
 		maxFiles = ignoreConfig.MaxFileCount
 	}
 
-	// 从环境变量获取
-	if envVal, ok := os.LookupEnv("MAX_FILE_LIMIT"); ok {
-		if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
-			maxFiles = val
-		}
+	// 从配置中获取(环境变量)
+	if i.config.MaxFiles > 0 {
+		maxFiles = i.config.MaxFiles
 	}
 
 	err := i.workspaceReader.WalkFile(ctx, projectPath, func(walkCtx *types.WalkContext) error {
@@ -1731,7 +1726,7 @@ func (i *indexer) collectFiles(ctx context.Context, workspacePath string, projec
 		return nil, err
 	}
 
-	i.logger.Info("collect project source files finish. cost %d ms, found %d source files to index, max_file_limit %d",
+	i.logger.Info("collect project source files finish. cost %d ms, found %d source files to index, max files limit %d",
 		time.Since(startTime).Milliseconds(), len(filePathModTimestamps), maxFiles)
 
 	return filePathModTimestamps, nil

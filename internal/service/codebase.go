@@ -546,17 +546,6 @@ func (l *codebaseService) Summarize(ctx context.Context, req *dto.GetIndexSummar
 	if err != nil {
 		return nil, err
 	}
-	// 从数据库获取工作区构建状态
-	workspaceModel, err := l.workspaceRepository.GetWorkspaceByPath(req.CodebasePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get workspace from database:%v", err)
-	}
-
-	totalFile := workspaceModel.FileNum
-	codegraphFile := workspaceModel.CodegraphFileNum
-	// TODO 根据配置的阈值判断状态
-	_ = codegraphFile / totalFile
-
 	resp := &dto.IndexSummary{
 		Codegraph: dto.CodegraphInfo{
 			Status:     convertStatus(model.CodegraphStatusBuilding),
@@ -596,6 +585,8 @@ func convertStatus(status int) string {
 		indexStatus = "success"
 	case model.CodegraphStatusSuccess:
 		indexStatus = "running"
+	case model.CodegraphStatusInit:
+		indexStatus = "pending"
 	default:
 		indexStatus = "failed"
 	}

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -177,6 +178,11 @@ func (s *FileScanner) LoadIgnoreRules(codebasePath string) *gitignore.GitIgnore 
 
 	// Remove duplicate rules
 	uniqueRules := utils.UniqueStringSlice(currentIgnoreRules)
+	// 转义
+	for i, rule := range uniqueRules {
+		// 处理 $
+		uniqueRules[i] = strings.ReplaceAll(rule, "$", `\$`)
+	}
 
 	compiledIgnore := gitignore.CompileIgnoreLines(uniqueRules...)
 
