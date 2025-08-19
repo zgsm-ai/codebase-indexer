@@ -121,12 +121,26 @@ func AuthMiddleware(logger logger.Logger) gin.HandlerFunc {
 	}
 }
 
-// RateLimitMiddleware 限流中间件
-func RateLimitMiddleware(logger logger.Logger) gin.HandlerFunc {
+// ExtensionRateLimitMiddleware 插件限流中间件
+func ExtensionRateLimitMiddleware(logger logger.Logger) gin.HandlerFunc {
 	limiter := rate.NewLimiter(rate.Every(time.Second), 100)
 	return func(c *gin.Context) {
 		if !limiter.Allow() {
-			logger.Error("rate limit exceeded")
+			logger.Error("extension rate limit exceeded")
+			utils.TooManyRequests(c, "too many requests")
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+// BackendRateLimitMiddleware 后端限流中间件
+func BackendRateLimitMiddleware(logger logger.Logger) gin.HandlerFunc {
+	limiter := rate.NewLimiter(rate.Every(time.Second), 300)
+	return func(c *gin.Context) {
+		if !limiter.Allow() {
+			logger.Error("backend rate limit exceeded")
 			utils.TooManyRequests(c, "too many requests")
 			c.Abort()
 			return
