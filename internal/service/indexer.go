@@ -1708,6 +1708,13 @@ func (i *indexer) collectFiles(ctx context.Context, workspacePath string, projec
 		maxFiles = ignoreConfig.MaxFileCount
 	}
 
+	// 从环境变量获取
+	if envVal, ok := os.LookupEnv("MAX_FILE_LIMIT"); ok {
+		if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
+			maxFiles = val
+		}
+	}
+
 	err := i.workspaceReader.WalkFile(ctx, projectPath, func(walkCtx *types.WalkContext) error {
 		if walkCtx.Info.IsDir {
 			return nil
