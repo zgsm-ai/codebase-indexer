@@ -23,7 +23,7 @@ import (
 
 const (
 	// InactiveThreshold 定义数据库实例不活跃的时间阈值，超过这个时间将被清理
-	InactiveThreshold = 72 * time.Hour
+	InactiveThreshold = 6 * time.Hour
 	// CleanupInterval 定义清理任务的执行间隔
 	CleanupInterval = time.Hour
 )
@@ -448,13 +448,14 @@ func (s *LevelDBStorage) cleanupInactiveDBs() {
 			if currentRecord, exists := s.clients.Load(projectUuid); exists {
 				currentAccessRecord := currentRecord.(*dbAccessRecord)
 				if now.Sub(currentAccessRecord.lastAccessTime) > InactiveThreshold {
-					// 清理数据库数据
-					if err := s.cleanupDBData(projectUuid, currentAccessRecord.db); err != nil {
-						s.logger.Error("cleanup: failed to cleanup database data. project %s, err: %v",
-							projectUuid, err)
-						mutex.Unlock()
-						return true // 继续处理其他数据库
-					}
+					// TODO 清理数据库数据
+					// // 清理数据库数据
+					// if err := s.cleanupDBData(projectUuid, currentAccessRecord.db); err != nil {
+					// 	s.logger.Error("cleanup: failed to cleanup database data. project %s, err: %v",
+					// 		projectUuid, err)
+					// 	mutex.Unlock()
+					// 	return true // 继续处理其他数据库
+					// }
 
 					// 关闭数据库连接
 					if err := currentAccessRecord.db.Close(); err != nil {
