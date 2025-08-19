@@ -282,10 +282,16 @@ func (sc *embeddingStatusService) handleBuildCompletion(workspacePath string, ev
 	if codebaseEmbeddingConfig.FailedFiles == nil {
 		codebaseEmbeddingConfig.FailedFiles = make(map[string]string)
 	}
+	if codebaseEmbeddingConfig.SyncFiles == nil {
+		codebaseEmbeddingConfig.SyncFiles = make(map[string]string)
+	}
 
 	if status == dto.EmbeddingFailed {
+		delete(codebaseEmbeddingConfig.SyncFiles, filePath)
 		codebaseEmbeddingConfig.FailedFiles[filePath] = dto.EmbeddingFailed
 	} else {
+		delete(codebaseEmbeddingConfig.SyncFiles, filePath)
+		delete(codebaseEmbeddingConfig.FailedFiles, filePath)
 		codebaseEmbeddingConfig.HashTree[filePath] = event.FileHash
 	}
 	// 保存 codebase embedding 配置

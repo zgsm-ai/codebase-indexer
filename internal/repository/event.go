@@ -41,6 +41,8 @@ type EventRepository interface {
 	GetEventsByWorkspaceForDeduplication(workspacePath string) ([]*model.Event, error)
 	// GetEventsCountByType 获取满足事件类型条件的事件总数
 	GetEventsCountByType(eventTypes []string) (int64, error)
+	// GetEventsCountByWorkspaceAndStatus 根据工作区路径、嵌入状态和代码图状态获取事件总数
+	GetEventsCountByWorkspaceAndStatus(workspacePath string, embeddingStatuses []int, codegraphStatuses []int) (int64, error)
 	// GetLatestEventByWorkspaceAndSourcePath 根据工作区路径和源文件路径获取最新记录
 	GetLatestEventByWorkspaceAndSourcePath(workspacePath, sourceFilePath string) (*model.Event, error)
 	// BatchCreateEvents 批量创建事件
@@ -1107,6 +1109,58 @@ func (r *eventRepository) GetEventsCountByType(eventTypes []string) (int64, erro
 		}
 		r.logger.Error("Failed to get events count by types: %v", err)
 		return 0, fmt.Errorf("failed to get events count by types: %w", err)
+	}
+
+	return count, nil
+}
+
+// GetEventsCountByWorkspaceAndStatus 根据工作区路径、嵌入状态和代码图状态获取事件总数
+func (r *eventRepository) GetEventsCountByWorkspaceAndStatus(workspacePath string, embeddingStatuses []int, codegraphStatuses []int) (int64, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM events
+		WHERE workspace_path = ?
+	`
+
+	args := []interface{}{workspacePath}
+
+	// 如果提供了嵌入状态列表，添加嵌入状态过滤条件
+	if len(embeddingStatuses) > 0 {
+		placeholders := ""
+		for i := range embeddingStatuses {
+			if i > 0 {
+				placeholders += ","
+			}
+			placeholders += "?"
+		}
+		query += fmt.Sprintf(" AND embedding_status IN (%s)", placeholders)
+		for _, status := range embeddingStatuses {
+			args = append(args, status)
+		}
+	}
+
+	// 如果提供了代码图状态列表，添加代码图状态过滤条件
+	if len(codegraphStatuses) > 0 {
+		placeholders := ""
+		for i := range codegraphStatuses {
+			if i > 0 {
+				placeholders += ","
+			}
+			placeholders += "?"
+		}
+		query += fmt.Sprintf(" AND codegraph_status IN (%s)", placeholders)
+		for _, status := range codegraphStatuses {
+			args = append(args, status)
+		}
+	}
+
+	var count int64
+	err := r.db.GetDB().QueryRow(query, args...).Scan(&count)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return 0, err
 	}
 
 	return count, nil
