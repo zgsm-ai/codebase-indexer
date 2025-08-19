@@ -34,6 +34,7 @@ func LoggingMiddleware(logger logger.Logger) gin.HandlerFunc {
 		start := time.Now()
 		path := c.Request.URL.Path
 		raw := c.Request.URL.RawQuery
+		requestId := c.GetHeader("X-Request-ID")
 
 		// 处理请求
 		c.Next()
@@ -49,9 +50,10 @@ func LoggingMiddleware(logger logger.Logger) gin.HandlerFunc {
 			path = path + "?" + raw
 		}
 
-		logger.Info("[GIN] %s %s %d %s %s %s",
+		logger.Info("[GIN] %s %s %s %d %s %s %s",
 			method,
 			path,
+			requestId,
 			statusCode,
 			latency,
 			clientIP,

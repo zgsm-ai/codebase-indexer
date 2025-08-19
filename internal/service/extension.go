@@ -381,19 +381,22 @@ func (s *extensionService) SwitchIndex(ctx context.Context, workspacePath, switc
 		WorkspacePath: workspace.WorkspacePath,
 		Active:        active,
 	}
-	if err := s.workspaceRepo.UpdateWorkspace(updateWorkspace); err != nil {
-		return fmt.Errorf("failed to update workspace: %w", err)
-	}
 
 	if active == "true" {
 		// 创建代码库配置
-		if err := s.createCodebaseConfig(workspacePath, clientID); err != nil {
+		fileNum, err := s.createCodebaseConfig(workspacePath, clientID)
+		if err != nil {
 			s.logger.Error("failed to create codebase config: %v", err)
 		}
+		updateWorkspace.FileNum = fileNum
 
 		// 创建代码库嵌入配置
-		if err := s.createCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
-			s.logger.Error("failed to create codebase embedding config: %v", err)
+		if err := s.initCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
+			s.logger.Error("failed to init codebase embedding config: %v", err)
+		}
+
+		if err := s.workspaceRepo.UpdateWorkspace(updateWorkspace); err != nil {
+			return fmt.Errorf("failed to update workspace: %w", err)
 		}
 
 		// 事务处理新增open_worksapce事件，删除其余非进行中状态事件
@@ -406,16 +409,19 @@ func (s *extensionService) SwitchIndex(ctx context.Context, workspacePath, switc
 			SourceFilePath:  "",
 			TargetFilePath:  "",
 			SyncId:          "",
-			EmbeddingStatus: model.EmbeddingStatusSuccess,
+			EmbeddingStatus: model.EmbeddingStatusInit,
 			CodegraphStatus: model.CodegraphStatusInit,
 		}
 
 		if err := s.eventRepo.CreateEvent(newOpenWorkspaceEvent); err != nil {
 			s.logger.Error("failed to create open workspace event: %v", err)
 		} else {
-			s.logger.Info("created new open workspace event for workspace: %s", workspacePath)
+			s.logger.Info("switch on, created new open workspace event for workspace: %s", workspacePath)
 		}
 	} else {
+		if err := s.workspaceRepo.UpdateWorkspace(updateWorkspace); err != nil {
+			return fmt.Errorf("failed to update workspace: %w", err)
+		}
 		// 删除非进行中状态事件
 		s.deleteNonProcessingEvents(workspacePath)
 	}
@@ -596,9 +602,6 @@ func (s *extensionService) tryUpdateExistingEvent(workspacePath string, event dt
 		EmbeddingStatus: model.EmbeddingStatusInit,
 		CodegraphStatus: model.CodegraphStatusInit,
 	}
-	if event.EventType == model.EventTypeOpenWorkspace {
-		updateEvent.EmbeddingStatus = model.EmbeddingStatusSuccess
-	}
 
 	// 更新事件记录
 	if err := s.eventRepo.UpdateEvent(updateEvent); err != nil {
@@ -636,24 +639,25 @@ func (s *extensionService) createNewEvent(workspacePath string, event dto.Worksp
 
 // handleOpenWorkspaceEvent 处理打开工作区事件
 func (s *extensionService) handleOpenWorkspaceEvent(workspacePath, clientID string) {
-	// 检查工作区是否已存在
-	_, err := s.workspaceRepo.GetWorkspaceByPath(workspacePath)
-	if err != nil {
-		// 工作区不存在，创建新的工作区
-		s.createAndActivateWorkspace(workspacePath, "true")
-	} else {
-		// 激活工作区
-		s.activateWorkspace(workspacePath)
-	}
-
 	// 创建代码库配置
-	if err := s.createCodebaseConfig(workspacePath, clientID); err != nil {
+	fileNum, err := s.createCodebaseConfig(workspacePath, clientID)
+	if err != nil {
 		s.logger.Error("failed to create codebase config: %v", err)
 	}
 
 	// 创建代码库嵌入配置
 	if err := s.createCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
 		s.logger.Error("failed to create codebase embedding config: %v", err)
+	}
+
+	// 检查工作区是否已存在
+	_, err = s.workspaceRepo.GetWorkspaceByPath(workspacePath)
+	if err != nil {
+		// 工作区不存在，创建新的工作区
+		s.createAndActivateWorkspace(workspacePath, "true", fileNum)
+	} else {
+		// 激活工作区
+		s.activateWorkspace(workspacePath, fileNum)
 	}
 
 	// 删除所有非进行中状态的事件
@@ -666,10 +670,10 @@ func (s *extensionService) handleCloseWorkspaceEvent(workspacePath string) {
 	_, err := s.workspaceRepo.GetWorkspaceByPath(workspacePath)
 	if err != nil {
 		// 工作区不存在，创建新的工作区
-		s.createAndActivateWorkspace(workspacePath, "false")
+		s.createAndActivateWorkspace(workspacePath, "false", 0)
 	} else {
 		// 关闭工作区
-		s.deactivateWorkspace(workspacePath)
+		s.deactivateWorkspace(workspacePath, 0)
 	}
 
 	// 删除所有非进行中状态的事件
@@ -677,13 +681,13 @@ func (s *extensionService) handleCloseWorkspaceEvent(workspacePath string) {
 }
 
 // createAndActivateWorkspace 创建并激活/关闭工作区
-func (s *extensionService) createAndActivateWorkspace(workspacePath, active string) {
+func (s *extensionService) createAndActivateWorkspace(workspacePath, active string, fileNum int) {
 	workspaceName := filepath.Base(workspacePath)
 	newWorkspace := &model.Workspace{
 		WorkspaceName:    workspaceName,
 		WorkspacePath:    workspacePath,
 		Active:           active,
-		FileNum:          0,
+		FileNum:          fileNum,
 		EmbeddingFileNum: 0,
 		EmbeddingTs:      0,
 		CodegraphFileNum: 0,
@@ -698,10 +702,11 @@ func (s *extensionService) createAndActivateWorkspace(workspacePath, active stri
 }
 
 // activateWorkspace 激活工作区
-func (s *extensionService) activateWorkspace(workspacePath string) {
+func (s *extensionService) activateWorkspace(workspacePath string, fileNum int) {
 	updateWorkspace := &model.Workspace{
 		WorkspacePath: workspacePath,
 		Active:        "true",
+		FileNum:       fileNum,
 	}
 	if err := s.workspaceRepo.UpdateWorkspace(updateWorkspace); err != nil {
 		s.logger.Error("failed to activate workspace: %v", err)
@@ -709,19 +714,27 @@ func (s *extensionService) activateWorkspace(workspacePath string) {
 }
 
 // deactivateWorkspace 关闭工作区
-func (s *extensionService) deactivateWorkspace(workspacePath string) {
+func (s *extensionService) deactivateWorkspace(workspacePath string, fileNum int) {
 	updateWorkspace := &model.Workspace{
 		WorkspacePath: workspacePath,
 		Active:        "false",
+		FileNum:       fileNum,
 	}
 	if err := s.workspaceRepo.UpdateWorkspace(updateWorkspace); err != nil {
 		s.logger.Error("failed to deactivate workspace: %v", err)
 	}
 }
 
-func (s *extensionService) createCodebaseConfig(workspacePath, clientID string) error {
+func (s *extensionService) createCodebaseConfig(workspacePath, clientID string) (int, error) {
+	var fileNum int
 	workspaceName := filepath.Base(workspacePath)
 	codebaseID := utils.GenerateCodebaseID(workspacePath)
+
+	currentHashTree, err := s.fileScanner.ScanCodebase(workspacePath)
+	if err != nil {
+		currentHashTree = make(map[string]string)
+	}
+	fileNum = len(currentHashTree)
 
 	codebaseConfig, err := s.storage.GetCodebaseConfig(codebaseID)
 	if err != nil {
@@ -731,21 +744,26 @@ func (s *extensionService) createCodebaseConfig(workspacePath, clientID string) 
 			CodebaseId:   codebaseID,
 			CodebaseName: workspaceName,
 			CodebasePath: workspacePath,
-			HashTree:     make(map[string]string),
+			HashTree:     currentHashTree,
 			RegisterTime: time.Now(),
 		}
 	} else {
+		if fileNum > 0 {
+			codebaseConfig.HashTree = currentHashTree
+		} else {
+			fileNum = len(codebaseConfig.HashTree)
+		}
 		codebaseConfig.RegisterTime = time.Now()
 	}
 
 	// 保存到存储
 	if err := s.storage.SaveCodebaseConfig(codebaseConfig); err != nil {
 		s.logger.Error("failed to save codebase config for %s: %v", workspacePath, err)
-		return fmt.Errorf("failed to save codebase config: %w", err)
+		return 0, fmt.Errorf("failed to save codebase config: %w", err)
 	}
 
 	s.logger.Info("created codebase config for %s (%s)", workspaceName, codebaseID)
-	return nil
+	return fileNum, nil
 }
 
 func (s *extensionService) createCodebaseEmbeddingConfig(workspacePath, clientID string) error {
@@ -804,28 +822,23 @@ func (s *extensionService) initCodebaseEmbeddingConfig(workspacePath, clientID s
 
 // TriggerIndex 触发索引构建
 func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, indexType, clientID string) error {
+	// 创建代码库配置
+	fileNum, err := s.createCodebaseConfig(workspacePath, clientID)
+	if err != nil {
+		return fmt.Errorf("failed to create codebase config: %w", err)
+	}
+
+	// 创建代码库嵌入配置
+	if err := s.initCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
+		return fmt.Errorf("failed to init codebase embedding config: %w", err)
+	}
+
 	// 检查工作区是否已存在
-	_, err := s.workspaceRepo.GetWorkspaceByPath(workspacePath)
+	_, err = s.workspaceRepo.GetWorkspaceByPath(workspacePath)
 	if err != nil {
 		// 工作区不存在，创建新的工作区
 		s.logger.Info("workspace not found, creating new workspace: %s", workspacePath)
-		workspaceName := filepath.Base(workspacePath)
-		newWorkspace := &model.Workspace{
-			WorkspaceName:    workspaceName,
-			WorkspacePath:    workspacePath,
-			Active:           "true", // 激活工作区
-			FileNum:          0,
-			EmbeddingFileNum: 0,
-			EmbeddingTs:      0,
-			CodegraphFileNum: 0,
-			CodegraphTs:      0,
-		}
-
-		if err := s.workspaceRepo.CreateWorkspace(newWorkspace); err != nil {
-			return fmt.Errorf("failed to create workspace: %w", err)
-		}
-
-		s.logger.Info("created new workspace: %s", workspacePath)
+		s.createAndActivateWorkspace(workspacePath, "true", fileNum)
 	} else {
 		updateWorksapce := map[string]interface{}{
 			"active":                      "true",
@@ -838,18 +851,28 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 			"codegraph_message":           "",
 			"codegraph_failed_file_paths": "",
 		}
+		switch indexType {
+		case dto.IndexTypeEmbedding:
+			updateWorksapce = map[string]interface{}{
+				"active":                      "true",
+				"embedding_file_num":          0,
+				"embedding_ts":                0,
+				"embedding_message":           "",
+				"embedding_failed_file_paths": "",
+			}
+		case dto.IndexTypeCodegraph:
+			updateWorksapce = map[string]interface{}{
+				"active":                      "true",
+				"codegraph_file_num":          0,
+				"codegraph_ts":                0,
+				"codegraph_message":           "",
+				"codegraph_failed_file_paths": "",
+			}
+		}
 		if err := s.workspaceRepo.UpdateWorkspaceByMap(workspacePath, updateWorksapce); err != nil {
 			return fmt.Errorf("failed to update workspace: %w", err)
 		}
 		s.logger.Info("updated workspace active status to true: %s", workspacePath)
-	}
-
-	if err := s.createCodebaseConfig(workspacePath, clientID); err != nil {
-		return fmt.Errorf("failed to create codebase config: %w", err)
-	}
-
-	if err := s.initCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
-		return fmt.Errorf("failed to init codebase embedding config: %w", err)
 	}
 
 	// 判断rebuild_workspace事件是否存在非进行中状态，若不存在则创建

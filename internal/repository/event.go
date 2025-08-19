@@ -66,8 +66,8 @@ func NewEventRepository(db database.DatabaseManager, logger logger.Logger) Event
 // CreateEvent 创建事件
 func (r *eventRepository) CreateEvent(event *model.Event) error {
 	query := `
-		INSERT INTO events (workspace_path, event_type, source_file_path, target_file_path, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO events (workspace_path, event_type, source_file_path, target_file_path, embedding_status, codegraph_status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	nowTime := time.Now()
@@ -76,6 +76,8 @@ func (r *eventRepository) CreateEvent(event *model.Event) error {
 		event.EventType,
 		event.SourceFilePath,
 		event.TargetFilePath,
+		event.EmbeddingStatus,
+		event.CodegraphStatus,
 		nowTime,
 		nowTime,
 	)
@@ -1174,18 +1176,20 @@ func (r *eventRepository) BatchCreateEvents(events []*model.Event) error {
 		valueArgs := make([]interface{}, 0, len(batch)*6)
 
 		for _, event := range batch {
-			valueStrings = append(valueStrings, "(?, ?, ?, ?, ?, ?)")
+			valueStrings = append(valueStrings, "(?, ?, ?, ?, ?, ?, ?, ?)")
 			valueArgs = append(valueArgs,
 				event.WorkspacePath,
 				event.EventType,
 				event.SourceFilePath,
 				event.TargetFilePath,
+				event.EmbeddingStatus,
+				event.CodegraphStatus,
 				nowTime,
 				nowTime,
 			)
 		}
 
-		query := fmt.Sprintf("INSERT INTO events (workspace_path, event_type, source_file_path, target_file_path, created_at, updated_at) VALUES %s",
+		query := fmt.Sprintf("INSERT INTO events (workspace_path, event_type, source_file_path, target_file_path, embedding_status, codegraph_status, created_at, updated_at) VALUES %s",
 			strings.Join(valueStrings, ","))
 
 		result, err := r.db.GetDB().Exec(query, valueArgs...)
