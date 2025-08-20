@@ -55,7 +55,6 @@ func NewFileScanner(logger logger.Logger) ScannerInterface {
 // defaultScannerConfig returns default scanner configuration
 func defaultScannerConfig() *config.ScannerConfig {
 	return &config.ScannerConfig{
-		FileIgnorePatterns:   config.DefaultConfigSync.FileIgnorePatterns,
 		FolderIgnorePatterns: config.DefaultConfigSync.FolderIgnorePatterns,
 		FileIncludePatterns:  config.DefaultConfigSync.FileIncludePatterns,
 		MaxFileSizeKB:        config.DefaultConfigSync.MaxFileSizeKB,
@@ -70,9 +69,6 @@ func (s *FileScanner) SetScannerConfig(config *config.ScannerConfig) {
 	}
 	s.rwMutex.Lock()
 	defer s.rwMutex.Unlock()
-	if len(config.FileIgnorePatterns) > 0 {
-		s.scannerConfig.FileIgnorePatterns = config.FileIgnorePatterns
-	}
 	if len(config.FolderIgnorePatterns) > 0 {
 		s.scannerConfig.FolderIgnorePatterns = config.FolderIgnorePatterns
 	}
@@ -192,7 +188,7 @@ func (s *FileScanner) LoadIgnoreRules(codebasePath string) *gitignore.GitIgnore 
 // LoadFileIgnoreRules loads file ignore rules from configuration and merges with .gitignore
 func (s *FileScanner) LoadFileIgnoreRules(codebasePath string) *gitignore.GitIgnore {
 	// First create ignore object with default rules
-	currentIgnoreRules := s.scannerConfig.FileIgnorePatterns
+	currentIgnoreRules := s.scannerConfig.FolderIgnorePatterns
 
 	// Read and merge .gitignore file
 	gitignoreRules := s.loadGitignore(codebasePath)

@@ -8,7 +8,6 @@ import (
 
 // ScannerConfig holds the configuration for file scanning
 type ScannerConfig struct {
-	FileIgnorePatterns   []string
 	FolderIgnorePatterns []string
 	FileIncludePatterns  []string
 	MaxFileSizeKB        int // File size limit in KB

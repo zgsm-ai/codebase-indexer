@@ -199,7 +199,6 @@ func (d *Daemon) updateConfig() {
 	})
 	// Update file scanner configuration
 	d.fileScanner.SetScannerConfig(&config.ScannerConfig{
-		FileIgnorePatterns:   newConfig.Sync.FileIgnorePatterns,
 		FolderIgnorePatterns: newConfig.Sync.FolderIgnorePatterns,
 		FileIncludePatterns:  newConfig.Sync.FileIncludePatterns,
 		MaxFileSizeKB:        newConfig.Sync.MaxFileSizeKB,
@@ -261,7 +260,6 @@ func configChanged(current, new config.ClientConfig) bool {
 		current.Sync.MaxFileSizeKB != new.Sync.MaxFileSizeKB ||
 		current.Sync.MaxRetries != new.Sync.MaxRetries ||
 		current.Sync.RetryDelaySeconds != new.Sync.RetryDelaySeconds ||
-		!equalIgnorePatterns(current.Sync.FileIgnorePatterns, new.Sync.FileIgnorePatterns) ||
 		!equalIgnorePatterns(current.Sync.FolderIgnorePatterns, new.Sync.FolderIgnorePatterns) ||
 		!equalIgnorePatterns(current.Sync.FileIncludePatterns, new.Sync.FileIncludePatterns)
 }

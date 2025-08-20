@@ -71,7 +71,6 @@ func (ep *embeddingProcessService) ProcessActiveWorkspaces() ([]*model.Workspace
 
 // ProcessAddFileEvent 处理添加文件事件
 func (ep *embeddingProcessService) ProcessAddFileEvent(ctx context.Context, event *model.Event) (*utils.FileStatus, error) {
-
 	ep.logger.Info("processing add file event: %s", event.SourceFilePath)
 
 	// 更新事件状态为上传中
@@ -79,7 +78,6 @@ func (ep *embeddingProcessService) ProcessAddFileEvent(ctx context.Context, even
 	err := ep.eventRepo.UpdateEvent(&updateEvent)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update event status to uploading: %w", err)
-
 	}
 
 	// 调用上报逻辑进行上报

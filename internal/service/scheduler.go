@@ -135,7 +135,6 @@ func (s *Scheduler) LoadConfig(ctx context.Context) {
 
 	// Update scanner configuration
 	scannerConfig := &config.ScannerConfig{
-		FileIgnorePatterns:   clientConfig.Sync.FileIgnorePatterns,
 		FolderIgnorePatterns: clientConfig.Sync.FolderIgnorePatterns,
 		MaxFileSizeKB:        clientConfig.Sync.MaxFileSizeKB,
 	}
@@ -183,9 +182,6 @@ func (s *Scheduler) runScheduler(parentCtx context.Context, initial bool) {
 
 // performSync Perform sync operation
 func (s *Scheduler) performSync() {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
 	// Prevent multiple sync tasks from running concurrently
 	if s.isRunning {
 		s.logger.Info("sync task already running, skipping this run")
@@ -236,21 +232,7 @@ func (s *Scheduler) performSyncForCodebase(config *config.CodebaseConfig) error 
 	if len(config.HashTree) > 0 {
 		serverHashTree = config.HashTree
 	} else {
-		s.logger.Info("local hash tree empty, fetching from server")
-		serverHashTree, err = s.httpSync.FetchServerHashTree(config.CodebasePath)
-		if err != nil {
-			s.logger.Warn("failed to get hash tree from server: %v", err)
-			// No server hash tree available, use empty hash tree for full sync
-			serverHashTree = make(map[string]string)
-		} else {
-			// Update codebase hash tree
-			s.logger.Info("fetched server hash tree successfully, updating codebase config")
-			config.HashTree = serverHashTree
-			config.LastSync = nowTime
-			if err := s.storage.SaveCodebaseConfig(config); err != nil {
-				s.logger.Error("failed to save codebase config: %v", err)
-			}
-		}
+		serverHashTree = make(map[string]string)
 	}
 
 	// Compare hash trees to find changes
@@ -473,6 +455,13 @@ func (s *Scheduler) UploadChangesZip(zipPath string, uploadReq dto.UploadReq) er
 
 	var errUpload error
 	for i := 0; i < maxRetries; i++ {
+		requestId, err := utils.GenerateUUID()
+		if err != nil {
+			s.logger.Warn("failed to generate upload request ID, using timestamp: %v", err)
+			requestId = time.Now().Format("20060102150405.000")
+		}
+		s.logger.Info("upload request ID: %s", requestId)
+		uploadReq.RequestId = requestId
 		errUpload = s.httpSync.UploadFile(zipPath, uploadReq)
 		if errUpload == nil {
 			s.logger.Info("zip file uploaded successfully")
@@ -516,9 +505,6 @@ func isTimeoutError(err error) bool {
 
 // SyncForCodebases Batch sync codebases
 func (s *Scheduler) SyncForCodebases(ctx context.Context, codebaseConfig []*config.CodebaseConfig) error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
 	// Prevent multiple sync tasks running concurrently
 	if s.isRunning {
 		s.logger.Info("sync task already running, skipping this sync")
@@ -604,6 +590,83 @@ func (s *Scheduler) CreateSingleFileZip(config *config.CodebaseConfig, fileStatu
 		if err := utils.AddFileToZip(zipWriter, fileStatus.Path, config.CodebasePath); err != nil {
 			// Continue trying to add other files but log error
 			s.logger.Warn("failed to add file to zip: %s, error: %v", fileStatus.Path, err)
+		}
+	}
+
+	// 添加元数据文件到ZIP
+	metadataJson, err := json.Marshal(metadata)
+	if err != nil {
+		return "", err
+	}
+
+	metadataFilePath := ".shenma_sync/" + time.Now().Format("20060102150405.000000")
+	metadataWriter, err := zipWriter.Create(metadataFilePath)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = metadataWriter.Write(metadataJson)
+	if err != nil {
+		return "", err
+	}
+
+	return zipPath, nil
+}
+
+// CreateFilesZip 创建多文件ZIP文件
+func (s *Scheduler) CreateFilesZip(config *config.CodebaseConfig, fileStatus []*utils.FileStatus) (string, error) {
+	zipDir := filepath.Join(utils.UploadTmpDir, "zip")
+	if err := os.MkdirAll(zipDir, 0755); err != nil {
+		return "", err
+	}
+
+	zipPath := filepath.Join(zipDir, config.CodebaseId+"-"+time.Now().Format("20060102150405.000000")+".zip")
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		return "", err
+	}
+
+	// 确保清理临时ZIP文件
+	cleanup := func() {
+		if err != nil {
+			if _, statErr := os.Stat(zipPath); statErr == nil {
+				_ = os.Remove(zipPath)
+				s.logger.Info("temp zip file deleted successfully: %s", zipPath)
+			}
+		}
+	}
+	defer cleanup()
+	defer zipFile.Close()
+
+	zipWriter := zip.NewWriter(zipFile)
+	defer zipWriter.Close()
+
+	// 创建SyncMetadata
+	metadata := &SyncMetadata{
+		ClientId:     config.ClientID,
+		CodebaseName: config.CodebaseName,
+		CodebasePath: config.CodebasePath,
+		FileList:     make([]utils.FileStatus, 0),
+		Timestamp:    time.Now().Unix(),
+	}
+
+	if runtime.GOOS == "windows" {
+		for _, f := range fileStatus {
+			f.Path = filepath.ToSlash(f.Path)
+			if f.Status == utils.FILE_STATUS_RENAME {
+				f.TargetPath = filepath.ToSlash(f.TargetPath)
+			}
+			metadata.FileList = append(metadata.FileList, *f)
+		}
+	}
+
+	// 只添加新增和修改的文件到ZIP
+	for _, f := range fileStatus {
+		if f.Status == utils.FILE_STATUS_ADDED || f.Status == utils.FILE_STATUS_MODIFIED {
+			if err := utils.AddFileToZip(zipWriter, f.Path, config.CodebasePath); err != nil {
+				// Continue trying to add other files but log error
+				s.logger.Warn("failed to add file to zip: %s, error: %v", f.Path, err)
+			}
 		}
 	}
 

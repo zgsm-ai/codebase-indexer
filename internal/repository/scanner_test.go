@@ -18,7 +18,7 @@ import (
 var (
 	scannerConfig = &config.ScannerConfig{
 		// IgnorePatterns: []string{".git", ".idea", "node_modules/", "vendor/", "dist/", "build/"},
-		FileIgnorePatterns:   []string{".*", "*.bak"},
+		// FileIgnorePatterns:   []string{".*", "*.bak"},
 		FolderIgnorePatterns: []string{".*", "build/", "dist/", "node_modules/", "vendor/"},
 		FileIncludePatterns:  []string{".go"},
 		// MaxFileSizeMB:  10,
