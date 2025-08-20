@@ -20,7 +20,6 @@ type ConfigSync struct {
 	MaxFileCount            int      `json:"maxFileCount"`
 	MaxRetries              int      `json:"maxRetries"`
 	RetryDelaySeconds       int      `json:"retryDelaySeconds"`
-	FileIgnorePatterns      []string `json:"fileIgnorePatterns"`
 	FolderIgnorePatterns    []string `json:"folderIgnorePatterns"`
 	FileIncludePatterns     []string `json:"fileIncludePatterns"`
 	EmbeddingSuccessPercent float32  `json:"embeddingSuccessPercent"`
@@ -92,12 +91,11 @@ var DefaultFileIncludePatterns = []string{
 }
 
 var DefaultConfigSync = ConfigSync{
-	IntervalMinutes:         5,  // Default sync interval in minutes
-	MaxFileSizeKB:           50, // Default maximum file size in KB
+	IntervalMinutes:         5,    // Default sync interval in minutes
+	MaxFileSizeKB:           2048, // Default maximum file size in KB
 	MaxFileCount:            10000,
 	MaxRetries:              3,                           // Default maximum retry count
 	RetryDelaySeconds:       3,                           // Default retry delay in seconds
-	FileIgnorePatterns:      DefaultFileIgnorePatterns,   // Default file ignore patterns
 	FolderIgnorePatterns:    DefaultFolderIgnorePatterns, // Default folder ignore patterns
 	FileIncludePatterns:     DefaultFileIncludePatterns,
 	EmbeddingSuccessPercent: 80.0, // Default embedding success percent

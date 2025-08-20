@@ -163,10 +163,9 @@ func main() {
 	indexer := service.NewCodeIndexer(scanRepo, sourceFileParser, dependencyAnalyzer, workspaceReader, codegraphStore,
 		workspaceRepo, service.IndexerConfig{VisitPattern: workspace.DefaultVisitPattern}, appLogger)
 
-	codebaseService := service.NewCodebaseService(storageManager, appLogger, workspaceReader, workspaceRepo, definition.NewDefinitionParser(), indexer)
-	extensionService := service.NewExtensionService(storageManager, syncRepo, scanRepo, workspaceRepo, eventRepo, codebaseEmbeddingRepo, codebaseService, appLogger)
-
 	codegraphProcessor := service.NewCodegraphProcessor(workspaceReader, indexer, workspaceRepo, eventRepo, appLogger)
+	codebaseService := service.NewCodebaseService(storageManager, appLogger, workspaceReader, workspaceRepo, definition.NewDefinitionParser(), indexer)
+	extensionService := service.NewExtensionService(storageManager, syncRepo, scanRepo, workspaceRepo, eventRepo, codebaseEmbeddingRepo, codebaseService, fileScanService, appLogger)
 
 	// Initialize job layer
 	fileScanJob := job.NewFileScanJob(fileScanService, storageManager, syncRepo, appLogger, 5*time.Minute)

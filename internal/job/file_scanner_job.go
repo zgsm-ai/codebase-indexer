@@ -154,7 +154,7 @@ func (j *FileScanJob) scanWorkspaces(ctx context.Context) {
 // scanWorkspace 扫描单个工作区
 func (j *FileScanJob) scanWorkspace(workspace *model.Workspace) error {
 	// 检测文件变更
-	events, err := j.scanner.DetectFileChanges(workspace)
+	events, err := j.scanner.DetectFileChanges(workspace.WorkspacePath)
 	if err != nil {
 		return fmt.Errorf("failed to detect file changes: %w", err)
 	}

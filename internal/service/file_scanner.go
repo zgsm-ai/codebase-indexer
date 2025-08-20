@@ -13,7 +13,7 @@ import (
 // FileScanService 工作区扫描服务接口
 type FileScanService interface {
 	ScanActiveWorkspaces() ([]*model.Workspace, error)
-	DetectFileChanges(workspace *model.Workspace) ([]*model.Event, error)
+	DetectFileChanges(workspacePath string) ([]*model.Event, error)
 	UpdateWorkspaceStats(workspace *model.Workspace) error
 	MapFileStatusToEventType(status string) string
 }
@@ -65,18 +65,18 @@ func (ws *fileScanService) ScanActiveWorkspaces() ([]*model.Workspace, error) {
 }
 
 // DetectFileChanges 检测文件变更
-func (ws *fileScanService) DetectFileChanges(workspace *model.Workspace) ([]*model.Event, error) {
-	ws.logger.Info("scanning workspace: %s", workspace.WorkspacePath)
+func (ws *fileScanService) DetectFileChanges(workspacePath string) ([]*model.Event, error) {
+	ws.logger.Info("scanning workspace: %s", workspacePath)
 
 	// 获取当前文件哈希树
-	currentHashTree, err := ws.fileScanner.ScanCodebase(workspace.WorkspacePath)
+	currentHashTree, err := ws.fileScanner.ScanCodebase(workspacePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan codebase: %w", err)
 	}
 
 	// 获取上次保存的哈希树
 	// 生成codebaseId
-	codebaseId := utils.GenerateCodebaseID(workspace.WorkspacePath)
+	codebaseId := utils.GenerateCodebaseID(workspacePath)
 	codebaseConfig, err := ws.storage.GetCodebaseConfig(codebaseId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get codebase config: %w", err)
@@ -90,7 +90,7 @@ func (ws *fileScanService) DetectFileChanges(workspace *model.Workspace) ([]*mod
 		return nil, fmt.Errorf("failed to save codebase config: %w", err)
 	}
 
-	codebaseEmbeddingId := utils.GenerateCodebaseEmbeddingID(workspace.WorkspacePath)
+	codebaseEmbeddingId := utils.GenerateCodebaseEmbeddingID(workspacePath)
 	codebaseEmbeddingConfig, err := ws.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseEmbeddingId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get codebase embedding config: %w", err)
@@ -100,16 +100,16 @@ func (ws *fileScanService) DetectFileChanges(workspace *model.Workspace) ([]*mod
 	changes := ws.fileScanner.CalculateFileChanges(currentHashTree, codebaseEmbeddingConfig.HashTree)
 	if len(changes) == 0 {
 		// 查询 open_workspace 事件并更新状态为完成
-		ws.updateNonSuccessOpenOrRebuildEventStatus(workspace.WorkspacePath)
+		ws.updateNonSuccessOpenOrRebuildEventStatus(workspacePath)
 		return nil, nil
 	}
 
 	// 在生成新事件后，查询工作区内所有现有事件
-	existingEvents, err := ws.eventRepo.GetEventsByWorkspaceForDeduplication(workspace.WorkspacePath)
+	existingEvents, err := ws.eventRepo.GetEventsByWorkspaceForDeduplication(workspacePath)
 	if err != nil {
 		ws.logger.Error("failed to get existing events for deduplication: %v", err)
 		// 降级处理：继续执行，但跳过去重逻辑
-		return ws.handleEventsWithoutDeduplication(changes, workspace)
+		return ws.handleEventsWithoutDeduplication(changes, workspacePath)
 	}
 
 	// 构建源文件路径到事件记录的映射，用于快速查找
@@ -127,11 +127,13 @@ func (ws *fileScanService) DetectFileChanges(workspace *model.Workspace) ([]*mod
 	for _, change := range changes {
 		filePth := change.Path
 		event := &model.Event{
-			WorkspacePath:  workspace.WorkspacePath,
-			EventType:      ws.MapFileStatusToEventType(change.Status),
-			SourceFilePath: filePth,
-			TargetFilePath: filePth,
-			FileHash:       change.Hash,
+			WorkspacePath:   workspacePath,
+			EventType:       ws.MapFileStatusToEventType(change.Status),
+			SourceFilePath:  filePth,
+			TargetFilePath:  filePth,
+			FileHash:        change.Hash,
+			EmbeddingStatus: model.EmbeddingStatusInit,
+			CodegraphStatus: model.CodegraphStatusSuccess,
 		}
 
 		// 检查是否已存在相同路径的事件
@@ -145,8 +147,6 @@ func (ws *fileScanService) DetectFileChanges(workspace *model.Workspace) ([]*mod
 			events = append(events, existingEvent)
 		} else {
 			// 创建新事件
-			event.EmbeddingStatus = model.EmbeddingStatusInit
-			event.CodegraphStatus = model.CodegraphStatusSuccess
 			err := ws.eventRepo.CreateEvent(event)
 			if err != nil {
 				ws.logger.Error("failed to create event for path %s: %v", filePth, err)
@@ -157,7 +157,7 @@ func (ws *fileScanService) DetectFileChanges(workspace *model.Workspace) ([]*mod
 	}
 
 	// 查询 open_workspace 事件并更新状态为完成
-	ws.updateNonSuccessOpenOrRebuildEventStatus(workspace.WorkspacePath)
+	ws.updateNonSuccessOpenOrRebuildEventStatus(workspacePath)
 
 	return events, nil
 }
@@ -235,14 +235,14 @@ func (ws *fileScanService) UpdateWorkspaceStats(workspace *model.Workspace) erro
 }
 
 // handleEventsWithoutDeduplication 当去重逻辑失败时的降级处理方法
-func (ws *fileScanService) handleEventsWithoutDeduplication(changes []*utils.FileStatus, workspace *model.Workspace) ([]*model.Event, error) {
+func (ws *fileScanService) handleEventsWithoutDeduplication(changes []*utils.FileStatus, workspacePath string) ([]*model.Event, error) {
 	ws.logger.Warn("deduplication failed, falling back to direct event creation")
 
 	var events []*model.Event
 	for _, change := range changes {
 		filePth := change.Path
 		event := &model.Event{
-			WorkspacePath:   workspace.WorkspacePath,
+			WorkspacePath:   workspacePath,
 			EventType:       ws.MapFileStatusToEventType(change.Status),
 			SourceFilePath:  filePth,
 			TargetFilePath:  filePth,
@@ -261,7 +261,7 @@ func (ws *fileScanService) handleEventsWithoutDeduplication(changes []*utils.Fil
 	}
 
 	// 查询 open_workspace 事件并更新状态为完成
-	ws.updateNonSuccessOpenOrRebuildEventStatus(workspace.WorkspacePath)
+	ws.updateNonSuccessOpenOrRebuildEventStatus(workspacePath)
 
 	return events, nil
 }

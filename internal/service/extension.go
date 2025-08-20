@@ -63,6 +63,7 @@ func NewExtensionService(
 	eventRepo repository.EventRepository,
 	codebaseEmbeddingRepo repository.EmbeddingFileRepository,
 	codebaseService CodebaseService,
+	scanService FileScanService,
 	logger logger.Logger,
 ) ExtensionService {
 	return &extensionService{
@@ -73,6 +74,7 @@ func NewExtensionService(
 		eventRepo:             eventRepo,
 		codebaseEmbeddingRepo: codebaseEmbeddingRepo,
 		codebaseService:       codebaseService,
+		scanService:           scanService,
 		logger:                logger,
 	}
 }
@@ -85,6 +87,7 @@ type extensionService struct {
 	eventRepo             repository.EventRepository
 	codebaseEmbeddingRepo repository.EmbeddingFileRepository
 	codebaseService       CodebaseService
+	scanService           FileScanService
 	logger                logger.Logger
 }
 
@@ -418,6 +421,8 @@ func (s *extensionService) SwitchIndex(ctx context.Context, workspacePath, switc
 		} else {
 			s.logger.Info("switch on, created new open workspace event for workspace: %s", workspacePath)
 		}
+		// switch on, 触发文件扫描
+		go s.scanService.DetectFileChanges(workspace.WorkspacePath)
 	} else {
 		if err := s.workspaceRepo.UpdateWorkspace(updateWorkspace); err != nil {
 			return fmt.Errorf("failed to update workspace: %w", err)
@@ -515,6 +520,9 @@ func (s *extensionService) processEvents(workspacePath, clientID string, events 
 			if s.createNewEvent(workspacePath, event) {
 				successCount++
 			}
+			// open_workspace 事件触发文件扫描
+			go s.scanService.DetectFileChanges(workspacePath)
+
 			break
 		}
 
@@ -829,8 +837,14 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 	}
 
 	// 创建代码库嵌入配置
-	if err := s.initCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
-		return fmt.Errorf("failed to init codebase embedding config: %w", err)
+	if indexType == dto.IndexTypeCodegraph {
+		if err := s.createCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
+			return fmt.Errorf("failed to create codebase embedding config: %w", err)
+		}
+	} else {
+		if err := s.initCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
+			return fmt.Errorf("failed to init codebase embedding config: %w", err)
+		}
 	}
 
 	// 检查工作区是否已存在
@@ -926,6 +940,8 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 			return fmt.Errorf("failed to create open workspace event: %w", err)
 		}
 		rebuildEventId = eventModel.ID
+		// rebuild_workspace 事件触发文件扫描
+		go s.scanService.DetectFileChanges(workspacePath)
 	}
 
 	// 事务处理删除其他非进行中状态事件
