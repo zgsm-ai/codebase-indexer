@@ -395,16 +395,20 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePath(ctx context.Context, f
 	}
 
 	// 从SyncFiles中添加对应的文件路径
-	// if codebaseEmbeddingConfig.SyncFiles != nil {
-	// 	if _, exists := codebaseEmbeddingConfig.SyncFiles[fileStatus.Path]; !exists {
-	// 		codebaseEmbeddingConfig.SyncFiles[fileStatus.Path] = fileStatus.Hash
-	// 		updated = true
-	// 	}
-	// } else {
-	// 	codebaseEmbeddingConfig.SyncFiles = make(map[string]string)
-	// 	codebaseEmbeddingConfig.SyncFiles[fileStatus.Path] = fileStatus.Hash
-	// 	updated = true
-	// }
+	if codebaseEmbeddingConfig.SyncFiles != nil {
+		for _, filePath := range filePaths {
+			if oldHash, exists := codebaseEmbeddingConfig.SyncFiles[filePath]; !exists || oldHash != fileStatus.Hash {
+				codebaseEmbeddingConfig.SyncFiles[filePath] = fileStatus.Hash
+				updated = true
+			}
+		}
+	} else {
+		codebaseEmbeddingConfig.SyncFiles = make(map[string]string)
+		for _, filePath := range filePaths {
+			codebaseEmbeddingConfig.SyncFiles[filePath] = fileStatus.Hash
+		}
+		updated = true
+	}
 
 	// // 添加syncId到SyncIds中
 	// if codebaseEmbeddingConfig.SyncIds != nil {

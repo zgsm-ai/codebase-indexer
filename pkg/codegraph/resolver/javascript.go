@@ -76,7 +76,6 @@ func (js *JavaScriptResolver) resolvePackage(ctx context.Context, element *Packa
 func (js *JavaScriptResolver) resolveFunction(ctx context.Context, element *Function, rc *ResolveContext) ([]Element, error) {
 	elements := []Element{element}
 	rootCapture := rc.Match.Captures[0]
-	updateRootElement(element, &rootCapture, rc.CaptureNames[rootCapture.Index], rc.SourceFile.Content)
 	if isArrowFunctionImport(&rootCapture.Node, rc.SourceFile.Content) {
 		return []Element{}, nil
 	}
@@ -88,7 +87,7 @@ func (js *JavaScriptResolver) resolveFunction(ctx context.Context, element *Func
 		content := capture.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeFunction:
-			element.Type = types.ElementTypeFunction
+			updateRootElement(element, &rootCapture, rc.CaptureNames[rootCapture.Index], rc.SourceFile.Content)
 			if isExportStatement(&capture.Node) {
 				element.Scope = types.ScopePackage
 			} else {
@@ -108,7 +107,6 @@ func (js *JavaScriptResolver) resolveFunction(ctx context.Context, element *Func
 func (js *JavaScriptResolver) resolveMethod(ctx context.Context, element *Method, rc *ResolveContext) ([]Element, error) {
 	elements := []Element{element}
 	rootCap := rc.Match.Captures[0]
-	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
 	for _, capture := range rc.Match.Captures {
 		if capture.Node.IsMissing() || capture.Node.IsError() {
 			continue
@@ -117,6 +115,7 @@ func (js *JavaScriptResolver) resolveMethod(ctx context.Context, element *Method
 		content := capture.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeMethod:
+			updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
 			element.Declaration.Modifier = extractModifiers(content)
 		case types.ElementTypeMethodName:
 			element.BaseElement.Name = content

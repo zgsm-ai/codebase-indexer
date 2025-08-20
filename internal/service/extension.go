@@ -876,11 +876,8 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 	}
 
 	// 判断rebuild_workspace事件是否存在非进行中状态，若不存在则创建
-	existingRebuildEvents, err := s.eventRepo.GetEventsByWorkspaceAndType(workspacePath, []string{model.EventTypeRebuildWorkspace}, 1, true)
-	if err != nil {
-		return fmt.Errorf("failed to get existing rebuild workspace events: %w", err)
-	}
-
+	var rebuildEventId int64
+	shouldCreateEvent := true
 	embeddingStatus := model.EmbeddingStatusInit
 	codegraphStatus := model.CodegraphStatusInit
 	switch indexType {
@@ -889,10 +886,8 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 	case dto.IndexTypeCodegraph:
 		embeddingStatus = model.EmbeddingStatusSuccess
 	}
-
-	var rebuildEventId int64
-	shouldCreateEvent := true
-	if len(existingRebuildEvents) > 0 {
+	existingRebuildEvents, err := s.eventRepo.GetEventsByWorkspaceAndType(workspacePath, []string{model.EventTypeRebuildWorkspace}, 1, true)
+	if err == nil && len(existingRebuildEvents) > 0 {
 		// 检查是否存在非进行中状态的rebuild_workspace事件
 		for _, event := range existingRebuildEvents {
 			if event.EmbeddingStatus != model.EmbeddingStatusUploading &&
@@ -915,10 +910,9 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 		}
 	}
 
-	var eventModel *model.Event
 	if shouldCreateEvent {
 		// 创建打开工作区事件
-		eventModel = &model.Event{
+		eventModel := &model.Event{
 			WorkspacePath:   workspacePath,
 			EventType:       model.EventTypeRebuildWorkspace,
 			SourceFilePath:  "",
@@ -1014,14 +1008,9 @@ func (s *extensionService) GetIndexStatus(ctx context.Context, workspacePath str
 			ProcessTs:    0,
 		}
 	} else {
-		// 获取工作区的所有事件
-		events, err := s.eventRepo.GetEventsByWorkspaceForDeduplication(workspace.WorkspacePath)
-		if err != nil {
-			s.logger.Warn("failed to get events for workspace %s: %v", workspace.WorkspacePath, err)
-		}
 		// 如果工作区已激活，根据事件记录计算状态
-		data.Embedding = s.calculateEmbeddingStatus(workspace, events)
-		data.Codegraph = s.calculateCodegraphStatus(workspace, events)
+		data.Embedding = s.calculateEmbeddingStatus(workspace)
+		data.Codegraph = s.calculateCodegraphStatus(workspace)
 	}
 
 	// 构建响应
@@ -1036,8 +1025,7 @@ func (s *extensionService) GetIndexStatus(ctx context.Context, workspacePath str
 }
 
 // calculateEmbeddingStatus 计算 embedding 状态
-func (s *extensionService) calculateEmbeddingStatus(workspace *model.Workspace, events []*model.Event) dto.IndexStatus {
-
+func (s *extensionService) calculateEmbeddingStatus(workspace *model.Workspace) dto.IndexStatus {
 	status := dto.IndexStatus{
 		TotalFiles:   workspace.FileNum,
 		TotalSucceed: workspace.EmbeddingFileNum,
@@ -1054,6 +1042,8 @@ func (s *extensionService) calculateEmbeddingStatus(workspace *model.Workspace, 
 		}
 	} else {
 		status.Process = 0
+		status.Status = dto.ProcessStatusPending
+		return status
 	}
 
 	// 计算失败文件数
@@ -1064,32 +1054,29 @@ func (s *extensionService) calculateEmbeddingStatus(workspace *model.Workspace, 
 	}
 
 	// 统计各状态的 embedding 事件数
-	initCount := 0
-	uploadingCount := 0
-	buildingCount := 0
-	uploadFailedCount := 0
-	buildFailedCount := 0
+	processingCount, err := s.eventRepo.GetEventsCountByWorkspaceAndStatus(
+		workspace.WorkspacePath,
+		[]int{model.EmbeddingStatusInit, model.EmbeddingStatusUploading, model.EmbeddingStatusBuilding},
+		[]int{},
+	)
+	if err != nil {
+		s.logger.Warn("failed to get embedding events count by workspace and status: %v", err)
+	}
 
-	for _, event := range events {
-		switch event.EmbeddingStatus {
-		case model.EmbeddingStatusInit:
-			initCount++
-		case model.EmbeddingStatusUploading:
-			uploadingCount++
-		case model.EmbeddingStatusBuilding:
-			buildingCount++
-		case model.EmbeddingStatusUploadFailed:
-			uploadFailedCount++
-		case model.EmbeddingStatusBuildFailed:
-			buildFailedCount++
-		}
+	failedCount, err := s.eventRepo.GetEventsCountByWorkspaceAndStatus(
+		workspace.WorkspacePath,
+		[]int{model.EmbeddingStatusUploadFailed, model.EmbeddingStatusBuildFailed},
+		[]int{},
+	)
+	if err != nil {
+		s.logger.Warn("failed to get embedding events count by workspace and status: %v", err)
 	}
 
 	// 判断状态
 	// 存在初始或进行中状态事件时，状态为 running
-	if initCount > 0 || uploadingCount > 0 || buildingCount > 0 {
+	if processingCount > 0 {
 		status.Status = dto.ProcessStatusRunning
-	} else if uploadFailedCount > 0 || buildFailedCount > 0 {
+	} else if failedCount > 0 {
 		// 存在失败状态时，判断比较 process 和配置中的百分比阈值
 		clientConfig := config.GetClientConfig()
 		embeddingSuccessPercent := clientConfig.Sync.EmbeddingSuccessPercent
@@ -1110,8 +1097,7 @@ func (s *extensionService) calculateEmbeddingStatus(workspace *model.Workspace, 
 }
 
 // calculateCodegraphStatus 计算 codegraph 状态
-func (s *extensionService) calculateCodegraphStatus(workspace *model.Workspace, events []*model.Event) dto.IndexStatus {
-
+func (s *extensionService) calculateCodegraphStatus(workspace *model.Workspace) dto.IndexStatus {
 	status := dto.IndexStatus{
 		TotalFiles:   workspace.FileNum,
 		TotalSucceed: workspace.CodegraphFileNum,
@@ -1128,6 +1114,8 @@ func (s *extensionService) calculateCodegraphStatus(workspace *model.Workspace, 
 		}
 	} else {
 		status.Process = 0
+		status.Status = dto.ProcessStatusPending
+		return status
 	}
 
 	// 计算失败文件数
@@ -1137,25 +1125,28 @@ func (s *extensionService) calculateCodegraphStatus(workspace *model.Workspace, 
 		totalFailed = len(failedFilePaths)
 	}
 
-	// 统计各状态的 codegraph 事件数
-	initCount := 0
-	buildingCount := 0
-	failedCount := 0
+	// 统计各状态的 embedding 事件数
+	processingCount, err := s.eventRepo.GetEventsCountByWorkspaceAndStatus(
+		workspace.WorkspacePath,
+		[]int{},
+		[]int{model.CodegraphStatusInit, model.CodegraphStatusBuilding},
+	)
+	if err != nil {
+		s.logger.Warn("failed to get codegraph events count by workspace and status: %v", err)
+	}
 
-	for _, event := range events {
-		switch event.CodegraphStatus {
-		case model.CodegraphStatusInit:
-			initCount++
-		case model.CodegraphStatusBuilding:
-			buildingCount++
-		case model.CodegraphStatusFailed:
-			failedCount++
-		}
+	failedCount, err := s.eventRepo.GetEventsCountByWorkspaceAndStatus(
+		workspace.WorkspacePath,
+		[]int{},
+		[]int{model.CodegraphStatusFailed},
+	)
+	if err != nil {
+		s.logger.Warn("failed to get codegraph events count by workspace and status: %v", err)
 	}
 
 	// 判断状态
 	// 存在初始或进行中状态事件时，状态为 running
-	if initCount > 0 || buildingCount > 0 {
+	if processingCount > 0 {
 		status.Status = dto.ProcessStatusRunning
 	} else if failedCount > 0 {
 		// 存在失败状态时，判断比较 process 和配置中的百分比阈值
