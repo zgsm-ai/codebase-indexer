@@ -195,8 +195,8 @@ func TestQuery(t *testing.T) {
 			Name:          "查询createTestIndexer函数调用",
 			ElementName:   "createTestIndexer",
 			FilePath:      filepath.Join(workspacePath, "test/codegraph/ts_test.go"),
-			StartLine:     66,
-			EndLine:       66,
+			StartLine:     67,
+			EndLine:       67,
 			ElementType:   "call.function",
 			ShouldFindDef: true,
 			wantDefinitions: []types.Definition{

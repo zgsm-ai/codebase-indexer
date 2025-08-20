@@ -292,7 +292,7 @@ func TestQueryPython(t *testing.T) {
 			ElementType:   "reference",
 			ShouldFindDef: true,
 			wantDefinitions: []types.Definition{
-				{Name: "SecurityRequirement", Path: "models.py", Range: []int32{7, 0, 7, 0}},
+				{Name: "SecurityRequirement", Path: "models.py", Range: []int32{8, 0, 8, 0}},
 			},
 			wantErr: nil,
 		},

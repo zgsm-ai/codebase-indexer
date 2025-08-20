@@ -32,7 +32,7 @@ func (ts *TypeScriptResolver) resolveImport(ctx context.Context, element *Import
 		case types.ElementTypeImport:
 			element.Type = types.ElementTypeImport
 		case types.ElementTypeImportName:
-			element.Name = content
+			element.BaseElement.Name = content
 		case types.ElementTypeImportAlias:
 			element.Alias = content
 		case types.ElementTypeImportSource:
@@ -60,7 +60,6 @@ func (ts *TypeScriptResolver) resolvePackage(ctx context.Context, element *Packa
 func (ts *TypeScriptResolver) resolveFunction(ctx context.Context, element *Function, rc *ResolveContext) ([]Element, error) {
 	elements := []Element{element}
 	rootCapture := rc.Match.Captures[0]
-	updateRootElement(element, &rootCapture, rc.CaptureNames[rootCapture.Index], rc.SourceFile.Content)
 	if isArrowFunctionImport(&rootCapture.Node, rc.SourceFile.Content) {
 		return []Element{}, nil
 	}
@@ -72,6 +71,7 @@ func (ts *TypeScriptResolver) resolveFunction(ctx context.Context, element *Func
 		content := capture.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeFunction:
+			updateRootElement(element, &rootCapture, rc.CaptureNames[rootCapture.Index], rc.SourceFile.Content)
 			if isExportStatement(&capture.Node) {
 				element.Scope = types.ScopePackage
 			} else {
@@ -94,7 +94,6 @@ func (ts *TypeScriptResolver) resolveFunction(ctx context.Context, element *Func
 func (ts *TypeScriptResolver) resolveMethod(ctx context.Context, element *Method, rc *ResolveContext) ([]Element, error) {
 	elements := []Element{element}
 	rootCap := rc.Match.Captures[0]
-	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
 	for _, capture := range rc.Match.Captures {
 		if capture.Node.IsMissing() || capture.Node.IsError() {
 			continue
@@ -103,6 +102,7 @@ func (ts *TypeScriptResolver) resolveMethod(ctx context.Context, element *Method
 		content := capture.Node.Utf8Text(rc.SourceFile.Content)
 		switch types.ToElementType(nodeCaptureName) {
 		case types.ElementTypeMethod:
+			updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
 			element.Declaration.Modifier = extractModifiers(content)
 		case types.ElementTypeMethodName:
 			element.BaseElement.Name = content
