@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"codebase-indexer/internal/utils"
 
@@ -26,13 +28,72 @@ type BaseIntegrationTestSuite struct {
 func (s *BaseIntegrationTestSuite) SetupSuite() {
 	// 设置API基础URL
 	s.baseURL = "http://localhost:11380"
-
+	var currentWorkspace, err = filepath.Abs("../../")
+	if err != nil {
+		panic(err)
+	}
 	// 设置工作目录路径
-	s.workspacePath = "g:\\tmp\\projects\\go\\kubernetes"
+	s.workspacePath = currentWorkspace
 	s.extraHeaders = make(map[string]string)
 
 	// 读取认证配置
 	s.setupAuthHeaders()
+	// 注册工作区
+	s.registerWorkspace()
+}
+
+func (s *BaseIntegrationTestSuite) registerWorkspace() {
+	var resp *http.Response
+	var err error
+	// 准备请求体
+	reqBody := map[string]interface{}{
+		"workspace": s.workspacePath,
+		"data": []map[string]interface{}{{
+			"eventType": "open_workspace",
+			"eventTime": time.Now().UTC().Format(time.RFC3339),
+		},
+		},
+	}
+	// 序列化请求体
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		panic(err)
+	}
+
+	// 创建HTTP请求
+	req, err := s.CreatePOSTRequest(s.baseURL+"/codebase-indexer/api/v1/events", jsonData)
+	if err != nil {
+		panic(err)
+	}
+	// 发送请求
+	resp, err = s.SendRequest(req)
+
+	s.Require().NoError(err)
+	defer resp.Body.Close()
+
+	// 验证响应状态码
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		panic("init workspace=> unexpected status code: " + resp.Status + ", body: " + string(body))
+	}
+
+	// 读取响应体
+	body, err := io.ReadAll(resp.Body)
+	s.Require().NoError(err)
+
+	// 解析响应JSON
+	var response map[string]interface{}
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		panic("init workspace=> unexpected body: " + string(body))
+
+	}
+	if response["message"] != "ok" {
+		panic("init workspace=> unexpected body: " + string(body))
+	}
+	// sleep 2s，等待处理完成
+	s.T().Log("wait 2 seconds for initializing workspace...")
+	time.Sleep(2 * time.Second)
 }
 
 // setupAuthHeaders 设置认证头

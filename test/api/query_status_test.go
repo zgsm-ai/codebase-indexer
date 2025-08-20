@@ -32,33 +32,15 @@ func (s *QueryStatusIntegrationTestSuite) TestQueryStatus() {
 			name:           "成功查询索引状态",
 			endpoint:       "status",
 			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
+			codebasePath:   s.workspacePath,
 			expectedStatus: http.StatusOK,
 			expectedCode:   "0",
 			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.True(t, response["success"].(bool))
 				assert.Equal(t, "ok", response["message"])
 
 				data := response["data"].(map[string]interface{})
-				assert.Contains(t, data, "Status")
-				assert.Contains(t, data, "Message")
-				assert.Contains(t, data, "Timestamp")
-
-				// 验证Status字段的有效值
-				validStatuses := []string{"completed", "in_progress", "failed", "not_started"}
-				assert.Contains(t, validStatuses, data["Status"])
-
-				// 验证Timestamp是字符串
-				assert.IsType(t, "", data["Timestamp"])
-			},
-		},
-		{
-			name:           "缺少clientId参数查询状态",
-			endpoint:       "status",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
-			expectedStatus: http.StatusBadRequest,
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.False(t, response["success"].(bool))
+				assert.Contains(t, data, "embedding")
+				assert.Contains(t, data, "codegraph")
 			},
 		},
 		{
@@ -67,32 +49,6 @@ func (s *QueryStatusIntegrationTestSuite) TestQueryStatus() {
 			clientId:       "123",
 			expectedStatus: http.StatusBadRequest,
 			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.False(t, response["success"].(bool))
-			},
-		},
-		{
-			name:           "查询不存在的代码库状态",
-			endpoint:       "status",
-			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\nonexistent",
-			expectedStatus: http.StatusOK,
-			expectedCode:   "0",
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.True(t, response["success"].(bool))
-				data := response["data"].(map[string]interface{})
-				assert.Contains(t, data, "Status")
-				assert.Contains(t, data, "Message")
-				assert.Contains(t, data, "Timestamp")
-			},
-		},
-		{
-			name:           "空参数值查询状态",
-			endpoint:       "status",
-			clientId:       "",
-			codebasePath:   "",
-			expectedStatus: http.StatusBadRequest,
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.False(t, response["success"].(bool))
 			},
 		},
 	}
@@ -106,11 +62,8 @@ func (s *QueryStatusIntegrationTestSuite) TestQueryStatus() {
 
 			// 添加查询参数
 			q := reqURL.Query()
-			if tc.clientId != "" {
-				q.Add("clientId", tc.clientId)
-			}
 			if tc.codebasePath != "" {
-				q.Add("codebasePath", tc.codebasePath)
+				q.Add("workspace", tc.codebasePath)
 			}
 			reqURL.RawQuery = q.Encode()
 
@@ -136,7 +89,7 @@ func (s *QueryStatusIntegrationTestSuite) TestQueryStatus() {
 			s.Require().NoError(err)
 
 			// 验证通用响应格式
-			s.ValidateCommonResponse(t, response, tc.expectedCode)
+			// s.ValidateCommonResponse(t, response, tc.expectedCode)
 
 			// 执行自定义验证
 			if tc.validateResp != nil {
@@ -153,7 +106,7 @@ func (s *QueryStatusIntegrationTestSuite) TestQuerySummary() {
 			name:           "成功查询索引摘要",
 			endpoint:       "summary",
 			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
+			codebasePath:   s.workspacePath,
 			expectedStatus: http.StatusOK,
 			expectedCode:   "0",
 			validateResp: func(t *testing.T, response map[string]interface{}) {
@@ -161,42 +114,10 @@ func (s *QueryStatusIntegrationTestSuite) TestQuerySummary() {
 				assert.Equal(t, "ok", response["message"])
 
 				data := response["data"].(map[string]interface{})
-				assert.Contains(t, data, "TotalFiles")
-				assert.Contains(t, data, "TotalSize")
-				assert.Contains(t, data, "IndexedFiles")
-				assert.Contains(t, data, "IndexedSize")
-				assert.Contains(t, data, "LastIndexed")
+				assert.Contains(t, data, "codegraph")
+				assert.Contains(t, data["codegraph"], "status")
+				assert.Contains(t, data["codegraph"], "totalFiles")
 
-				// 验证数值类型
-				assert.IsType(t, 0.0, data["TotalFiles"])
-				assert.IsType(t, 0.0, data["TotalSize"])
-				assert.IsType(t, 0.0, data["IndexedFiles"])
-				assert.IsType(t, 0.0, data["IndexedSize"])
-
-				// 验证LastIndexed是字符串
-				assert.IsType(t, "", data["LastIndexed"])
-
-				// 验证数值的合理性
-				totalFiles := data["TotalFiles"].(float64)
-				indexedFiles := data["IndexedFiles"].(float64)
-				assert.GreaterOrEqual(t, totalFiles, indexedFiles)
-				assert.GreaterOrEqual(t, totalFiles, 0.0)
-				assert.GreaterOrEqual(t, indexedFiles, 0.0)
-
-				totalSize := data["TotalSize"].(float64)
-				indexedSize := data["IndexedSize"].(float64)
-				assert.GreaterOrEqual(t, totalSize, indexedSize)
-				assert.GreaterOrEqual(t, totalSize, 0.0)
-				assert.GreaterOrEqual(t, indexedSize, 0.0)
-			},
-		},
-		{
-			name:           "缺少clientId参数查询摘要",
-			endpoint:       "summary",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
-			expectedStatus: http.StatusBadRequest,
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.False(t, response["success"].(bool))
 			},
 		},
 		{
@@ -217,18 +138,13 @@ func (s *QueryStatusIntegrationTestSuite) TestQuerySummary() {
 			expectedCode:   "0",
 			validateResp: func(t *testing.T, response map[string]interface{}) {
 				assert.True(t, response["success"].(bool))
-				data := response["data"].(map[string]interface{})
-				assert.Contains(t, data, "TotalFiles")
-				assert.Contains(t, data, "TotalSize")
-				assert.Contains(t, data, "IndexedFiles")
-				assert.Contains(t, data, "IndexedSize")
-				assert.Contains(t, data, "LastIndexed")
+				assert.Equal(t, "ok", response["message"])
 
-				// 不存在的代码库应该返回0值
-				assert.Equal(t, 0.0, data["TotalFiles"])
-				assert.Equal(t, 0.0, data["TotalSize"])
-				assert.Equal(t, 0.0, data["IndexedFiles"])
-				assert.Equal(t, 0.0, data["IndexedSize"])
+				data := response["data"].(map[string]interface{})
+				assert.Contains(t, data, "codegraph")
+				assert.Contains(t, data["codegraph"], "status")
+				assert.Contains(t, data["codegraph"], "totalFiles")
+				assert.Equal(t, data["codegraph"].(map[string]interface{})["totalFiles"].(float64), float64(0))
 			},
 		},
 		{

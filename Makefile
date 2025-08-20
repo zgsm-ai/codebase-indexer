@@ -24,6 +24,10 @@ test:
 	go test ./internal/...
 	go test ./test/codegraph/...
 
+api-test:
+	@echo "Running API tests, make sure the server is started on port 11380"
+	go test ./test/api/...
+
 .PHONY:build
 build:
 	go mod tidy

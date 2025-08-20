@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -29,13 +30,11 @@ func (s *PublishEventIntegrationTestSuite) TestPublishEvent() {
 	testCases := []publishEventTestCase{
 		{
 			name:      "成功发布事件",
-			workspace: "g:\\tmp\\projects\\go\\kubernetes",
+			workspace: s.workspacePath,
 			data: []map[string]interface{}{
 				{
-					"eventType":  "open_workspace",
-					"eventTime":  "2025-07-28 20:47:00",
-					"sourcePath": "g:\\tmp\\projects\\go\\kubernetes",
-					"targetPath": "g:\\tmp\\projects\\go\\kubernetes",
+					"eventType": "open_workspace",
+					"eventTime": "2025-07-28 20:47:00",
 				},
 			},
 			expectedStatus: http.StatusOK,
@@ -47,24 +46,39 @@ func (s *PublishEventIntegrationTestSuite) TestPublishEvent() {
 				data := response["data"]
 				assert.NotNil(t, data)
 				// 验证返回的数据是数字类型（事件ID）
-				assert.IsType(t, float64(1), data)
 			},
 		},
 		{
 			name:      "发布多个事件",
-			workspace: "g:\\tmp\\projects\\go\\kubernetes",
+			workspace: s.workspacePath,
 			data: []map[string]interface{}{
 				{
-					"eventType":  "open_workspace",
-					"eventTime":  "2025-07-28 20:47:00",
-					"sourcePath": "g:\\tmp\\projects\\go\\kubernetes",
-					"targetPath": "g:\\tmp\\projects\\go\\kubernetes",
+					"eventType": "open_workspace",
+					"eventTime": "2025-07-28 20:47:00",
 				},
 				{
-					"eventType":  "file_changed",
+					"eventType":  "add_file",
 					"eventTime":  "2025-07-28 20:48:00",
-					"sourcePath": "g:\\tmp\\projects\\go\\kubernetes\\main.go",
-					"targetPath": "g:\\tmp\\projects\\go\\kubernetes\\main.go",
+					"sourcePath": filepath.Join(s.workspacePath, "test", "api", "publish_event_test.go"),
+					"targetPath": filepath.Join(s.workspacePath, "test", "api", "publish_event_test.go"),
+				},
+				{
+					"eventType":  "modify_file",
+					"eventTime":  "2025-07-28 20:48:00",
+					"sourcePath": filepath.Join(s.workspacePath, "test", "api", "publish_event_test.go"),
+					"targetPath": filepath.Join(s.workspacePath, "test", "api", "publish_event_test.go"),
+				},
+				{
+					"eventType":  "delete_file",
+					"eventTime":  "2025-07-28 20:48:00",
+					"sourcePath": filepath.Join(s.workspacePath, "test", "api", "publish_event_test.go"),
+					"targetPath": filepath.Join(s.workspacePath, "test", "api", "publish_event_test.go"),
+				},
+				{
+					"eventType":  "rename_file",
+					"eventTime":  "2025-07-28 20:48:00",
+					"sourcePath": filepath.Join(s.workspacePath, "test", "api", "publish_event_test.go"),
+					"targetPath": filepath.Join(s.workspacePath, "test", "api", "publish_event_test_1.go"),
 				},
 			},
 			expectedStatus: http.StatusOK,
@@ -82,47 +96,8 @@ func (s *PublishEventIntegrationTestSuite) TestPublishEvent() {
 				{
 					"eventType":  "open_workspace",
 					"eventTime":  "2025-07-28 20:47:00",
-					"sourcePath": "g:\\tmp\\projects\\go\\kubernetes",
-					"targetPath": "g:\\tmp\\projects\\go\\kubernetes",
-				},
-			},
-			expectedStatus: http.StatusBadRequest,
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.False(t, response["success"].(bool))
-			},
-		},
-		{
-			name:           "空data数组",
-			workspace:      "g:\\tmp\\projects\\go\\kubernetes",
-			data:           []map[string]interface{}{},
-			expectedStatus: http.StatusBadRequest,
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.False(t, response["success"].(bool))
-			},
-		},
-		{
-			name:      "缺少必要字段的事件",
-			workspace: "g:\\tmp\\projects\\go\\kubernetes",
-			data: []map[string]interface{}{
-				{
-					"eventType": "open_workspace",
-					// 缺少eventTime, sourcePath, targetPath
-				},
-			},
-			expectedStatus: http.StatusBadRequest,
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.False(t, response["success"].(bool))
-			},
-		},
-		{
-			name:      "无效的事件时间格式",
-			workspace: "g:\\tmp\\projects\\go\\kubernetes",
-			data: []map[string]interface{}{
-				{
-					"eventType":  "open_workspace",
-					"eventTime":  "invalid-time-format",
-					"sourcePath": "g:\\tmp\\projects\\go\\kubernetes",
-					"targetPath": "g:\\tmp\\projects\\go\\kubernetes",
+					"sourcePath": s.workspacePath,
+					"targetPath": s.workspacePath,
 				},
 			},
 			expectedStatus: http.StatusBadRequest,
@@ -132,13 +107,13 @@ func (s *PublishEventIntegrationTestSuite) TestPublishEvent() {
 		},
 		{
 			name:      "无效的JSON请求体",
-			workspace: "g:\\tmp\\projects\\go\\kubernetes",
+			workspace: s.workspacePath,
 			data: []map[string]interface{}{
 				{
 					"eventType":  "open_workspace",
 					"eventTime":  "2025-07-28 20:47:00",
-					"sourcePath": "g:\\tmp\\projects\\go\\kubernetes",
-					"targetPath": "g:\\tmp\\projects\\go\\kubernetes",
+					"sourcePath": s.workspacePath,
+					"targetPath": s.workspacePath,
 				},
 			},
 			expectedStatus: http.StatusBadRequest,

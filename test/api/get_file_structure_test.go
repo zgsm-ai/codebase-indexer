@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -31,8 +32,8 @@ func (s *GetFileStructureIntegrationTestSuite) TestGetFileStructure() {
 		{
 			name:           "成功获取文件结构",
 			clientId:       "123",
-			codebasePath:   "g:\\projects\\codebase-indexer",
-			filePath:       "G:\\projects\\casdoor\\controllers\\auth.go",
+			codebasePath:   s.workspacePath,
+			filePath:       filepath.Join(s.workspacePath, "test/api/get_file_structure_test.go"),
 			expectedStatus: http.StatusOK,
 			expectedCode:   "0",
 			validateResp: func(t *testing.T, response map[string]interface{}) {
@@ -57,19 +58,11 @@ func (s *GetFileStructureIntegrationTestSuite) TestGetFileStructure() {
 				assert.Contains(t, position, "endColumn")
 			},
 		},
-		{
-			name:           "缺少clientId参数",
-			codebasePath:   "g:\\projects\\codebase-indexer",
-			filePath:       "G:\\projects\\casdoor\\controllers\\auth.go",
-			expectedStatus: http.StatusBadRequest,
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.False(t, response["success"].(bool))
-			},
-		},
+
 		{
 			name:           "缺少codebasePath参数",
 			clientId:       "123",
-			filePath:       "G:\\projects\\casdoor\\controllers\\auth.go",
+			filePath:       filepath.Join(s.workspacePath, "test/api/get_file_structure_test.go"),
 			expectedStatus: http.StatusBadRequest,
 			validateResp: func(t *testing.T, response map[string]interface{}) {
 				assert.False(t, response["success"].(bool))
@@ -78,7 +71,7 @@ func (s *GetFileStructureIntegrationTestSuite) TestGetFileStructure() {
 		{
 			name:           "缺少filePath参数",
 			clientId:       "123",
-			codebasePath:   "g:\\projects\\codebase-indexer",
+			codebasePath:   s.workspacePath,
 			expectedStatus: http.StatusBadRequest,
 			validateResp: func(t *testing.T, response map[string]interface{}) {
 				assert.False(t, response["success"].(bool))
@@ -87,16 +80,14 @@ func (s *GetFileStructureIntegrationTestSuite) TestGetFileStructure() {
 		{
 			name:           "不存在的文件路径",
 			clientId:       "123",
-			codebasePath:   "g:\\projects\\codebase-indexer",
+			codebasePath:   s.workspacePath,
 			filePath:       "G:\\projects\\nonexistent\\file.go",
-			expectedStatus: http.StatusOK,
-			expectedCode:   "0",
+			expectedStatus: http.StatusBadRequest,
+			expectedCode:   "-1",
 			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.True(t, response["success"].(bool))
-				data := response["data"].(map[string]interface{})
-				list := data["list"].([]interface{})
-				// 不存在的文件应该返回空列表
-				assert.Len(t, list, 0)
+				assert.False(t, response["success"].(bool))
+				message := response["message"].(string)
+				assert.Equal(t, message, "no such file or directory")
 			},
 		},
 		{
@@ -112,8 +103,8 @@ func (s *GetFileStructureIntegrationTestSuite) TestGetFileStructure() {
 		{
 			name:           "特殊字符路径",
 			clientId:       "123",
-			codebasePath:   "g:\\projects\\codebase-indexer",
-			filePath:       "G:\\projects\\casdoor\\controllers\\auth.go",
+			codebasePath:   s.workspacePath,
+			filePath:       filepath.Join(s.workspacePath, "test/api/get_file_structure_test.go"),
 			expectedStatus: http.StatusOK,
 			expectedCode:   "0",
 			validateResp: func(t *testing.T, response map[string]interface{}) {

@@ -533,12 +533,18 @@ func (l *workspaceReader) Tree(ctx context.Context, workspacePath string, subDir
 }
 
 func (w *workspaceReader) GetProjectByFilePath(ctx context.Context, workspace string, filePath string, resolveModule bool) (*Project, error) {
+	if exists, err := w.Exists(ctx, filePath); err == nil && !exists {
+		return nil, ErrPathNotExists
+	}
+	if !utils.IsSubdir(workspace, filePath) {
+		return nil, fmt.Errorf("file %s is not in workspace %s", filePath, workspace)
+	}
 	projects := w.FindProjects(ctx, workspace, resolveModule, DefaultVisitPattern)
 	if len(projects) == 0 {
 		return nil, fmt.Errorf("found no projects in workspace %s", workspace)
 	}
 	for _, p := range projects {
-		if strings.HasPrefix(filePath, p.Path) {
+		if utils.IsSubdir(p.Path, filePath) {
 			return p, nil
 		}
 	}

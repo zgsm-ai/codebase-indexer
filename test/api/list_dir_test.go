@@ -31,7 +31,7 @@ func (s *ListDirIntegrationTestSuite) TestListDir() {
 		{
 			name:           "成功列出目录内容",
 			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
+			codebasePath:   s.workspacePath,
 			subDir:         "cmd",
 			expectedStatus: http.StatusOK,
 			expectedCode:   "0",
@@ -40,7 +40,7 @@ func (s *ListDirIntegrationTestSuite) TestListDir() {
 				assert.Equal(t, "ok", response["message"])
 
 				data := response["data"].(map[string]interface{})
-				assert.Equal(t, "g:\\tmp\\projects\\go\\kubernetes", data["rootPath"])
+				assert.Equal(t, s.workspacePath, data["rootPath"])
 
 				directoryTree := data["directoryTree"].([]interface{})
 				assert.Greater(t, len(directoryTree), 0)
@@ -56,7 +56,7 @@ func (s *ListDirIntegrationTestSuite) TestListDir() {
 		{
 			name:           "列出根目录内容",
 			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
+			codebasePath:   s.workspacePath,
 			subDir:         "",
 			expectedStatus: http.StatusOK,
 			expectedCode:   "0",
@@ -65,15 +65,6 @@ func (s *ListDirIntegrationTestSuite) TestListDir() {
 				data := response["data"].(map[string]interface{})
 				directoryTree := data["directoryTree"].([]interface{})
 				assert.Greater(t, len(directoryTree), 0)
-			},
-		},
-		{
-			name:           "缺少clientId参数",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
-			subDir:         "cmd",
-			expectedStatus: http.StatusBadRequest,
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.False(t, response["success"].(bool))
 			},
 		},
 		{
@@ -88,16 +79,12 @@ func (s *ListDirIntegrationTestSuite) TestListDir() {
 		{
 			name:           "不存在的子目录",
 			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
+			codebasePath:   s.workspacePath,
 			subDir:         "nonexistent_dir",
-			expectedStatus: http.StatusOK,
-			expectedCode:   "0",
+			expectedStatus: http.StatusBadRequest,
+			expectedCode:   "-1",
 			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.True(t, response["success"].(bool))
-				data := response["data"].(map[string]interface{})
-				directoryTree := data["directoryTree"].([]interface{})
-				// 不存在的目录应该返回空列表
-				assert.Len(t, directoryTree, 0)
+				assert.False(t, response["success"].(bool))
 			},
 		},
 		{

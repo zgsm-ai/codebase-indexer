@@ -1,13 +1,9 @@
 package api
 
 import (
-	"bytes"
-	"codebase-indexer/internal/utils"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -16,35 +12,7 @@ import (
 )
 
 type GetSnippetsIntegrationTestSuite struct {
-	suite.Suite
-	baseURL       string
-	workspacePath string
-	extraHeaders  map[string]string
-}
-
-func (s *GetSnippetsIntegrationTestSuite) SetupSuite() {
-	// 设置API基础URL
-	s.baseURL = "http://localhost:11380"
-
-	// 设置工作目录路径
-	s.workspacePath = "g:\\tmp\\projects\\go\\kubernetes"
-	s.extraHeaders = make(map[string]string)
-	rootDir, err := utils.GetRootDir("codebase_indexer_test")
-	if err != nil {
-		panic(err)
-	}
-	authJsonPath := filepath.Join(rootDir, "share", "auth.json")
-	file, err := os.ReadFile(authJsonPath)
-	if err != nil {
-		panic(err)
-	}
-	authConfig := make(map[string]string)
-	if err = json.Unmarshal(file, &authConfig); err != nil {
-		panic(err)
-	}
-	s.extraHeaders["Client-ID"] = authConfig["machine_id"]
-	s.extraHeaders["Server-Endpoint"] = authConfig["base_url"]
-	s.extraHeaders["Authorization"] = fmt.Sprintf("Bearer %s", authConfig["access_token"])
+	BaseIntegrationTestSuite
 }
 
 type testCase struct {
@@ -66,8 +34,8 @@ func (s *GetSnippetsIntegrationTestSuite) TestReadCodeSnippets() {
 			workspacePath: s.workspacePath,
 			codeSnippets: []map[string]interface{}{
 				{
-					"filePath":  filepath.Join(s.workspacePath, "cmd", "kubelet", "app", "server.go"),
-					"startLine": 15,
+					"filePath":  filepath.Join(s.workspacePath, "test", "api", "get_snippets_test.go"),
+					"startLine": 1,
 					"endLine":   25,
 				},
 			},
@@ -79,8 +47,8 @@ func (s *GetSnippetsIntegrationTestSuite) TestReadCodeSnippets() {
 				assert.Len(t, list, 1)
 
 				snippet := list[0].(map[string]interface{})
-				assert.Equal(t, filepath.Join(s.workspacePath, "cmd", "kubelet", "app", "server.go"), snippet["filePath"])
-				assert.Equal(t, float64(15), snippet["startLine"])
+				assert.Equal(t, filepath.Join(s.workspacePath, "test", "api", "get_snippets_test.go"), snippet["filePath"])
+				assert.Equal(t, float64(1), snippet["startLine"])
 				assert.Equal(t, float64(25), snippet["endLine"])
 				assert.Contains(t, snippet["content"].(string), "package")
 			},
@@ -91,12 +59,12 @@ func (s *GetSnippetsIntegrationTestSuite) TestReadCodeSnippets() {
 			workspacePath: s.workspacePath,
 			codeSnippets: []map[string]interface{}{
 				{
-					"filePath":  filepath.Join(s.workspacePath, "cmd", "kubelet", "app", "server.go"),
+					"filePath":  filepath.Join(s.workspacePath, "test", "api", "get_snippets_test.go"),
 					"startLine": 1,
 					"endLine":   5,
 				},
 				{
-					"filePath":  filepath.Join(s.workspacePath, "cmd", "kube-apiserver", "app", "server.go"),
+					"filePath":  filepath.Join(s.workspacePath, "test", "api", "get_file_structure_test.go"),
 					"startLine": 1,
 					"endLine":   5,
 				},
@@ -115,7 +83,7 @@ func (s *GetSnippetsIntegrationTestSuite) TestReadCodeSnippets() {
 			workspacePath: s.workspacePath,
 			codeSnippets: []map[string]interface{}{
 				{
-					"filePath":  filepath.Join(s.workspacePath, "cmd", "kubelet", "app", "server.go"),
+					"filePath":  filepath.Join(s.workspacePath, "internal", "service", "indexer.go"),
 					"startLine": 1,
 					"endLine":   600, // 超过500行限制
 				},
@@ -142,7 +110,7 @@ func (s *GetSnippetsIntegrationTestSuite) TestReadCodeSnippets() {
 				snippets := make([]map[string]interface{}, 201)
 				for i := 0; i < 201; i++ {
 					snippets[i] = map[string]interface{}{
-						"filePath":  filepath.Join(s.workspacePath, "cmd", "kubelet", "app", "server.go"),
+						"filePath":  filepath.Join(s.workspacePath, "internal", "service", "indexer.go"),
 						"startLine": 1,
 						"endLine":   10,
 					}
@@ -174,22 +142,6 @@ func (s *GetSnippetsIntegrationTestSuite) TestReadCodeSnippets() {
 			},
 		},
 		{
-			name:          "缺少clientId",
-			workspacePath: s.workspacePath,
-			codeSnippets: []map[string]interface{}{
-				{
-					"filePath":  filepath.Join(s.workspacePath, "cmd", "kubelet", "app", "server.go"),
-					"startLine": 1,
-					"endLine":   10,
-				},
-			},
-			expectedStatus: http.StatusBadRequest,
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				// 验证返回错误
-				assert.False(t, response["success"].(bool))
-			},
-		},
-		{
 			name:     "缺少workspacePath",
 			clientId: "test-client",
 			codeSnippets: []map[string]interface{}{
@@ -217,7 +169,7 @@ func (s *GetSnippetsIntegrationTestSuite) TestReadCodeSnippets() {
 			},
 		},
 		{
-			name:          "不存在的文件",
+			name:          "不存在的文件", // 批量接口，不报错
 			clientId:      "test-client",
 			workspacePath: s.workspacePath,
 			codeSnippets: []map[string]interface{}{
@@ -229,8 +181,11 @@ func (s *GetSnippetsIntegrationTestSuite) TestReadCodeSnippets() {
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, response map[string]interface{}) {
-				// 验证返回错误
+				// 验证空
 				assert.True(t, response["success"].(bool))
+				data := response["data"].(map[string]interface{})
+				list := data["list"].([]interface{})
+				assert.Len(t, list, 0)
 			},
 		},
 	}
@@ -246,18 +201,22 @@ func (s *GetSnippetsIntegrationTestSuite) TestReadCodeSnippets() {
 			}
 
 			var resp *http.Response
+			var request *http.Request
 			var err error
 
 			// 特殊处理无效JSON的情况
 			if tc.name == "无效JSON请求体" {
-				resp, err = http.Post(s.baseURL+"/codebase-indexer/api/v1/snippets/read", "application/json", bytes.NewBuffer([]byte("invalid json")))
+				request, err = s.CreatePOSTRequest(s.baseURL+"/codebase-indexer/api/v1/snippets/read", []byte("invalid json"))
+				assert.NoError(t, err)
 			} else {
 				// 发送正常请求
 				jsonData, err := json.Marshal(reqBody)
 				s.Require().NoError(err)
-				resp, err = http.Post(s.baseURL+"/codebase-indexer/api/v1/snippets/read", "application/json", bytes.NewBuffer(jsonData))
+				request, err = s.CreatePOSTRequest(s.baseURL+"/codebase-indexer/api/v1/snippets/read", jsonData)
+
 			}
 
+			resp, err = s.SendRequest(request)
 			s.Require().NoError(err)
 			defer resp.Body.Close()
 

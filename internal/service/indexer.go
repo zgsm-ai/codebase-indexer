@@ -864,7 +864,6 @@ func (i *indexer) QueryReferences(ctx context.Context, opts *types.QueryReferenc
 		opts.EndLine = opts.StartLine + maxQueryLineLimit
 	}
 
-	// TODO projectUuid
 	project, err := i.workspaceReader.GetProjectByFilePath(ctx, opts.Workspace, filePath, true)
 	if err != nil {
 		return nil, err
@@ -878,7 +877,7 @@ func (i *indexer) QueryReferences(ctx context.Context, opts *types.QueryReferenc
 
 	exists, err := i.storage.ProjectIndexExists(projectUuid)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check project %s index store, err:%v", projectUuid, err)
+		return nil, fmt.Errorf("failed to check workspace %s index, err:%v", opts.Workspace, err)
 	}
 	if !exists {
 		return nil, fmt.Errorf("workspace %s index not exists", opts.Workspace)
@@ -1130,7 +1129,7 @@ func (i *indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefi
 
 	exists, err := i.storage.ProjectIndexExists(projectUuid)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check project %s index store, err:%v", projectUuid, err)
+		return nil, fmt.Errorf("failed to check workspace %s index, err:%v", options.Workspace, err)
 	}
 	if !exists {
 		return nil, fmt.Errorf("workspace %s index not exists", options.Workspace)

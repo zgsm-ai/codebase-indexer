@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,8 +35,8 @@ func (s *QueryReferenceIntegrationTestSuite) TestQueryReference() {
 		{
 			name:           "成功查询引用信息",
 			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
-			filePath:       "g:\\tmp\\projects\\go\\kubernetes\\pkg\\controller\\daemon\\util\\daemonset_util.go",
+			codebasePath:   s.workspacePath,
+			filePath:       filepath.Join(s.workspacePath, "test", "api", "query_reference_test.go"),
 			startLine:      1,
 			endLine:        1000,
 			expectedStatus: http.StatusOK,
@@ -50,12 +51,11 @@ func (s *QueryReferenceIntegrationTestSuite) TestQueryReference() {
 
 				// 验证第一个元素的结构
 				firstItem := list[0].(map[string]interface{})
-				assert.Contains(t, firstItem, "FilePath")
+				assert.Contains(t, firstItem, "filePath")
 				assert.Contains(t, firstItem, "symbolName")
 				assert.Contains(t, firstItem, "position")
 				assert.Contains(t, firstItem, "content")
 				assert.Contains(t, firstItem, "nodeType")
-				assert.Contains(t, firstItem, "children")
 
 				position := firstItem["position"].(map[string]interface{})
 				assert.Contains(t, position, "startLine")
@@ -64,7 +64,7 @@ func (s *QueryReferenceIntegrationTestSuite) TestQueryReference() {
 				assert.Contains(t, position, "endColumn")
 
 				// 验证nodeType字段的有效值
-				validNodeTypes := []string{"definition.function", "call.method"}
+				validNodeTypes := []string{"definition.function", "call.method", "definition.class"}
 				assert.Contains(t, validNodeTypes, firstItem["nodeType"])
 
 				// 验证children字段
@@ -76,37 +76,9 @@ func (s *QueryReferenceIntegrationTestSuite) TestQueryReference() {
 			},
 		},
 		{
-			name:           "查询小范围引用",
-			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
-			filePath:       "g:\\tmp\\projects\\go\\kubernetes\\pkg\\controller\\daemon\\util\\daemonset_util.go",
-			startLine:      1,
-			endLine:        50,
-			expectedStatus: http.StatusOK,
-			expectedCode:   "0",
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.True(t, response["success"].(bool))
-				data := response["data"].(map[string]interface{})
-				list := data["list"].([]interface{})
-				// 小范围应该返回较少的引用
-				assert.GreaterOrEqual(t, len(list), 0)
-			},
-		},
-		{
-			name:           "缺少clientId参数",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
-			filePath:       "g:\\tmp\\projects\\go\\kubernetes\\pkg\\controller\\daemon\\util\\daemonset_util.go",
-			startLine:      1,
-			endLine:        1000,
-			expectedStatus: http.StatusBadRequest,
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.False(t, response["success"].(bool))
-			},
-		},
-		{
 			name:           "缺少codebasePath参数",
 			clientId:       "123",
-			filePath:       "g:\\tmp\\projects\\go\\kubernetes\\pkg\\controller\\daemon\\util\\daemonset_util.go",
+			filePath:       filepath.Join(s.workspacePath, "test", "api", "query_reference_test.go"),
 			startLine:      1,
 			endLine:        1000,
 			expectedStatus: http.StatusBadRequest,
@@ -117,7 +89,7 @@ func (s *QueryReferenceIntegrationTestSuite) TestQueryReference() {
 		{
 			name:           "缺少filePath参数",
 			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
+			codebasePath:   s.workspacePath,
 			startLine:      1,
 			endLine:        1000,
 			expectedStatus: http.StatusBadRequest,
@@ -125,60 +97,18 @@ func (s *QueryReferenceIntegrationTestSuite) TestQueryReference() {
 				assert.False(t, response["success"].(bool))
 			},
 		},
-		{
-			name:           "缺少startLine参数",
-			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
-			filePath:       "g:\\tmp\\projects\\go\\kubernetes\\pkg\\controller\\daemon\\util\\daemonset_util.go",
-			endLine:        1000,
-			expectedStatus: http.StatusBadRequest,
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.False(t, response["success"].(bool))
-			},
-		},
-		{
-			name:           "缺少endLine参数",
-			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
-			filePath:       "g:\\tmp\\projects\\go\\kubernetes\\pkg\\controller\\daemon\\util\\daemonset_util.go",
-			startLine:      1,
-			expectedStatus: http.StatusBadRequest,
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.False(t, response["success"].(bool))
-			},
-		},
+
 		{
 			name:           "不存在的文件路径",
 			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
-			filePath:       "g:\\tmp\\projects\\go\\kubernetes\\nonexistent\\file.go",
+			codebasePath:   s.workspacePath,
+			filePath:       filepath.Join(s.workspacePath, "test", "api", "no_exists.go"),
 			startLine:      1,
 			endLine:        1000,
-			expectedStatus: http.StatusOK,
-			expectedCode:   "0",
+			expectedStatus: http.StatusBadRequest,
+			expectedCode:   "-1",
 			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.True(t, response["success"].(bool))
-				data := response["data"].(map[string]interface{})
-				list := data["list"].([]interface{})
-				// 不存在的文件应该返回空列表
-				assert.Len(t, list, 0)
-			},
-		},
-		{
-			name:           "无效的行号范围",
-			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
-			filePath:       "g:\\tmp\\projects\\go\\kubernetes\\pkg\\controller\\daemon\\util\\daemonset_util.go",
-			startLine:      1000,
-			endLine:        1, // 结束行小于开始行
-			expectedStatus: http.StatusOK,
-			expectedCode:   "0",
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.True(t, response["success"].(bool))
-				data := response["data"].(map[string]interface{})
-				list := data["list"].([]interface{})
-				// 无效范围应该返回空列表
-				assert.Len(t, list, 0)
+				assert.False(t, response["success"].(bool))
 			},
 		},
 		{

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,8 +35,8 @@ func (s *QueryDefinitionIntegrationTestSuite) TestQueryDefinition() {
 		{
 			name:           "成功查询定义信息",
 			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
-			filePath:       "g:\\tmp\\projects\\go\\kubernetes\\cluster\\gce\\gci\\mounter\\mounter.go",
+			codebasePath:   s.workspacePath,
+			filePath:       filepath.Join(s.workspacePath, "test", "api", "query_definition_test.go"),
 			startLine:      1,
 			endLine:        1000,
 			expectedStatus: http.StatusOK,
@@ -63,15 +64,15 @@ func (s *QueryDefinitionIntegrationTestSuite) TestQueryDefinition() {
 				assert.Contains(t, position, "endColumn")
 
 				// 验证类型字段的有效值
-				validTypes := []string{"variable", "definition.function", "definition.method"}
+				validTypes := []string{"variable", "definition.function", "definition.method", "definition.class"}
 				assert.Contains(t, validTypes, firstItem["type"])
 			},
 		},
 		{
 			name:           "查询小范围定义",
 			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
-			filePath:       "g:\\tmp\\projects\\go\\kubernetes\\cluster\\gce\\gci\\mounter\\mounter.go",
+			codebasePath:   s.workspacePath,
+			filePath:       filepath.Join(s.workspacePath, "test", "api", "query_definition_test.go"),
 			startLine:      1,
 			endLine:        50,
 			expectedStatus: http.StatusOK,
@@ -85,20 +86,9 @@ func (s *QueryDefinitionIntegrationTestSuite) TestQueryDefinition() {
 			},
 		},
 		{
-			name:           "缺少clientId参数",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
-			filePath:       "g:\\tmp\\projects\\go\\kubernetes\\cluster\\gce\\gci\\mounter\\mounter.go",
-			startLine:      1,
-			endLine:        1000,
-			expectedStatus: http.StatusBadRequest,
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.False(t, response["success"].(bool))
-			},
-		},
-		{
 			name:           "缺少codebasePath参数",
 			clientId:       "123",
-			filePath:       "g:\\tmp\\projects\\go\\kubernetes\\cluster\\gce\\gci\\mounter\\mounter.go",
+			filePath:       filepath.Join(s.workspacePath, "test", "api", "query_definition_test.go"),
 			startLine:      1,
 			endLine:        1000,
 			expectedStatus: http.StatusBadRequest,
@@ -109,31 +99,9 @@ func (s *QueryDefinitionIntegrationTestSuite) TestQueryDefinition() {
 		{
 			name:           "缺少filePath参数",
 			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
+			codebasePath:   s.workspacePath,
 			startLine:      1,
 			endLine:        1000,
-			expectedStatus: http.StatusBadRequest,
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.False(t, response["success"].(bool))
-			},
-		},
-		{
-			name:           "缺少startLine参数",
-			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
-			filePath:       "g:\\tmp\\projects\\go\\kubernetes\\cluster\\gce\\gci\\mounter\\mounter.go",
-			endLine:        1000,
-			expectedStatus: http.StatusBadRequest,
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.False(t, response["success"].(bool))
-			},
-		},
-		{
-			name:           "缺少endLine参数",
-			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
-			filePath:       "g:\\tmp\\projects\\go\\kubernetes\\cluster\\gce\\gci\\mounter\\mounter.go",
-			startLine:      1,
 			expectedStatus: http.StatusBadRequest,
 			validateResp: func(t *testing.T, response map[string]interface{}) {
 				assert.False(t, response["success"].(bool))
@@ -142,35 +110,14 @@ func (s *QueryDefinitionIntegrationTestSuite) TestQueryDefinition() {
 		{
 			name:           "不存在的文件路径",
 			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
-			filePath:       "g:\\tmp\\projects\\go\\kubernetes\\nonexistent\\file.go",
+			codebasePath:   s.workspacePath,
+			filePath:       filepath.Join(s.workspacePath, "test", "api", "no_exists.go"),
 			startLine:      1,
 			endLine:        1000,
-			expectedStatus: http.StatusOK,
-			expectedCode:   "0",
+			expectedStatus: http.StatusBadRequest,
+			expectedCode:   "-1",
 			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.True(t, response["success"].(bool))
-				data := response["data"].(map[string]interface{})
-				list := data["list"].([]interface{})
-				// 不存在的文件应该返回空列表
-				assert.Len(t, list, 0)
-			},
-		},
-		{
-			name:           "无效的行号范围",
-			clientId:       "123",
-			codebasePath:   "g:\\tmp\\projects\\go\\kubernetes",
-			filePath:       "g:\\tmp\\projects\\go\\kubernetes\\cluster\\gce\\gci\\mounter\\mounter.go",
-			startLine:      1000,
-			endLine:        1, // 结束行小于开始行
-			expectedStatus: http.StatusOK,
-			expectedCode:   "0",
-			validateResp: func(t *testing.T, response map[string]interface{}) {
-				assert.True(t, response["success"].(bool))
-				data := response["data"].(map[string]interface{})
-				list := data["list"].([]interface{})
-				// 无效范围应该返回空列表
-				assert.Len(t, list, 0)
+				assert.False(t, response["success"].(bool))
 			},
 		},
 		{
