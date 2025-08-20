@@ -327,11 +327,20 @@ func (w *workspaceReader) WalkFile(ctx context.Context, dir string, walkFn types
 			return nil
 		}
 
+		var size int64
+		var modTime time.Time
+		if fileInfo, err := info.Info(); err == nil {
+			size = fileInfo.Size()
+			modTime = fileInfo.ModTime()
+		}
+
 		skip, err := walkOpts.VisitPattern.ShouldSkip(
 			&types.FileInfo{
-				Name:  info.Name(),
-				Path:  filePath,
-				IsDir: info.IsDir(),
+				Name:    info.Name(),
+				Path:    filePath,
+				IsDir:   info.IsDir(),
+				Size:    size,
+				ModTime: modTime,
 			})
 		if skip {
 			// 跳过目录
@@ -362,17 +371,13 @@ func (w *workspaceReader) WalkFile(ctx context.Context, dir string, walkFn types
 			Path:         filePath,
 			RelativePath: relativePath,
 			Info: &types.FileInfo{
-				Name: info.Name(),
-				Path: filePath,
+				Name:    info.Name(),
+				Path:    filePath,
+				IsDir:   info.IsDir(),
+				Size:    size,
+				ModTime: modTime,
 			},
 			ParentPath: filepath.Dir(filePath),
-		}
-		fileInfo, _ := info.Info()
-		if fileInfo != nil {
-			walkCtx.Info.Size = fileInfo.Size()
-			walkCtx.Info.ModTime = fileInfo.ModTime()
-			walkCtx.Info.Mode = fileInfo.Mode()
-			walkCtx.Info.IsDir = fileInfo.IsDir()
 		}
 
 		return walkFn(walkCtx)
@@ -494,7 +499,6 @@ func (l *workspaceReader) Tree(ctx context.Context, workspacePath string, subDir
 			if fileInfo != nil {
 				node.FileInfo.Size = fileInfo.Size()
 				node.FileInfo.ModTime = fileInfo.ModTime()
-				node.FileInfo.Mode = fileInfo.Mode()
 				node.FileInfo.IsDir = isLast && info.IsDir()
 			}
 
@@ -598,7 +602,6 @@ func (w *workspaceReader) List(ctx context.Context, path string) ([]*types.FileI
 				w.logger.Warn("workspace_reader failed to get file info for %s: %v", fullPath, err)
 			} else {
 				fileInfo.Size = info.Size()
-				fileInfo.Mode = info.Mode()
 				fileInfo.ModTime = info.ModTime()
 			}
 		}

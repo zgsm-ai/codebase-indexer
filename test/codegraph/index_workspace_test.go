@@ -12,6 +12,31 @@ import (
 	"time"
 )
 
+// g:\tmp\projects\c\linux-master
+// g:\tmp\projects\c\netdata
+// g:\tmp\projects\c\openssl
+// g:\tmp\projects\c\redis
+// g:\tmp\projects\c\sqlite
+// g:\tmp\projects\cpp\grpc
+// g:\tmp\projects\cpp\opencv
+// g:\tmp\projects\cpp\protobuf
+// g:\tmp\projects\go\docker-ce
+// g:\tmp\projects\go\go
+// g:\tmp\projects\go\kubernetes
+// g:\tmp\projects\go\weaviate
+// g:\tmp\projects\java\elasticsearch
+// g:\tmp\projects\java\hadoop
+// g:\tmp\projects\java\mall
+// g:\tmp\projects\javascript\angular
+// g:\tmp\projects\javascript\react
+// g:\tmp\projects\javascript\vue
+// g:\tmp\projects\python\django
+// g:\tmp\projects\python\pandas
+// g:\tmp\projects\python\scikit-learn
+// g:\tmp\projects\typescript\svelte
+// g:\tmp\projects\typescript\TypeScript
+// g:\tmp\projects\typescript\vue-next
+
 const testRootDir = "G:\\tmp\\projects"
 
 func getSupportedExtByLanguageTestHelper(language lang.Language) []string {

@@ -403,7 +403,9 @@ func (l *codebaseService) QueryDefinition(ctx context.Context, req *dto.SearchDe
 	if req.CodebasePath == types.EmptyString {
 		return nil, fmt.Errorf("missing param: codebasePath")
 	}
-
+	if !filepath.IsAbs(req.FilePath) {
+		return nil, fmt.Errorf("param filePath must be absolute path")
+	}
 	_, err = lang.InferLanguage(req.FilePath)
 	if err != nil {
 		return nil, errs.ErrUnSupportedLanguage
@@ -480,6 +482,10 @@ func (l *codebaseService) QueryReference(ctx context.Context, req *dto.SearchRef
 
 	if req.FilePath == types.EmptyString {
 		return nil, errs.NewMissingParamError("filePath")
+	}
+
+	if !filepath.IsAbs(req.FilePath) {
+		return nil, fmt.Errorf("param filePath must be absolute path")
 	}
 
 	nodes, err := l.indexer.QueryReferences(ctx, &types.QueryReferenceOptions{

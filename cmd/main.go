@@ -142,6 +142,12 @@ func main() {
 
 	// 创建存储
 	codegraphStore, err := store.NewLevelDBStorage(utils.IndexDir, appLogger)
+	defer func(codegraphStore *store.LevelDBStorage) {
+		err = codegraphStore.Close()
+		if err != nil {
+			appLogger.Error("failed to close codegraph store: %v", err)
+		}
+	}(codegraphStore)
 
 	// 创建工作区读取器
 	workspaceReader := workspace.NewWorkSpaceReader(appLogger)
@@ -155,7 +161,7 @@ func main() {
 	dependencyAnalyzer := analyzer.NewDependencyAnalyzer(appLogger, packageClassifier, workspaceReader, codegraphStore)
 
 	indexer := service.NewCodeIndexer(scanRepo, sourceFileParser, dependencyAnalyzer, workspaceReader, codegraphStore,
-		workspaceRepo, service.IndexerConfig{VisitPattern: workspace.DefaultVisitPattern}, appLogger) //todo 文件忽略列表
+		workspaceRepo, service.IndexerConfig{VisitPattern: workspace.DefaultVisitPattern}, appLogger)
 
 	codebaseService := service.NewCodebaseService(storageManager, appLogger, workspaceReader, workspaceRepo, definition.NewDefinitionParser(), indexer)
 	extensionService := service.NewExtensionService(storageManager, syncRepo, scanRepo, workspaceRepo, eventRepo, codebaseEmbeddingRepo, codebaseService, appLogger)

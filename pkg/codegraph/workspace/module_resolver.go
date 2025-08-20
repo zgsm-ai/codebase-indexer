@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pelletier/go-toml/v2"
 	"golang.org/x/mod/modfile"
 )
 
@@ -358,7 +359,7 @@ func (mr *ModuleResolver) parsePyProjectToml(pyprojectPath string) ([]string, er
 	}
 
 	var pyproject PyProjectToml
-	if err := json.Unmarshal(data, &pyproject); err != nil {
+	if err := toml.Unmarshal(data, &pyproject); err != nil {
 		// 如果JSON解析失败，尝试简单的文本解析
 		return mr.parsePyProjectTomlText(string(data)), nil
 	}

@@ -2,7 +2,6 @@ package types
 
 import (
 	"errors"
-	"io/fs"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -27,12 +26,11 @@ type TreeNode struct {
 }
 
 type FileInfo struct {
-	Name    string      `json:"name"`  // 节点名称
-	Path    string      `json:"path"`  // 节点路径
-	Size    int64       `json:"-"`     // 文件大小（仅文件有）
-	ModTime time.Time   `json:"-"`     // 修改时间（可选）
-	IsDir   bool        `json:"IsDir"` // 是否是目录
-	Mode    fs.FileMode `json:"-"`
+	Name    string    `json:"name"`  // 节点名称
+	Path    string    `json:"path"`  // 节点路径
+	Size    int64     `json:"-"`     // 文件大小（仅文件有）
+	ModTime time.Time `json:"-"`     // 修改时间（可选）
+	IsDir   bool      `json:"IsDir"` // 是否是目录
 }
 
 // WalkContext provides context information during directory traversal
@@ -79,14 +77,23 @@ func (v *VisitPattern) ShouldSkip(fileInfo *FileInfo) (bool, error) {
 	path := fileInfo.Path
 	base := filepath.Base(path)
 	fileExt := filepath.Ext(base)
+
+	// 1. 排除指定扩展名的文件
 	if fileExt != EmptyString && slices.Contains(v.ExcludeExts, fileExt) {
 		return true, nil
 	}
 
-	if len(v.IncludeExts) > 0 && fileExt != EmptyString && !slices.Contains(v.IncludeExts, fileExt) {
-		return true, nil
+	// 2. 仅包含指定扩展名的文件（非目录）
+	if len(v.IncludeExts) > 0 && !isDir {
+		if fileExt == EmptyString { // 无扩展名的文件直接排除
+			return true, nil
+		}
+		if !slices.Contains(v.IncludeExts, fileExt) { // 扩展名不在包含列表中
+			return true, nil
+		}
 	}
 
+	// 3. 自定义跳过函数（优先级：用户自定义逻辑高于内置规则）
 	if v.SkipFunc != nil {
 		skip, err := v.SkipFunc(fileInfo)
 		if skip {
@@ -94,31 +101,59 @@ func (v *VisitPattern) ShouldSkip(fileInfo *FileInfo) (bool, error) {
 		}
 	}
 
+	// 4. 目录特定规则（基于完整路径判断，解决父/子目录区分问题）
 	if isDir {
-		for _, p := range v.ExcludeDirs {
-			if base == p {
+		// 4.1 排除指定路径的目录（支持完整路径或特定层级目录）
+		normalizedPath := filepath.Clean(path) // 标准化路径（处理../等相对路径）
+		for _, excludePath := range v.ExcludeDirs {
+			normalizedExclude := filepath.Clean(excludePath)
+			// 匹配规则：目录路径完全一致，或为目标目录的子目录（可选）
+			if normalizedPath == normalizedExclude ||
+				strings.HasPrefix(normalizedPath, normalizedExclude+string(filepath.Separator)) {
 				return true, nil
 			}
 		}
 
-		for _, p := range v.IncludeDirs {
-			if base != p {
+		// 4.2 仅包含指定路径的目录（支持完整路径或特定层级目录）
+		if len(v.IncludeDirs) > 0 {
+			found := false
+			normalizedPath := filepath.Clean(path)
+			for _, includePath := range v.IncludeDirs {
+				normalizedInclude := filepath.Clean(includePath)
+				// 匹配规则：目录路径完全一致，或为目标目录的子目录（可选）
+				if normalizedPath == normalizedInclude ||
+					strings.HasPrefix(normalizedPath, normalizedInclude+string(filepath.Separator)) {
+					found = true
+					break
+				}
+			}
+			if !found { // 不在包含列表中则跳过
 				return true, nil
 			}
 		}
 	}
 
+	// 5. 排除指定前缀的文件/目录（基于名称）
 	for _, p := range v.ExcludePrefixes {
 		if strings.HasPrefix(base, p) {
 			return true, nil
 		}
 	}
 
-	for _, p := range v.IncludePrefixes {
-		if !strings.HasPrefix(base, p) {
+	// 6. 仅包含指定前缀的文件/目录（基于名称）
+	if len(v.IncludePrefixes) > 0 {
+		found := false
+		for _, p := range v.IncludePrefixes {
+			if strings.HasPrefix(base, p) {
+				found = true
+				break
+			}
+		}
+		if !found {
 			return true, nil
 		}
 	}
+
 	return false, nil
 }
 
