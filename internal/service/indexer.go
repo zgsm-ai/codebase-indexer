@@ -399,37 +399,47 @@ func (i *indexer) RemoveIndexes(ctx context.Context, workspacePath string, fileP
 	if len(projects) == 0 {
 		return fmt.Errorf("no project found in workspace %s", workspacePath)
 	}
-
+	workspaceModel, err := i.workspaceRepository.GetWorkspaceByPath(workspacePath)
+	if err != nil {
+		return err
+	}
 	var errs []error
 	projectFilesMap, err := i.groupFilesByProject(projects, filePaths)
 	if err != nil {
 		return fmt.Errorf("group files by project failed: %w", err)
 	}
-
+	totalRemoved := 0
 	for projectUuid, files := range projectFilesMap {
 		pStart := time.Now()
 		i.logger.Info("start to remove project %s files index", projectUuid)
 
-		if err := i.removeIndexByFilePaths(ctx, projectUuid, files); err != nil {
+		removed, err := i.removeIndexByFilePaths(ctx, projectUuid, files)
+		if err != nil {
 			errs = append(errs, err)
 		}
-
-		i.logger.Info("remove project %s files index end, cost %d ms", projectUuid,
-			time.Since(pStart).Milliseconds())
+		totalRemoved += removed
+		i.logger.Info("remove project %s files index end, cost %d ms, removed %d index.", projectUuid,
+			time.Since(pStart).Milliseconds(), removed)
 	}
-
+	// 更新为删除后的值
+	if workspaceModel != nil {
+		if err := i.workspaceRepository.UpdateCodegraphInfo(workspacePath,
+			workspaceModel.CodegraphFileNum-totalRemoved, time.Now().Unix()); err != nil {
+			return errors.Join(append(errs, err)...)
+		}
+	}
 	err = errors.Join(errs...)
-	i.logger.Info("remove workspace %s files index successfully, cost %d ms, errors: %v",
-		workspacePath, time.Since(start).Milliseconds(), utils.TruncateError(err))
+	i.logger.Info("remove workspace %s files index successfully, cost %d ms, removed %d index, errors: %v",
+		workspacePath, time.Since(start).Milliseconds(), totalRemoved, utils.TruncateError(err))
 	return err
 }
 
 // removeIndexByFilePaths 删除单个项目的索引
-func (i *indexer) removeIndexByFilePaths(ctx context.Context, projectUuid string, filePaths []string) error {
+func (i *indexer) removeIndexByFilePaths(ctx context.Context, projectUuid string, filePaths []string) (int, error) {
 	// 1. 查询path相应的file_table
 	deleteFileTables, err := i.searchFileElementTablesByPath(ctx, projectUuid, filePaths)
 	if err != nil {
-		return fmt.Errorf("get file tables for deletion failed: %w", err)
+		return 0, fmt.Errorf("get file tables for deletion failed: %w", err)
 	}
 	deletePaths := make(map[string]any)
 	for _, v := range deleteFileTables {
@@ -438,15 +448,16 @@ func (i *indexer) removeIndexByFilePaths(ctx context.Context, projectUuid string
 
 	// 2. 清理符号定义
 	if err = i.cleanupSymbolOccurrences(ctx, projectUuid, deleteFileTables, deletePaths); err != nil {
-		return fmt.Errorf("cleanup symbol definitions failed: %w", err)
+		return 0, fmt.Errorf("cleanup symbol definitions failed: %w", err)
 	}
 
 	// 3. 删除path索引
-	if err = i.deleteFileIndexes(ctx, projectUuid, filePaths); err != nil {
-		return fmt.Errorf("delete file indexes failed: %w", err)
+	deleted, err := i.deleteFileIndexes(ctx, projectUuid, filePaths)
+	if err != nil {
+		return 0, fmt.Errorf("delete file indexes failed: %w", err)
 	}
 
-	return nil
+	return deleted, nil
 }
 
 // searchFileElementTablesByPath 获取待删除的文件表和路径（包括文件夹）
@@ -572,9 +583,9 @@ func (i *indexer) cleanupSymbolOccurrences(ctx context.Context, projectUuid stri
 }
 
 // deleteFileIndexes 删除文件索引
-func (i *indexer) deleteFileIndexes(ctx context.Context, puuid string, filePaths []string) error {
+func (i *indexer) deleteFileIndexes(ctx context.Context, puuid string, filePaths []string) (int, error) {
 	var errs []error
-
+	deleted := 0
 	for _, fp := range filePaths {
 		// 删除path索引
 		language, err := lang.InferLanguage(fp)
@@ -583,14 +594,16 @@ func (i *indexer) deleteFileIndexes(ctx context.Context, puuid string, filePaths
 		}
 		if err = i.storage.Delete(ctx, puuid, store.ElementPathKey{Language: language, Path: fp}); err != nil {
 			errs = append(errs, err)
+		} else {
+			deleted++
 		}
 	}
 
 	if len(errs) > 0 {
-		return errors.Join(errs...)
+		return deleted, errors.Join(errs...)
 	}
 
-	return nil
+	return deleted, nil
 }
 
 // IndexFiles 根据工作区路径、文件路径，批量保存索引
@@ -652,7 +665,7 @@ func (i *indexer) IndexFiles(ctx context.Context, workspacePath string, filePath
 				TotalFilesCnt:        len(projectFiles),
 				Project:              project,
 				WorkspacePath:        workspacePath,
-				PreviousFileNum:      workspaceModel.FileNum - len(projectFiles),
+				PreviousFileNum:      workspaceModel.FileNum,
 				Concurrency:          i.config.MaxConcurrency,
 				BatchSize:            i.config.MaxBatchSize,
 			}
@@ -1424,6 +1437,10 @@ func (i *indexer) RemoveAllIndexes(ctx context.Context, workspacePath string) er
 	for _, p := range projects {
 		errs = append(errs, i.storage.DeleteAll(ctx, p.Uuid))
 	}
+	// 将数据库数据置为0
+	if err := i.workspaceRepository.UpdateCodegraphInfo(workspacePath, 0, time.Now().Unix()); err != nil {
+		return errors.Join(append(errs, fmt.Errorf("update codegraph info err:%v", err))...)
+	}
 	return errors.Join(errs...)
 }
 
@@ -1580,7 +1597,6 @@ func (i *indexer) parseFiles(ctx context.Context, files []*types.FileWithModTime
 		FailedFilePaths: make([]string, 0, totalFiles/4), // 预估失败文件数约为文件数的25%
 	}
 
-	// TODO 大量文件，会导致错误很多
 	var errs []error
 
 	for _, f := range files {
