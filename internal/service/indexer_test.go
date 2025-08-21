@@ -1099,7 +1099,7 @@ func TestQueryReferences(t *testing.T) {
 			// 设置存储行为
 			if tc.mockStorage.fileElementTable != nil {
 				// 设置 ProjectIndexExists 方法
-				mockStorage.EXPECT().ExistsProject(gomock.Any()).Return(true, nil)
+				mockStorage.EXPECT().ProjectIndexExists(gomock.Any()).Return(true, nil)
 
 				// 设置 Get 方法
 				fileTableBytes, err := proto.Marshal(tc.mockStorage.fileElementTable)
@@ -1142,7 +1142,7 @@ func TestQueryReferences(t *testing.T) {
 			} else {
 				// 文件不存在的情况
 				// 设置 ProjectIndexExists 方法
-				mockStorage.EXPECT().ExistsProject(gomock.Any()).Return(true, nil)
+				mockStorage.EXPECT().ProjectIndexExists(gomock.Any()).Return(true, nil)
 				// 设置 Get 方法
 				mockStorage.EXPECT().Get(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, store.ErrKeyNotFound)
 			}
@@ -1330,7 +1330,7 @@ func TestQueryDefinitions(t *testing.T) {
 			// 设置存储行为
 			if tc.mockStorage.projectExists {
 				// 设置 ProjectIndexExists 方法
-				mockStorage.EXPECT().ExistsProject(gomock.Any()).Return(true, nil)
+				mockStorage.EXPECT().ProjectIndexExists(gomock.Any()).Return(true, nil)
 
 				if tc.mockStorage.fileElementTable != nil {
 					// 设置 Get 方法 - 文件元素表
@@ -1379,4 +1379,608 @@ type mockDefinitionStorageData struct {
 	projectExists    bool
 	fileElementTable *codegraphpb.FileElementTable
 	symbolData       *codegraphpb.SymbolOccurrence
+}
+
+func TestRenameIndexes(t *testing.T) {
+	// 设置测试环境
+	env := setupTestEnvironment(t)
+	defer teardownTestEnvironment(t, env, []*workspace.Project{})
+
+	// 定义测试用例
+	testCases := []struct {
+		name           string
+		workspacePath  string
+		sourceFilePath string
+		targetFilePath string
+		mockStorage    func(ctrl *gomock.Controller, storage *mocks.MockGraphStorage, workspaceReader *mocks.MockWorkspaceReader)
+		expectError    bool
+		errorMsg       string
+		description    string
+	}{
+		{
+			name:           "重命名文件索引成功",
+			workspacePath:  "/test/workspace",
+			sourceFilePath: "/test/workspace/main.go",
+			targetFilePath: "/test/workspace/app.go",
+			mockStorage: func(ctrl *gomock.Controller, storage *mocks.MockGraphStorage, workspaceReader *mocks.MockWorkspaceReader) {
+				// 模拟工作区读取器
+				mockWorkspaceReader := mocks.NewMockWorkspaceReader(ctrl)
+
+				// 设置 FindProjects 方法
+				mockWorkspaceReader.EXPECT().FindProjects(gomock.Any(), "/test/workspace", false, gomock.Any()).Return([]*workspace.Project{
+					{Uuid: "test-project-uuid", Path: "/test/workspace"},
+				})
+
+				// 设置 GetProjectByFilePath 方法
+				mockWorkspaceReader.EXPECT().GetProjectByFilePath(gomock.Any(), "/test/workspace", "/test/workspace/main.go", false).Return(&workspace.Project{
+					Uuid: "test-project-uuid",
+					Path: "/test/workspace",
+				}, nil)
+
+				mockWorkspaceReader.EXPECT().GetProjectByFilePath(gomock.Any(), "/test/workspace", "/test/workspace/app.go", false).Return(&workspace.Project{
+					Uuid: "test-project-uuid",
+					Path: "/test/workspace",
+				}, nil)
+
+				// 创建模拟的文件元素表
+				fileElementTable := &codegraphpb.FileElementTable{
+					Path:     "/test/workspace/main.go",
+					Language: string(lang.Go),
+					Elements: []*codegraphpb.Element{
+						{
+							Name:         "main",
+							IsDefinition: true,
+							Range:        []int32{1, 0, 1, 0},
+							ElementType:  codegraphpb.ElementType_FUNCTION,
+						},
+					},
+				}
+
+				// 创建模拟的符号数据
+				symbolData := &codegraphpb.SymbolOccurrence{
+					Name:     "main",
+					Language: string(lang.Go),
+					Occurrences: []*codegraphpb.Occurrence{
+						{
+							Path:        "/test/workspace/main.go",
+							Range:       []int32{1, 0, 1, 0},
+							ElementType: codegraphpb.ElementType_FUNCTION,
+						},
+					},
+				}
+
+				// 设置存储行为
+				fileTableBytes, err := proto.Marshal(fileElementTable)
+				assert.NoError(t, err)
+
+				symbolBytes, err := proto.Marshal(symbolData)
+				assert.NoError(t, err)
+
+				// 设置 Get 方法
+				storage.EXPECT().Get(gomock.Any(), "test-project-uuid", gomock.Any()).Return(fileTableBytes, nil)
+
+				// 设置 Delete 方法
+				storage.EXPECT().Delete(gomock.Any(), "test-project-uuid", gomock.Any()).Return(nil)
+
+				// 设置 Put 方法（保存新的文件元素表）
+				storage.EXPECT().Put(gomock.Any(), "test-project-uuid", gomock.Any()).Return(nil)
+
+				// 设置 Get 方法（获取符号数据）
+				storage.EXPECT().Get(gomock.Any(), "test-project-uuid", gomock.Any()).Return(symbolBytes, nil)
+
+				// 设置 Put 方法（保存符号数据）
+				storage.EXPECT().Put(gomock.Any(), "test-project-uuid", gomock.Any()).Return(nil)
+			},
+			expectError: false,
+			description: "测试重命名文件索引成功的情况",
+		},
+		{
+			name:           "工作区不存在项目",
+			workspacePath:  "/test/workspace",
+			sourceFilePath: "/test/workspace/main.go",
+			targetFilePath: "/test/workspace/app.go",
+			mockStorage: func(ctrl *gomock.Controller, storage *mocks.MockGraphStorage, workspaceReader *mocks.MockWorkspaceReader) {
+				// 模拟工作区读取器
+				mockWorkspaceReader := mocks.NewMockWorkspaceReader(ctrl)
+
+				// 设置 FindProjects 方法 - 返回空列表
+				mockWorkspaceReader.EXPECT().FindProjects(gomock.Any(), "/test/workspace", false, gomock.Any()).Return([]*workspace.Project{})
+			},
+			expectError: false,
+			description: "测试工作区不存在项目的情况",
+		},
+		{
+			name:           "源文件项目查找失败",
+			workspacePath:  "/test/workspace",
+			sourceFilePath: "/test/workspace/main.go",
+			targetFilePath: "/test/workspace/app.go",
+			mockStorage: func(ctrl *gomock.Controller, storage *mocks.MockGraphStorage, workspaceReader *mocks.MockWorkspaceReader) {
+				// 模拟工作区读取器
+				mockWorkspaceReader := mocks.NewMockWorkspaceReader(ctrl)
+
+				// 设置 FindProjects 方法
+				mockWorkspaceReader.EXPECT().FindProjects(gomock.Any(), "/test/workspace", false, gomock.Any()).Return([]*workspace.Project{
+					{Uuid: "test-project-uuid", Path: "/test/workspace"},
+				})
+
+				// 设置 GetProjectByFilePath 方法 - 返回错误
+				mockWorkspaceReader.EXPECT().GetProjectByFilePath(gomock.Any(), "/test/workspace", "/test/workspace/main.go", false).Return(nil, fmt.Errorf("project not found"))
+			},
+			expectError: true,
+			errorMsg:    "cannot find project for file",
+			description: "测试源文件项目查找失败的情况",
+		},
+		{
+			name:           "源文件索引不存在",
+			workspacePath:  "/test/workspace",
+			sourceFilePath: "/test/workspace/main.go",
+			targetFilePath: "/test/workspace/app.go",
+			mockStorage: func(ctrl *gomock.Controller, storage *mocks.MockGraphStorage, workspaceReader *mocks.MockWorkspaceReader) {
+				// 模拟工作区读取器
+				mockWorkspaceReader := mocks.NewMockWorkspaceReader(ctrl)
+
+				// 设置 FindProjects 方法
+				mockWorkspaceReader.EXPECT().FindProjects(gomock.Any(), "/test/workspace", false, gomock.Any()).Return([]*workspace.Project{
+					{Uuid: "test-project-uuid", Path: "/test/workspace"},
+				})
+
+				// 设置 GetProjectByFilePath 方法
+				mockWorkspaceReader.EXPECT().GetProjectByFilePath(gomock.Any(), "/test/workspace", "/test/workspace/main.go", false).Return(&workspace.Project{
+					Uuid: "test-project-uuid",
+					Path: "/test/workspace",
+				}, nil)
+
+				mockWorkspaceReader.EXPECT().GetProjectByFilePath(gomock.Any(), "/test/workspace", "/test/workspace/app.go", false).Return(&workspace.Project{
+					Uuid: "test-project-uuid",
+					Path: "/test/workspace",
+				}, nil)
+
+				// 设置 Get 方法 - 返回错误，表示文件不存在
+				storage.EXPECT().Get(gomock.Any(), "test-project-uuid", gomock.Any()).Return(nil, store.ErrKeyNotFound)
+			},
+			expectError: false,
+			description: "测试源文件索引不存在的情况",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 创建模拟控制器
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			// 创建模拟存储
+			mockStorage := mocks.NewMockGraphStorage(ctrl)
+
+			// 创建模拟工作区读取器
+			mockWorkspaceReader := mocks.NewMockWorkspaceReader(ctrl)
+
+			// 设置 mock 行为
+			tc.mockStorage(ctrl, mockStorage, mockWorkspaceReader)
+
+			// 创建使用 mock 的索引器
+			mockIndexer := NewCodeIndexer(
+				env.scanner,
+				env.sourceFileParser,
+				env.dependencyAnalyzer,
+				mockWorkspaceReader,
+				mockStorage,
+				env.repository,
+				IndexerConfig{VisitPattern: testVisitPattern},
+				env.logger,
+			)
+
+			// 调用重命名索引方法
+			err := mockIndexer.RenameIndexes(env.ctx, tc.workspacePath, tc.sourceFilePath, tc.targetFilePath)
+
+			// 验证结果
+			if tc.expectError {
+				assert.Error(t, err)
+				if tc.errorMsg != "" {
+					assert.Contains(t, err.Error(), tc.errorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestIndexAddFiles(t *testing.T) {
+	// 设置测试环境
+	env := setupTestEnvironment(t)
+	defer teardownTestEnvironment(t, env, []*workspace.Project{})
+
+	// 定义测试用例
+	testCases := []struct {
+		name          string
+		workspacePath string
+		filePaths     []string
+		mockStorage   func(ctrl *gomock.Controller, storage *mocks.MockGraphStorage, workspaceReader *mocks.MockWorkspaceReader, repository *mocks.MockWorkspaceRepository)
+		expectError   bool
+		errorMsg      string
+		description   string
+	}{
+		{
+			name:          "索引文件成功 - 项目已索引",
+			workspacePath: "/test/workspace",
+			filePaths:     []string{"/test/workspace/main.go", "/test/workspace/utils.go"},
+			mockStorage: func(ctrl *gomock.Controller, storage *mocks.MockGraphStorage, workspaceReader *mocks.MockWorkspaceReader, repository *mocks.MockWorkspaceRepository) {
+				// 模拟工作区读取器
+				mockWorkspaceReader := mocks.NewMockWorkspaceReader(ctrl)
+
+				// 设置 Exists 方法
+				mockWorkspaceReader.EXPECT().Exists(gomock.Any(), "/test/workspace").Return(true, nil)
+
+				// 设置 FindProjects 方法
+				mockWorkspaceReader.EXPECT().FindProjects(gomock.Any(), "/test/workspace", true, gomock.Any()).Return([]*workspace.Project{
+					{Uuid: "test-project-uuid", Path: "/test/workspace"},
+				})
+
+				// 模拟工作区仓库
+				mockWorkspaceRepo := mocks.NewMockWorkspaceRepository(ctrl)
+
+				// 设置 GetWorkspaceByPath 方法
+				mockWorkspaceRepo.EXPECT().GetWorkspaceByPath("/test/workspace").Return(&model.Workspace{
+					WorkspacePath:    "/test/workspace",
+					FileNum:          10,
+					CodegraphFileNum: 5,
+				}, nil)
+
+				// 设置存储行为
+				storage.EXPECT().Size(gomock.Any(), "test-project-uuid", store.PathKeySystemPrefix).Return(5) // 项目已索引
+			},
+			expectError: false,
+			description: "测试索引文件成功的情况 - 项目已索引",
+		},
+		{
+			name:          "索引文件成功 - 项目未索引",
+			workspacePath: "/test/workspace",
+			filePaths:     []string{"/test/workspace/main.go"},
+			mockStorage: func(ctrl *gomock.Controller, storage *mocks.MockGraphStorage, workspaceReader *mocks.MockWorkspaceReader, repository *mocks.MockWorkspaceRepository) {
+				// 模拟工作区读取器
+				mockWorkspaceReader := mocks.NewMockWorkspaceReader(ctrl)
+
+				// 设置 Exists 方法
+				mockWorkspaceReader.EXPECT().Exists(gomock.Any(), "/test/workspace").Return(true, nil)
+
+				// 设置 FindProjects 方法
+				mockWorkspaceReader.EXPECT().FindProjects(gomock.Any(), "/test/workspace", true, gomock.Any()).Return([]*workspace.Project{
+					{Uuid: "test-project-uuid", Path: "/test/workspace"},
+				})
+
+				// 模拟工作区仓库
+				mockWorkspaceRepo := mocks.NewMockWorkspaceRepository(ctrl)
+
+				// 设置 GetWorkspaceByPath 方法
+				mockWorkspaceRepo.EXPECT().GetWorkspaceByPath("/test/workspace").Return(&model.Workspace{
+					WorkspacePath:    "/test/workspace",
+					FileNum:          10,
+					CodegraphFileNum: 5,
+				}, nil)
+
+				// 设置存储行为
+				storage.EXPECT().Size(gomock.Any(), "test-project-uuid", store.PathKeySystemPrefix).Return(0) // 项目未索引
+			},
+			expectError: false,
+			description: "测试索引文件成功的情况 - 项目未索引",
+		},
+		{
+			name:          "工作区不存在",
+			workspacePath: "/nonexistent/workspace",
+			filePaths:     []string{"/nonexistent/workspace/main.go"},
+			mockStorage: func(ctrl *gomock.Controller, storage *mocks.MockGraphStorage, workspaceReader *mocks.MockWorkspaceReader, repository *mocks.MockWorkspaceRepository) {
+				// 模拟工作区读取器
+				mockWorkspaceReader := mocks.NewMockWorkspaceReader(ctrl)
+
+				// 设置 Exists 方法 - 工作区不存在
+				mockWorkspaceReader.EXPECT().Exists(gomock.Any(), "/nonexistent/workspace").Return(false, nil)
+			},
+			expectError: true,
+			errorMsg:    "workspace path /nonexistent/workspace not exists",
+			description: "测试工作区不存在的情况",
+		},
+		{
+			name:          "工作区中没有项目",
+			workspacePath: "/test/workspace",
+			filePaths:     []string{"/test/workspace/main.go"},
+			mockStorage: func(ctrl *gomock.Controller, storage *mocks.MockGraphStorage, workspaceReader *mocks.MockWorkspaceReader, repository *mocks.MockWorkspaceRepository) {
+				// 模拟工作区读取器
+				mockWorkspaceReader := mocks.NewMockWorkspaceReader(ctrl)
+
+				// 设置 Exists 方法
+				mockWorkspaceReader.EXPECT().Exists(gomock.Any(), "/test/workspace").Return(true, nil)
+
+				// 设置 FindProjects 方法 - 返回空列表
+				mockWorkspaceReader.EXPECT().FindProjects(gomock.Any(), "/test/workspace", true, gomock.Any()).Return([]*workspace.Project{})
+			},
+			expectError: true,
+			errorMsg:    "no project found in workspace",
+			description: "测试工作区中没有项目的情况",
+		},
+		{
+			name:          "获取工作区信息失败",
+			workspacePath: "/test/workspace",
+			filePaths:     []string{"/test/workspace/main.go"},
+			mockStorage: func(ctrl *gomock.Controller, storage *mocks.MockGraphStorage, workspaceReader *mocks.MockWorkspaceReader, repository *mocks.MockWorkspaceRepository) {
+				// 模拟工作区读取器
+				mockWorkspaceReader := mocks.NewMockWorkspaceReader(ctrl)
+
+				// 设置 Exists 方法
+				mockWorkspaceReader.EXPECT().Exists(gomock.Any(), "/test/workspace").Return(true, nil)
+
+				// 设置 FindProjects 方法
+				mockWorkspaceReader.EXPECT().FindProjects(gomock.Any(), "/test/workspace", true, gomock.Any()).Return([]*workspace.Project{
+					{Uuid: "test-project-uuid", Path: "/test/workspace"},
+				})
+
+				// 模拟工作区仓库
+				mockWorkspaceRepo := mocks.NewMockWorkspaceRepository(ctrl)
+
+				// 设置 GetWorkspaceByPath 方法 - 返回错误
+				mockWorkspaceRepo.EXPECT().GetWorkspaceByPath("/test/workspace").Return(nil, fmt.Errorf("workspace not found"))
+			},
+			expectError: true,
+			errorMsg:    "get workspace err",
+			description: "测试获取工作区信息失败的情况",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 创建模拟控制器
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			// 创建模拟存储
+			mockStorage := mocks.NewMockGraphStorage(ctrl)
+
+			// 创建模拟工作区读取器
+			mockWorkspaceReader := mocks.NewMockWorkspaceReader(ctrl)
+
+			// 创建模拟工作区仓库
+			mockWorkspaceRepo := mocks.NewMockWorkspaceRepository(ctrl)
+
+			// 设置 mock 行为
+			tc.mockStorage(ctrl, mockStorage, mockWorkspaceReader, mockWorkspaceRepo)
+
+			// 创建使用 mock 的索引器
+			mockIndexer := NewCodeIndexer(
+				env.scanner,
+				env.sourceFileParser,
+				env.dependencyAnalyzer,
+				mockWorkspaceReader,
+				mockStorage,
+				mockWorkspaceRepo,
+				IndexerConfig{VisitPattern: testVisitPattern},
+				env.logger,
+			)
+
+			// 调用索引文件方法
+			err := mockIndexer.IndexFiles(env.ctx, tc.workspacePath, tc.filePaths)
+
+			// 验证结果
+			if tc.expectError {
+				assert.Error(t, err)
+				if tc.errorMsg != "" {
+					assert.Contains(t, err.Error(), tc.errorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestIndexRemoveFiles(t *testing.T) {
+	// 设置测试环境
+	env := setupTestEnvironment(t)
+	defer teardownTestEnvironment(t, env, []*workspace.Project{})
+
+	// 定义测试用例
+	testCases := []struct {
+		name          string
+		workspacePath string
+		filePaths     []string
+		mockStorage   func(ctrl *gomock.Controller, storage *mocks.MockGraphStorage, workspaceReader *mocks.MockWorkspaceReader)
+		expectError   bool
+		errorMsg      string
+		description   string
+	}{
+		{
+			name:          "删除文件索引成功",
+			workspacePath: "/test/workspace",
+			filePaths:     []string{"/test/workspace/main.go", "/test/workspace/utils.go"},
+			mockStorage: func(ctrl *gomock.Controller, storage *mocks.MockGraphStorage, workspaceReader *mocks.MockWorkspaceReader) {
+				// 模拟工作区读取器
+				mockWorkspaceReader := mocks.NewMockWorkspaceReader(ctrl)
+
+				// 设置 FindProjects 方法
+				mockWorkspaceReader.EXPECT().FindProjects(gomock.Any(), "/test/workspace", false, gomock.Any()).Return([]*workspace.Project{
+					{Uuid: "test-project-uuid", Path: "/test/workspace"},
+				})
+
+				// 创建模拟的文件元素表
+				fileElementTable1 := &codegraphpb.FileElementTable{
+					Path:     "/test/workspace/main.go",
+					Language: string(lang.Go),
+					Elements: []*codegraphpb.Element{
+						{
+							Name:         "main",
+							IsDefinition: true,
+							Range:        []int32{1, 0, 1, 0},
+							ElementType:  codegraphpb.ElementType_FUNCTION,
+						},
+					},
+				}
+
+				fileElementTable2 := &codegraphpb.FileElementTable{
+					Path:     "/test/workspace/utils.go",
+					Language: string(lang.Go),
+					Elements: []*codegraphpb.Element{
+						{
+							Name:         "helper",
+							IsDefinition: true,
+							Range:        []int32{1, 0, 1, 0},
+							ElementType:  codegraphpb.ElementType_FUNCTION,
+						},
+					},
+				}
+
+				// 设置存储行为
+				fileTableBytes1, err := proto.Marshal(fileElementTable1)
+				assert.NoError(t, err)
+
+				fileTableBytes2, err := proto.Marshal(fileElementTable2)
+				assert.NoError(t, err)
+
+				// 设置 Get 方法 - 返回文件元素表
+				storage.EXPECT().Get(gomock.Any(), "test-project-uuid", gomock.Any()).Return(fileTableBytes1, nil)
+				storage.EXPECT().Get(gomock.Any(), "test-project-uuid", gomock.Any()).Return(fileTableBytes2, nil)
+
+				// 设置 Delete 方法 - 删除文件索引
+				storage.EXPECT().Delete(gomock.Any(), "test-project-uuid", gomock.Any()).Return(nil).Times(2)
+
+				// 设置 Put 方法 - 更新符号数据
+				storage.EXPECT().Put(gomock.Any(), "test-project-uuid", gomock.Any()).Return(nil).Times(2)
+			},
+			expectError: false,
+			description: "测试删除文件索引成功的情况",
+		},
+		{
+			name:          "工作区中没有项目",
+			workspacePath: "/test/workspace",
+			filePaths:     []string{"/test/workspace/main.go"},
+			mockStorage: func(ctrl *gomock.Controller, storage *mocks.MockGraphStorage, workspaceReader *mocks.MockWorkspaceReader) {
+				// 模拟工作区读取器
+				mockWorkspaceReader := mocks.NewMockWorkspaceReader(ctrl)
+
+				// 设置 FindProjects 方法 - 返回空列表
+				mockWorkspaceReader.EXPECT().FindProjects(gomock.Any(), "/test/workspace", false, gomock.Any()).Return([]*workspace.Project{})
+			},
+			expectError: true,
+			errorMsg:    "no project found in workspace",
+			description: "测试工作区中没有项目的情况",
+		},
+		{
+			name:          "删除不存在的文件索引",
+			workspacePath: "/test/workspace",
+			filePaths:     []string{"/test/workspace/nonexistent.go"},
+			mockStorage: func(ctrl *gomock.Controller, storage *mocks.MockGraphStorage, workspaceReader *mocks.MockWorkspaceReader) {
+				// 模拟工作区读取器
+				mockWorkspaceReader := mocks.NewMockWorkspaceReader(ctrl)
+
+				// 设置 FindProjects 方法
+				mockWorkspaceReader.EXPECT().FindProjects(gomock.Any(), "/test/workspace", false, gomock.Any()).Return([]*workspace.Project{
+					{Uuid: "test-project-uuid", Path: "/test/workspace"},
+				})
+
+				// 设置 Get 方法 - 返回错误，表示文件不存在
+				storage.EXPECT().Get(gomock.Any(), "test-project-uuid", gomock.Any()).Return(nil, store.ErrKeyNotFound)
+			},
+			expectError: false,
+			description: "测试删除不存在的文件索引的情况",
+		},
+		{
+			name:          "删除文件夹索引成功",
+			workspacePath: "/test/workspace",
+			filePaths:     []string{"/test/workspace/utils/"},
+			mockStorage: func(ctrl *gomock.Controller, storage *mocks.MockGraphStorage, workspaceReader *mocks.MockWorkspaceReader) {
+				// 模拟工作区读取器
+				mockWorkspaceReader := mocks.NewMockWorkspaceReader(ctrl)
+
+				// 设置 FindProjects 方法
+				mockWorkspaceReader.EXPECT().FindProjects(gomock.Any(), "/test/workspace", false, gomock.Any()).Return([]*workspace.Project{
+					{Uuid: "test-project-uuid", Path: "/test/workspace"},
+				})
+
+				// 创建模拟的文件元素表
+				fileElementTable1 := &codegraphpb.FileElementTable{
+					Path:     "/test/workspace/utils/helper.go",
+					Language: string(lang.Go),
+					Elements: []*codegraphpb.Element{
+						{
+							Name:         "helper",
+							IsDefinition: true,
+							Range:        []int32{1, 0, 1, 0},
+							ElementType:  codegraphpb.ElementType_FUNCTION,
+						},
+					},
+				}
+
+				fileElementTable2 := &codegraphpb.FileElementTable{
+					Path:     "/test/workspace/utils/common.go",
+					Language: string(lang.Go),
+					Elements: []*codegraphpb.Element{
+						{
+							Name:         "common",
+							IsDefinition: true,
+							Range:        []int32{1, 0, 1, 0},
+							ElementType:  codegraphpb.ElementType_FUNCTION,
+						},
+					},
+				}
+
+				// 设置存储行为
+				_, err := proto.Marshal(fileElementTable1)
+				assert.NoError(t, err)
+
+				_, err = proto.Marshal(fileElementTable2)
+				assert.NoError(t, err)
+
+				// 设置 Get 方法 - 第一次返回错误，触发前缀搜索
+				storage.EXPECT().Get(gomock.Any(), "test-project-uuid", gomock.Any()).Return(nil, store.ErrKeyNotFound)
+
+				// 设置 Delete 方法 - 删除文件索引
+				storage.EXPECT().Delete(gomock.Any(), "test-project-uuid", gomock.Any()).Return(nil).Times(2)
+
+				// 设置 Put 方法 - 更新符号数据
+				storage.EXPECT().Put(gomock.Any(), "test-project-uuid", gomock.Any()).Return(nil).Times(2)
+			},
+			expectError: false,
+			description: "测试删除文件夹索引成功的情况",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 创建模拟控制器
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			// 创建模拟存储
+			mockStorage := mocks.NewMockGraphStorage(ctrl)
+
+			// 创建模拟工作区读取器
+			mockWorkspaceReader := mocks.NewMockWorkspaceReader(ctrl)
+
+			// 设置 mock 行为
+			tc.mockStorage(ctrl, mockStorage, mockWorkspaceReader)
+
+			// 创建使用 mock 的索引器
+			mockIndexer := NewCodeIndexer(
+				env.scanner,
+				env.sourceFileParser,
+				env.dependencyAnalyzer,
+				mockWorkspaceReader,
+				mockStorage,
+				env.repository,
+				IndexerConfig{VisitPattern: testVisitPattern},
+				env.logger,
+			)
+
+			// 调用删除索引方法
+			err := mockIndexer.RemoveIndexes(env.ctx, tc.workspacePath, tc.filePaths)
+
+			// 验证结果
+			if tc.expectError {
+				assert.Error(t, err)
+				if tc.errorMsg != "" {
+					assert.Contains(t, err.Error(), tc.errorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
