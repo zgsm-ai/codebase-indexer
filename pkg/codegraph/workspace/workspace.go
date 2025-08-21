@@ -57,10 +57,10 @@ func NewWorkSpaceReader(logger logger.Logger) WorkspaceReader {
 	}
 }
 
-func (w *workspaceReader) FindProjects(ctx context.Context, workspace string, resolveModule bool, visitPattern *types.VisitPattern) []*Project {
+func (w *workspaceReader) FindProjects(ctx context.Context, workspacePath string, resolveModule bool, visitPattern *types.VisitPattern) []*Project {
 
 	start := time.Now()
-	w.logger.Info("start to scan workspace：%s", workspace)
+	w.logger.Info("start to scan workspace：%s", workspacePath)
 	if visitPattern == nil {
 		visitPattern = DefaultVisitPattern
 	}
@@ -81,12 +81,12 @@ func (w *workspaceReader) FindProjects(ctx context.Context, workspace string, re
 	}
 
 	// 1. 当前目录是 git 仓库
-	if hasGitDir(workspace) {
-		projectName := filepath.Base(workspace)
+	if hasGitDir(workspacePath) {
+		projectName := filepath.Base(workspacePath)
 		project := &Project{
-			Path: workspace,
+			Path: workspacePath,
 			Name: projectName,
-			Uuid: generateUuid(projectName, workspace),
+			Uuid: generateUuid(projectName, workspacePath),
 		}
 		projects = append(projects, project)
 		if resolveModule {
@@ -103,7 +103,7 @@ func (w *workspaceReader) FindProjects(ctx context.Context, workspace string, re
 			depth int
 		}
 
-		queue := []queueItem{{dir: workspace, depth: 1}}
+		queue := []queueItem{{dir: workspacePath, depth: 1}}
 
 		for len(queue) > 0 && entryCount < maxEntries {
 			current := queue[0]
@@ -166,11 +166,11 @@ func (w *workspaceReader) FindProjects(ctx context.Context, workspace string, re
 
 	// 3. 没有发现任何 git 仓库，将当前目录作为唯一项目
 	if !foundGit {
-		projectName := filepath.Base(workspace)
+		projectName := filepath.Base(workspacePath)
 		project := &Project{
-			Path: workspace,
+			Path: workspacePath,
 			Name: projectName,
-			Uuid: generateUuid(projectName, workspace),
+			Uuid: generateUuid(projectName, workspacePath),
 		}
 		projects = append(projects, project)
 		if resolveModule {
@@ -532,23 +532,23 @@ func (l *workspaceReader) Tree(ctx context.Context, workspacePath string, subDir
 	return rootNodes, nil
 }
 
-func (w *workspaceReader) GetProjectByFilePath(ctx context.Context, workspace string, filePath string, resolveModule bool) (*Project, error) {
+func (w *workspaceReader) GetProjectByFilePath(ctx context.Context, workspacePath string, filePath string, resolveModule bool) (*Project, error) {
 	if exists, err := w.Exists(ctx, filePath); err == nil && !exists {
 		return nil, ErrPathNotExists
 	}
-	if !utils.IsSubdir(workspace, filePath) {
-		return nil, fmt.Errorf("file %s is not in workspace %s", filePath, workspace)
+	if !utils.IsSubdir(workspacePath, filePath) {
+		return nil, fmt.Errorf("file %s is not in workspace %s", filePath, workspacePath)
 	}
-	projects := w.FindProjects(ctx, workspace, resolveModule, DefaultVisitPattern)
+	projects := w.FindProjects(ctx, workspacePath, resolveModule, DefaultVisitPattern)
 	if len(projects) == 0 {
-		return nil, fmt.Errorf("found no projects in workspace %s", workspace)
+		return nil, fmt.Errorf("found no projects in workspace %s", workspacePath)
 	}
 	for _, p := range projects {
 		if utils.IsSubdir(p.Path, filePath) {
 			return p, nil
 		}
 	}
-	return nil, fmt.Errorf("failed to find project which file %s belongs to in workspace %s", filePath, workspace)
+	return nil, fmt.Errorf("failed to find project which file %s belongs to in workspace %s", filePath, workspacePath)
 }
 
 func (w *workspaceReader) Stat(filePath string) (*types.FileInfo, error) {

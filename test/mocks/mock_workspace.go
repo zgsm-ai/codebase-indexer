@@ -52,9 +52,9 @@ func (mr *MockWorkspaceReaderMockRecorder) Exists(ctx, path interface{}) *gomock
 }
 
 // FindProjects mocks base method.
-func (m *MockWorkspaceReader) FindProjects(ctx context.Context, workspace string, resolveModule bool, visitPattern *types.VisitPattern) []*workspace.Project {
+func (m *MockWorkspaceReader) FindProjects(ctx context.Context, workspacePath string, resolveModule bool, visitPattern *types.VisitPattern) []*workspace.Project {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FindProjects", ctx, workspace, resolveModule, visitPattern)
+	ret := m.ctrl.Call(m, "FindProjects", ctx, workspacePath, resolveModule, visitPattern)
 	ret0, _ := ret[0].([]*workspace.Project)
 	return ret0
 }
@@ -66,9 +66,9 @@ func (mr *MockWorkspaceReaderMockRecorder) FindProjects(ctx, workspace, resolveM
 }
 
 // GetProjectByFilePath mocks base method.
-func (m *MockWorkspaceReader) GetProjectByFilePath(ctx context.Context, workspace, filePath string, resolveModule bool) (*workspace.Project, error) {
+func (m *MockWorkspaceReader) GetProjectByFilePath(ctx context.Context, workspacePath, filePath string, resolveModule bool) (*workspace.Project, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetProjectByFilePath", ctx, workspace, filePath, resolveModule)
+	ret := m.ctrl.Call(m, "GetProjectByFilePath", ctx, workspacePath, filePath, resolveModule)
 	ret0, _ := ret[0].(*workspace.Project)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
