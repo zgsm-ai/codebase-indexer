@@ -244,8 +244,6 @@ func (s *extensionService) SyncCodebase(ctx context.Context, clientID, workspace
 
 // UpdateSyncConfig 更新同步配置
 func (s *extensionService) UpdateSyncConfig(ctx context.Context, clientID, serverEndpoint, accessToken string) error {
-	s.logger.Info("updating sync config for client %s", clientID)
-
 	// 更新同步器配置
 	syncConfig := &config.SyncConfig{
 		ClientId:  clientID,
@@ -260,7 +258,6 @@ func (s *extensionService) UpdateSyncConfig(ctx context.Context, clientID, serve
 
 // CheckIgnoreFiles 检查文件是否应该被忽略
 func (s *extensionService) CheckIgnoreFiles(ctx context.Context, clientID, workspacePath, workspaceName string, filePaths []string) (*CheckIgnoreResult, error) {
-	s.logger.Info("checking ignore files for client %s, workspace: %s, files: %d", clientID, workspacePath, len(filePaths))
 	// 检查每个文件
 	maxFileSizeKB := s.fileScanner.GetScannerConfig().MaxFileSizeKB
 	maxFileSize := int64(maxFileSizeKB * 1024)
@@ -349,6 +346,7 @@ func (s *extensionService) CheckIgnoreFiles(ctx context.Context, clientID, works
 	}, nil
 }
 
+// SwitchIndex 索引开关切换
 func (s *extensionService) SwitchIndex(ctx context.Context, workspacePath, switchStatus, clientID string) error {
 	codebaseEnv := s.storage.GetCodebaseEnv()
 	if codebaseEnv == nil {
@@ -435,6 +433,7 @@ func (s *extensionService) SwitchIndex(ctx context.Context, workspacePath, switc
 	return nil
 }
 
+// deleteNonProcessingEvents 删除非进行中状态事件
 func (s *extensionService) deleteNonProcessingEvents(workspacePath string) error {
 	// 定义非进行中状态
 	nonProcessingEmbeddingStatuses := []int{
@@ -460,7 +459,7 @@ func (s *extensionService) deleteNonProcessingEvents(workspacePath string) error
 		nonProcessingCodegraphStatuses,
 	)
 	if err != nil {
-		s.logger.Error("failed to get non-processing events for deletion: %v", err)
+		s.logger.Warn("failed to get non-processing events for deletion: %v", err)
 	} else {
 		// 删除所有非进行中状态的事件
 		deleteEventIds := []int64{}
@@ -469,7 +468,7 @@ func (s *extensionService) deleteNonProcessingEvents(workspacePath string) error
 		}
 		if len(deleteEventIds) > 0 {
 			if err := s.eventRepo.BatchDeleteEvents(deleteEventIds); err != nil {
-				s.logger.Error("failed to batch delete non-processing events: %v", err)
+				s.logger.Warn("failed to batch delete non-processing events: %v", err)
 			} else {
 				s.logger.Debug("batch deleted non-processing events for workspace: %s", workspacePath)
 			}
@@ -480,8 +479,6 @@ func (s *extensionService) deleteNonProcessingEvents(workspacePath string) error
 
 // PublishEvents 发布工作区事件
 func (s *extensionService) PublishEvents(ctx context.Context, workspacePath, clientID string, events []dto.WorkspaceEvent) (int, error) {
-	s.logger.Info("publishing %d events for workspace: %s", len(events), workspacePath)
-
 	successCount := s.processEvents(workspacePath, clientID, events)
 
 	s.logger.Info("successfully published %d/%d events for workspace: %s",
@@ -493,10 +490,11 @@ func (s *extensionService) PublishEvents(ctx context.Context, workspacePath, cli
 // processEvents 处理工作区事件
 func (s *extensionService) processEvents(workspacePath, clientID string, events []dto.WorkspaceEvent) int {
 	successCount := 0
+	extensionEventTypeMap := model.GetExtensionEventTypeMap()
 
 	ignoreConfig := s.fileScanner.LoadIgnoreConfig(workspacePath)
 	for _, event := range events {
-		if event.EventType == "" {
+		if !extensionEventTypeMap[event.EventType] {
 			continue
 		}
 
@@ -513,7 +511,7 @@ func (s *extensionService) processEvents(workspacePath, clientID string, events 
 			// 尝试更新现有事件
 			if updated := s.tryUpdateExistingEvent(workspacePath, event); updated {
 				successCount++
-				continue
+				break
 			}
 
 			// 创建新事件
@@ -522,7 +520,6 @@ func (s *extensionService) processEvents(workspacePath, clientID string, events 
 			}
 			// open_workspace 事件触发文件扫描
 			go s.scanService.DetectFileChanges(workspacePath)
-
 			break
 		}
 
@@ -534,6 +531,7 @@ func (s *extensionService) processEvents(workspacePath, clientID string, events 
 			s.logger.Warn("failed to get relative path for source path: %s, error: %v", sourcePath, err)
 			continue
 		}
+		event.SourcePath = sourceRelPath
 		if targetPath != "" {
 			targetRelPath, err := filepath.Rel(workspacePath, targetPath)
 			if err != nil {
@@ -570,7 +568,6 @@ func (s *extensionService) processEvents(workspacePath, clientID string, events 
 		}
 
 		// 尝试更新现有事件
-		event.SourcePath = sourceRelPath
 		if updated := s.tryUpdateExistingEvent(workspacePath, event); updated {
 			successCount++
 			continue
@@ -733,6 +730,7 @@ func (s *extensionService) deactivateWorkspace(workspacePath string, fileNum int
 	}
 }
 
+// createCodebaseConfig 创建代码库配置文件
 func (s *extensionService) createCodebaseConfig(workspacePath, clientID string) (int, error) {
 	var fileNum int
 	workspaceName := filepath.Base(workspacePath)
@@ -774,6 +772,7 @@ func (s *extensionService) createCodebaseConfig(workspacePath, clientID string) 
 	return fileNum, nil
 }
 
+// createCodebaseEmbeddingConfig 创建代码库嵌入配置
 func (s *extensionService) createCodebaseEmbeddingConfig(workspacePath, clientID string) error {
 	workspaceName := filepath.Base(workspacePath)
 	codebaseEmbeddingID := utils.GenerateCodebaseEmbeddingID(workspacePath)
@@ -805,6 +804,7 @@ func (s *extensionService) createCodebaseEmbeddingConfig(workspacePath, clientID
 	return nil
 }
 
+// initCodebaseEmbeddingConfig 初始化代码库嵌入配置
 func (s *extensionService) initCodebaseEmbeddingConfig(workspacePath, clientID string) error {
 	workspaceName := filepath.Base(workspacePath)
 	codebaseEmbeddingID := utils.GenerateCodebaseEmbeddingID(workspacePath)
@@ -824,7 +824,7 @@ func (s *extensionService) initCodebaseEmbeddingConfig(workspacePath, clientID s
 		return fmt.Errorf("failed to save codebase embedding config: %w", err)
 	}
 
-	s.logger.Info("created codebase embedding config for %s (%s)", workspaceName, codebaseEmbeddingID)
+	s.logger.Info("init codebase embedding config for %s (%s)", workspaceName, codebaseEmbeddingID)
 	return nil
 }
 
@@ -845,6 +845,9 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 		if err := s.initCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
 			return fmt.Errorf("failed to init codebase embedding config: %w", err)
 		}
+		if err := s.deleteRemoteEmbedding(clientID, workspacePath); err != nil {
+			s.logger.Warn("delete remote embedding failed: %v", err)
+		}
 	}
 
 	// 检查工作区是否已存在
@@ -854,36 +857,9 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 		s.logger.Info("workspace not found, creating new workspace: %s", workspacePath)
 		s.createAndActivateWorkspace(workspacePath, "true", fileNum)
 	} else {
-		updateWorksapce := map[string]interface{}{
-			"active":                      "true",
-			"embedding_file_num":          0,
-			"embedding_ts":                0,
-			"embedding_message":           "",
-			"embedding_failed_file_paths": "",
-			"codegraph_file_num":          0,
-			"codegraph_ts":                0,
-			"codegraph_message":           "",
-			"codegraph_failed_file_paths": "",
-		}
-		switch indexType {
-		case dto.IndexTypeEmbedding:
-			updateWorksapce = map[string]interface{}{
-				"active":                      "true",
-				"embedding_file_num":          0,
-				"embedding_ts":                0,
-				"embedding_message":           "",
-				"embedding_failed_file_paths": "",
-			}
-		case dto.IndexTypeCodegraph:
-			updateWorksapce = map[string]interface{}{
-				"active":                      "true",
-				"codegraph_file_num":          0,
-				"codegraph_ts":                0,
-				"codegraph_message":           "",
-				"codegraph_failed_file_paths": "",
-			}
-		}
-		if err := s.workspaceRepo.UpdateWorkspaceByMap(workspacePath, updateWorksapce); err != nil {
+		updateWorkspace := getUpdateWorkspaceByTriggerType(indexType)
+		updateWorkspace["file_num"] = fileNum
+		if err := s.workspaceRepo.UpdateWorkspaceByMap(workspacePath, updateWorkspace); err != nil {
 			return fmt.Errorf("failed to update workspace: %w", err)
 		}
 		s.logger.Info("updated workspace active status to true: %s", workspacePath)
@@ -892,14 +868,7 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 	// 判断rebuild_workspace事件是否存在非进行中状态，若不存在则创建
 	var rebuildEventId int64
 	shouldCreateEvent := true
-	embeddingStatus := model.EmbeddingStatusInit
-	codegraphStatus := model.CodegraphStatusInit
-	switch indexType {
-	case dto.IndexTypeEmbedding:
-		codegraphStatus = model.CodegraphStatusSuccess
-	case dto.IndexTypeCodegraph:
-		embeddingStatus = model.EmbeddingStatusSuccess
-	}
+	embeddingStatus, codegraphStatus := getIndexStatusByTriggerType(indexType)
 	existingRebuildEvents, err := s.eventRepo.GetEventsByWorkspaceAndType(workspacePath, []string{model.EventTypeRebuildWorkspace}, 1, true)
 	if err == nil && len(existingRebuildEvents) > 0 {
 		// 检查是否存在非进行中状态的rebuild_workspace事件
@@ -940,26 +909,10 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 			return fmt.Errorf("failed to create open workspace event: %w", err)
 		}
 		rebuildEventId = eventModel.ID
-		// rebuild_workspace 事件触发文件扫描
-		go s.scanService.DetectFileChanges(workspacePath)
-	}
-
-	// 事务处理删除其他非进行中状态事件
-	// 获取所有需要删除的事件ID
-	nonProcessingEmbeddingStatuses := []int{
-		model.EmbeddingStatusInit,
-		model.EmbeddingStatusUploadFailed,
-		model.EmbeddingStatusBuildFailed,
-		model.EmbeddingStatusSuccess,
-	}
-
-	nonProcessingCodegraphStatuses := []int{
-		model.CodegraphStatusInit,
-		model.CodegraphStatusFailed,
-		model.CodegraphStatusSuccess,
 	}
 
 	// 获取所有非进行中状态的事件（排除新创建的事件）
+	nonProcessingEmbeddingStatuses, nonProcessingCodegraphStatuses := getNonProcessingStatusesByTriggerType(indexType)
 	eventsToDelete, err := s.eventRepo.GetEventsByTypeAndStatusAndWorkspaces(
 		[]string{},
 		[]string{workspacePath},
@@ -987,18 +940,112 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 		}
 	}
 
-	s.logger.Info("successfully triggered index build for workspace: %s", workspacePath)
+	if indexType != dto.IndexTypeCodegraph {
+		// rebuild_workspace 事件触发文件扫描
+		go s.scanService.DetectFileChanges(workspacePath)
+	}
+
+	s.logger.Info("successfully triggered index for workspace: %s", workspacePath)
 	return nil
+}
+
+// deleteRemoteEmbedding 删除远程索引
+func (s *extensionService) deleteRemoteEmbedding(clientID, workspacePath string) error {
+	deleteEmbeddingReq := dto.DeleteEmbeddingReq{ClientId: clientID, CodebasePath: workspacePath}
+	resp, err := s.httpSync.DeleteEmbedding(deleteEmbeddingReq)
+	if err != nil {
+		return fmt.Errorf("http delete remote embedding failed: %w", err)
+	}
+	if resp.Code != -1 {
+		return fmt.Errorf("delete remote embedding resp code: %d, msg: %s", resp.Code, resp.Message)
+	}
+
+	return nil
+}
+
+// getUpdateWorkspaceByTriggerType 根据触发类型获取更新工作区参数
+func getUpdateWorkspaceByTriggerType(indexType string) map[string]interface{} {
+	updateWorkspace := map[string]interface{}{
+		"active":                      "true",
+		"embedding_file_num":          0,
+		"embedding_ts":                0,
+		"embedding_message":           "",
+		"embedding_failed_file_paths": "",
+		"codegraph_file_num":          0,
+		"codegraph_ts":                0,
+		"codegraph_message":           "",
+		"codegraph_failed_file_paths": "",
+	}
+	switch indexType {
+	case dto.IndexTypeEmbedding:
+		updateWorkspace = map[string]interface{}{
+			"active":                      "true",
+			"embedding_file_num":          0,
+			"embedding_ts":                0,
+			"embedding_message":           "",
+			"embedding_failed_file_paths": "",
+		}
+	case dto.IndexTypeCodegraph:
+		updateWorkspace = map[string]interface{}{
+			"active":                      "true",
+			"codegraph_file_num":          0,
+			"codegraph_ts":                0,
+			"codegraph_message":           "",
+			"codegraph_failed_file_paths": "",
+		}
+	}
+	return updateWorkspace
+}
+
+// getIndexStatusByTriggerType 根据触发类型获取索引状态
+func getIndexStatusByTriggerType(indexType string) (int, int) {
+	embeddingStatus := model.EmbeddingStatusInit
+	codegraphStatus := model.CodegraphStatusInit
+	switch indexType {
+	case dto.IndexTypeEmbedding:
+		codegraphStatus = model.CodegraphStatusSuccess
+	case dto.IndexTypeCodegraph:
+		embeddingStatus = model.EmbeddingStatusSuccess
+	}
+	return embeddingStatus, codegraphStatus
+}
+
+// getNonProcessingStatusesByTriggerType 根据触发类型获取非进行中状态
+func getNonProcessingStatusesByTriggerType(indexType string) ([]int, []int) {
+	nonProcessingEmbeddingStatuses := []int{
+		model.EmbeddingStatusInit,
+		model.EmbeddingStatusUploadFailed,
+		model.EmbeddingStatusBuildFailed,
+		model.EmbeddingStatusSuccess,
+	}
+
+	nonProcessingCodegraphStatuses := []int{
+		model.CodegraphStatusInit,
+		model.CodegraphStatusFailed,
+		model.CodegraphStatusSuccess,
+	}
+
+	switch indexType {
+	case dto.IndexTypeEmbedding:
+		nonProcessingCodegraphStatuses = []int{
+			model.CodegraphStatusFailed,
+			model.CodegraphStatusSuccess,
+		}
+	case dto.IndexTypeCodegraph:
+		nonProcessingEmbeddingStatuses = []int{
+			model.EmbeddingStatusUploadFailed,
+			model.EmbeddingStatusBuildFailed,
+			model.EmbeddingStatusSuccess,
+		}
+	}
+	return nonProcessingEmbeddingStatuses, nonProcessingCodegraphStatuses
 }
 
 // GetIndexStatus 获取索引状态
 func (s *extensionService) GetIndexStatus(ctx context.Context, workspacePath string) (*dto.IndexStatusResponse, error) {
-	s.logger.Info("getting index status for workspace: %s", workspacePath)
-
 	// 获取工作区信息
 	workspace, err := s.workspaceRepo.GetWorkspaceByPath(workspacePath)
 	if err != nil {
-		s.logger.Error("failed to get workspace %s: %v", workspacePath, err)
 		return nil, fmt.Errorf("failed to get workspace: %w", err)
 	}
 
@@ -1036,7 +1083,7 @@ func (s *extensionService) GetIndexStatus(ctx context.Context, workspacePath str
 		Data:    data,
 	}
 
-	s.logger.Info("successfully retrieved index status for workspace: %s", workspacePath)
+	s.logger.Info("successfully retrieved index status for workspace: %s, data: %v", workspacePath, data)
 	return response, nil
 }
 
@@ -1064,10 +1111,13 @@ func (s *extensionService) calculateEmbeddingStatus(workspace *model.Workspace) 
 
 	// 计算失败文件数
 	failedFilePaths := strings.Split(workspace.EmbeddingFailedFilePaths, ",")
-	totalFailed := 0
-	if len(failedFilePaths) > 0 {
-		totalFailed = len(failedFilePaths)
+	fullFailedfilePaths := make([]string, 0, len(failedFilePaths))
+	for i, failedFilePath := range failedFilePaths {
+		if failedFilePath != "" {
+			fullFailedfilePaths[i] = filepath.Join(workspace.WorkspacePath, failedFilePath)
+		}
 	}
+	totalFailed := len(fullFailedfilePaths)
 
 	// 统计各状态的 embedding 事件数
 	processingCount, err := s.eventRepo.GetEventsCountByWorkspaceAndStatus(
@@ -1099,7 +1149,7 @@ func (s *extensionService) calculateEmbeddingStatus(workspace *model.Workspace) 
 		if status.Process < embeddingSuccessPercent {
 			status.Status = dto.ProcessStatusFailed
 			status.TotalFailed = totalFailed
-			status.FailedFiles = failedFilePaths
+			status.FailedFiles = fullFailedfilePaths
 			status.FailedReason = workspace.EmbeddingMessage
 		} else {
 			status.Status = dto.ProcessStatusSuccess
@@ -1136,10 +1186,13 @@ func (s *extensionService) calculateCodegraphStatus(workspace *model.Workspace) 
 
 	// 计算失败文件数
 	failedFilePaths := strings.Split(workspace.EmbeddingFailedFilePaths, ",")
-	totalFailed := 0
-	if len(failedFilePaths) > 0 {
-		totalFailed = len(failedFilePaths)
+	fullFailedfilePaths := make([]string, 0, len(failedFilePaths))
+	for i, failedFilePath := range failedFilePaths {
+		if failedFilePath != "" {
+			fullFailedfilePaths[i] = filepath.Join(workspace.WorkspacePath, failedFilePath)
+		}
 	}
+	totalFailed := len(fullFailedfilePaths)
 
 	// 统计各状态的 embedding 事件数
 	processingCount, err := s.eventRepo.GetEventsCountByWorkspaceAndStatus(
@@ -1171,8 +1224,8 @@ func (s *extensionService) calculateCodegraphStatus(workspace *model.Workspace) 
 		if status.Process < codegraphSuccessPercent {
 			status.Status = dto.ProcessStatusFailed
 			status.TotalFailed = totalFailed
-			status.FailedFiles = failedFilePaths
-			status.FailedReason = workspace.EmbeddingMessage
+			status.FailedFiles = fullFailedfilePaths
+			status.FailedReason = workspace.CodegraphMessage
 		} else {
 			status.Status = dto.ProcessStatusSuccess
 		}

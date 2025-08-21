@@ -9,6 +9,7 @@ import (
 
 	"codebase-indexer/internal/config"
 	"codebase-indexer/internal/dto"
+	"codebase-indexer/internal/errs"
 	"codebase-indexer/internal/model"
 	"codebase-indexer/internal/repository"
 	"codebase-indexer/internal/utils"
@@ -151,7 +152,7 @@ func (sc *embeddingStatusService) checkWorkspaceUploadingStates(workspacePath st
 // getBuildingEventsForWorkspace 获取指定工作区的building状态events
 func (sc *embeddingStatusService) getBuildingEventsForWorkspace(workspacePath string) ([]*model.Event, error) {
 	buildingStatuses := []int{model.EmbeddingStatusBuilding}
-	events, err := sc.eventRepo.GetEventsByWorkspaceAndEmbeddingStatus(workspacePath, 5, false, buildingStatuses)
+	events, err := sc.eventRepo.GetEventsByWorkspaceAndEmbeddingStatus(workspacePath, 20, false, buildingStatuses)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get building events: %w", err)
 	}
@@ -161,7 +162,7 @@ func (sc *embeddingStatusService) getBuildingEventsForWorkspace(workspacePath st
 // getUploadingEventsForWorkspace 获取指定工作区的uploading状态events
 func (sc *embeddingStatusService) getUploadingEventsForWorkspace(workspacePath string) ([]*model.Event, error) {
 	uploadingStatuses := []int{model.EmbeddingStatusUploading}
-	events, err := sc.eventRepo.GetEventsByWorkspaceAndEmbeddingStatus(workspacePath, 5, false, uploadingStatuses)
+	events, err := sc.eventRepo.GetEventsByWorkspaceAndEmbeddingStatus(workspacePath, 20, false, uploadingStatuses)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get uploading events: %w", err)
 	}
@@ -288,7 +289,7 @@ func (sc *embeddingStatusService) handleBuildCompletion(workspacePath string, ev
 
 	if status == dto.EmbeddingFailed {
 		delete(codebaseEmbeddingConfig.SyncFiles, filePath)
-		codebaseEmbeddingConfig.FailedFiles[filePath] = dto.EmbeddingFailed
+		codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrEmbeddingFailed
 	} else {
 		delete(codebaseEmbeddingConfig.SyncFiles, filePath)
 		delete(codebaseEmbeddingConfig.FailedFiles, filePath)
@@ -306,20 +307,20 @@ func (sc *embeddingStatusService) handleBuildCompletion(workspacePath string, ev
 	var embeddingMessage string
 	embeddingFaildFiles := codebaseEmbeddingConfig.FailedFiles
 	failedKeys := make([]string, 0, len(embeddingFaildFiles))
-	failedValues := make([]string, 0, len(embeddingFaildFiles))
 	for k, v := range embeddingFaildFiles {
 		failedKeys = append(failedKeys, k)
-		failedValues = append(failedValues, v)
+		embeddingMessage = v
+		if len(failedKeys) > 5 {
+			break
+		}
 	}
 	if len(failedKeys) == 0 {
 		embeddingFailedFilePaths = ""
 		embeddingMessage = ""
 	} else if len(failedKeys) > 5 {
 		embeddingFailedFilePaths = strings.Join(failedKeys[:5], ",")
-		embeddingMessage = strings.Join(failedValues[:5], ",")
 	} else {
 		embeddingFailedFilePaths = strings.Join(failedKeys, ",")
-		embeddingMessage = strings.Join(failedValues, ",")
 	}
 
 	err = sc.workspaceRepo.UpdateEmbeddingInfo(event.WorkspacePath, embeddingFileNum, time.Now().Unix(), embeddingFailedFilePaths, embeddingMessage)

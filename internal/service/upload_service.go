@@ -90,6 +90,49 @@ func (us *uploadService) GetUploadConfig() *UploadConfig {
 	return us.uploadCfg
 }
 
+func (us *uploadService) UploadChangesWithRetry(workspacePath string, changes []*utils.FileStatus, maxRetries int) ([]*utils.FileStatus, error) {
+	if !us.uploadCfg.EnableRetry {
+		// 如果禁用重试，直接上传一次
+		return us.uploadChanges(workspacePath, changes)
+	}
+
+	// 使用配置中的最大重试次数或传入的参数
+	actualMaxRetries := us.uploadCfg.MaxRetries
+	if maxRetries > 0 {
+		actualMaxRetries = maxRetries
+	}
+
+	var lastErr error
+
+	for attempt := 1; attempt <= actualMaxRetries; attempt++ {
+		us.logger.Info("uploading files %d (attempt %d/%d)", len(changes), attempt, actualMaxRetries)
+
+		fileStatuses, err := us.uploadChanges(workspacePath, changes)
+		if err == nil {
+			us.logger.Info("files uploaded successfully")
+			return fileStatuses, nil
+		}
+
+		lastErr = err
+		us.logger.Warn("failed to upload files %d (attempt %d/%d): %v", len(changes), attempt, actualMaxRetries, err)
+
+		if attempt < actualMaxRetries {
+			// 检查是否为可重试错误
+			if !us.isRetryableError(err) {
+				us.logger.Error("non-retryable error occurred for files %d: %v", len(changes), err)
+				break
+			}
+
+			// 指数退避
+			delay := us.uploadCfg.BaseRetryDelay * time.Duration(math.Pow(2, float64(attempt-1)))
+			us.logger.Info("waiting %v before retry...", delay)
+			time.Sleep(delay)
+		}
+	}
+
+	return nil, fmt.Errorf("failed to upload files %d after %d attempts, last error: %w", len(changes), actualMaxRetries, lastErr)
+}
+
 // UploadFileWithRetry 带重试的文件上传
 func (us *uploadService) UploadFileWithRetry(workspacePath string, filePath string, status string, maxRetries int) (*utils.FileStatus, error) {
 	if !us.uploadCfg.EnableRetry {
@@ -479,6 +522,74 @@ func (us *uploadService) uploadSingleFile(workspacePath string, filePath string,
 	fileStatus.RequestId = requestId
 	us.logger.Info("file %s uploaded successfully", filePath)
 	return fileStatus, nil
+}
+
+func (us *uploadService) uploadChanges(workspacePath string, changes []*utils.FileStatus) ([]*utils.FileStatus, error) {
+	// 6. 获取上传令牌
+	workspaceName := filepath.Base(workspacePath)
+	authInfo := config.GetAuthInfo()
+	tokenReq := dto.UploadTokenReq{
+		ClientId:     authInfo.ClientId,
+		CodebasePath: workspacePath,
+		CodebaseName: workspaceName,
+	}
+	tokenResp, err := us.syncer.FetchUploadToken(tokenReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch upload token: %w", err)
+	}
+
+	// 4. 创建临时的 codebase 配置
+	codebaseId := utils.GenerateCodebaseID(workspacePath)
+	codebaseConfig := &config.CodebaseConfig{
+		ClientID:     authInfo.ClientId,
+		CodebaseId:   codebaseId,
+		CodebasePath: workspacePath,
+		CodebaseName: workspaceName,
+		RegisterTime: time.Now(),
+	}
+
+	// 5. 创建ZIP文件
+	zipPath, err := us.scheduler.CreateFilesZip(codebaseConfig, changes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create zip file: %w", err)
+	}
+
+	// 清理临时文件
+	defer func() {
+		if zipPath != "" {
+			if err := os.Remove(zipPath); err != nil {
+				us.logger.Warn("failed to delete temp zip file %s: %v", zipPath, err)
+			} else {
+				us.logger.Info("temp zip file deleted successfully: %s", zipPath)
+			}
+		}
+	}()
+
+	// 7. 上传文件
+	requestId, err := utils.GenerateUUID()
+	if err != nil {
+		us.logger.Warn("failed to generate upload request ID, using timestamp: %v", err)
+		requestId = time.Now().Format("20060102150405.000")
+	}
+	us.logger.Info("upload request ID: %s", requestId)
+
+	uploadReq := dto.UploadReq{
+		ClientId:     authInfo.ClientId,
+		CodebasePath: workspacePath,
+		CodebaseName: filepath.Base(workspacePath),
+		RequestId:    requestId,
+		UploadToken:  tokenResp.Data.Token,
+	}
+	err = us.syncer.UploadFile(zipPath, uploadReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upload file: %w", err)
+	}
+
+	for _, fileStatus := range changes {
+		fileStatus.RequestId = requestId
+	}
+	us.logger.Info("upload id: %s, uploaded %d files successfully", requestId, len(changes))
+	return changes, nil
 }
 
 // uploadFiles 上传多个文件

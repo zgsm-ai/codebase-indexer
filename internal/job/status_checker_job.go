@@ -55,6 +55,7 @@ func (j *StatusCheckerJob) Start(ctx context.Context) {
 	authInfo := config.GetAuthInfo()
 	if j.interval > 0 && authInfo.ClientId != "" && authInfo.Token != "" && authInfo.ServerURL != "" {
 		j.checkBuildingStates(ctx)
+		j.checkUploadingStates(ctx)
 	}
 
 	go func() {
@@ -69,15 +70,40 @@ func (j *StatusCheckerJob) Start(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
-				j.logger.Info("status checker task stopped")
+				j.logger.Info("check building task stopped")
 				return
 			case <-ticker.C:
 				authInfo := config.GetAuthInfo()
 				if authInfo.ClientId == "" || authInfo.Token == "" || authInfo.ServerURL == "" {
-					j.logger.Warn("auth info is nil, skip status checker task")
+					j.logger.Warn("auth info is nil, skip check building task")
 					continue
 				}
 				j.checkBuildingStates(ctx)
+			}
+		}
+	}()
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				j.logger.Error("recovered from panic in check uploading: %v", r)
+			}
+		}()
+		ticker := time.NewTicker(j.interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				j.logger.Info("check uploading task stopped")
+				return
+			case <-ticker.C:
+				authInfo := config.GetAuthInfo()
+				if authInfo.ClientId == "" || authInfo.Token == "" || authInfo.ServerURL == "" {
+					j.logger.Warn("auth info is nil, skip check uploading task")
+					continue
+				}
+				j.checkUploadingStates(ctx)
 			}
 		}
 	}()
@@ -143,6 +169,47 @@ func (j *StatusCheckerJob) checkBuildingStates(ctx context.Context) {
 	if err != nil {
 		j.logger.Error("failed to check building states: %v", err)
 		return
+	}
+}
+
+// checkUploadingStates 检查所有uploading状态
+func (j *StatusCheckerJob) checkUploadingStates(ctx context.Context) {
+	// 检查上下文是否已取消
+	select {
+	case <-ctx.Done():
+		j.logger.Info("context cancelled, skipping status check")
+		return
+	default:
+		// 继续执行
+	}
+
+	// 检查是否关闭codebase
+	codebaseEnv := j.storage.GetCodebaseEnv()
+	if codebaseEnv == nil {
+		codebaseEnv = &config.CodebaseEnv{
+			Switch: dto.SwitchOn,
+		}
+	}
+	if codebaseEnv.Switch == dto.SwitchOff {
+		j.logger.Info("codebase is disabled, skipping status check")
+		return
+	}
+
+	// 获取活跃工作区
+	workspaces, err := j.checker.CheckActiveWorkspaces()
+	if err != nil {
+		j.logger.Error("failed to check active workspaces: %v", err)
+		return
+	}
+
+	if len(workspaces) == 0 {
+		j.logger.Debug("no active workspaces found")
+		return
+	}
+
+	workspacePaths := make([]string, len(workspaces))
+	for i, workspace := range workspaces {
+		workspacePaths[i] = workspace.WorkspacePath
 	}
 
 	// 检查上下文是否已取消

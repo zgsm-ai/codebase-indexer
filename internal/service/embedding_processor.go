@@ -259,7 +259,7 @@ func (ep *embeddingProcessService) ProcessEmbeddingEvents(ctx context.Context, w
 	}
 
 	// 获取待处理的添加文件事件
-	addEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeAddFile}, workspacePaths, 10, false, targetStatuses, nil)
+	addEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeAddFile}, workspacePaths, 20, false, targetStatuses, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get add file events: %w", err)
 	}
@@ -279,7 +279,7 @@ func (ep *embeddingProcessService) ProcessEmbeddingEvents(ctx context.Context, w
 	}
 
 	// 获取修改文件事件
-	modifyEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeModifyFile}, workspacePaths, 10, false, targetStatuses, nil)
+	modifyEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeModifyFile}, workspacePaths, 20, false, targetStatuses, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get modify file events: %w", err)
 	}
@@ -299,7 +299,7 @@ func (ep *embeddingProcessService) ProcessEmbeddingEvents(ctx context.Context, w
 	}
 
 	// 获取重命名文件事件
-	renameEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeRenameFile}, workspacePaths, 10, false, targetStatuses, nil)
+	renameEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeRenameFile}, workspacePaths, 20, false, targetStatuses, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get rename file events: %w", err)
 	}
@@ -319,7 +319,7 @@ func (ep *embeddingProcessService) ProcessEmbeddingEvents(ctx context.Context, w
 	}
 
 	// 获取删除文件事件
-	deleteEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeDeleteFile}, workspacePaths, 10, false, targetStatuses, nil)
+	deleteEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeDeleteFile}, workspacePaths, 20, false, targetStatuses, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get delete file events: %w", err)
 	}
@@ -430,20 +430,20 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePath(ctx context.Context, f
 		var embeddingMessage string
 		embeddingFaildFiles := codebaseEmbeddingConfig.FailedFiles
 		failedKeys := make([]string, 0, len(embeddingFaildFiles))
-		failedValues := make([]string, 0, len(embeddingFaildFiles))
 		for k, v := range embeddingFaildFiles {
 			failedKeys = append(failedKeys, k)
-			failedValues = append(failedValues, v)
+			embeddingMessage = v
+			if len(failedKeys) > 5 {
+				break
+			}
 		}
 		if len(failedKeys) == 0 {
 			embeddingFailedFilePaths = ""
 			embeddingMessage = ""
 		} else if len(failedKeys) > 5 {
 			embeddingFailedFilePaths = strings.Join(failedKeys[:5], ",")
-			embeddingMessage = strings.Join(failedValues[:5], ",")
 		} else {
 			embeddingFailedFilePaths = strings.Join(failedKeys, ",")
-			embeddingMessage = strings.Join(failedValues, ",")
 		}
 
 		err = ep.workspaceRepo.UpdateEmbeddingInfo(event.WorkspacePath, embeddingFileNum, time.Now().Unix(), embeddingFailedFilePaths, embeddingMessage)

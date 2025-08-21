@@ -63,7 +63,7 @@ func (j *EventProcessorJob) Start(ctx context.Context) {
 				j.logger.Error("recovered from panic in embedding processor: %v", r)
 			}
 		}()
-		ticker := time.NewTicker(10 * time.Second)
+		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
 		for {
