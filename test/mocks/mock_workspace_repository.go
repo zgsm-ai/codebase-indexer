@@ -163,3 +163,17 @@ func (mr *MockWorkspaceRepositoryMockRecorder) UpdateWorkspace(workspace interfa
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkspace", reflect.TypeOf((*MockWorkspaceRepository)(nil).UpdateWorkspace), workspace)
 }
+
+// UpdateWorkspaceByMap mocks base method.
+func (m *MockWorkspaceRepository) UpdateWorkspaceByMap(path string, updates map[string]interface{}) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkspaceByMap", path, updates)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateWorkspaceByMap indicates an expected call of UpdateWorkspaceByMap.
+func (mr *MockWorkspaceRepositoryMockRecorder) UpdateWorkspaceByMap(path, updates interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkspaceByMap", reflect.TypeOf((*MockWorkspaceRepository)(nil).UpdateWorkspaceByMap), path, updates)
+}

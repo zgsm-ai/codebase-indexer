@@ -225,6 +225,21 @@ func (mr *MockEventRepositoryMockRecorder) GetEventsCountByType(eventTypes inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventsCountByType", reflect.TypeOf((*MockEventRepository)(nil).GetEventsCountByType), eventTypes)
 }
 
+// GetEventsCountByWorkspaceAndStatus mocks base method.
+func (m *MockEventRepository) GetEventsCountByWorkspaceAndStatus(workspacePath string, embeddingStatuses, codegraphStatuses []int) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEventsCountByWorkspaceAndStatus", workspacePath, embeddingStatuses, codegraphStatuses)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetEventsCountByWorkspaceAndStatus indicates an expected call of GetEventsCountByWorkspaceAndStatus.
+func (mr *MockEventRepositoryMockRecorder) GetEventsCountByWorkspaceAndStatus(workspacePath, embeddingStatuses, codegraphStatuses interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventsCountByWorkspaceAndStatus", reflect.TypeOf((*MockEventRepository)(nil).GetEventsCountByWorkspaceAndStatus), workspacePath, embeddingStatuses, codegraphStatuses)
+}
+
 // GetLatestEventByWorkspaceAndSourcePath mocks base method.
 func (m *MockEventRepository) GetLatestEventByWorkspaceAndSourcePath(workspacePath, sourceFilePath string) (*model.Event, error) {
 	m.ctrl.T.Helper()
@@ -267,4 +282,18 @@ func (m *MockEventRepository) UpdateEvent(event *model.Event) error {
 func (mr *MockEventRepositoryMockRecorder) UpdateEvent(event interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateEvent", reflect.TypeOf((*MockEventRepository)(nil).UpdateEvent), event)
+}
+
+// UpdateEventByMap mocks base method.
+func (m *MockEventRepository) UpdateEventByMap(id int64, updates map[string]interface{}) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateEventByMap", id, updates)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateEventByMap indicates an expected call of UpdateEventByMap.
+func (mr *MockEventRepositoryMockRecorder) UpdateEventByMap(id, updates interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateEventByMap", reflect.TypeOf((*MockEventRepository)(nil).UpdateEventByMap), id, updates)
 }

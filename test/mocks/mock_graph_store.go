@@ -107,21 +107,6 @@ func (mr *MockGraphStorageMockRecorder) Exists(ctx, projectUuid, key interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Exists", reflect.TypeOf((*MockGraphStorage)(nil).Exists), ctx, projectUuid, key)
 }
 
-// ExistsProject mocks base method.
-func (m *MockGraphStorage) ProjectIndexExists(projectUuid string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProjectIndexExists", projectUuid)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ExistsProject indicates an expected call of ExistsProject.
-func (mr *MockGraphStorageMockRecorder) ExistsProject(projectUuid interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProjectIndexExists", reflect.TypeOf((*MockGraphStorage)(nil).ProjectIndexExists), projectUuid)
-}
-
 // Get mocks base method.
 func (m *MockGraphStorage) Get(ctx context.Context, projectUuid string, key store.Key) ([]byte, error) {
 	m.ctrl.T.Helper()
@@ -149,6 +134,21 @@ func (m *MockGraphStorage) Iter(ctx context.Context, projectUuid string) store.I
 func (mr *MockGraphStorageMockRecorder) Iter(ctx, projectUuid interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Iter", reflect.TypeOf((*MockGraphStorage)(nil).Iter), ctx, projectUuid)
+}
+
+// ProjectIndexExists mocks base method.
+func (m *MockGraphStorage) ProjectIndexExists(projectUuid string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProjectIndexExists", projectUuid)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ProjectIndexExists indicates an expected call of ProjectIndexExists.
+func (mr *MockGraphStorageMockRecorder) ProjectIndexExists(projectUuid interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProjectIndexExists", reflect.TypeOf((*MockGraphStorage)(nil).ProjectIndexExists), projectUuid)
 }
 
 // Put mocks base method.
