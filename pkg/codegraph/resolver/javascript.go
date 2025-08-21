@@ -692,22 +692,23 @@ func createVariableElement(name string, scope types.Scope, element *Variable) *V
 func determineVariableScope(node *sitter.Node) types.Scope {
 	// 检查父节点
 	var current *sitter.Node = node
-	maxDepth := 5 // 限制向上查找的层数，防止无限循环
+	maxDepth := 3 // 限制向上查找的层数，防止无限循环
 
 	// 特殊处理：对于variable_declarator节点，找到其父节点(通常是declaration)
-	if node.Kind() == string(types.NodeKindVariableDeclarator) {
-		parent := node.Parent()
-		if parent != nil {
-			// 查找声明的类型：let/const是词法(块级)作用域，var是函数作用域
-			if parent.Kind() == string(types.NodeKindLexicalDeclaration) {
-				return types.ScopeBlock
-			} else if parent.Kind() == string(types.NodeKindVariableDeclaration) {
-				// 对于var声明，需要向上查找第一个函数作用域或文件作用域
-				current = parent // 从变量声明的父节点开始向上查找
-			}
-		}
-	}
+	// if node.Kind() == string(types.NodeKindVariableDeclarator) {
+	// 	parent := node.Parent()
+	// 	if parent != nil {
+	// 		// 查找声明的类型：let/const是词法(块级)作用域，var是函数作用域
+	// 		if parent.Kind() == string(types.NodeKindLexicalDeclaration) {
+	// 			return types.ScopeBlock
+	// 		} else if parent.Kind() == string(types.NodeKindVariableDeclaration) {
+	// 			// 对于var声明，需要向上查找第一个函数作用域或文件作用域
+	// 			current = parent // 从变量声明的父节点开始向上查找
+	// 		}
+	// 	}
+	// }
 
+	var currentKind = types.ScopeFile
 	// 从当前节点开始，逐级向上查找作用域容器
 	for i := 0; i < maxDepth; i++ {
 		// 先检查当前节点
@@ -717,13 +718,15 @@ func determineVariableScope(node *sitter.Node) types.Scope {
 			// 检查当前节点类型
 			switch {
 			case isBlockScopeContainer(current.Kind()):
-				return types.ScopeBlock
+				currentKind = types.ScopeBlock
 			case isFunctionScopeContainer(current.Kind()):
-				return types.ScopeFunction
+				currentKind = types.ScopeFunction
 			case isClassScopeContainer(current.Kind()):
-				return types.ScopeClass
+				currentKind = types.ScopeClass
 			case isFileScopeContainer(current.Kind()):
-				return types.ScopeFile
+				currentKind = types.ScopeFile
+			case isExportScopeContainer(current.Kind()):
+				currentKind = types.ScopeProject
 			}
 		}
 
@@ -737,7 +740,22 @@ func determineVariableScope(node *sitter.Node) types.Scope {
 	}
 
 	// 默认为文件作用域
-	return types.ScopeFile
+	return currentKind
+}
+
+func isExportScopeContainer(nodekind string) bool {
+	ExportScopeContainer := []string{
+		"export_statement",
+		"export_default_declaration",
+		"export_named_declaration",
+		"export_all_declaration",
+	}
+	for _, containerKind := range ExportScopeContainer {
+		if nodekind == containerKind {
+			return true
+		}
+	}
+	return false
 }
 
 // isBlockScopeContainer 判断节点类型是否为块级作用域容器

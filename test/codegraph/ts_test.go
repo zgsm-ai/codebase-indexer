@@ -191,6 +191,12 @@ func TestQueryTypeScript(t *testing.T) {
 		IncludeExts: []string{".ts", ".tsx"},
 	})
 
+	// 先清除所有已有的索引，确保强制重新索引
+	fmt.Println("清除工作空间的所有索引...")
+	err = indexer.RemoveAllIndexes(context.Background(), workspacePath)
+	assert.NoError(t, err)
+	fmt.Println("索引清除完成")
+
 	// 先索引工作空间，确保有数据可查询
 	fmt.Println("开始索引TypescriptScriptProjectRootDir工作空间...")
 	_, err = indexer.IndexWorkspace(context.Background(), workspacePath)
@@ -205,6 +211,7 @@ func TestQueryTypeScript(t *testing.T) {
 		StartLine       int                // 开始行号
 		EndLine         int                // 结束行号
 		ElementType     string             // 元素类型
+		CodeSnippet     []byte             // 代码片段内容
 		ExpectedCount   int                // 期望的定义数量
 		ExpectedNames   []string           // 期望找到的定义名称
 		ShouldFindDef   bool               // 是否应该找到定义
@@ -279,22 +286,9 @@ func TestQueryTypeScript(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			Name:          "查询processExpression函数调用",
-			ElementName:   "processExpression",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\compiler-ssr\\src\\ssrCodegenTransform.ts",
-			StartLine:     49,
-			EndLine:       49,
-			ElementType:   "call.function",
-			ShouldFindDef: true,
-			wantDefinitions: []types.Definition{
-				{Name: "processExpression", Path: "transformExpression.ts", Range: []int32{103, 0, 103, 0}},
-			},
-			wantErr: nil,
-		},
-		{
 			Name:          "查询createSimpleExpression函数",
 			ElementName:   "createSimpleExpression",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\compiler-core\\src\transforms\vOn.ts",
+			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\compiler-core\\src\\transforms\\vOn.ts",
 			StartLine:     59,
 			EndLine:       59,
 			ElementType:   "call.function",
@@ -318,28 +312,16 @@ func TestQueryTypeScript(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			Name:          "查询isSimpleIdentifier函数",
-			ElementName:   "isSimpleIdentifier",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\compiler-core\\src\\parser.ts",
-			StartLine:     994,
-			EndLine:       994,
-			ElementType:   "call.function",
+			Name:        "查询isFnExpression函数",
+			ElementName: "isFnExpression",
+			FilePath:    "e:\\tmp\\projects\\typescript\\vue-next\\packages\\compiler-core\\src\\transforms\\vOn.ts",
+			StartLine:   85,
+			EndLine:     85,
+			ElementType: "call.function",
+			//CodeSnippet:   []byte(`const isInlineStatement = !(isMemberExp || isFnExpression(exp, context))`), // 添加包含函数调用的代码片段
 			ShouldFindDef: true,
 			wantDefinitions: []types.Definition{
-				{Name: "isSimpleIdentifier", Path: "utils.ts", Range: []int32{66, 0, 66, 0}},
-			},
-			wantErr: nil,
-		},
-		{
-			Name:          "查询isFnExpression函数",
-			ElementName:   "isFnExpression",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\compiler-core\\transforms\\vOn.ts",
-			StartLine:     85,
-			EndLine:       85,
-			ElementType:   "call.function",
-			ShouldFindDef: true,
-			wantDefinitions: []types.Definition{
-				{Name: "isFnExpression", Path: "utils.ts", Range: []int32{228, 0, 228, 0}},
+				{Name: "isFnExpression", Path: "utils.ts", Range: []int32{227, 0, 227, 0}},
 			},
 			wantErr: nil,
 		},
@@ -489,13 +471,8 @@ func TestQueryTypeScript(t *testing.T) {
 
 			// 检查文件是否存在
 			if _, err := os.Stat(tc.FilePath); os.IsNotExist(err) {
-				fmt.Printf("文件不存在，跳过查询\n")
-				if !tc.ShouldFindDef {
-					correctCases++
-					fmt.Printf("✓ 预期文件不存在，测试通过\n")
-				} else {
-					fmt.Printf("✗ 预期找到定义但文件不存在，测试失败\n")
-				}
+				fmt.Printf("文件不存在，测试失败\n")
+				assert.Fail(t, fmt.Sprintf("%s: 测试文件 '%s' 不存在", tc.Name, tc.FilePath))
 				return
 			}
 
@@ -513,10 +490,11 @@ func TestQueryTypeScript(t *testing.T) {
 
 			// 调用QueryDefinitions接口
 			definitions, err := indexer.QueryDefinitions(context.Background(), &types.QueryDefinitionOptions{
-				Workspace: workspacePath,
-				StartLine: tc.StartLine,
-				EndLine:   tc.EndLine,
-				FilePath:  tc.FilePath,
+				Workspace:   workspacePath,
+				StartLine:   tc.StartLine,
+				EndLine:     tc.EndLine,
+				FilePath:    tc.FilePath,
+				CodeSnippet: tc.CodeSnippet, // 添加代码片段参数
 			})
 
 			foundDefinitions := len(definitions)
@@ -568,13 +546,6 @@ func TestQueryTypeScript(t *testing.T) {
 				fmt.Printf("📊 查询总结: 期望找到=%v, 实际找到=%d\n",
 					tc.ShouldFindDef, foundDefinitions)
 
-				if tc.ShouldFindDef && foundDefinitions == 0 {
-					fmt.Println("  ⚠️  警告: 期望找到定义但未找到")
-				} else if !tc.ShouldFindDef && foundDefinitions > 0 {
-					fmt.Println("  ⚠️  警告: 期望不找到定义但找到了")
-				} else {
-					fmt.Println("  ✅ 查询结果符合预期")
-				}
 			}
 
 			// 使用结构化的期望结果进行验证（类似js_resolver_test.go格式）

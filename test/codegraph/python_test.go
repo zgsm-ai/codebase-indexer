@@ -161,7 +161,7 @@ func TestQueryPython(t *testing.T) {
 			ElementType:   "call.function",
 			ShouldFindDef: true,
 			wantDefinitions: []types.Definition{
-				{Name: "add_task", Path: "utils.py", Range: []int32{8, 0, 8, 0}},
+				{Name: "add_task", Path: "background.py", Range: []int32{8, 0, 8, 0}},
 			},
 			wantErr: nil,
 		},

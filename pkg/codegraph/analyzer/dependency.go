@@ -95,7 +95,6 @@ func (da *DependencyAnalyzer) SaveSymbolOccurrences(ctx context.Context, project
 					totalVariablesFiltered++
 					continue
 				}
-
 				symbol, load := da.loadSymbolOccurrenceByStrategy(ctx, projectUuid, totalFiles, element, symbolCache, fileTable)
 				if load {
 					totalLoad++
@@ -195,17 +194,20 @@ func (da *DependencyAnalyzer) FilterByImports(filePath string, imports []*codegr
 		// 1、同文件
 		if def.Path == filePath {
 			found = append(found, def)
+			continue
 		}
 
 		// 2、同包(同父路径)
 		if utils.IsSameParentDir(def.Path, filePath) {
 			found = append(found, def)
+			continue
 		}
 
 		// 3、根据import，当前def的路径包含imp的路径
 		for _, imp := range imports {
 			if IsImportPathInFilePath(imp, filePath) {
 				found = append(found, def)
+				break
 			}
 		}
 	}
