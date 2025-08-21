@@ -150,8 +150,8 @@ func TestJavaBaseParse(t *testing.T) {
 		{
 			name: "Java",
 			sourceFile: &types.SourceFile{
-				Path:    "testdata/com/example/test/TestClass.java",
-				Content: readFile("testdata/com/example/test/TestClass.java"),
+				Path:    "testdata/java/TestClass.java",
+				Content: readFile("testdata/java/TestClass.java"),
 			},
 			wantErr: nil,
 		},
@@ -163,20 +163,17 @@ func TestJavaBaseParse(t *testing.T) {
 			assert.NotNil(t, res)
 			assert.NotNil(t, res.Package)
 			// assert.NotEmpty(t, res.Imports)
-			// for _, ipt := range res.Imports {
-			// 	fmt.Println("import:", ipt.GetName())
-			// 	fmt.Println("import file paths:", ipt.FilePaths)
-			// }
+			for _, ipt := range res.Imports {
+				fmt.Println("import:", ipt.GetName())
+			}
 			fmt.Println("package:", res.Package.GetName())
 			// Java 文件未必有 Imports，但一般有 Elements
 			assert.NotEmpty(t, res.Elements)
 			for _, element := range res.Elements {
 
 				cls, ok := element.(*resolver.Class)
-				fmt.Println("--------------------------------")
 				if ok {
-					fmt.Println(cls.GetName())
-					fmt.Println(cls.GetType())
+					fmt.Println(cls.GetType(), cls.GetName())
 					for _, field := range cls.Fields {
 						fmt.Println(field.Modifier, field.Type, field.Name)
 					}
@@ -188,8 +185,7 @@ func TestJavaBaseParse(t *testing.T) {
 				}
 				variable, ok := element.(*resolver.Variable)
 				if ok {
-					fmt.Println(variable.GetName())
-					fmt.Println(variable.GetType())
+					fmt.Println(variable.GetType(), variable.GetName())
 				}
 
 			}

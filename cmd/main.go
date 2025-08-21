@@ -5,8 +5,10 @@ import (
 	"codebase-indexer/pkg/codegraph/definition"
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"runtime"
 
 	// "net"
 	"net/http"
@@ -244,7 +246,12 @@ func main() {
 
 	appLogger.Info("client has been successfully closed")
 }
-
+func memStatsHandler(w http.ResponseWriter, r *http.Request) {
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+	json.NewEncoder(w).Encode(memStats)
+	w.Header().Set("Content-Type", "application/json")
+}
 func setupPprof(appLogger logger.Logger) {
 	pprofConfig := config.GetClientConfig().Pprof
 	if pprofConfig.Enabled {
@@ -259,6 +266,7 @@ func setupPprof(appLogger logger.Logger) {
 			pprofMux.Handle("/debug/pprof/heap", pprof.Handler("heap"))
 			pprofMux.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
 			pprofMux.Handle("/debug/pprof/block", pprof.Handler("block"))
+			pprofMux.Handle("/debug/pprof/memStats", http.HandlerFunc(memStatsHandler))
 
 			appLogger.Info("pprof server starting on %s", pprofConfig.Address)
 			if err := http.ListenAndServe(pprofConfig.Address, pprofMux); err != nil && err != http.ErrServerClosed {

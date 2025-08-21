@@ -62,7 +62,7 @@ var TestVar = "test"
 
 	// 预期的位置信息 (tree-sitter 使用从0开始的行列号)
 	expectedRanges := map[string][]int32{
-		"test":          {1, 0, 1, 12},   // line 4: type TestStruct struct {
+		// "test":          {1, 0, 1, 12},   // package 不考虑
 		"TestStruct":    {4, 0, 7, 1},    // line 4: type TestStruct struct {
 		"TestInterface": {10, 0, 13, 1},  // line 10: type TestInterface interface {
 		"TestFunc":      {16, 0, 18, 1},  // line 16: func TestFunc(...)

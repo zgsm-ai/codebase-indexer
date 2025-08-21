@@ -33,16 +33,19 @@ func loadScm() error {
 		sitterLang := l.SitterLanguage()
 		err := langParser.SetLanguage(sitterLang)
 		if err != nil {
+			langParser.Close()
 			return fmt.Errorf("failed to init language parser %s: %w", l.Language, err)
 		}
 
 		baseQuery, err := loadLanguageScm(l, baseSubDir, sitterLang)
 		if err != nil {
+			langParser.Close()
 			return err
 		}
 
 		defQuery, err := loadLanguageScm(l, defSubdir, sitterLang)
 		if err != nil {
+			langParser.Close()
 			return err
 		}
 

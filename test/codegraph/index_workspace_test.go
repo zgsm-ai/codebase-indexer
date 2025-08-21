@@ -39,7 +39,7 @@ import (
 // g:\tmp\projects\typescript\TypeScript
 // g:\tmp\projects\typescript\vue-next
 
-const testRootDir = "G:\\tmp\\projects"
+const testRootDir = "/home/kcx/codeWorkspace/codebase-indexer/test/tmp/projects"
 
 func getSupportedExtByLanguageTestHelper(language lang.Language) []string {
 	parser, err := lang.GetSitterParserByLanguage(language)

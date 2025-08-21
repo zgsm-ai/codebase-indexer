@@ -1045,8 +1045,8 @@ func TestCodegraphProcessor_convertFilePathToAbs(t *testing.T) {
 				SourceFilePath: "file.go",
 				TargetFilePath: "new.go",
 			},
-			expectedSource: filepath.Join("file.go", "file.go"),
-			expectedTarget: filepath.Join("new.go", "new.go"),
+			expectedSource: filepath.Join("/workspace", "file.go"), // 修正：应该是 "/workspace/file.go"
+			expectedTarget: filepath.Join("/workspace", "new.go"),  // 修正：应该是 "/workspace/new.go"
 		},
 		{
 			name: "源路径是绝对路径，目标路径不是",
@@ -1056,7 +1056,7 @@ func TestCodegraphProcessor_convertFilePathToAbs(t *testing.T) {
 				TargetFilePath: "new.go",
 			},
 			expectedSource: "/workspace/file.go",
-			expectedTarget: filepath.Join("new.go", "new.go"),
+			expectedTarget: filepath.Join("/workspace", "new.go"), // 修正：应该是 "/workspace/new.go"
 		},
 		{
 			name: "源路径不是绝对路径，目标路径是",
@@ -1065,7 +1065,7 @@ func TestCodegraphProcessor_convertFilePathToAbs(t *testing.T) {
 				SourceFilePath: "file.go",
 				TargetFilePath: "/workspace/new.go",
 			},
-			expectedSource: filepath.Join("file.go", "file.go"),
+			expectedSource: filepath.Join("/workspace", "file.go"), // 修正：应该是 "/workspace/file.go"
 			expectedTarget: "/workspace/new.go",
 		},
 		{
@@ -1075,8 +1075,8 @@ func TestCodegraphProcessor_convertFilePathToAbs(t *testing.T) {
 				SourceFilePath: "",
 				TargetFilePath: "",
 			},
-			expectedSource: "",
-			expectedTarget: "",
+			expectedSource: "/workspace",
+			expectedTarget: "/workspace",
 		},
 	}
 

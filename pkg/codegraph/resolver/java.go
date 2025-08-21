@@ -219,9 +219,12 @@ func (j *JavaResolver) resolveVariable(ctx context.Context, element *Variable, r
 			// 用于处理这种 String managerName = "DefaultManager", managerVersion
 			elems[len(elems)-1].BaseElement.Name = StripSpaces(content)
 		case types.ElementTypeLocalVariableType, types.ElementTypeFieldType:
-			// 左侧的类型声明
+			// 左侧的类型声明，有可能返回nil
 			typs := findAllTypes(&cap.Node, rc.SourceFile.Content)
-			elems[len(elems)-1].VariableType = typs
+			if len(typs) == 0 {
+				elems[len(elems)-1].VariableType = []string{types.PrimitiveType}
+				continue
+			}
 			for _, typ := range typs {
 				// 得到owner，用点进行分割，取最后一个
 				parts := strings.Split(typ, types.Dot)
@@ -241,7 +244,7 @@ func (j *JavaResolver) resolveVariable(ctx context.Context, element *Variable, r
 				}
 				// 自定义类型走引用
 				refs = append(refs, NewReference(element, &cap.Node, realTyp, owner))
-
+				elems[len(elems)-1].VariableType = append(elems[len(elems)-1].VariableType, realTyp)
 			}
 		}
 	}

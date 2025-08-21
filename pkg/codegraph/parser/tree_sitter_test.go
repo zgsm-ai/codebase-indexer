@@ -12,6 +12,7 @@ import (
 
 func TestQuery(t *testing.T) {
 	parser := sitter.NewParser()
+	defer parser.Close()
 	lang := sitter.NewLanguage(sittergo.Language())
 	err := parser.SetLanguage(lang)
 	assert.NoError(t, err)
@@ -88,6 +89,7 @@ func (p *Person) SayHello() string { return "Hello" }
 
 func TestWalk(t *testing.T) {
 	parser := sitter.NewParser()
+	defer parser.Close()
 	lang := sitter.NewLanguage(sittergo.Language())
 	err := parser.SetLanguage(lang)
 	assert.NoError(t, err)
@@ -147,6 +149,7 @@ func TestWalk(t *testing.T) {
 
 func TestWalkRecur(t *testing.T) {
 	parser := sitter.NewParser()
+	defer parser.Close()
 	lang := sitter.NewLanguage(sittergo.Language())
 	err := parser.SetLanguage(lang)
 	assert.NoError(t, err)

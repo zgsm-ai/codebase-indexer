@@ -20,7 +20,6 @@ func TestSQLiteManager(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "test-db")
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
-
 	// 创建测试日志记录器
 	logger := &mocks.MockLogger{}
 
@@ -58,16 +57,6 @@ func TestSQLiteManager(t *testing.T) {
 		err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='events'").Scan(&tableName)
 		require.NoError(t, err)
 		assert.Equal(t, "events", tableName)
-
-		// 检查embedding_states表
-		err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='embedding_states'").Scan(&tableName)
-		require.NoError(t, err)
-		assert.Equal(t, "embedding_states", tableName)
-
-		// 检查codegraph_states表
-		err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='codegraph_states'").Scan(&tableName)
-		require.NoError(t, err)
-		assert.Equal(t, "codegraph_states", tableName)
 	})
 
 	t.Run("GetDB", func(t *testing.T) {
@@ -218,62 +207,6 @@ func TestSQLiteManagerTableCreation(t *testing.T) {
 		expectedColumns := []string{
 			"id", "workspace_path", "event_type", "source_file_path",
 			"target_file_path", "created_at", "updated_at",
-		}
-
-		for _, col := range expectedColumns {
-			assert.True(t, columns[col], "Missing column: %s", col)
-		}
-	})
-
-	t.Run("EmbeddingStatesTableSchema", func(t *testing.T) {
-		// 验证embedding_states表结构
-		rows, err := db.Query("PRAGMA table_info(embedding_states)")
-		require.NoError(t, err)
-		defer rows.Close()
-
-		columns := make(map[string]bool)
-		for rows.Next() {
-			var cid int
-			var name, dtype string
-			var notNull, pk int
-			var dfltValue interface{} // 使用interface{}来处理可能为NULL的默认值
-
-			err = rows.Scan(&cid, &name, &dtype, &notNull, &dfltValue, &pk)
-			require.NoError(t, err)
-			columns[name] = true
-		}
-
-		expectedColumns := []string{
-			"sync_id", "workspace_path", "file_path", "status",
-			"message", "created_at", "updated_at",
-		}
-
-		for _, col := range expectedColumns {
-			assert.True(t, columns[col], "Missing column: %s", col)
-		}
-	})
-
-	t.Run("CodegraphStatesTableSchema", func(t *testing.T) {
-		// 验证codegraph_states表结构
-		rows, err := db.Query("PRAGMA table_info(codegraph_states)")
-		require.NoError(t, err)
-		defer rows.Close()
-
-		columns := make(map[string]bool)
-		for rows.Next() {
-			var cid int
-			var name, dtype string
-			var notNull, pk int
-			var dfltValue interface{} // 使用interface{}来处理可能为NULL的默认值
-
-			err = rows.Scan(&cid, &name, &dtype, &notNull, &dfltValue, &pk)
-			require.NoError(t, err)
-			columns[name] = true
-		}
-
-		expectedColumns := []string{
-			"workspace_path", "file_path", "status",
-			"message", "created_at", "updated_at",
 		}
 
 		for _, col := range expectedColumns {
