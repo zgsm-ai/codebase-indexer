@@ -257,7 +257,7 @@ func (i *indexer) IndexWorkspace(ctx context.Context, workspacePath string) (*ty
 		taskMetrics.FailedFilePaths = append(taskMetrics.FailedFilePaths, projectTaskMetrics.FailedFilePaths...)
 	}
 
-	i.logger.Info("%s index end. cost %d ms, index %d projects, visit %d files, "+
+	i.logger.Info("workspace %s index end. cost %d ms, indexed %d projects, visited %d files, "+
 		"parsed %d files successfully, failed %d files", workspacePath,
 		time.Since(workspaceStart).Milliseconds(), len(projects), taskMetrics.TotalFiles,
 		taskMetrics.TotalFiles-taskMetrics.TotalFailedFiles, taskMetrics.TotalFailedFiles)
@@ -324,10 +324,15 @@ func (i *indexer) indexProject(ctx context.Context, workspacePath string, projec
 	}
 
 	i.logger.Info("project %s files parse finish. cost %d ms, visit %d files, "+
-		"parsed %d files successfully, failed %d files, total symbols: %d",
+		"parsed %d files successfully, failed %d files, total symbols: %d, saved symbols %d, total variables %d, saved variables %d",
 		project.Path, time.Since(projectStart).Milliseconds(), batchResult.ProjectMetrics.TotalFiles,
 		batchResult.ProjectMetrics.TotalFiles-batchResult.ProjectMetrics.TotalFailedFiles,
-		batchResult.ProjectMetrics.TotalFailedFiles, batchResult.ProjectMetrics.TotalSymbols)
+		batchResult.ProjectMetrics.TotalFailedFiles,
+		batchResult.ProjectMetrics.TotalSymbols,
+		batchResult.ProjectMetrics.TotalSavedSymbols,
+		batchResult.ProjectMetrics.TotalVariables,
+		batchResult.ProjectMetrics.TotalSavedVariables,
+	)
 
 	return batchResult.ProjectMetrics, nil
 }
@@ -1651,12 +1656,14 @@ func (i *indexer) processBatch(ctx context.Context, batchId int, params *BatchPr
 	// 项目符号表存储
 	symbolStart := time.Now()
 
-	symbols, err := i.analyzer.SaveSymbolOccurrences(ctx, params.ProjectUuid, params.TotalFiles, elementTables, symbolCache)
+	symbolMetrics, err := i.analyzer.SaveSymbolOccurrences(ctx, params.ProjectUuid, params.TotalFiles, elementTables, symbolCache)
+	metrics.TotalSymbols += symbolMetrics.TotalSymbols
+	metrics.TotalSavedSymbols += symbolMetrics.TotalSavedSymbols
+	metrics.TotalVariables += symbolMetrics.TotalVariables
+	metrics.TotalSavedVariables += symbolMetrics.TotalSavedVariables
 	if err != nil {
-		metrics.TotalSymbols += symbols
 		return nil, fmt.Errorf("save symbol definitions failed: %w", err)
 	}
-	metrics.TotalSymbols += symbols
 	i.logger.Info("batch-%d batch [%d:%d]/%d save symbols end, cost %d ms", batchId,
 		params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(symbolStart).Milliseconds())
 
@@ -1773,16 +1780,19 @@ func (i *indexer) indexFilesInBatches(ctx context.Context, params *BatchProcessi
 		// 提交任务
 		err := func(ctx context.Context, taskID int) error {
 			batchStartTime := time.Now()
-			result, err := i.processBatch(ctx, taskID, batchParams, symbolCache)
+			metrics, err := i.processBatch(ctx, taskID, batchParams, symbolCache)
 			if err != nil {
 				i.logger.Debug("batch-%d process batch err:%v", taskID, err)
 				return fmt.Errorf("process batch err:%w", err)
 			}
 
-			processedFilesCnt += result.TotalFiles - result.TotalFailedFiles
-			projectMetrics.TotalFailedFiles += result.TotalFailedFiles
-			projectMetrics.TotalSymbols += result.TotalSymbols
-			projectMetrics.FailedFilePaths = append(projectMetrics.FailedFilePaths, result.FailedFilePaths...)
+			processedFilesCnt += metrics.TotalFiles - metrics.TotalFailedFiles
+			projectMetrics.TotalFailedFiles += metrics.TotalFailedFiles
+			projectMetrics.TotalSymbols += metrics.TotalSymbols
+			projectMetrics.TotalSavedSymbols += metrics.TotalSavedSymbols
+			projectMetrics.TotalVariables += metrics.TotalVariables
+			projectMetrics.TotalSavedVariables += metrics.TotalSavedVariables
+			projectMetrics.FailedFilePaths = append(projectMetrics.FailedFilePaths, metrics.FailedFilePaths...)
 			//TODO 更新进度
 			batchUpdateStart := time.Now()
 			if err := i.updateProgress(ctx, &ProgressInfo{

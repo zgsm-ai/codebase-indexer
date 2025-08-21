@@ -8,6 +8,7 @@ import (
 	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
 	"codebase-indexer/pkg/codegraph/resolver"
 	"codebase-indexer/pkg/codegraph/store"
+	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/pkg/codegraph/utils"
 	"codebase-indexer/pkg/codegraph/workspace"
 	"codebase-indexer/pkg/logger"
@@ -19,11 +20,12 @@ import (
 )
 
 type DependencyAnalyzer struct {
-	PackageClassifier *packageclassifier.PackageClassifier
-	workspaceReader   workspace.WorkspaceReader
-	logger            logger.Logger
-	store             store.GraphStorage
-	loadThreshold     int
+	PackageClassifier     *packageclassifier.PackageClassifier
+	workspaceReader       workspace.WorkspaceReader
+	logger                logger.Logger
+	store                 store.GraphStorage
+	loadThreshold         int
+	skipVariableThreshold int
 }
 
 func NewDependencyAnalyzer(logger logger.Logger,
@@ -32,20 +34,22 @@ func NewDependencyAnalyzer(logger logger.Logger,
 	store store.GraphStorage) *DependencyAnalyzer {
 
 	return &DependencyAnalyzer{
-		logger:            logger,
-		PackageClassifier: packageClassifier,
-		workspaceReader:   reader,
-		store:             store,
-		loadThreshold:     getLoadThreshold(),
+		logger:                logger,
+		PackageClassifier:     packageClassifier,
+		workspaceReader:       reader,
+		store:                 store,
+		loadThreshold:         getLoadThresholdFromEnv(),
+		skipVariableThreshold: getSkipVariableThresholdFromEnv(),
 	}
 }
 
-// defaultLoadThreshold
-const defaultLoadThreshold = 9000 // 不存在则load，缓存key、value。
+const defaultLoadFromStoreThreshold = 9000 // 不存在则load，缓存key、value。
 
-func getLoadThreshold() int {
-	loadThreshold := defaultLoadThreshold
-	if envVal, ok := os.LookupEnv("LOAD_THRESHOLD"); ok {
+const defaultSkipVariableThreshold = 9000 // 不存在则load，缓存key、value。
+
+func getLoadThresholdFromEnv() int {
+	loadThreshold := defaultLoadFromStoreThreshold
+	if envVal, ok := os.LookupEnv("LOAD_FROM_STORE_THRESHOLD"); ok {
 		if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
 			loadThreshold = val
 		}
@@ -53,27 +57,44 @@ func getLoadThreshold() int {
 	return loadThreshold
 }
 
+func getSkipVariableThresholdFromEnv() int {
+	skipVariableThreshold := defaultSkipVariableThreshold
+	if envVal, ok := os.LookupEnv("SKIP_VARIABLE_THRESHOLD"); ok {
+		if val, err := strconv.Atoi(envVal); err == nil && val > 0 {
+			skipVariableThreshold = val
+		}
+	}
+	return skipVariableThreshold
+}
+
 // SaveSymbolOccurrences 保存符号定义位置
 func (da *DependencyAnalyzer) SaveSymbolOccurrences(ctx context.Context, projectUuid string, totalFiles int,
-	fileElementTables []*parser.FileElementTable, symbolCache *cache.LRUCache[*codegraphpb.SymbolOccurrence]) (int, error) {
+	fileElementTables []*parser.FileElementTable, symbolCache *cache.LRUCache[*codegraphpb.SymbolOccurrence]) (*types.IndexTaskMetrics, error) {
+	taskMetrics := &types.IndexTaskMetrics{}
 	if len(fileElementTables) == 0 {
-		return 0, nil
+		return taskMetrics, nil
 	}
 	// 2. 构建项目定义符号表  符号名 -> 元素列表，先根据符号名匹配，匹配符号名后，再根据导入路径、包名进行过滤。
-	totalSavedSymbols := 0
-	totalLoad := 0
+	totalElements := 0
+	totalVariables := 0
+	totalElementsAfterFiltered := 0
+	totalLoad, totalVariablesFiltered := 0, 0
 	updatedSymbolOccurrences := make([]*codegraphpb.SymbolOccurrence, 0, 100)
 	for _, fileTable := range fileElementTables {
+		totalElements += len(fileTable.Elements)
 		for _, element := range fileTable.Elements {
 			switch element.(type) {
 			// 处理定义
-			case *resolver.Class, *resolver.Function, *resolver.Method, *resolver.Interface:
+			case *resolver.Class, *resolver.Function, *resolver.Method, *resolver.Interface, *resolver.Variable:
+				if element.GetType() == types.ElementTypeVariable {
+					totalVariables++
+				}
 				// 定义位置
-				// 跳过局部作用域的变量 不处理变量
-				//if element.GetType() == types.ElementTypeVariable && (element.GetScope() == types.ScopeBlock ||
-				//	element.GetScope() == types.ScopeFunction) {
-				//	continue
-				//}
+				// 有些变量是函数类型（ts），只处理全局/包级变量
+				if da.shouldSkipVariable(totalFiles, element) {
+					totalVariablesFiltered++
+					continue
+				}
 
 				symbol, load := da.loadSymbolOccurrenceByStrategy(ctx, projectUuid, totalFiles, element, symbolCache, fileTable)
 				if load {
@@ -86,24 +107,33 @@ func (da *DependencyAnalyzer) SaveSymbolOccurrences(ctx context.Context, project
 				})
 
 				updatedSymbolOccurrences = append(updatedSymbolOccurrences, symbol)
-				totalSavedSymbols++
-				// TODO 引用位置
+				totalElementsAfterFiltered++
+				// 引用位置
 				// case *resolver.Reference, *resolver.Call:
 			}
 		}
 
 	}
-
+	taskMetrics.TotalSymbols = totalElements
+	taskMetrics.TotalVariables = totalVariables
 	// 3. 保存到存储中，后续查询使用
 	if err := da.store.BatchSave(ctx, projectUuid, workspace.SymbolOccurrences(updatedSymbolOccurrences)); err != nil {
-		return totalSavedSymbols, fmt.Errorf("batch save symbol definitions error: %w", err)
+		return taskMetrics, fmt.Errorf("batch save symbol definitions error: %w", err)
 	}
-	da.logger.Info("batch save symbols end, total element_tables %d, total elements %d ,load from db %d, load threshold %d",
-		len(fileElementTables), totalSavedSymbols, totalLoad, da.loadThreshold)
-	return totalSavedSymbols, nil
+	taskMetrics.TotalSavedSymbols = totalElementsAfterFiltered
+	taskMetrics.TotalSavedVariables = totalVariables - totalVariablesFiltered
+	da.logger.Info("batch save symbols end, element_tables %d, total elements %d, after filtered %d, load from db %d, total variable %d, skipped %d, load threshold %d, skip threshold %d",
+		len(fileElementTables), totalElements, totalElementsAfterFiltered, totalLoad, totalVariables, totalVariablesFiltered, da.loadThreshold, da.skipVariableThreshold)
+	return taskMetrics, nil
 }
 
-// loadSymbolOccurrenceByStrategy 根据策略加载，defaultLoadThreshold、level2、level3
+func (da *DependencyAnalyzer) shouldSkipVariable(totalFiles int, element resolver.Element) bool {
+	return totalFiles > da.skipVariableThreshold || (element.GetType() == types.ElementTypeVariable && (element.GetScope() != types.ScopePackage &&
+		element.GetScope() != types.ScopeFile &&
+		element.GetScope() != types.ScopeProject))
+}
+
+// loadSymbolOccurrenceByStrategy 根据策略加载，defaultLoadFromStoreThreshold、level2、level3
 func (da *DependencyAnalyzer) loadSymbolOccurrenceByStrategy(ctx context.Context,
 	projectUuid string,
 	totalFiles int,
@@ -165,20 +195,17 @@ func (da *DependencyAnalyzer) FilterByImports(filePath string, imports []*codegr
 		// 1、同文件
 		if def.Path == filePath {
 			found = append(found, def)
-			break
 		}
 
 		// 2、同包(同父路径)
 		if utils.IsSameParentDir(def.Path, filePath) {
 			found = append(found, def)
-			break
 		}
 
 		// 3、根据import，当前def的路径包含imp的路径
 		for _, imp := range imports {
 			if IsImportPathInFilePath(imp, filePath) {
 				found = append(found, def)
-				break
 			}
 		}
 	}

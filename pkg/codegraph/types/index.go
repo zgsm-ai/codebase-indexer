@@ -15,10 +15,13 @@ type FileWithModTimestamp struct {
 }
 
 type IndexTaskMetrics struct {
-	TotalFiles       int
-	TotalSymbols     int
-	TotalFailedFiles int
-	FailedFilePaths  []string
+	TotalFiles          int
+	TotalSymbols        int
+	TotalSavedSymbols   int
+	TotalVariables      int
+	TotalSavedVariables int
+	TotalFailedFiles    int
+	FailedFilePaths     []string
 }
 
 // CodeDefinition 代码文件结构
