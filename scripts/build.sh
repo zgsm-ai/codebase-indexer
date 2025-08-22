@@ -114,13 +114,13 @@ case "$TARGET_OS" in
       "amd64")
         export CC=clang
         export CGO_CFLAGS="-O2 -g -arch x86_64"
-        STATIC_BUILD_FLAGS="-linkmode external -extldflags \"-static\""
+        STATIC_BUILD_FLAGS="-linkmode external"
         STATIC_BUILD_TAGS="netgo osusergo static_build"
         ;;
       "arm64")
         export CC=clang
         export CGO_CFLAGS="-O2 -g -arch arm64"
-        STATIC_BUILD_FLAGS="-linkmode external -extldflags \"-static\""
+        STATIC_BUILD_FLAGS="-linkmode external"
         STATIC_BUILD_TAGS="netgo osusergo static_build"
         ;;
       *)

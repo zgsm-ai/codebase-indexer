@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"codebase-indexer/internal/errs"
 	"codebase-indexer/internal/model"
 	"codebase-indexer/internal/repository"
 	"codebase-indexer/internal/utils"
@@ -89,6 +90,7 @@ func (ep *embeddingProcessService) ProcessAddFileEvent(ctx context.Context, even
 		if updateErr != nil {
 			return nil, fmt.Errorf("failed to update event status to uploadFailed: %w", updateErr)
 		}
+		ep.uploadFilePathFailed(event, err)
 		return nil, fmt.Errorf("failed to upload add file %s: %w", event.SourceFilePath, err)
 	}
 
@@ -126,6 +128,7 @@ func (ep *embeddingProcessService) ProcessModifyFileEvent(ctx context.Context, e
 		if updateErr != nil {
 			return nil, fmt.Errorf("failed to update event status to upload failed: %w", updateErr)
 		}
+		ep.uploadFilePathFailed(event, err)
 		return nil, fmt.Errorf("failed to upload modified file %s: %w", event.SourceFilePath, err)
 	}
 
@@ -163,6 +166,7 @@ func (ep *embeddingProcessService) ProcessDeleteFileEvent(ctx context.Context, e
 		if updateErr != nil {
 			return nil, fmt.Errorf("failed to update event status to upload failed: %w", updateErr)
 		}
+		ep.uploadFilePathFailed(event, err)
 		return nil, fmt.Errorf("failed to upload delete file %s: %w", event.SourceFilePath, err)
 	}
 
@@ -200,6 +204,7 @@ func (ep *embeddingProcessService) ProcessRenameFileEvent(ctx context.Context, e
 		if updateErr != nil {
 			return nil, fmt.Errorf("failed to update event status to upload failed: %w", updateErr)
 		}
+		ep.uploadFilePathFailed(event, err)
 		return nil, fmt.Errorf("failed to upload renamed file %s->%s: %w", event.SourceFilePath, event.TargetFilePath, err)
 	}
 
@@ -341,6 +346,71 @@ func (ep *embeddingProcessService) ProcessEmbeddingEvents(ctx context.Context, w
 	return nil
 }
 
+func (ep *embeddingProcessService) uploadFilePathFailed(event *model.Event, uploadErr error) error {
+	filePath := event.SourceFilePath
+	if event.EventType == model.EventTypeRenameFile {
+		filePath = event.TargetFilePath
+	}
+	codebaseId := utils.GenerateCodebaseEmbeddingID(event.WorkspacePath)
+	codebaseEmbeddingConfig, err := ep.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseId)
+	if err != nil {
+		return fmt.Errorf("failed to get codebase embedding config for workspace %s: %w", event.WorkspacePath, err)
+	}
+	if codebaseEmbeddingConfig.HashTree == nil {
+		codebaseEmbeddingConfig.HashTree = make(map[string]string)
+	}
+	if codebaseEmbeddingConfig.FailedFiles == nil {
+		codebaseEmbeddingConfig.FailedFiles = make(map[string]string)
+	}
+	if codebaseEmbeddingConfig.SyncFiles == nil {
+		codebaseEmbeddingConfig.SyncFiles = make(map[string]string)
+	}
+	delete(codebaseEmbeddingConfig.HashTree, filePath)
+	delete(codebaseEmbeddingConfig.SyncFiles, filePath)
+	if utils.IsUnauthorizedError(uploadErr) {
+		codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrAuthenticationFailed
+	} else if utils.IsTooManyRequestsError(uploadErr) {
+		codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrInternalServerError
+	} else if utils.IsServiceUnavailableError(uploadErr) {
+		codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrInternalServerError
+	} else {
+		codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrFileEmbeddingFailed
+	}
+	// 保存 codebase embedding 配置
+	err = ep.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig)
+	if err != nil {
+		ep.logger.Error("failed to save codebase embedding config for workspace %s: %v", event.WorkspacePath, err)
+		return fmt.Errorf("failed to save codebase embedding config: %w", err)
+	}
+
+	embeddingFileNum := len(codebaseEmbeddingConfig.HashTree)
+	var embeddingFailedFilePaths string
+	var embeddingMessage string
+	embeddingFaildFiles := codebaseEmbeddingConfig.FailedFiles
+	failedKeys := make([]string, 0, len(embeddingFaildFiles))
+	for k, v := range embeddingFaildFiles {
+		failedKeys = append(failedKeys, k)
+		embeddingMessage = v
+		if len(failedKeys) > 5 {
+			break
+		}
+	}
+	if len(failedKeys) == 0 {
+		embeddingFailedFilePaths = ""
+		embeddingMessage = ""
+	} else if len(failedKeys) > 5 {
+		embeddingFailedFilePaths = strings.Join(failedKeys[:5], ",")
+	} else {
+		embeddingFailedFilePaths = strings.Join(failedKeys, ",")
+	}
+
+	err = ep.workspaceRepo.UpdateEmbeddingInfo(event.WorkspacePath, embeddingFileNum, time.Now().Unix(), embeddingMessage, embeddingFailedFilePaths)
+	if err != nil {
+		return fmt.Errorf("failed to update workspace: %w", err)
+	}
+	return nil
+}
+
 // CleanWorkspaceFilePath 删除 workspace 中指定文件的 filepath 记录
 func (ep *embeddingProcessService) CleanWorkspaceFilePath(ctx context.Context, fileStatus *utils.FileStatus, event *model.Event) error {
 	ep.logger.Info("cleaning workspace filepath for event: %s, workspace: %s", event.SourceFilePath, event.WorkspacePath)
@@ -446,7 +516,7 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePath(ctx context.Context, f
 			embeddingFailedFilePaths = strings.Join(failedKeys, ",")
 		}
 
-		err = ep.workspaceRepo.UpdateEmbeddingInfo(event.WorkspacePath, embeddingFileNum, time.Now().Unix(), embeddingFailedFilePaths, embeddingMessage)
+		err = ep.workspaceRepo.UpdateEmbeddingInfo(event.WorkspacePath, embeddingFileNum, time.Now().Unix(), embeddingMessage, embeddingFailedFilePaths)
 		if err != nil {
 			ep.logger.Error("failed to update workspace file num: %v", err)
 			return fmt.Errorf("failed to update workspace file num: %w", err)

@@ -1112,9 +1112,9 @@ func (s *extensionService) calculateEmbeddingStatus(workspace *model.Workspace) 
 	// 计算失败文件数
 	failedFilePaths := strings.Split(workspace.EmbeddingFailedFilePaths, ",")
 	fullFailedfilePaths := make([]string, 0, len(failedFilePaths))
-	for i, failedFilePath := range failedFilePaths {
+	for _, failedFilePath := range failedFilePaths {
 		if failedFilePath != "" {
-			fullFailedfilePaths[i] = filepath.Join(workspace.WorkspacePath, failedFilePath)
+			fullFailedfilePaths = append(fullFailedfilePaths, filepath.Join(workspace.WorkspacePath, failedFilePath))
 		}
 	}
 	totalFailed := len(fullFailedfilePaths)
@@ -1142,8 +1142,10 @@ func (s *extensionService) calculateEmbeddingStatus(workspace *model.Workspace) 
 	// 存在初始或进行中状态事件时，状态为 running
 	if processingCount > 0 {
 		status.Status = dto.ProcessStatusRunning
-	} else if failedCount > 0 {
-		// 存在失败状态时，判断比较 process 和配置中的百分比阈值
+		return status
+	}
+	// 存在失败状态时，判断比较 process 和配置中的百分比阈值
+	if failedCount > 0 {
 		clientConfig := config.GetClientConfig()
 		embeddingSuccessPercent := clientConfig.Sync.EmbeddingSuccessPercent
 		if status.Process < embeddingSuccessPercent {
@@ -1187,9 +1189,9 @@ func (s *extensionService) calculateCodegraphStatus(workspace *model.Workspace) 
 	// 计算失败文件数
 	failedFilePaths := strings.Split(workspace.EmbeddingFailedFilePaths, ",")
 	fullFailedfilePaths := make([]string, 0, len(failedFilePaths))
-	for i, failedFilePath := range failedFilePaths {
+	for _, failedFilePath := range failedFilePaths {
 		if failedFilePath != "" {
-			fullFailedfilePaths[i] = filepath.Join(workspace.WorkspacePath, failedFilePath)
+			fullFailedfilePaths = append(fullFailedfilePaths, filepath.Join(workspace.WorkspacePath, failedFilePath))
 		}
 	}
 	totalFailed := len(fullFailedfilePaths)
@@ -1217,8 +1219,10 @@ func (s *extensionService) calculateCodegraphStatus(workspace *model.Workspace) 
 	// 存在初始或进行中状态事件时，状态为 running
 	if processingCount > 0 {
 		status.Status = dto.ProcessStatusRunning
-	} else if failedCount > 0 {
-		// 存在失败状态时，判断比较 process 和配置中的百分比阈值
+		return status
+	}
+	// 存在失败状态时，判断比较 process 和配置中的百分比阈值
+	if failedCount > 0 {
 		clientConfig := config.GetClientConfig()
 		codegraphSuccessPercent := clientConfig.Sync.CodegraphSuccessPercent
 		if status.Process < codegraphSuccessPercent {

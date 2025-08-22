@@ -16,6 +16,7 @@ import (
 // status code
 const (
 	StatusCodeUnauthorized       = "401" // HTTP 401 Unauthorized
+	StatusCodeForbidden          = "403" // HTTP 403 Forbidden
 	StatusCodePageNotFound       = "404" // HTTP 404 Not Found
 	StatusCodeTooManyRequests    = "429" // HTTP 429 Too Many Requests
 	StatusCodeServiceUnavailable = "503" // HTTP 503 Service Unavailable
@@ -44,6 +45,14 @@ func IsUnauthorizedError(err error) bool {
 	}
 
 	return strings.Contains(err.Error(), StatusCodeUnauthorized)
+}
+
+func IsForbiddenError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	return strings.Contains(err.Error(), StatusCodeForbidden)
 }
 
 func IsPageNotFoundError(err error) bool {
