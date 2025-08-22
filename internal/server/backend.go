@@ -21,5 +21,6 @@ func SetupBackendRoutes(router *gin.Engine, backendHandler *handler.BackendHandl
 		api.GET("/files/structure", AuthMiddleware(logger), BackendRateLimitMiddleware(logger), backendHandler.GetFileStructure)
 		api.GET("/index/summary", AuthMiddleware(logger), BackendRateLimitMiddleware(logger), backendHandler.GetIndexSummary)
 		api.GET("/index/export", AuthMiddleware(logger), BackendRateLimitMiddleware(logger), backendHandler.ExportIndex)
+		api.DELETE("/index", AuthMiddleware(logger), BackendRateLimitMiddleware(logger), backendHandler.DeleteIndex)
 	}
 }

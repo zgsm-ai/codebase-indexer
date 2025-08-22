@@ -252,6 +252,23 @@ func (h *BackendHandler) ExportIndex(c *gin.Context) {
 	}
 }
 
+func (h *BackendHandler) DeleteIndex(c *gin.Context) {
+	var req dto.DeleteIndexRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		h.logger.Error("invalid request format: %v", err)
+		response.Error(c, http.StatusBadRequest, err)
+		return
+	}
+
+	err := h.codebaseService.DeleteIndex(c, &req)
+	if err != nil {
+		h.logger.Error("delete index err: %v", err)
+		response.Error(c, http.StatusBadRequest, err)
+		return
+	}
+	response.Ok(c)
+}
+
 func (h *BackendHandler) ReadCodeSnippets(c *gin.Context) {
 	var req dto.ReadCodeSnippetsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

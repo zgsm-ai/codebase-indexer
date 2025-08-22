@@ -388,3 +388,107 @@ func TestIsSubdir(t *testing.T) {
 		})
 	}
 }
+
+func TestFindLongestExistingPath(t *testing.T) {
+	// 创建临时测试目录结构
+	tmpDir := t.TempDir()
+	existingDir := filepath.Join(tmpDir, "a", "b", "c")
+	if err := os.MkdirAll(existingDir, 0755); err != nil {
+		t.Fatalf("创建测试目录失败: %v", err)
+	}
+	existingFile := filepath.Join(existingDir, "file.txt")
+	if err := os.WriteFile(existingFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("创建测试文件失败: %v", err)
+	}
+
+	// 获取系统根目录（用于根目录测试）
+	rootDir := filepath.VolumeName(tmpDir) + string(filepath.Separator)
+	if rootDir == string(filepath.Separator) { // Unix 系统根目录
+		rootDir = string(filepath.Separator)
+	}
+
+	tests := []struct {
+		name    string
+		path    string
+		want    string
+		wantErr bool
+		// 测试前是否切换到临时目录（解决相对路径问题）
+		chdirTemp bool
+	}{
+		{
+			name:    "路径本身是存在的文件",
+			path:    existingFile,
+			want:    existingFile,
+			wantErr: false,
+		},
+		{
+			name:    "路径本身是存在的目录",
+			path:    existingDir,
+			want:    existingDir,
+			wantErr: false,
+		},
+		{
+			name:    "路径不存在，父目录存在",
+			path:    filepath.Join(existingDir, "nonexist", "sub"),
+			want:    existingDir,
+			wantErr: false,
+		},
+		{
+			name:    "多级父目录后存在",
+			path:    filepath.Join(tmpDir, "a", "x", "y", "z"),
+			want:    filepath.Join(tmpDir, "a"),
+			wantErr: false,
+		},
+		{
+			name:    "整个路径都不存在",
+			path:    filepath.Join("/nonexist", "path"),
+			wantErr: true, // 此时仅根目录存在，但原始路径不是根目录，返回错误
+		},
+		{
+			name:    "根目录存在",
+			path:    rootDir,
+			want:    rootDir,
+			wantErr: false,
+		},
+		{
+			name:      "相对路径存在",
+			path:      filepath.Join("a", "b"), // 相对路径，在临时目录下存在
+			want:      filepath.Join(tmpDir, "a", "b"),
+			wantErr:   false,
+			chdirTemp: true, // 测试前切换到临时目录
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 若需要，切换到临时目录再处理相对路径
+			var originalWd string
+			if tt.chdirTemp {
+				var err error
+				originalWd, err = os.Getwd()
+				if err != nil {
+					t.Fatalf("获取当前工作目录失败: %v", err)
+				}
+				if err := os.Chdir(tmpDir); err != nil {
+					t.Fatalf("切换到临时目录失败: %v", err)
+				}
+				defer os.Chdir(originalWd) // 测试结束后切回原目录
+			}
+
+			got, err := FindLongestExistingPath(tt.path)
+
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("错误状态不符: 实际=%v, 预期=%v", err, tt.wantErr)
+			}
+
+			if !tt.wantErr {
+				gotClean := filepath.Clean(got)
+				wantClean := filepath.Clean(tt.want)
+
+				if gotClean != wantClean {
+					t.Errorf("结果不符: 实际=%q, 预期=%q", gotClean, wantClean)
+				}
+			}
+		})
+	}
+}

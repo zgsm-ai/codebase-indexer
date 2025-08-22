@@ -563,24 +563,29 @@ func (l *codebaseService) Summarize(ctx context.Context, req *dto.GetIndexSummar
 }
 
 func (l *codebaseService) DeleteIndex(ctx context.Context, req *dto.DeleteIndexRequest) error {
-	l.logger.Info("start to delete all index for workspace %s", req.CodebasePath)
 	indexType := req.IndexType
+	codebasePath := req.CodebasePath
+	if indexType == types.EmptyString {
+		return errs.NewMissingParamError("indexType")
+	}
+	if codebasePath == types.EmptyString {
+		return errs.NewMissingParamError("codebasePath")
+	}
+	l.logger.Info("start to delete %s index for workspace %s", req.IndexType, codebasePath)
 	// 根据索引类型删除对应的索引
 	switch indexType {
 	case dto.Embedding:
-
+		return fmt.Errorf("deleting embedding index is not supported")
 	case dto.Codegraph:
-		if err := l.indexer.RemoveAllIndexes(ctx, req.CodebasePath); err != nil {
+		if err := l.indexer.RemoveAllIndexes(ctx, codebasePath); err != nil {
 			return fmt.Errorf("failed to delete graph index, err:%w", err)
 		}
 	case dto.All:
-		if err := l.indexer.RemoveAllIndexes(ctx, req.CodebasePath); err != nil {
-			return fmt.Errorf("failed to delete graph index, err:%w", err)
-		}
+		return fmt.Errorf("deleting all index is not supported")
 	default:
 		return errs.NewInvalidParamErr("indexType", indexType)
 	}
-	l.logger.Info("delete all index successfully for workspace %s", req.CodebasePath)
+	l.logger.Info("delete all index successfully for workspace %s", codebasePath)
 	return nil
 }
 

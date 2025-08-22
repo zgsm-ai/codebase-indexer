@@ -21,7 +21,7 @@ LANGUAGES=(
 )
 
 # 每个语言对应的项目列表（用|分隔） - 使用SSH地址
-C_PROJECTS="git@github.com:redis/redis.git|git@github.com:sqlite/sqlite.git|git@github.com:openssl/openssl.git|git@github.com:netdata/netdata.git"
+C_PROJECTS="git@github.com:redis/redis.git|git@github.com:sqlite/sqlite.git|git@github.com:openssl/openssl.git|git@github.com:netdata/netdata.git|git@github.com:facebook/zstd.git"
 CPP_PROJECTS="git@github.com:protocolbuffers/protobuf.git|git@github.com:grpc/grpc.git|git@github.com:ggml-org/whisper.cpp.git"
 CSHARP_PROJECTS="git@github.com:dotnet/efcore.git|git@github.com:aspnetcore/AspNetCore.git|git@github.com:mono/mono.git"
 GO_PROJECTS="git@github.com:gin-gonic/gin.git|git@github.com:kubernetes/kubernetes.git|git@github.com:hypermodeinc/dgraph.git"

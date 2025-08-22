@@ -21,6 +21,7 @@ type BaseIntegrationTestSuite struct {
 	suite.Suite
 	baseURL       string
 	workspacePath string
+	clientId      string
 	extraHeaders  map[string]string
 }
 
@@ -34,6 +35,7 @@ func (s *BaseIntegrationTestSuite) SetupSuite() {
 	}
 	// 设置工作目录路径
 	s.workspacePath = currentWorkspace
+	s.clientId = "123"
 	s.extraHeaders = make(map[string]string)
 
 	// 读取认证配置
@@ -119,6 +121,21 @@ func (s *BaseIntegrationTestSuite) setupAuthHeaders() {
 // CreateGETRequest 创建GET请求
 func (s *BaseIntegrationTestSuite) CreateGETRequest(url string) (*http.Request, error) {
 	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// 添加认证头
+	for key, value := range s.extraHeaders {
+		req.Header.Add(key, value)
+	}
+
+	return req, nil
+}
+
+// CreateGETRequest 创建GET请求
+func (s *BaseIntegrationTestSuite) CreateDeleteRequest(url string) (*http.Request, error) {
+	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
 		return nil, err
 	}

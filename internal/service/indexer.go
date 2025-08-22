@@ -452,7 +452,7 @@ func (i *indexer) removeIndexByFilePaths(ctx context.Context, projectUuid string
 	}
 
 	// 3. 删除path索引
-	deleted, err := i.deleteFileIndexes(ctx, projectUuid, filePaths)
+	deleted, err := i.deleteFileIndexes(ctx, projectUuid, deletePaths)
 	if err != nil {
 		return 0, fmt.Errorf("delete file indexes failed: %w", err)
 	}
@@ -558,6 +558,7 @@ func (i *indexer) cleanupSymbolOccurrences(ctx context.Context, projectUuid stri
 
 				newSymDefs := &codegraphpb.SymbolOccurrence{
 					Name:        e.GetName(),
+					Language:    ft.Language,
 					Occurrences: make([]*codegraphpb.Occurrence, 0),
 				}
 				for _, d := range symDefs.Occurrences {
@@ -566,7 +567,16 @@ func (i *indexer) cleanupSymbolOccurrences(ctx context.Context, projectUuid stri
 					}
 					newSymDefs.Occurrences = append(newSymDefs.Occurrences, d)
 				}
-				// 保存更新后的文件表
+				// 如果新的为0，就无需再写入，并删除旧的
+				if len(newSymDefs.Occurrences) == 0 {
+					if err := i.storage.Delete(ctx, projectUuid, store.SymbolNameKey{Language: language,
+						Name: newSymDefs.Name}); err != nil {
+						errs = append(errs, err)
+					}
+					continue
+				}
+
+				// 保存更新后的符号表
 				if err := i.storage.Put(ctx, projectUuid, &store.Entry{Key: store.SymbolNameKey{Language: language,
 					Name: newSymDefs.Name}, Value: newSymDefs}); err != nil {
 					errs = append(errs, err)
@@ -583,10 +593,10 @@ func (i *indexer) cleanupSymbolOccurrences(ctx context.Context, projectUuid stri
 }
 
 // deleteFileIndexes 删除文件索引
-func (i *indexer) deleteFileIndexes(ctx context.Context, puuid string, filePaths []string) (int, error) {
+func (i *indexer) deleteFileIndexes(ctx context.Context, puuid string, deletePaths map[string]any) (int, error) {
 	var errs []error
 	deleted := 0
-	for _, fp := range filePaths {
+	for fp := range deletePaths {
 		// 删除path索引
 		language, err := lang.InferLanguage(fp)
 		if err != nil {
@@ -1452,14 +1462,24 @@ func (i *indexer) RenameIndexes(ctx context.Context, workspacePath string, sourc
 		i.logger.Info("found no projects in workspace %s", workspacePath)
 		return nil
 	}
-	sourceProject, err := i.workspaceReader.GetProjectByFilePath(ctx, workspacePath, sourceFilePath, false)
-	if err != nil {
-		return fmt.Errorf("cannot find project for file %s, err:%v", sourceFilePath, err)
+	var sourceProject *workspace.Project
+	var targetProject *workspace.Project
+	// rename 后，原文件（目录）已经不存在了。
+	for _, p := range projects {
+		if strings.HasPrefix(sourceFilePath, p.Path) {
+			sourceProject = p
+		}
+		if strings.HasPrefix(targetFilePath, p.Path) {
+			targetProject = p
+		}
 	}
-	targetProject, err := i.workspaceReader.GetProjectByFilePath(ctx, workspacePath, targetFilePath, false)
-	if err != nil {
-		return fmt.Errorf("cannot find project for file %s, err:%v", targetFilePath, err)
+	if sourceProject == nil {
+		return fmt.Errorf("could not find source project in workspace %s for file %s", workspacePath, sourceFilePath)
 	}
+	if targetProject == nil {
+		return fmt.Errorf("could not find target project in workspace %s for file %s", workspacePath, targetFilePath)
+	}
+
 	sourceProjectUuid, targetProjectUuid := sourceProject.Uuid, targetProject.Uuid
 	// 可能是文件，也可能是目录
 	sourceTables, err := i.searchFileElementTablesByPath(ctx, sourceProjectUuid, []string{sourceFilePath})

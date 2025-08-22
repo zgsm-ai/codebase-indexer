@@ -3,6 +3,7 @@ package utils
 import (
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
+	"errors"
 	"os"
 	"path"
 	"path/filepath"
@@ -138,4 +139,38 @@ func EnsureTrailingSeparator(path string) string {
 // 问题：无法处理连续分隔符（如 "dir//" 会保留 "dir/"），根路径处理可能不符合预期
 func TrimLastSeparator(path string) string {
 	return strings.TrimSuffix(path, string(filepath.Separator))
+}
+
+// FindLongestExistingPath 从路径末尾向上查找最长的存在路径（文件或目录均可）
+// 特殊处理：若最终仅根目录存在且输入路径不是根目录，则返回错误
+func FindLongestExistingPath(path string) (string, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", errors.New("invalid absolute path: " + err.Error())
+	}
+	current := filepath.Clean(absPath)
+	originalPath := current // 保存原始路径用于根目录判断
+
+	for {
+		// 检查当前路径是否存在（文件或目录均可）
+		if _, err := os.Stat(current); err == nil {
+			// 若存在的是根目录，且原始路径不是根目录，则视为不存在
+			if isRoot(current) && current != originalPath {
+				return "", errors.New("path and its parents not exist")
+			}
+			return current, nil
+		}
+
+		parent := filepath.Dir(current)
+		if parent == current { // 到达根目录仍未找到
+			return "", errors.New("path and its parents not exist")
+		}
+		current = parent
+	}
+}
+
+// 判断路径是否为根目录（跨系统）
+func isRoot(path string) bool {
+	clean := filepath.Clean(path)
+	return filepath.Dir(clean) == clean
 }
