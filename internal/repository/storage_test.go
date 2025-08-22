@@ -667,7 +667,7 @@ func TestDeleteCodebaseConfig(t *testing.T) {
 			logger:  logger,
 			rwMutex: sync.RWMutex{},
 		}
-
+		// TODO linux测试删除文件占用是没问题的，但是windows会报错？？？
 		// Execute deletion
 		err = cm.DeleteCodebaseConfig(codebaseId)
 		assert.Error(t, err)

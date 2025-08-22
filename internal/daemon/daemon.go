@@ -110,28 +110,28 @@ func (d *Daemon) Start() {
 	}()
 
 	// Start fetch server hash tree task
-	d.wg.Add(1)
-	go func() {
-		ticker := time.NewTicker(1 * time.Hour)
-		defer ticker.Stop()
+	// d.wg.Add(1)
+	// go func() {
+	// 	ticker := time.NewTicker(1 * time.Hour)
+	// 	defer ticker.Stop()
 
-		defer func() {
-			if r := recover(); r != nil {
-				d.logger.Error("fetch server hash task panic recovered: %v", r)
-			}
-			d.wg.Done()
-		}()
+	// 	defer func() {
+	// 		if r := recover(); r != nil {
+	// 			d.logger.Error("fetch server hash task panic recovered: %v", r)
+	// 		}
+	// 		d.wg.Done()
+	// 	}()
 
-		for {
-			select {
-			case <-d.ctx.Done():
-				d.logger.Info("fetch server hash task stopped")
-				return
-			case <-ticker.C:
-				d.fetchServerHashTree()
-			}
-		}
-	}()
+	// 	for {
+	// 		select {
+	// 		case <-d.ctx.Done():
+	// 			d.logger.Info("fetch server hash task stopped")
+	// 			return
+	// 		case <-ticker.C:
+	// 			d.fetchServerHashTree()
+	// 		}
+	// 	}
+	// }()
 
 	// 启动文件扫描任务（5分钟间隔）
 	d.wg.Add(1)

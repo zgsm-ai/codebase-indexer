@@ -575,7 +575,7 @@ func TestCPPResolver_ResolveClass(t *testing.T) {
 }
 
 func TestResolveFile(t *testing.T) {
-	filePath := "G:\\tmp\\projects\\cpp\\grpc\\src\\compiler\\cpp_generator.cc"
+	filePath := "testdata/cpp/testclass.cpp"
 	logger := initLogger()
 	parser := NewSourceFileParser(logger)
 	sourceFile := &types.SourceFile{

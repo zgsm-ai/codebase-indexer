@@ -93,6 +93,7 @@ func (p *SourceFileParser) Parse(ctx context.Context,
 		}
 		// TODO Parent 、Children 关系处理。比如变量定义在函数中，函数定义在类中。
 		elems, err := p.processNode(ctx, langParser.Language, match, captureNames, sourceFile)
+		// match.Remove()
 		if err != nil {
 			p.logger.Debug("tree_sitter base processor processNode error: %v", err)
 			continue // 跳过错误的匹配

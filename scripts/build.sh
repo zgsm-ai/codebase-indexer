@@ -112,16 +112,20 @@ case "$TARGET_OS" in
   "darwin")
     case "$TARGET_ARCH" in
       "amd64")
-        export CC=clang-12
+        export CC=clang
         export CGO_CFLAGS="-O2 -g -arch x86_64"
+        STATIC_BUILD_FLAGS="-linkmode external"
+        STATIC_BUILD_TAGS="netgo osusergo static_build"
         ;;
       "arm64")
-        export CC=clang-12
+        export CC=clang
         export CGO_CFLAGS="-O2 -g -arch arm64"
+        STATIC_BUILD_FLAGS="-linkmode external"
+        STATIC_BUILD_TAGS="netgo osusergo static_build"
         ;;
       *)
-        echo "Warning: Unsupported macOS architecture: $TARGET_ARCH, using default clang-12"
-        export CC=clang-12
+        echo "Warning: Unsupported macOS architecture: $TARGET_ARCH, using default clang"
+        export CC=clang
         ;;
     esac
     ;;

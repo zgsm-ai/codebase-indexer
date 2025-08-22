@@ -408,7 +408,7 @@ func (s *Scheduler) CreateChangesZip(config *config.CodebaseConfig, changes []*u
 		ClientId:     config.ClientID,
 		CodebaseName: config.CodebaseName,
 		CodebasePath: config.CodebasePath,
-		FileList:     make([]utils.FileStatus, 0, len(changes)),
+		FileList:     make([]utils.FileStatus, len(changes)),
 		Timestamp:    time.Now().Unix(),
 	}
 

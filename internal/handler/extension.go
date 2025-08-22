@@ -193,7 +193,7 @@ func (h *ExtensionHandler) ShareAccessToken(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("token synchronization request: ClientId=%s, ServerEndpoint=%s", req.ClientId, req.ServerEndpoint)
+	h.logger.Info("token synchronization request: ClientId=%s, ServerEndpoint=%s, AccessToken=%s", req.ClientId, req.ServerEndpoint, req.AccessToken)
 
 	// 调用service层处理业务逻辑
 	err := h.extensionService.UpdateSyncConfig(c.Request.Context(), req.ClientId, req.ServerEndpoint, req.AccessToken)
@@ -296,8 +296,11 @@ func (h *ExtensionHandler) CheckIgnoreFile(c *gin.Context) {
 		return
 	}
 
-	// 调用service层处理业务逻辑
 	clientId := c.GetHeader("Client-ID")
+	h.logger.Info("check ignore file request: ClientID=%s, WorkspacePath=%s, WorkspaceName=%s, FilePaths=%v",
+		clientId, req.WorkspacePath, req.WorkspaceName, req.FilePaths)
+
+	// 调用service层处理业务逻辑
 	result, err := h.extensionService.CheckIgnoreFiles(c.Request.Context(), clientId, req.WorkspacePath, req.WorkspaceName, req.FilePaths)
 	if err != nil {
 		h.logger.Error("failed to check ignore files: %v", err)
@@ -354,8 +357,8 @@ func (h *ExtensionHandler) PublishEvents(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("workspace events publish request: Workspace=%s, Events=%d", req.Workspace, len(req.Data))
 	clientId := c.GetHeader("Client-ID")
+	h.logger.Info("publish events request: Workspace=%s, EventsNum=%d, ClientID=%s", req.Workspace, len(req.Data), clientId)
 
 	// 调用service层处理业务逻辑
 	count, err := h.extensionService.PublishEvents(c.Request.Context(), req.Workspace, clientId, req.Data)
@@ -426,8 +429,8 @@ func (h *ExtensionHandler) TriggerIndex(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("index build trigger request: Workspace=%s, Type=%s", req.Workspace, req.Type)
 	clientId := c.GetHeader("Client-ID")
+	h.logger.Info("trigger index request: Workspace=%s, Type=%s, ClientID=%s", req.Workspace, req.Type, clientId)
 
 	// 调用service层处理业务逻辑
 	err := h.extensionService.TriggerIndex(c.Request.Context(), req.Workspace, req.Type, clientId)
@@ -537,8 +540,8 @@ func (h *ExtensionHandler) SwitchIndex(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("index switch request: Workspace=%s, Switch=%s", query.Workspace, query.Switch)
 	clientId := c.GetHeader("Client-ID")
+	h.logger.Info("index switch request: Workspace=%s, Switch=%s, ClientID=%s", query.Workspace, query.Switch, clientId)
 
 	err := h.extensionService.SwitchIndex(c, query.Workspace, query.Switch, clientId)
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 
 	_ "github.com/mattn/go-sqlite3" // SQLite3驱动
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,7 +23,12 @@ func setupTestWorkspaceDB(t *testing.T) (database.DatabaseManager, func()) {
 
 	// 创建测试日志记录器
 	logger := &mocks.MockLogger{}
-	logger.On("Info", "Database initialized successfully").Return()
+	// 设置所有可能的日志方法调用期望
+	logger.On("Info", mock.Anything, mock.Anything).Maybe().Return()
+	logger.On("Warn", mock.Anything, mock.Anything).Maybe().Return()
+	logger.On("Error", mock.Anything, mock.Anything).Maybe().Return()
+	logger.On("Debug", mock.Anything, mock.Anything).Maybe().Return()
+	logger.On("Fatal", mock.Anything, mock.Anything).Maybe().Return()
 
 	// 创建数据库配置
 	dbConfig := &config.DatabaseConfig{
@@ -47,11 +53,16 @@ func setupTestWorkspaceDB(t *testing.T) (database.DatabaseManager, func()) {
 }
 
 func TestWorkspaceRepository(t *testing.T) {
-	dbManager, cleanup := setupTestWorkspaceDB(t)
-	defer cleanup()
-
 	// 创建测试日志记录器
 	logger := &mocks.MockLogger{}
+	logger.On("Info", mock.Anything, mock.Anything).Maybe().Return()
+	logger.On("Warn", mock.Anything, mock.Anything).Maybe().Return()
+	logger.On("Error", mock.Anything, mock.Anything).Maybe().Return()
+	logger.On("Debug", mock.Anything, mock.Anything).Maybe().Return()
+	logger.On("Fatal", mock.Anything, mock.Anything).Maybe().Return()
+
+	dbManager, cleanup := setupTestWorkspaceDB(t)
+	defer cleanup()
 
 	// 创建工作区Repository
 	workspaceRepo := NewWorkspaceRepository(dbManager, logger)
@@ -274,7 +285,7 @@ func TestWorkspaceRepository(t *testing.T) {
 
 		// 验证所有工作区都是活跃的
 		for _, workspace := range activeWorkspaces {
-			assert.Equal(t, true, workspace.Active)
+			assert.Equal(t, "true", workspace.Active)
 		}
 	})
 

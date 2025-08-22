@@ -67,7 +67,7 @@ func TestScanDirectory(t *testing.T) {
 	logger.On("Info", mock.Anything, mock.Anything).Return()
 	logger.On("Debug", mock.Anything, mock.Anything).Return()
 	_ = NewFileScanner(logger)
-
+	// TODO 测试待校验
 	setupTestDir := func(t *testing.T) string {
 		tempDir := t.TempDir()
 
@@ -207,6 +207,10 @@ func benchmarkScanCodebase(t *testing.T, fileCount int) (*mocks.MockLogger, Scan
 func BenchmarkScanCodebase_10000Files(b *testing.B) {
 	t := &testing.T{} // Create temp testing.T instance
 	logger, fs, tempDir := benchmarkScanCodebase(t, 10000)
+	logger.On("Info", mock.Anything, mock.Anything).Maybe().Return()
+	logger.On("Warn", mock.Anything, mock.Anything).Maybe().Return()
+	logger.On("Error", mock.Anything, mock.Anything).Maybe().Return()
+	logger.On("Debug", mock.Anything, mock.Anything).Maybe().Return()
 	_ = logger // Avoid unused variable warning
 
 	b.ResetTimer()

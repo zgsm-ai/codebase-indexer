@@ -9,6 +9,7 @@ import (
 
 	"codebase-indexer/internal/config"
 	"codebase-indexer/internal/dto"
+	"codebase-indexer/internal/errs"
 	"codebase-indexer/internal/model"
 	"codebase-indexer/internal/repository"
 	"codebase-indexer/internal/utils"
@@ -106,7 +107,17 @@ func (sc *embeddingStatusService) checkWorkspaceBuildingStates(workspacePath str
 	sc.logger.Info("found %d building events for workspace: %s", len(events), workspacePath)
 
 	// 检查每个event的构建状态
+	nowTime := time.Now()
 	for _, event := range events {
+		if nowTime.Sub(event.UpdatedAt) > time.Minute*3 {
+			updateEvent := &model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusBuildFailed}
+			err := sc.eventRepo.UpdateEvent(updateEvent)
+			if err != nil {
+				sc.logger.Error("failed to update event status: %v", err)
+			}
+			sc.buildFilePathFailed(event)
+			continue
+		}
 		err := sc.checkEventBuildStatus(workspacePath, event)
 		if err != nil {
 			sc.logger.Error("failed to check event build status: %v", err)
@@ -135,7 +146,7 @@ func (sc *embeddingStatusService) checkWorkspaceUploadingStates(workspacePath st
 	// 检查每个event的上传状态
 	nowTime := time.Now()
 	for _, event := range events {
-		if nowTime.Sub(event.UpdatedAt) < time.Minute*5 {
+		if nowTime.Sub(event.UpdatedAt) < time.Minute*3 {
 			continue
 		}
 		updateEvent := &model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusUploadFailed}
@@ -143,6 +154,7 @@ func (sc *embeddingStatusService) checkWorkspaceUploadingStates(workspacePath st
 		if err != nil {
 			sc.logger.Error("failed to update event status: %v", err)
 		}
+		sc.buildFilePathFailed(event)
 	}
 
 	return nil
@@ -151,7 +163,7 @@ func (sc *embeddingStatusService) checkWorkspaceUploadingStates(workspacePath st
 // getBuildingEventsForWorkspace 获取指定工作区的building状态events
 func (sc *embeddingStatusService) getBuildingEventsForWorkspace(workspacePath string) ([]*model.Event, error) {
 	buildingStatuses := []int{model.EmbeddingStatusBuilding}
-	events, err := sc.eventRepo.GetEventsByWorkspaceAndEmbeddingStatus(workspacePath, 5, false, buildingStatuses)
+	events, err := sc.eventRepo.GetEventsByWorkspaceAndEmbeddingStatus(workspacePath, 20, false, buildingStatuses)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get building events: %w", err)
 	}
@@ -161,7 +173,7 @@ func (sc *embeddingStatusService) getBuildingEventsForWorkspace(workspacePath st
 // getUploadingEventsForWorkspace 获取指定工作区的uploading状态events
 func (sc *embeddingStatusService) getUploadingEventsForWorkspace(workspacePath string) ([]*model.Event, error) {
 	uploadingStatuses := []int{model.EmbeddingStatusUploading}
-	events, err := sc.eventRepo.GetEventsByWorkspaceAndEmbeddingStatus(workspacePath, 5, false, uploadingStatuses)
+	events, err := sc.eventRepo.GetEventsByWorkspaceAndEmbeddingStatus(workspacePath, 20, false, uploadingStatuses)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get uploading events: %w", err)
 	}
@@ -205,6 +217,7 @@ func (sc *embeddingStatusService) checkEventBuildStatus(workspacePath string, ev
 		if err != nil {
 			return fmt.Errorf("failed to update event: %w", err)
 		}
+		sc.buildFilePathFailed(event)
 		return nil
 	}
 
@@ -225,10 +238,66 @@ func (sc *embeddingStatusService) fetchFileStatus(workspacePath, syncId string) 
 
 	fileStatusResp, err := sc.syncer.FetchFileStatus(fileStatusReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch file status: %w", err)
+		return nil, err
 	}
 
 	return fileStatusResp, nil
+}
+
+func (sc *embeddingStatusService) buildFilePathFailed(event *model.Event) error {
+	filePath := event.SourceFilePath
+	if event.EventType == model.EventTypeRenameFile {
+		filePath = event.TargetFilePath
+	}
+	codebaseId := utils.GenerateCodebaseEmbeddingID(event.WorkspacePath)
+	codebaseEmbeddingConfig, err := sc.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseId)
+	if err != nil {
+		return fmt.Errorf("failed to get codebase embedding config for workspace %s: %w", event.WorkspacePath, err)
+	}
+	if codebaseEmbeddingConfig.HashTree == nil {
+		codebaseEmbeddingConfig.HashTree = make(map[string]string)
+	}
+	if codebaseEmbeddingConfig.FailedFiles == nil {
+		codebaseEmbeddingConfig.FailedFiles = make(map[string]string)
+	}
+	if codebaseEmbeddingConfig.SyncFiles == nil {
+		codebaseEmbeddingConfig.SyncFiles = make(map[string]string)
+	}
+	delete(codebaseEmbeddingConfig.SyncFiles, filePath)
+	codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrFileEmbeddingFailed
+	// 保存 codebase embedding 配置
+	err = sc.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig)
+	if err != nil {
+		sc.logger.Error("failed to save codebase embedding config for workspace %s: %v", event.WorkspacePath, err)
+		return fmt.Errorf("failed to save codebase embedding config: %w", err)
+	}
+
+	embeddingFileNum := len(codebaseEmbeddingConfig.HashTree)
+	var embeddingFailedFilePaths string
+	var embeddingMessage string
+	embeddingFaildFiles := codebaseEmbeddingConfig.FailedFiles
+	failedKeys := make([]string, 0, len(embeddingFaildFiles))
+	for k, v := range embeddingFaildFiles {
+		failedKeys = append(failedKeys, k)
+		embeddingMessage = v
+		if len(failedKeys) > 5 {
+			break
+		}
+	}
+	if len(failedKeys) == 0 {
+		embeddingFailedFilePaths = ""
+		embeddingMessage = ""
+	} else if len(failedKeys) > 5 {
+		embeddingFailedFilePaths = strings.Join(failedKeys[:5], ",")
+	} else {
+		embeddingFailedFilePaths = strings.Join(failedKeys, ",")
+	}
+
+	err = sc.workspaceRepo.UpdateEmbeddingInfo(event.WorkspacePath, embeddingFileNum, time.Now().Unix(), embeddingMessage, embeddingFailedFilePaths)
+	if err != nil {
+		return fmt.Errorf("failed to update workspace: %w", err)
+	}
+	return nil
 }
 
 // handleBuildCompletion 处理构建完成后的状态更新
@@ -288,7 +357,7 @@ func (sc *embeddingStatusService) handleBuildCompletion(workspacePath string, ev
 
 	if status == dto.EmbeddingFailed {
 		delete(codebaseEmbeddingConfig.SyncFiles, filePath)
-		codebaseEmbeddingConfig.FailedFiles[filePath] = dto.EmbeddingFailed
+		codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrFileEmbeddingFailed
 	} else {
 		delete(codebaseEmbeddingConfig.SyncFiles, filePath)
 		delete(codebaseEmbeddingConfig.FailedFiles, filePath)
@@ -306,23 +375,23 @@ func (sc *embeddingStatusService) handleBuildCompletion(workspacePath string, ev
 	var embeddingMessage string
 	embeddingFaildFiles := codebaseEmbeddingConfig.FailedFiles
 	failedKeys := make([]string, 0, len(embeddingFaildFiles))
-	failedValues := make([]string, 0, len(embeddingFaildFiles))
 	for k, v := range embeddingFaildFiles {
 		failedKeys = append(failedKeys, k)
-		failedValues = append(failedValues, v)
+		embeddingMessage = v
+		if len(failedKeys) > 5 {
+			break
+		}
 	}
 	if len(failedKeys) == 0 {
 		embeddingFailedFilePaths = ""
 		embeddingMessage = ""
 	} else if len(failedKeys) > 5 {
 		embeddingFailedFilePaths = strings.Join(failedKeys[:5], ",")
-		embeddingMessage = strings.Join(failedValues[:5], ",")
 	} else {
 		embeddingFailedFilePaths = strings.Join(failedKeys, ",")
-		embeddingMessage = strings.Join(failedValues, ",")
 	}
 
-	err = sc.workspaceRepo.UpdateEmbeddingInfo(event.WorkspacePath, embeddingFileNum, time.Now().Unix(), embeddingFailedFilePaths, embeddingMessage)
+	err = sc.workspaceRepo.UpdateEmbeddingInfo(event.WorkspacePath, embeddingFileNum, time.Now().Unix(), embeddingMessage, embeddingFailedFilePaths)
 	if err != nil {
 		return fmt.Errorf("failed to update workspace: %w", err)
 	}

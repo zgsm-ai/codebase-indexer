@@ -38,6 +38,7 @@ func (s *DefParser) Parse(ctx context.Context, codeFile *types.SourceFile, opts 
 	}
 
 	sitterParser := sitter.NewParser()
+	defer sitterParser.Close()
 	sitterLanguage := langConf.SitterLanguage()
 	if err := sitterParser.SetLanguage(sitterLanguage); err != nil {
 		return nil, err
@@ -48,7 +49,6 @@ func (s *DefParser) Parse(ctx context.Context, codeFile *types.SourceFile, opts 
 		return nil, fmt.Errorf("failed to parse file")
 	}
 	defer tree.Close()
-
 
 	// 执行 query，并处理匹配结果
 	qc := sitter.NewQueryCursor()

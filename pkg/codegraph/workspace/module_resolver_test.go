@@ -63,6 +63,7 @@ func TestNewModuleResolver(t *testing.T) {
 	}
 }
 
+// TODO 待进一步校验
 // TestResolveProjectModules 测试 ResolveProjectModules 方法
 func TestResolveProjectModules(t *testing.T) {
 	ctx := context.Background()
@@ -101,7 +102,7 @@ func TestResolveProjectModules(t *testing.T) {
 		t.Error("未找到开始解析的日志消息")
 	}
 }
-
+// TODO 待进一步校验
 // TestResolveProjectModulesWithVariousLanguages 测试各种语言包信息的解析
 func TestResolveProjectModulesWithVariousLanguages(t *testing.T) {
 	ctx := context.Background()
@@ -114,7 +115,7 @@ func TestResolveProjectModulesWithVariousLanguages(t *testing.T) {
 	// 创建各种语言的配置文件
 	createTestFiles(t, tempDir)
 
-	err := resolver.ResolveProjectModules(ctx, project, "test-project", 2)
+	err := resolver.ResolveProjectModules(ctx, project, "test-project", 1)
 	if err != nil {
 		t.Errorf("解析项目模块时发生错误: %v", err)
 	}

@@ -83,3 +83,15 @@ func GetCodegraphStatusString(status int) string {
 		return "unknown"
 	}
 }
+
+func GetExtensionEventTypeMap() map[string]bool {
+	return map[string]bool{
+		EventTypeAddFile:          true,
+		EventTypeModifyFile:       true,
+		EventTypeDeleteFile:       true,
+		EventTypeRenameFile:       true,
+		EventTypeOpenWorkspace:    true,
+		EventTypeCloseWorkspace:   true,
+		EventTypeRebuildWorkspace: true,
+	}
+}
