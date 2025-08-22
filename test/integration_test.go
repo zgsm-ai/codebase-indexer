@@ -271,7 +271,7 @@ func (s *IntegrationTestSuite) TestCheckIgnoreFile() {
 	assert.NoError(s.T(), err)
 
 	largeFile := filepath.Join(workspaceDir, "large.txt")
-	err = os.WriteFile(largeFile, make([]byte, 110*1024), 0644) // 110KB
+	err = os.WriteFile(largeFile, make([]byte, 110*1024*1024), 0644) // 110MB
 	assert.NoError(s.T(), err)
 
 	ignoredFile := filepath.Join(workspaceDir, "ignored.txt")

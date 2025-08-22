@@ -20,6 +20,19 @@ type ModuleResolver struct {
 	logger logger.Logger
 }
 
+func (mr *ModuleResolver) deduplicateStrings(emptyStrInput []string) []string {
+	// 去重
+	seen := make(map[string]bool)
+	var result []string
+	for _, str := range emptyStrInput {
+		if !seen[str] && str != "" {
+			seen[str] = true
+			result = append(result, str)
+		}
+	}
+	return result
+}
+
 // GoWorkFile go.work文件结构
 type GoWorkFile struct {
 	Go  string

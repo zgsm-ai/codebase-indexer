@@ -2,14 +2,12 @@ package workspace
 
 import (
 	"codebase-indexer/pkg/codegraph/types"
-	"codebase-indexer/test/mocks"
 	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 func createTestDir(t *testing.T, structure map[string]bool) string {
@@ -72,8 +70,7 @@ func TestFindProjects(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := createTestDir(t, tt.structure)
-			logger := &mocks.MockLogger{}
-			logger.On("Info", mock.Anything, mock.Anything).Return()
+			logger := NewMockLogger()
 			wr := NewWorkSpaceReader(logger)
 			projects := wr.FindProjects(context.Background(), dir, true, &types.VisitPattern{})
 			assert.Equal(t, tt.expectNum, len(projects))

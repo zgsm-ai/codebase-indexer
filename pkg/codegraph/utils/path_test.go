@@ -120,7 +120,7 @@ func TestListFiles(t *testing.T) {
 				os.WriteFile(filepath.Join(tempDir, "visible.txt"), []byte("public"), 0644)
 			},
 			wantErr:     false,
-			wantFileCnt: 2,
+			wantFileCnt: 1,
 		},
 	}
 

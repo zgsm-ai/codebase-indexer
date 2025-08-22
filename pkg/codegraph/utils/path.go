@@ -20,10 +20,12 @@ func CheckContextCanceled(ctx context.Context) error {
 
 // ToUnixPath 将相对路径转换为 Unix 风格（使用 / 分隔符，去除冗余路径元素）
 func ToUnixPath(rawPath string) string {
-	// path.Clean 会自动处理为 Unix 风格路径，去除多余的 /、. 和 ..
-	filePath := path.Clean(rawPath)
-	filePath = filepath.ToSlash(filePath)
-	return filePath
+	// 转换为 Unix 风格路径（统一使用 / 分隔符）
+	// 1. 替换所有 Windows 风格的 \ 为 /
+	slashed := strings.ReplaceAll(rawPath, types.WindowsSeparator, types.Slash)
+	// 2. 清理路径（去掉多余 /、.、..）
+	unixPath := path.Clean(slashed)
+	return unixPath
 }
 
 // PathEqual 比较路径是否相等，/ \ 转为 /
@@ -35,8 +37,8 @@ func PathEqual(a, b string) bool {
 // 注意：parent和sub都必须是绝对路径
 func IsSubdir(parent, sub string) bool {
 	// 确保路径已清理（处理.和..）
-	parent = ToUnixPath(filepath.Clean(parent))
-	sub = ToUnixPath(filepath.Clean(sub))
+	parent = ToUnixPath(parent)
+	sub = ToUnixPath(sub)
 	if !strings.HasSuffix(parent, types.Slash) {
 		parent = parent + types.Slash
 	}
