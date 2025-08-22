@@ -9,11 +9,12 @@ import (
 	//sitterkotlin "github.com/tree-sitter-grammars/tree-sitter-kotlin/bindings/go"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	//sittercsharp "github.com/tree-sitter/tree-sitter-c-sharp/bindings/go"
-	sitterc "github.com/tree-sitter/tree-sitter-c/bindings/go"
+
 	sittercpp "github.com/tree-sitter/tree-sitter-cpp/bindings/go"
 	sittergo "github.com/tree-sitter/tree-sitter-go/bindings/go"
 	sitterjava "github.com/tree-sitter/tree-sitter-java/bindings/go"
 	sitterjavascript "github.com/tree-sitter/tree-sitter-javascript/bindings/go"
+
 	//sitterphp "github.com/tree-sitter/tree-sitter-php/bindings/go"
 	sitterpython "github.com/tree-sitter/tree-sitter-python/bindings/go"
 	//sitterruby "github.com/tree-sitter/tree-sitter-ruby/bindings/go"
@@ -93,18 +94,11 @@ var treeSitterParsers = []*TreeSitterParser{
 	//	SupportedExts: []string{".rs"},
 	//},
 	{
-		Language: C,
-		SitterLanguage: func() *sitter.Language {
-			return sitter.NewLanguage(sitterc.Language())
-		},
-		SupportedExts: []string{".c"},
-	},
-	{
 		Language: CPP,
 		SitterLanguage: func() *sitter.Language {
 			return sitter.NewLanguage(sittercpp.Language())
 		},
-		SupportedExts: []string{".cpp", ".cc", ".cxx", ".hpp", ".h"},
+		SupportedExts: []string{".cpp", ".cc", ".cxx", ".hpp", ".h", ".c"},
 	},
 	//{
 	//	Language: CSharp,
