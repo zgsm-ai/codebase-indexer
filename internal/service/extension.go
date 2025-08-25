@@ -1121,7 +1121,7 @@ func (s *extensionService) calculateEmbeddingStatus(workspace *model.Workspace) 
 
 	// 统计各状态的 embedding 事件数
 	processingCount, err := s.eventRepo.GetEventsCountByWorkspaceAndStatus(
-		workspace.WorkspacePath,
+		[]string{workspace.WorkspacePath},
 		[]int{model.EmbeddingStatusInit, model.EmbeddingStatusUploading, model.EmbeddingStatusBuilding},
 		[]int{},
 	)
@@ -1130,7 +1130,7 @@ func (s *extensionService) calculateEmbeddingStatus(workspace *model.Workspace) 
 	}
 
 	failedCount, err := s.eventRepo.GetEventsCountByWorkspaceAndStatus(
-		workspace.WorkspacePath,
+		[]string{workspace.WorkspacePath},
 		[]int{model.EmbeddingStatusUploadFailed, model.EmbeddingStatusBuildFailed},
 		[]int{},
 	)
@@ -1198,7 +1198,7 @@ func (s *extensionService) calculateCodegraphStatus(workspace *model.Workspace) 
 
 	// 统计各状态的 embedding 事件数
 	processingCount, err := s.eventRepo.GetEventsCountByWorkspaceAndStatus(
-		workspace.WorkspacePath,
+		[]string{workspace.WorkspacePath},
 		[]int{},
 		[]int{model.CodegraphStatusInit, model.CodegraphStatusBuilding},
 	)
@@ -1207,7 +1207,7 @@ func (s *extensionService) calculateCodegraphStatus(workspace *model.Workspace) 
 	}
 
 	failedCount, err := s.eventRepo.GetEventsCountByWorkspaceAndStatus(
-		workspace.WorkspacePath,
+		[]string{workspace.WorkspacePath},
 		[]int{},
 		[]int{model.CodegraphStatusFailed},
 	)

@@ -14,6 +14,9 @@ type DatabaseConfig struct {
 	ConnMaxLifetime   time.Duration `json:"connMaxLifetime"`   // 连接最大生命周期
 	EnableWAL         bool          `json:"enableWAL"`         // 启用WAL模式
 	EnableForeignKeys bool          `json:"enableForeignKeys"` // 启用外键约束
+	// 分批删除配置
+	BatchDeleteSize  int           `json:"batchDeleteSize"`  // 分批删除的批次大小
+	BatchDeleteDelay time.Duration `json:"batchDeleteDelay"` // 分批删除之间的延迟
 }
 
 // DefaultDatabaseConfig 默认数据库配置
@@ -26,5 +29,7 @@ func DefaultDatabaseConfig() *DatabaseConfig {
 		ConnMaxLifetime:   5 * time.Minute,
 		EnableWAL:         true,
 		EnableForeignKeys: true,
+		BatchDeleteSize:   1000,                 // 默认每批删除1000条记录
+		BatchDeleteDelay:  5 * time.Millisecond, // 默认批次间延迟5毫秒
 	}
 }

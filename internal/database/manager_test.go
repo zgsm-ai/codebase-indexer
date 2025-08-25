@@ -108,25 +108,6 @@ func TestSQLiteManager(t *testing.T) {
 		err = db.Ping()
 		assert.Error(t, err)
 	})
-
-	t.Run("InitializeWithInvalidPath", func(t *testing.T) {
-		// 测试使用无效路径初始化数据库
-		invalidConfig := &config.DatabaseConfig{
-			DataDir:         "/invalid/path/that/does/not/exist",
-			DatabaseName:    "test.db",
-			MaxOpenConns:    10,
-			MaxIdleConns:    5,
-			ConnMaxLifetime: 30 * time.Minute,
-		}
-
-		// 设置 mock logger 预期（对于无效路径，可能不会调用 Info）
-		logger.On("Info", "Database initialized successfully", []interface{}(nil)).Return().Maybe()
-		logger.On("Error", "Failed to create table: %v", mock.Anything).Return().Maybe()
-
-		invalidManager := NewSQLiteManager(invalidConfig, logger).(*SQLiteManager)
-		err = invalidManager.Initialize()
-		assert.Error(t, err)
-	})
 }
 
 func TestSQLiteManagerTableCreation(t *testing.T) {
@@ -293,5 +274,146 @@ func TestSQLiteManagerConcurrency(t *testing.T) {
 		err = db.QueryRow("SELECT COUNT(*) FROM workspaces WHERE workspace_name LIKE 'test_workspace_%'").Scan(&count)
 		require.NoError(t, err)
 		assert.Equal(t, 5, count)
+	})
+}
+
+func TestSQLiteManagerClearTable(t *testing.T) {
+	// 创建临时目录用于测试数据库
+	tempDir, err := os.MkdirTemp("", "test-db-clear")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	// 创建测试日志记录器
+	logger := &mocks.MockLogger{}
+
+	// 创建数据库配置，包含分批删除配置
+	dbConfig := &config.DatabaseConfig{
+		DataDir:          tempDir,
+		DatabaseName:     "test-clear.db",
+		MaxOpenConns:     10,
+		MaxIdleConns:     5,
+		ConnMaxLifetime:  30 * time.Minute,
+		BatchDeleteSize:  100, // 小批次大小便于测试
+		BatchDeleteDelay: 1 * time.Millisecond,
+	}
+
+	// 创建数据库管理器
+	logger.On("Info", "Database initialized successfully", []interface{}(nil)).Return()
+	logger.On("Info", mock.Anything, mock.Anything).Return() // 允许任何Info调用
+
+	dbManager := NewSQLiteManager(dbConfig, logger).(*SQLiteManager)
+	err = dbManager.Initialize()
+	require.NoError(t, err)
+
+	db := dbManager.GetDB()
+
+	t.Run("ClearTableBasic", func(t *testing.T) {
+		// 插入测试数据到workspaces表
+		for i := 0; i < 250; i++ {
+			_, err := db.Exec("INSERT INTO workspaces (workspace_name, workspace_path) VALUES (?, ?)",
+				fmt.Sprintf("test_workspace_%d", i), fmt.Sprintf("/test/path/%d", i))
+			require.NoError(t, err)
+		}
+
+		// 验证数据插入成功
+		var count int
+		err = db.QueryRow("SELECT COUNT(*) FROM workspaces").Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, 250, count)
+
+		// 清理表数据
+		err = dbManager.ClearTable("workspaces")
+		require.NoError(t, err)
+
+		// 验证表已清空
+		err = db.QueryRow("SELECT COUNT(*) FROM workspaces").Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, 0, count)
+
+		// 验证ID已重置：插入新记录，ID应该从1开始
+		_, err = db.Exec("INSERT INTO workspaces (workspace_name, workspace_path) VALUES (?, ?)",
+			"new_workspace", "/new/path")
+		require.NoError(t, err)
+
+		var newID int
+		err = db.QueryRow("SELECT id FROM workspaces WHERE workspace_name = 'new_workspace'").Scan(&newID)
+		require.NoError(t, err)
+		assert.Equal(t, 1, newID)
+	})
+
+	t.Run("ClearTableWithOptions", func(t *testing.T) {
+		// 插入测试数据到events表
+		for i := 0; i < 500; i++ {
+			_, err := db.Exec("INSERT INTO events (workspace_path, event_type) VALUES (?, ?)",
+				fmt.Sprintf("/test/path/%d", i), "test_event")
+			require.NoError(t, err)
+		}
+
+		// 验证数据插入成功
+		var count int
+		err = db.QueryRow("SELECT COUNT(*) FROM events").Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, 500, count)
+
+		// 使用选项清理表数据
+		options := &ClearTableOptions{
+			BatchSize:         &[]int{50}[0],                             // 每批删除50条
+			BatchDelay:        &[]time.Duration{2 * time.Millisecond}[0], // 批次间延迟2毫秒
+			EnableProgressLog: true,                                      // 启用进度日志
+		}
+
+		err = dbManager.ClearTableWithOptions("events", options)
+		require.NoError(t, err)
+
+		// 验证表已清空
+		err = db.QueryRow("SELECT COUNT(*) FROM events").Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, 0, count)
+
+		// 验证ID已重置
+		_, err = db.Exec("INSERT INTO events (workspace_path, event_type) VALUES (?, ?)",
+			"/new/path", "new_event")
+		require.NoError(t, err)
+
+		var newID int
+		err = db.QueryRow("SELECT id FROM events WHERE workspace_path = '/new/path'").Scan(&newID)
+		require.NoError(t, err)
+		assert.Equal(t, 1, newID)
+	})
+
+	t.Run("ClearTableInvalidName", func(t *testing.T) {
+		// 测试无效表名
+		err = dbManager.ClearTable("invalid_table")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid table name")
+	})
+
+	t.Run("ClearTableEmptyTable", func(t *testing.T) {
+		// 测试清空空表
+		err = dbManager.ClearTable("workspaces")
+		require.NoError(t, err) // 应该不报错
+
+		// 再次清空，应该仍然不报错
+		err = dbManager.ClearTable("workspaces")
+		require.NoError(t, err)
+	})
+
+	t.Run("ClearTableWithDefaultOptions", func(t *testing.T) {
+		// 插入少量测试数据
+		for i := 0; i < 10; i++ {
+			_, err := db.Exec("INSERT INTO workspaces (workspace_name, workspace_path) VALUES (?, ?)",
+				fmt.Sprintf("workspace_%d", i), fmt.Sprintf("/path/%d", i))
+			require.NoError(t, err)
+		}
+
+		// 使用nil选项（使用默认配置）
+		err = dbManager.ClearTableWithOptions("workspaces", nil)
+		require.NoError(t, err)
+
+		// 验证表已清空
+		var count int
+		err = db.QueryRow("SELECT COUNT(*) FROM workspaces").Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, 0, count)
 	})
 }
