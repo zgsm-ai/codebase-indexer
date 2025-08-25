@@ -111,7 +111,7 @@ func TestIndexLanguages(t *testing.T) {
 			Name:     "redis",
 			Language: "c",
 			Path:     filepath.Join(testRootDir, "c", "redis"),
-			Exts:     getSupportedExtByLanguageTestHelper(lang.C),
+			Exts:     getSupportedExtByLanguageTestHelper(lang.CPP),
 			wantErr:  nil,
 		},
 		{
@@ -204,7 +204,7 @@ func TestIndexMixedLanguages(t *testing.T) {
 			Name:     "redis",
 			Language: "c",
 			Path:     filepath.Join(testRootDir, "c", "redis"),
-			Exts:     getSupportedExtByLanguageTestHelper(lang.C),
+			Exts:     getSupportedExtByLanguageTestHelper(lang.CPP),
 			wantErr:  nil,
 		},
 		{ // 220.97s 223.75s 228s 38s 65s
