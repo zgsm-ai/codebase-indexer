@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/syndtr/goleveldb/leveldb/util"
 	"os"
 	"path/filepath"
 	"strings"
@@ -307,16 +308,19 @@ func (s *LevelDBStorage) Delete(ctx context.Context, projectUuid string, key Key
 func (s *LevelDBStorage) DeleteAll(ctx context.Context, projectUuid string) error {
 	db, err := s.getDB(projectUuid)
 	if err != nil {
-		s.logger.Debug("iter: failed to get database. project %s, error: %v", projectUuid, err)
+		s.logger.Debug("failed to get database. project %s, error: %v", projectUuid, err)
 		return nil
 	}
-	s.logger.Info("level_db: start to delete all for project %s", projectUuid)
+	s.logger.Info("start to delete all for project %s", projectUuid)
 	iter := s.Iter(ctx, projectUuid)
 	for iter.Next() {
 		_ = db.Delete([]byte(iter.Key()), nil)
 	}
-	err = iter.Close()
-	s.logger.Info("level_db: delete all for project %s end, after size: %d", projectUuid,
+	if err = iter.Close(); err != nil {
+		s.logger.Debug("failed to close iter for project %s, error: %v", projectUuid, err)
+	}
+	err = db.CompactRange(util.Range{})
+	s.logger.Info("delete all for project %s end, after size: %d", projectUuid,
 		s.Size(ctx, projectUuid, types.EmptyString))
 	return err
 }

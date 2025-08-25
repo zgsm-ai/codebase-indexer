@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"codebase-indexer/internal/config"
-	"codebase-indexer/internal/job"
 	"codebase-indexer/internal/repository"
 	"codebase-indexer/internal/service"
 	"codebase-indexer/internal/utils"
@@ -31,9 +30,10 @@ type Daemon struct {
 	schedWG     sync.WaitGroup // Used to wait for scheduler restart
 
 	// 新增字段
-	scannerJob        *job.FileScanJob
-	eventProcessorJob *job.EventProcessorJob
-	statusCheckerJob  *job.StatusCheckerJob
+	//scannerJob        *job.FileScanJob
+	//eventProcessorJob *job.EventProcessorJob
+	//statusCheckerJob  *job.StatusCheckerJob
+	jobs []Job
 }
 
 // func NewDaemon(scheduler *scheduler.Scheduler, grpcServer *grpc.Server, grpcListen net.Listener,
@@ -41,21 +41,19 @@ type Daemon struct {
 //	httpSync syncer.SyncInterface, fileScanner scanner.ScannerInterface, storage storage.SotrageInterface, logger logger.Logger) *Daemon {
 func NewDaemon(scheduler *service.Scheduler, httpSync repository.SyncInterface,
 	fileScanner repository.ScannerInterface, storage repository.StorageInterface, logger logger.Logger,
-	scannerJob *job.FileScanJob, eventProcessorJob *job.EventProcessorJob, statusCheckerJob *job.StatusCheckerJob) *Daemon {
+	jobs ...Job) *Daemon {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Daemon{
 		scheduler: scheduler,
 		// grpcServer:  grpcServer,
 		// grpcListen:  grpcListen,
-		httpSync:          httpSync,
-		fileScanner:       fileScanner,
-		storage:           storage,
-		logger:            logger,
-		ctx:               ctx,
-		cancel:            cancel,
-		scannerJob:        scannerJob,
-		eventProcessorJob: eventProcessorJob,
-		statusCheckerJob:  statusCheckerJob,
+		httpSync:    httpSync,
+		fileScanner: fileScanner,
+		storage:     storage,
+		logger:      logger,
+		ctx:         ctx,
+		cancel:      cancel,
+		jobs:        jobs,
 	}
 }
 
@@ -133,41 +131,19 @@ func (d *Daemon) Start() {
 	// 	}
 	// }()
 
-	// 启动文件扫描任务（5分钟间隔）
-	d.wg.Add(1)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				d.logger.Error("file scanner task panic recovered: %v", r)
-			}
-			d.wg.Done()
+	for _, j := range d.jobs {
+		d.wg.Add(1)
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					d.logger.Error("job panic recovered: %v", r)
+				}
+				d.wg.Done()
+			}()
+			j.Start(d.ctx)
 		}()
-		d.startFileScannerTask()
-	}()
+	}
 
-	// 启动事件处理协程任务
-	d.wg.Add(1)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				d.logger.Error("event processor task panic recovered: %v", r)
-			}
-			d.wg.Done()
-		}()
-		d.startEventProcessorTask()
-	}()
-
-	// 启动状态检查任务（3秒间隔）
-	d.wg.Add(1)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				d.logger.Error("status checker task panic recovered: %v", r)
-			}
-			d.wg.Done()
-		}()
-		d.startStatusCheckerTask()
-	}()
 }
 
 // updateConfig updates client configuration
@@ -315,22 +291,4 @@ func (d *Daemon) Stop() {
 	// 	d.logger.Info("gRPC service stopped")
 	// }
 	d.logger.Info("daemon process stopped")
-}
-
-// startFileScannerTask 启动文件扫描任务
-func (d *Daemon) startFileScannerTask() {
-	d.logger.Info("starting file scanner task...")
-	d.scannerJob.Start(d.ctx)
-}
-
-// startEventProcessorTask 启动事件处理协程任务
-func (d *Daemon) startEventProcessorTask() {
-	d.logger.Info("starting event processor task...")
-	d.eventProcessorJob.Start(d.ctx)
-}
-
-// startStatusCheckerTask 启动状态检查任务
-func (d *Daemon) startStatusCheckerTask() {
-	d.logger.Info("starting status checker task...")
-	d.statusCheckerJob.Start(d.ctx)
 }

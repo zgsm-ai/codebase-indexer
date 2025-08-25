@@ -29,3 +29,8 @@ const (
 	SwitchOn  = "on"
 	SwitchOff = "off"
 )
+
+const (
+	True  = "true"
+	False = "false"
+)
