@@ -104,12 +104,9 @@ func (v *VisitPattern) ShouldSkip(fileInfo *FileInfo) (bool, error) {
 	// 4. 目录特定规则（基于完整路径判断，解决父/子目录区分问题）
 	if isDir {
 		// 4.1 排除指定路径的目录（支持完整路径或特定层级目录）
-		normalizedPath := filepath.Clean(path) // 标准化路径（处理../等相对路径）
 		for _, excludePath := range v.ExcludeDirs {
-			normalizedExclude := filepath.Clean(excludePath)
 			// 匹配规则：目录路径完全一致，或为目标目录的子目录（可选）
-			if normalizedPath == normalizedExclude ||
-				strings.HasPrefix(normalizedPath, normalizedExclude+string(filepath.Separator)) {
+			if base == excludePath {
 				return true, nil
 			}
 		}
@@ -117,12 +114,9 @@ func (v *VisitPattern) ShouldSkip(fileInfo *FileInfo) (bool, error) {
 		// 4.2 仅包含指定路径的目录（支持完整路径或特定层级目录）
 		if len(v.IncludeDirs) > 0 {
 			found := false
-			normalizedPath := filepath.Clean(path)
 			for _, includePath := range v.IncludeDirs {
-				normalizedInclude := filepath.Clean(includePath)
 				// 匹配规则：目录路径完全一致，或为目标目录的子目录（可选）
-				if normalizedPath == normalizedInclude ||
-					strings.HasPrefix(normalizedPath, normalizedInclude+string(filepath.Separator)) {
+				if base == includePath {
 					found = true
 					break
 				}

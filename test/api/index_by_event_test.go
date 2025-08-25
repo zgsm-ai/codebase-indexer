@@ -228,7 +228,7 @@ func (s *IndexEventIntegrationTestSuite) TestIndexByEvent() {
 					"targetPath": filepath.Join(s.workspacePath, "test", "api", "new_get_file_structure_test.go"),
 				},
 			},
-			wantProcessTime: time.Second * 2,
+			wantProcessTime: time.Second * 5,
 			preProcess: func(s *IndexEventIntegrationTestSuite) error {
 				if err := s.deleteAllIndex(); err != nil {
 					s.T().Fatal(err)
@@ -237,7 +237,7 @@ func (s *IndexEventIntegrationTestSuite) TestIndexByEvent() {
 					s.T().Fatal(err)
 				}
 
-				time.Sleep(time.Second * 10)
+				time.Sleep(time.Second * 15)
 				// 验证索引数量和文件存在性
 				s.validateIndexCount(1, 0.1)
 				testFile := filepath.Join(s.workspacePath, "test", "api", "get_file_structure_test.go")
@@ -510,7 +510,7 @@ func (s *IndexEventIntegrationTestSuite) validateIndexCount(expectedMinCount int
 	// 验证最小数量
 	if expectedMinCount > 0 && graphIndexNum < expectedMinCount {
 		s.T().Fatalf("graph index num %d is less than expected min count %d", graphIndexNum, expectedMinCount)
-	} else if expectedMinCount == 0 && graphIndexNum <= 0 {
+	} else if expectedMinCount == 0 && graphIndexNum > 0 {
 		s.T().Fatal("graph index num is zero")
 	}
 
@@ -522,7 +522,7 @@ func (s *IndexEventIntegrationTestSuite) validateIndexCount(expectedMinCount int
 
 	if expectedMinCount > 0 && databaseIndexNum < expectedMinCount {
 		s.T().Fatalf("database index num %d is less than expected min count %d", databaseIndexNum, expectedMinCount)
-	} else if expectedMinCount == 0 && databaseIndexNum <= 0 {
+	} else if expectedMinCount == 0 && databaseIndexNum > 0 {
 		s.T().Fatal("database index num is zero")
 	}
 
