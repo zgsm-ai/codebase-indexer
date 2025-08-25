@@ -165,7 +165,7 @@
 
   (unary_expression
   operand:(composite_literal
-    type: [(type_identifier) (selector_expression)] @call.struct
+    type: [(type_identifier) (selector_expression)(qualified_type)] @call.struct
   )
  )
 

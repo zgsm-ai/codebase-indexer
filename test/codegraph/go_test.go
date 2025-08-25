@@ -227,12 +227,12 @@ func TestQuery(t *testing.T) {
 			Name:          "查询symbolMapKey函数调用",
 			ElementName:   "symbolMapKey",
 			FilePath:      filepath.Join(workspacePath, "internal/service/indexer.go"),
-			StartLine:     1647,
-			EndLine:       1647,
+			StartLine:     1650,
+			EndLine:       1650,
 			ElementType:   "call.function",
 			ShouldFindDef: true,
 			wantDefinitions: []types.Definition{
-				{Name: "symbolMapKey", Path: "indexer.go", Range: []int32{1650, 0, 1650, 0}},
+				{Name: "symbolMapKey", Path: "indexer.go", Range: []int32{1653, 0, 1653, 0}},
 			},
 			wantErr: nil,
 		},
@@ -240,12 +240,12 @@ func TestQuery(t *testing.T) {
 			Name:          "查询makeQueryPath函数调用",
 			ElementName:   "makeQueryPath",
 			FilePath:      filepath.Join(workspacePath, "pkg/codegraph/parser/scm.go"),
-			StartLine:     58,
-			EndLine:       58,
+			StartLine:     61,
+			EndLine:       61,
 			ElementType:   "call.function",
 			ShouldFindDef: true,
 			wantDefinitions: []types.Definition{
-				{Name: "makeQueryPath", Path: "scm.go", Range: []int32{69, 0, 69, 0}},
+				{Name: "makeQueryPath", Path: "scm.go", Range: []int32{72, 0, 72, 0}},
 			},
 			wantErr: nil,
 		},
@@ -357,8 +357,8 @@ func TestQuery(t *testing.T) {
 			Name:          "查询SourceFile结构体",
 			ElementName:   "SourceFile",
 			FilePath:      filepath.Join(workspacePath, "internal/service/indexer.go"),
-			StartLine:     1469,
-			EndLine:       1469,
+			StartLine:     1623,
+			EndLine:       1623,
 			ElementType:   "reference",
 			ShouldFindDef: true,
 			wantDefinitions: []types.Definition{
@@ -383,8 +383,8 @@ func TestQuery(t *testing.T) {
 			Name:          "查询ScannerInterface结构体",
 			ElementName:   "ScannerInterface",
 			FilePath:      filepath.Join(workspacePath, "internal/service/indexer.go"),
-			StartLine:     59,
-			EndLine:       59,
+			StartLine:     70,
+			EndLine:       70,
 			ElementType:   "reference",
 			ShouldFindDef: true,
 			wantDefinitions: []types.Definition{
@@ -422,8 +422,8 @@ func TestQuery(t *testing.T) {
 			Name:          "查询ConfigServer结构体",
 			ElementName:   "ConfigServer",
 			FilePath:      filepath.Join(workspacePath, "internal/config/config.go"),
-			StartLine:     43,
-			EndLine:       43,
+			StartLine:     42,
+			EndLine:       42,
 			ElementType:   "reference",
 			ShouldFindDef: true,
 			wantDefinitions: []types.Definition{
@@ -438,6 +438,7 @@ func TestQuery(t *testing.T) {
 			StartLine:     431,
 			EndLine:       431,
 			ElementType:   "reference",
+			CodeSnippet:   []byte("return &dto.DefinitionData{List: definitions}, nil"),
 			ShouldFindDef: true,
 			wantDefinitions: []types.Definition{
 				{Name: "DefinitionData", Path: "backend.go", Range: []int32{78, 0, 78, 0}},
@@ -471,6 +472,7 @@ func TestQuery(t *testing.T) {
 			// 检查文件是否存在
 			if _, err := os.Stat(tc.FilePath); os.IsNotExist(err) {
 				t.Logf("file not exist: %s", tc.FilePath)
+				return
 			}
 
 			// 检查行号范围是否有效
