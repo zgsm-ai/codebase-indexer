@@ -34,6 +34,7 @@ type Daemon struct {
 	scannerJob        *job.FileScanJob
 	eventProcessorJob *job.EventProcessorJob
 	statusCheckerJob  *job.StatusCheckerJob
+	eventCleanerJob   *job.EventCleanerJob
 }
 
 // func NewDaemon(scheduler *scheduler.Scheduler, grpcServer *grpc.Server, grpcListen net.Listener,
@@ -41,7 +42,8 @@ type Daemon struct {
 //	httpSync syncer.SyncInterface, fileScanner scanner.ScannerInterface, storage storage.SotrageInterface, logger logger.Logger) *Daemon {
 func NewDaemon(scheduler *service.Scheduler, httpSync repository.SyncInterface,
 	fileScanner repository.ScannerInterface, storage repository.StorageInterface, logger logger.Logger,
-	scannerJob *job.FileScanJob, eventProcessorJob *job.EventProcessorJob, statusCheckerJob *job.StatusCheckerJob) *Daemon {
+	scannerJob *job.FileScanJob, eventProcessorJob *job.EventProcessorJob, statusCheckerJob *job.StatusCheckerJob,
+	eventCleanerJob *job.EventCleanerJob) *Daemon {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Daemon{
 		scheduler: scheduler,
@@ -56,6 +58,7 @@ func NewDaemon(scheduler *service.Scheduler, httpSync repository.SyncInterface,
 		scannerJob:        scannerJob,
 		eventProcessorJob: eventProcessorJob,
 		statusCheckerJob:  statusCheckerJob,
+		eventCleanerJob:   eventCleanerJob,
 	}
 }
 
@@ -157,7 +160,7 @@ func (d *Daemon) Start() {
 		d.startEventProcessorTask()
 	}()
 
-	// 启动状态检查任务（3秒间隔）
+	// 启动状态检查任务（5秒间隔）
 	d.wg.Add(1)
 	go func() {
 		defer func() {
@@ -167,6 +170,18 @@ func (d *Daemon) Start() {
 			d.wg.Done()
 		}()
 		d.startStatusCheckerTask()
+	}()
+
+	// 启动事件清理任务（每天22:00执行）
+	d.wg.Add(1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				d.logger.Error("event cleaner task panic recovered: %v", r)
+			}
+			d.wg.Done()
+		}()
+		d.startEventCleanerTask()
 	}()
 }
 
@@ -333,4 +348,10 @@ func (d *Daemon) startEventProcessorTask() {
 func (d *Daemon) startStatusCheckerTask() {
 	d.logger.Info("starting status checker task...")
 	d.statusCheckerJob.Start(d.ctx)
+}
+
+// startEventCleanerTask 启动事件清理任务
+func (d *Daemon) startEventCleanerTask() {
+	d.logger.Info("starting event cleaner task...")
+	d.eventCleanerJob.Start(d.ctx)
 }

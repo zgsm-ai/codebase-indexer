@@ -42,13 +42,19 @@ type EventRepository interface {
 	// GetEventsCountByType 获取满足事件类型条件的事件总数
 	GetEventsCountByType(eventTypes []string) (int64, error)
 	// GetEventsCountByWorkspaceAndStatus 根据工作区路径、嵌入状态和代码图状态获取事件总数
-	GetEventsCountByWorkspaceAndStatus(workspacePath string, embeddingStatuses []int, codegraphStatuses []int) (int64, error)
+	GetEventsCountByWorkspaceAndStatus(workspacePaths []string, embeddingStatuses []int, codegraphStatuses []int) (int64, error)
 	// GetLatestEventByWorkspaceAndSourcePath 根据工作区路径和源文件路径获取最新记录
 	GetLatestEventByWorkspaceAndSourcePath(workspacePath, sourceFilePath string) (*model.Event, error)
 	// BatchCreateEvents 批量创建事件
 	BatchCreateEvents(events []*model.Event) error
 	// BatchDeleteEvents 批量删除事件
 	BatchDeleteEvents(ids []int64) error
+	// GetExpiredEventIDs 获取过期事件的ID列表
+	GetExpiredEventIDs(cutoffTime time.Time) ([]int64, error)
+	// GetTableName 获取表名
+	GetTableName() string
+	// ClearTable 清理表数据并重置ID
+	ClearTable() error
 }
 
 // eventRepository 事件Repository实现
@@ -1115,14 +1121,30 @@ func (r *eventRepository) GetEventsCountByType(eventTypes []string) (int64, erro
 }
 
 // GetEventsCountByWorkspaceAndStatus 根据工作区路径、嵌入状态和代码图状态获取事件总数
-func (r *eventRepository) GetEventsCountByWorkspaceAndStatus(workspacePath string, embeddingStatuses []int, codegraphStatuses []int) (int64, error) {
+func (r *eventRepository) GetEventsCountByWorkspaceAndStatus(workspacePaths []string, embeddingStatuses []int, codegraphStatuses []int) (int64, error) {
 	query := `
 		SELECT COUNT(*)
 		FROM events
-		WHERE workspace_path = ?
 	`
 
-	args := []interface{}{workspacePath}
+	args := []interface{}{}
+	whereAdded := false
+
+	// 如果提供了工作区路径列表，添加工作区路径过滤条件
+	if len(workspacePaths) > 0 {
+		placeholders := ""
+		for i := range workspacePaths {
+			if i > 0 {
+				placeholders += ","
+			}
+			placeholders += "?"
+		}
+		query += fmt.Sprintf(" WHERE workspace_path IN (%s)", placeholders)
+		whereAdded = true
+		for _, path := range workspacePaths {
+			args = append(args, path)
+		}
+	}
 
 	// 如果提供了嵌入状态列表，添加嵌入状态过滤条件
 	if len(embeddingStatuses) > 0 {
@@ -1133,7 +1155,12 @@ func (r *eventRepository) GetEventsCountByWorkspaceAndStatus(workspacePath strin
 			}
 			placeholders += "?"
 		}
-		query += fmt.Sprintf(" AND embedding_status IN (%s)", placeholders)
+		if whereAdded {
+			query += fmt.Sprintf(" AND embedding_status IN (%s)", placeholders)
+		} else {
+			query += fmt.Sprintf(" WHERE embedding_status IN (%s)", placeholders)
+			whereAdded = true
+		}
 		for _, status := range embeddingStatuses {
 			args = append(args, status)
 		}
@@ -1148,7 +1175,11 @@ func (r *eventRepository) GetEventsCountByWorkspaceAndStatus(workspacePath strin
 			}
 			placeholders += "?"
 		}
-		query += fmt.Sprintf(" AND codegraph_status IN (%s)", placeholders)
+		if whereAdded {
+			query += fmt.Sprintf(" AND codegraph_status IN (%s)", placeholders)
+		} else {
+			query += fmt.Sprintf(" WHERE codegraph_status IN (%s)", placeholders)
+		}
 		for _, status := range codegraphStatuses {
 			args = append(args, status)
 		}
@@ -1326,4 +1357,49 @@ func (r *eventRepository) BatchDeleteEvents(ids []int64) error {
 
 	r.logger.Info("Successfully deleted total %d events", totalDeleted)
 	return nil
+}
+
+// GetExpiredEventIDs 获取过期事件的ID列表
+func (r *eventRepository) GetExpiredEventIDs(cutoffTime time.Time) ([]int64, error) {
+	query := `
+		SELECT id
+		FROM events
+		WHERE updated_at < ?
+		ORDER BY updated_at ASC
+	`
+
+	rows, err := r.db.GetDB().Query(query, cutoffTime)
+	if err != nil {
+		r.logger.Error("Failed to get expired event IDs: %v", err)
+		return nil, fmt.Errorf("failed to get expired event IDs: %w", err)
+	}
+	defer rows.Close()
+
+	var eventIDs []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			r.logger.Error("Failed to scan event ID: %v", err)
+			return nil, fmt.Errorf("failed to scan event ID: %w", err)
+		}
+		eventIDs = append(eventIDs, id)
+	}
+
+	if err := rows.Err(); err != nil {
+		r.logger.Error("Error iterating expired event IDs: %v", err)
+		return nil, fmt.Errorf("error iterating expired event IDs: %w", err)
+	}
+
+	r.logger.Info("Found %d expired events before %s", len(eventIDs), cutoffTime.Format(time.RFC3339))
+	return eventIDs, nil
+}
+
+// GetTableName 获取表名
+func (r *eventRepository) GetTableName() string {
+	return "events"
+}
+
+// ClearTable 清理表数据并重置ID
+func (r *eventRepository) ClearTable() error {
+	return r.db.ClearTable(r.GetTableName())
 }

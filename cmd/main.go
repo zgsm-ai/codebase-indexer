@@ -170,6 +170,7 @@ func main() {
 	fileScanJob := job.NewFileScanJob(fileScanService, storageManager, syncRepo, appLogger, 5*time.Minute)
 	eventProcessorJob := job.NewEventProcessorJob(appLogger, syncRepo, embeddingProcessService, codegraphProcessor, storageManager)
 	statusCheckerJob := job.NewStatusCheckerJob(embeddingStatusService, storageManager, syncRepo, appLogger, 5*time.Second)
+	eventCleanerJob := job.NewEventCleanerJob(eventRepo, appLogger)
 
 	// Initialize handler layer
 	// grpcHandler := handler.NewGRPCHandler(syncRepo, scanRepo, storageManager, schedulerService, appLogger)
@@ -194,7 +195,7 @@ func main() {
 
 	// Start daemonProcess process
 	// daemonProcess := daemonProcess.NewDaemon(syncScheduler, s, lis, httpSync, fileScanner, storageManager, appLogger)
-	daemonProcess := daemon.NewDaemon(schedulerService, syncRepo, scanRepo, storageManager, appLogger, fileScanJob, eventProcessorJob, statusCheckerJob)
+	daemonProcess := daemon.NewDaemon(schedulerService, syncRepo, scanRepo, storageManager, appLogger, fileScanJob, eventProcessorJob, statusCheckerJob, eventCleanerJob)
 	go daemonProcess.Start()
 
 	// Start pprof server if enabled

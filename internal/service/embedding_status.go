@@ -361,7 +361,9 @@ func (sc *embeddingStatusService) handleBuildCompletion(workspacePath string, ev
 	} else {
 		delete(codebaseEmbeddingConfig.SyncFiles, filePath)
 		delete(codebaseEmbeddingConfig.FailedFiles, filePath)
-		codebaseEmbeddingConfig.HashTree[filePath] = event.FileHash
+		if event.EventType != model.EventTypeDeleteFile {
+			codebaseEmbeddingConfig.HashTree[filePath] = event.FileHash
+		}
 	}
 	// 保存 codebase embedding 配置
 	err = sc.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig)

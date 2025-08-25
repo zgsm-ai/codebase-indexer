@@ -2,9 +2,11 @@ package database
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"codebase-indexer/internal/config"
 	"codebase-indexer/pkg/logger"
@@ -18,6 +20,8 @@ type DatabaseManager interface {
 	Close() error
 	GetDB() *sql.DB
 	BeginTransaction() (*sql.Tx, error)
+	// ClearTable 清理指定表数据并重置ID
+	ClearTable(tableName string) error
 }
 
 // SQLiteManager SQLite数据库管理器实现
@@ -97,6 +101,128 @@ func (m *SQLiteManager) GetDB() *sql.DB {
 // BeginTransaction 开始事务
 func (m *SQLiteManager) BeginTransaction() (*sql.Tx, error) {
 	return m.db.Begin()
+}
+
+// ClearTable 清理指定表数据并重置ID
+func (m *SQLiteManager) ClearTable(tableName string) error {
+	return m.ClearTableWithOptions(tableName, nil)
+}
+
+// ClearTableOptions 清理表选项
+type ClearTableOptions struct {
+	BatchSize         *int           // 分批删除的批次大小，如果为nil则使用配置中的默认值
+	BatchDelay        *time.Duration // 分批删除之间的延迟，如果为nil则使用配置中的默认值
+	EnableProgressLog bool           // 是否启用进度日志
+}
+
+// ClearTableWithOptions 带选项的清理表数据方法
+func (m *SQLiteManager) ClearTableWithOptions(tableName string, options *ClearTableOptions) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	// 验证表名
+	validTables := map[string]bool{
+		"workspaces": true,
+		"events":     true,
+	}
+	if !validTables[tableName] {
+		return fmt.Errorf("invalid table name: %s", tableName)
+	}
+
+	// 设置默认选项
+	batchSize := m.config.BatchDeleteSize
+	if options != nil && options.BatchSize != nil {
+		batchSize = *options.BatchSize
+	}
+
+	batchDelay := m.config.BatchDeleteDelay
+	if options != nil && options.BatchDelay != nil {
+		batchDelay = *options.BatchDelay
+	}
+
+	enableProgressLog := false
+	if options != nil {
+		enableProgressLog = options.EnableProgressLog
+	}
+
+	// 获取表中的总记录数
+	var totalCount int
+	err := m.db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)).Scan(&totalCount)
+	if err != nil {
+		return fmt.Errorf("failed to get table row count: %v", err)
+	}
+
+	if totalCount == 0 {
+		m.logger.Info("Table %s is already empty", tableName)
+		return nil
+	}
+
+	if enableProgressLog {
+		m.logger.Info("Starting to clear table %s with %d records (batch size: %d)", tableName, totalCount, batchSize)
+	}
+
+	// 开始事务
+	tx, err := m.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %v", err)
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 分批删除数据
+	deletedCount := 0
+	for deletedCount < totalCount {
+		// 计算当前批次要删除的记录数
+		currentBatchSize := batchSize
+		if deletedCount+batchSize > totalCount {
+			currentBatchSize = totalCount - deletedCount
+		}
+
+		// 执行分批删除
+		result, err := tx.Exec(fmt.Sprintf("DELETE FROM %s WHERE id IN (SELECT id FROM %s ORDER BY id LIMIT %d)", tableName, tableName, currentBatchSize))
+		if err != nil {
+			return fmt.Errorf("failed to delete batch: %v", err)
+		}
+
+		// 获取实际删除的记录数
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to get affected rows: %v", err)
+		}
+
+		deletedCount += int(affected)
+
+		if enableProgressLog {
+			progress := float64(deletedCount) / float64(totalCount) * 100
+			m.logger.Info("Progress: %d/%d records deleted (%.1f%%)", deletedCount, totalCount, progress)
+		}
+
+		// 如果还有记录需要删除，则等待一段时间
+		if deletedCount < totalCount && batchDelay > 0 {
+			time.Sleep(batchDelay)
+		}
+	}
+
+	// 重置自增ID
+	if _, err := tx.Exec(fmt.Sprintf("DELETE FROM sqlite_sequence WHERE name='%s'", tableName)); err != nil {
+		return fmt.Errorf("failed to reset autoincrement: %v", err)
+	}
+
+	// 提交事务
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %v", err)
+	}
+
+	if enableProgressLog {
+		m.logger.Info("Successfully cleared table %s: %d records deleted, ID reset", tableName, deletedCount)
+	} else {
+		m.logger.Info("Table %s cleared successfully", tableName)
+	}
+
+	return nil
 }
 
 // createTables 创建数据库表结构
