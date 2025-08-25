@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const defaultCleanInterval = 60 & time.Minute
+const defaultCleanInterval = 60 * time.Minute
 const defaultExpiryPeriod = 3 * 24 * time.Hour
 
 type IndexCleanJob struct {
