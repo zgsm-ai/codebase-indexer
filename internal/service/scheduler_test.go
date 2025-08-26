@@ -151,7 +151,6 @@ func TestProcessFileChanges(t *testing.T) {
 
 		assert.NoError(t, err)
 		mockLogger.AssertCalled(t, "Info", "starting to upload zip file: %s", mock.Anything)
-		mockLogger.AssertCalled(t, "Info", "zip file uploaded successfully", mock.Anything)
 	})
 
 	t.Run("CreateChangesZipError", func(t *testing.T) {
@@ -286,7 +285,6 @@ func TestUploadChangesZip(t *testing.T) {
 		err = s.UploadChangesZip(tempFile, uploadReq)
 
 		assert.NoError(t, err)
-		mockLogger.AssertCalled(t, "Info", "zip file uploaded successfully", mock.Anything)
 		mockHttpSync.AssertExpectations(t)
 	})
 }

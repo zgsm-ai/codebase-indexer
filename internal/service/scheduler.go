@@ -393,7 +393,7 @@ func (s *Scheduler) CreateChangesZip(config *config.CodebaseConfig, changes []*u
 		if err != nil {
 			if _, statErr := os.Stat(zipPath); statErr == nil {
 				_ = os.Remove(zipPath)
-				s.logger.Info("temp zip file deleted successfully: %s", zipPath)
+				s.logger.Debug("temp zip file deleted successfully: %s", zipPath)
 			}
 		}
 	}
@@ -464,7 +464,6 @@ func (s *Scheduler) UploadChangesZip(zipPath string, uploadReq dto.UploadReq) er
 		uploadReq.RequestId = requestId
 		errUpload = s.httpSync.UploadFile(zipPath, uploadReq)
 		if errUpload == nil {
-			s.logger.Info("zip file uploaded successfully")
 			break
 		}
 		if !isTimeoutError(errUpload) {
@@ -473,7 +472,7 @@ func (s *Scheduler) UploadChangesZip(zipPath string, uploadReq dto.UploadReq) er
 		}
 		s.logger.Warn("failed to upload zip file (attempt %d/%d): %v", i+1, maxRetries, errUpload)
 		if i < maxRetries-1 {
-			s.logger.Info("waiting %v before retry...", retryDelay*time.Duration(i+1))
+			s.logger.Debug("waiting %v before retry...", retryDelay*time.Duration(i+1))
 			time.Sleep(retryDelay * time.Duration(i+1))
 		}
 	}
@@ -482,8 +481,6 @@ func (s *Scheduler) UploadChangesZip(zipPath string, uploadReq dto.UploadReq) er
 	if zipPath != "" {
 		if err := os.Remove(zipPath); err != nil {
 			s.logger.Warn("failed to delete temp zip file: %s, error: %v", zipPath, err)
-		} else {
-			s.logger.Info("temp zip file deleted successfully: %s", zipPath)
 		}
 	}
 
@@ -561,7 +558,7 @@ func (s *Scheduler) CreateSingleFileZip(config *config.CodebaseConfig, fileStatu
 		if err != nil {
 			if _, statErr := os.Stat(zipPath); statErr == nil {
 				_ = os.Remove(zipPath)
-				s.logger.Info("temp zip file deleted successfully: %s", zipPath)
+				s.logger.Debug("temp zip file deleted successfully: %s", zipPath)
 			}
 		}
 	}
@@ -631,7 +628,7 @@ func (s *Scheduler) CreateFilesZip(config *config.CodebaseConfig, fileStatus []*
 		if err != nil {
 			if _, statErr := os.Stat(zipPath); statErr == nil {
 				_ = os.Remove(zipPath)
-				s.logger.Info("temp zip file deleted successfully: %s", zipPath)
+				s.logger.Debug("temp zip file deleted successfully: %s", zipPath)
 			}
 		}
 	}

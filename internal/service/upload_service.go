@@ -109,7 +109,6 @@ func (us *uploadService) UploadChangesWithRetry(workspacePath string, changes []
 
 		fileStatuses, err := us.uploadChanges(workspacePath, changes)
 		if err == nil {
-			us.logger.Info("files uploaded successfully")
 			return fileStatuses, nil
 		}
 
@@ -125,7 +124,7 @@ func (us *uploadService) UploadChangesWithRetry(workspacePath string, changes []
 
 			// 指数退避
 			delay := us.uploadCfg.BaseRetryDelay * time.Duration(math.Pow(2, float64(attempt-1)))
-			us.logger.Info("waiting %v before retry...", delay)
+			us.logger.Debug("waiting %v before retry...", delay)
 			time.Sleep(delay)
 		}
 	}
@@ -153,7 +152,6 @@ func (us *uploadService) UploadFileWithRetry(workspacePath string, filePath stri
 
 		fileStatus, err := us.uploadSingleFile(workspacePath, filePath, status)
 		if err == nil {
-			us.logger.Info("file %s uploaded successfully", filePath)
 			return fileStatus, nil
 		}
 
@@ -169,7 +167,7 @@ func (us *uploadService) UploadFileWithRetry(workspacePath string, filePath stri
 
 			// 指数退避
 			delay := us.uploadCfg.BaseRetryDelay * time.Duration(math.Pow(2, float64(attempt-1)))
-			us.logger.Info("waiting %v before retry...", delay)
+			us.logger.Debug("waiting %v before retry...", delay)
 			time.Sleep(delay)
 		}
 	}
@@ -219,8 +217,6 @@ func (us *uploadService) DeleteFileWithRetry(workspacePath string, filePath stri
 		if zipPath != "" {
 			if err := os.Remove(zipPath); err != nil {
 				us.logger.Warn("failed to delete temp zip file %s: %v", zipPath, err)
-			} else {
-				us.logger.Info("temp zip file deleted successfully: %s", zipPath)
 			}
 		}
 	}()
@@ -228,7 +224,6 @@ func (us *uploadService) DeleteFileWithRetry(workspacePath string, filePath stri
 	// 7. 上传文件
 	requestId, err := utils.GenerateUUID()
 	if err != nil {
-		us.logger.Warn("failed to generate delete sync ID, using timestamp: %v", err)
 		requestId = time.Now().Format("20060102150405.000")
 	}
 	uploadReq := dto.UploadReq{
@@ -244,7 +239,7 @@ func (us *uploadService) DeleteFileWithRetry(workspacePath string, filePath stri
 	}
 
 	fileStatus.RequestId = requestId
-	us.logger.Info("file %s uploaded successfully", filePath)
+	us.logger.Info("file %s deleted successfully", filePath)
 	return fileStatus, nil
 }
 
@@ -269,7 +264,6 @@ func (us *uploadService) RenameFileWithRetry(workspacePath string, oldFilePath s
 
 		fileStatus, err := us.renameSingleFile(workspacePath, oldFilePath, newFilePath)
 		if err == nil {
-			us.logger.Info("file %s renamed to %s successfully", oldFilePath, newFilePath)
 			return fileStatus, nil
 		}
 
@@ -285,7 +279,7 @@ func (us *uploadService) RenameFileWithRetry(workspacePath string, oldFilePath s
 
 			// 指数退避
 			delay := us.uploadCfg.BaseRetryDelay * time.Duration(math.Pow(2, float64(attempt-1)))
-			us.logger.Info("waiting %v before retry...", delay)
+			us.logger.Debug("waiting %v before retry...", delay)
 			time.Sleep(delay)
 		}
 	}
@@ -313,7 +307,6 @@ func (us *uploadService) UploadFilesWithRetry(workspacePath string, filePaths []
 
 		fileStatuses, err := us.uploadFiles(workspacePath, filePaths, status)
 		if err == nil {
-			us.logger.Info("files uploaded successfully")
 			return fileStatuses, nil
 		}
 
@@ -329,7 +322,7 @@ func (us *uploadService) UploadFilesWithRetry(workspacePath string, filePaths []
 
 			// 指数退避
 			delay := us.uploadCfg.BaseRetryDelay * time.Duration(math.Pow(2, float64(attempt-1)))
-			us.logger.Info("waiting %v before retry...", delay)
+			us.logger.Debug("waiting %v before retry...", delay)
 			time.Sleep(delay)
 		}
 	}
@@ -357,7 +350,6 @@ func (us *uploadService) DeleteFilesWithRetry(workspacePath string, filePaths []
 
 		fileStatuses, err := us.uploadFiles(workspacePath, filePaths, utils.FILE_STATUS_DELETED)
 		if err == nil {
-			us.logger.Info("files deleted successfully")
 			return fileStatuses, nil
 		}
 
@@ -373,7 +365,7 @@ func (us *uploadService) DeleteFilesWithRetry(workspacePath string, filePaths []
 
 			// 指数退避
 			delay := us.uploadCfg.BaseRetryDelay * time.Duration(math.Pow(2, float64(attempt-1)))
-			us.logger.Info("waiting %v before retry...", delay)
+			us.logger.Debug("waiting %v before retry...", delay)
 			time.Sleep(delay)
 		}
 	}
@@ -407,7 +399,6 @@ func (us *uploadService) RenameFilesWithRetry(workspacePath string, renamePairs 
 
 		fileStatuses, err := us.renameFiles(workspacePath, renamePairs)
 		if err == nil {
-			us.logger.Info("files renamed successfully")
 			return fileStatuses, nil
 		}
 
@@ -423,7 +414,7 @@ func (us *uploadService) RenameFilesWithRetry(workspacePath string, renamePairs 
 
 			// 指数退避
 			delay := us.uploadCfg.BaseRetryDelay * time.Duration(math.Pow(2, float64(attempt-1)))
-			us.logger.Info("waiting %v before retry...", delay)
+			us.logger.Debug("waiting %v before retry...", delay)
 			time.Sleep(delay)
 		}
 	}
@@ -451,7 +442,6 @@ func (us *uploadService) uploadSingleFile(workspacePath string, filePath string,
 	}
 
 	fileTimestamp := fileInfo.ModTime().UnixMilli()
-	us.logger.Info("file timestamp: %d", fileTimestamp)
 
 	// 6. 获取上传令牌
 	workspaceName := filepath.Base(workspacePath)
@@ -606,7 +596,6 @@ func (us *uploadService) uploadFiles(workspacePath string, filePaths []string, s
 		}
 
 		fileTimestamp := fileInfo.ModTime().UnixMilli()
-		us.logger.Info("file timestamp: %d", fileTimestamp)
 
 		// 3. 创建文件变更对象
 		fileStatus := &utils.FileStatus{

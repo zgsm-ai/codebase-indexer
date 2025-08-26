@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"codebase-indexer/internal/config"
 	"codebase-indexer/internal/handler"
 	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/logger"
@@ -93,7 +94,11 @@ func (s *server) setupMiddleware() {
 
 	// 健康检查
 	s.engine.GET("/health", func(c *gin.Context) {
-		utils.Success(c, nil)
+		appInfo := config.GetAppInfo()
+		data := map[string]interface{}{
+			"appInfo": appInfo,
+		}
+		utils.Success(c, data)
 	})
 
 	// Swagger文档路由
