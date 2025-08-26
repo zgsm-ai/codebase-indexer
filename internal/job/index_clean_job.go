@@ -109,5 +109,5 @@ func (j *IndexCleanJob) cleanupExpiredWorkspaceIndexes(ctx context.Context) {
 
 		j.logger.Info("workspace %s clean up expired indexes successfully.", workspace.WorkspacePath)
 	}
-	j.logger.Info("clean up expired workspace indexes end.", j.expiryPeriod.Hours())
+	j.logger.Info("clean up expired workspace indexes end.")
 }
