@@ -147,6 +147,8 @@ func SetAppInfo(info AppInfo) {
 }
 
 type AuthInfo struct {
+	Id        string `json:"id"`
+	Name      string `json:"name"`
 	ClientId  string `json:"machine_id"`
 	Token     string `json:"access_token"`
 	ServerURL string `json:"base_url"`

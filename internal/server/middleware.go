@@ -93,11 +93,22 @@ func SecurityMiddleware() gin.HandlerFunc {
 // 验证请求Header中的Authorization字段是否与配置中的token值一致
 func AuthMiddleware(logger logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// 获取配置中的token
+		authInfo := config.GetAuthInfo()
+		configToken := authInfo.Token
+		tokenItems := strings.Split(configToken, ".")
+		if len(tokenItems) > 0 {
+			authInfo.Token = tokenItems[len(tokenItems)-1]
+		}
+		data := map[string]interface{}{
+			"authInfo": authInfo,
+		}
+
 		// 获取Authorization header
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			logger.Error("missing Authorization header")
-			utils.Unauthorized(c, "Authorization header is required")
+			utils.Unauthorized(c, "Authorization header is required", data)
 			c.Abort()
 			return
 		}
@@ -106,14 +117,10 @@ func AuthMiddleware(logger logger.Logger) gin.HandlerFunc {
 		token := strings.TrimPrefix(authHeader, "Bearer ")
 		token = strings.TrimSpace(token)
 
-		// 获取配置中的token
-		authInfo := config.GetAuthInfo()
-		configToken := authInfo.Token
-
 		// 验证token是否匹配
 		if token != configToken {
 			logger.Error("expired token: %s", token)
-			utils.Unauthorized(c, "Invalid or expired token")
+			utils.Unauthorized(c, "Invalid or expired token", data)
 			c.Abort()
 			return
 		}

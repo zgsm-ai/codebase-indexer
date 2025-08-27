@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1097,7 +1098,7 @@ func (s *extensionService) calculateEmbeddingStatus(workspace *model.Workspace) 
 
 	// 计算进度
 	if workspace.FileNum > 0 {
-		status.Process = float32(workspace.EmbeddingFileNum) / float32(workspace.FileNum) * 100
+		status.Process = float32(math.Round(float64(workspace.EmbeddingFileNum)/float64(workspace.FileNum)*100*10) / 10)
 		if status.Process > 100 { // 进度不能超过100%
 			status.Process = 100
 			status.Status = dto.ProcessStatusSuccess
@@ -1174,7 +1175,7 @@ func (s *extensionService) calculateCodegraphStatus(workspace *model.Workspace) 
 
 	// 计算进度
 	if workspace.FileNum > 0 {
-		status.Process = float32(workspace.CodegraphFileNum) / float32(workspace.FileNum) * 100
+		status.Process = float32(math.Round(float64(workspace.CodegraphFileNum)/float64(workspace.FileNum)*100*10) / 10)
 		if status.Process > 100 { // 进度不能超过100%
 			status.Process = 100
 			status.Status = dto.ProcessStatusSuccess

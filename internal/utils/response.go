@@ -53,6 +53,16 @@ func FailWithCode(c *gin.Context, code string, message string, statusCode int) {
 	})
 }
 
+func FailWithCodeAndData(c *gin.Context, code string, message string, data interface{}, statusCode int) {
+	c.JSON(statusCode, APIResponse{
+		Success:   false,
+		Code:      code,
+		Message:   message,
+		Data:      data,
+		Timestamp: time.Now().Format(time.RFC3339),
+	})
+}
+
 // NotFound 返回404响应
 func NotFound(c *gin.Context, message string) {
 	if message == "" {
@@ -62,11 +72,11 @@ func NotFound(c *gin.Context, message string) {
 }
 
 // Unauthorized 返回401响应
-func Unauthorized(c *gin.Context, message string) {
+func Unauthorized(c *gin.Context, message string, data interface{}) {
 	if message == "" {
 		message = "unauthorized"
 	}
-	FailWithCode(c, "401", message, http.StatusUnauthorized)
+	FailWithCodeAndData(c, "401", message, data, http.StatusUnauthorized)
 }
 
 // MethodNotAllowed 返回405响应
