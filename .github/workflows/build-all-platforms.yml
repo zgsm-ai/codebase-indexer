@@ -1,0 +1,118 @@
+name: Build and Package All Platforms
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version string for the build (e.g., 1.0.0, 1.0.0_beta)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    # 使用矩阵策略来定义不同的操作系统和架构组合
+    strategy:
+      matrix:
+        include:
+          # Linux amd64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            artifact_name: codebase-indexer-linux-amd64
+          # Linux arm64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            artifact_name: codebase-indexer-linux-arm64
+          # Linux 386
+          - os: ubuntu-latest
+            goos: linux
+            goarch: 386
+            artifact_name: codebase-indexer-linux-386
+          # Linux arm
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm
+            artifact_name: codebase-indexer-linux-arm
+          # Windows amd64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            artifact_name: codebase-indexer-windows-amd64
+          # Windows 386
+          - os: windows-latest
+            goos: windows
+            goarch: 386
+            artifact_name: codebase-indexer-windows-386
+          # Windows arm64
+          - os: windows-latest
+            goos: windows
+            goarch: arm64
+            artifact_name: codebase-indexer-windows-arm64
+          # macOS amd64
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            artifact_name: codebase-indexer-darwin-amd64
+          # macOS ARM64 (Apple Silicon)
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            artifact_name: codebase-indexer-darwin-arm64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24.4'
+
+    - name: Install cross-compilation dependencies (Linux)
+      if: matrix.goos == 'linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y musl-tools gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
+
+    - name: Install cross-compilation dependencies (Windows)
+      if: matrix.goos == 'windows'
+      run: |
+        # Install MinGW-w64 for Windows cross-compilation
+        sudo apt-get update
+        sudo apt-get install -y gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 gcc-mingw-w64-aarch64
+
+    - name: Build for ${{ matrix.goos }} ${{ matrix.goarch }}
+      run: |
+        chmod +x scripts/build.sh
+        ./scripts/build.sh "${{ matrix.goos }}" "${{ matrix.goarch }}" "${{ github.event.inputs.version }}"
+
+    - name: Package
+      run: |
+        # 确定输出文件名
+        OUTPUT_FILENAME="codebase-indexer-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.event.inputs.version }}"
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          OUTPUT_FILENAME="${OUTPUT_FILENAME}.exe"
+        fi
+        
+        # 创建压缩包
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          # Windows 使用 zip 格式
+          cd "bin/${{ github.event.inputs.version }}"
+          7z a "${{ matrix.artifact_name }}-${{ github.event.inputs.version }}.zip" "$OUTPUT_FILENAME"
+        else
+          # Linux 和 macOS 使用 tar.gz 格式
+          cd "bin/${{ github.event.inputs.version }}"
+          tar -czf "${{ matrix.artifact_name }}-${{ github.event.inputs.version }}.tar.gz" "$OUTPUT_FILENAME"
+        fi
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact_name }}-${{ github.event.inputs.version }}
+        path: |
+          bin/${{ github.event.inputs.version }}/${{ matrix.artifact_name }}-${{ github.event.inputs.version }}.zip
+          bin/${{ github.event.inputs.version }}/${{ matrix.artifact_name }}-${{ github.event.inputs.version }}.tar.gz
+        retention-days: 30
