@@ -554,9 +554,13 @@ func (l *codebaseService) Summarize(ctx context.Context, req *dto.GetIndexSummar
 	if err != nil {
 		return nil, err
 	}
+	status := model.CodegraphStatusInit
+	if summary.TotalFiles > 0 {
+		status = model.CodegraphStatusSuccess
+	}
 	resp := &dto.IndexSummary{
 		Codegraph: dto.CodegraphInfo{
-			Status:     convertStatus(model.CodegraphStatusBuilding),
+			Status:     convertStatus(status),
 			TotalFiles: summary.TotalFiles,
 		},
 	}
@@ -595,9 +599,9 @@ func convertStatus(status int) string {
 	var indexStatus string
 	switch status {
 	case model.CodegraphStatusBuilding:
-		indexStatus = "success"
-	case model.CodegraphStatusSuccess:
 		indexStatus = "running"
+	case model.CodegraphStatusSuccess:
+		indexStatus = "success"
 	case model.CodegraphStatusInit:
 		indexStatus = "pending"
 	default:

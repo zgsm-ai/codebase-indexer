@@ -132,6 +132,7 @@ func (j *EventProcessorJob) embeddingProcessWorkspaces(ctx context.Context) {
 	}
 	if codebaseEnv.Switch == dto.SwitchOff {
 		j.logger.Info("codebase is disabled, skipping embedding process")
+		time.Sleep(time.Second * 10)
 		return
 	}
 
@@ -147,9 +148,9 @@ func (j *EventProcessorJob) embeddingProcessWorkspaces(ctx context.Context) {
 		return
 	}
 
-	workspackePaths := make([]string, len(workspaces))
+	workspacePaths := make([]string, len(workspaces))
 	for i, workspace := range workspaces {
-		workspackePaths[i] = workspace.WorkspacePath
+		workspacePaths[i] = workspace.WorkspacePath
 	}
 
 	// 在处理事件前再次检查上下文是否已取消
@@ -161,7 +162,7 @@ func (j *EventProcessorJob) embeddingProcessWorkspaces(ctx context.Context) {
 		// 继续执行
 	}
 
-	err = j.embedding.ProcessEmbeddingEvents(j.ctx, workspackePaths)
+	err = j.embedding.ProcessEmbeddingEvents(j.ctx, workspacePaths)
 	if err != nil {
 		j.logger.Error("failed to process embedding events: %v", err)
 	}
@@ -176,6 +177,20 @@ func (j *EventProcessorJob) codegraphProcessWorkSpaces(ctx context.Context) erro
 	default:
 		// 继续执行
 	}
+
+	// 检查是否关闭codebase
+	codebaseEnv := j.storage.GetCodebaseEnv()
+	if codebaseEnv == nil {
+		codebaseEnv = &config.CodebaseEnv{
+			Switch: dto.SwitchOn,
+		}
+	}
+	if codebaseEnv.Switch == dto.SwitchOff {
+		j.logger.Info("codebase is disabled, skipping codegraph process")
+		time.Sleep(time.Second * 10)
+		return nil
+	}
+
 	// 获取活跃工作区
 	workspaces, err := j.codegraph.ProcessActiveWorkspaces(j.ctx)
 	if err != nil {
