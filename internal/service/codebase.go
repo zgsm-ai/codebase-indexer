@@ -546,7 +546,9 @@ func (l *codebaseService) fillContent(ctx context.Context, nodes []*types.Relati
 }
 
 func (l *codebaseService) Summarize(ctx context.Context, req *dto.GetIndexSummaryRequest) (*dto.IndexSummary, error) {
-
+	if l.manager.GetCodebaseEnv().Switch == dto.SwitchOff {
+		return nil, errs.ErrIndexDisabled
+	}
 	// 从存储获取数量
 	summary, err := l.indexer.GetSummary(ctx, req.CodebasePath)
 	if err != nil {
