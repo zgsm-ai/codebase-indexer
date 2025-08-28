@@ -367,6 +367,10 @@ func (ep *embeddingProcessService) uploadFilePathFailed(event *model.Event, uplo
 	}
 	delete(codebaseEmbeddingConfig.HashTree, filePath)
 	delete(codebaseEmbeddingConfig.SyncFiles, filePath)
+	if event.EventType == model.EventTypeRenameFile {
+		delete(codebaseEmbeddingConfig.HashTree, event.SourceFilePath)
+		delete(codebaseEmbeddingConfig.SyncFiles, event.SourceFilePath)
+	}
 	if utils.IsUnauthorizedError(uploadErr) {
 		codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrAuthenticationFailed
 	} else if utils.IsTooManyRequestsError(uploadErr) {
@@ -423,12 +427,14 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePath(ctx context.Context, f
 	}
 
 	// 根据事件类型处理不同的文件路径
+	filePath := event.SourceFilePath
 	var filePaths []string
 	switch event.EventType {
 	case model.EventTypeAddFile, model.EventTypeModifyFile, model.EventTypeDeleteFile:
 		filePaths = []string{event.SourceFilePath}
 	case model.EventTypeRenameFile:
 		filePaths = []string{event.SourceFilePath, event.TargetFilePath}
+		filePath = event.TargetFilePath
 	default:
 		ep.logger.Warn("unsupported event type for cleaning filepath: %d", event.EventType)
 		return nil
@@ -464,17 +470,13 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePath(ctx context.Context, f
 
 	// 从SyncFiles中添加对应的文件路径
 	if codebaseEmbeddingConfig.SyncFiles != nil {
-		for _, filePath := range filePaths {
-			if oldHash, exists := codebaseEmbeddingConfig.SyncFiles[filePath]; !exists || oldHash != fileStatus.Hash {
-				codebaseEmbeddingConfig.SyncFiles[filePath] = fileStatus.Hash
-				updated = true
-			}
+		if oldHash, exists := codebaseEmbeddingConfig.SyncFiles[filePath]; !exists || oldHash != fileStatus.Hash {
+			codebaseEmbeddingConfig.SyncFiles[filePath] = fileStatus.Hash
+			updated = true
 		}
 	} else {
 		codebaseEmbeddingConfig.SyncFiles = make(map[string]string)
-		for _, filePath := range filePaths {
-			codebaseEmbeddingConfig.SyncFiles[filePath] = fileStatus.Hash
-		}
+		codebaseEmbeddingConfig.SyncFiles[filePath] = fileStatus.Hash
 		updated = true
 	}
 

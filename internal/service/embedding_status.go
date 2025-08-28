@@ -264,6 +264,9 @@ func (sc *embeddingStatusService) buildFilePathFailed(event *model.Event) error 
 		codebaseEmbeddingConfig.SyncFiles = make(map[string]string)
 	}
 	delete(codebaseEmbeddingConfig.SyncFiles, filePath)
+	if event.EventType == model.EventTypeRenameFile {
+		delete(codebaseEmbeddingConfig.SyncFiles, event.SourceFilePath)
+	}
 	codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrFileEmbeddingFailed
 	// 保存 codebase embedding 配置
 	err = sc.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig)
