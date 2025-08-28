@@ -200,18 +200,17 @@ jobs:
         body: |
           Codebase Indexer ${{ github.ref_name }}
           
-          ## 构建信息
-          - 版本: ${{ github.ref_name }}
-          - 构建时间: ${{ github.event.created_at }}
+          ## Build Information
+          - Version: ${{ github.ref_name }}
           
-          ## 下载说明
-          请根据您的操作系统和架构选择对应的二进制文件：
+          ## Download Instructions
+          Please select the appropriate binary file based on your operating system and architecture:
           
           - Linux: `codebase-indexer-linux-*`
           - Windows: `codebase-indexer-windows-*.exe`
           - macOS: `codebase-indexer-darwin-*`
           
-          ## 支持的平台和架构
+          ## Supported Platforms and Architectures
           - Linux amd64, arm64, 386, arm
           - Windows amd64
           - macOS amd64, arm64
