@@ -1,0 +1,222 @@
+name: Build and Package All Platforms
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  build:
+    # 使用矩阵策略来定义不同的操作系统和架构组合
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux amd64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            artifact_name: codebase-indexer-linux-amd64
+          # Linux arm64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            artifact_name: codebase-indexer-linux-arm64
+          # Linux 386
+          - os: ubuntu-latest
+            goos: linux
+            goarch: 386
+            artifact_name: codebase-indexer-linux-386
+          # Linux arm
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm
+            artifact_name: codebase-indexer-linux-arm
+          # Windows amd64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            artifact_name: codebase-indexer-windows-amd64
+          # Windows 386 - temporarily disabled
+          # - os: windows-latest
+          #   goos: windows
+          #   goarch: 386
+          #   artifact_name: codebase-indexer-windows-386
+          # Windows arm64 - temporarily disabled
+          # - os: windows-latest
+          #   goos: windows
+          #   goarch: arm64
+          #   artifact_name: codebase-indexer-windows-arm64
+          # macOS amd64
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            artifact_name: codebase-indexer-darwin-amd64
+          # macOS ARM64 (Apple Silicon)
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            artifact_name: codebase-indexer-darwin-arm64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24.4'
+
+    - name: Install cross-compilation dependencies (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        # Install base tools first
+        sudo apt-get install -y musl-tools
+        # Install cross-compilation tools without multilib conflicts
+        sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
+        # Install multilib support separately if needed for 386 architecture
+        if [ "${{ matrix.goarch }}" == "386" ]; then
+          sudo apt-get install -y gcc-multilib
+        fi
+
+    - name: Install cross-compilation dependencies (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        # Windows already has MinGW-w64 installed by default
+        # Just verify the compilers are available
+        gcc --version
+        echo "Windows cross-compilation tools are available by default"
+
+    - name: Install cross-compilation dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        # macOS cross-compilation tools are available by default
+        clang --version
+        echo "macOS cross-compilation tools are available by default"
+
+    - name: Build for ${{ matrix.goos }} ${{ matrix.goarch }}
+      shell: bash
+      run: |
+        echo "Starting build for ${{ matrix.goos }} ${{ matrix.goarch }} version ${{ github.ref_name }}"
+        echo "Current directory: $(pwd)"
+        echo "Directory contents:"
+        ls -la
+        
+        # Make build script executable
+        chmod +x scripts/build.sh
+        
+        # Run build script with error handling
+        echo "Running build script..."
+        if ! ./scripts/build.sh "${{ matrix.goos }}" "${{ matrix.goarch }}" "${{ github.ref_name }}"; then
+          echo "Build script failed with exit code $?"
+          echo "Checking if scripts directory exists:"
+          if [ -d "scripts" ]; then
+            echo "Scripts directory contents:"
+            ls -la scripts/
+          else
+            echo "Scripts directory does not exist"
+          fi
+          exit 1
+        fi
+        
+        echo "Build script completed successfully"
+        
+    - name: Check build output
+      shell: bash
+      run: |
+        echo "Checking if build directory exists..."
+        echo "Current directory: $(pwd)"
+        
+        if [ -d "bin" ]; then
+          echo "bin directory exists, contents:"
+          ls -la bin/
+          
+          if [ -d "bin/${{ github.ref_name }}" ]; then
+            echo "Build directory exists, contents:"
+            ls -la "bin/${{ github.ref_name }}/"
+            
+            # Check if the expected executable file exists
+            EXPECTED_FILE="codebase-indexer-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.ref_name }}"
+            if [ "${{ matrix.goos }}" = "windows" ]; then
+              EXPECTED_FILE="${EXPECTED_FILE}.exe"
+            fi
+            
+            if [ -f "bin/${{ github.ref_name }}/$EXPECTED_FILE" ]; then
+              echo "Expected executable file exists: $EXPECTED_FILE"
+              echo "File details:"
+              ls -la "bin/${{ github.ref_name }}/$EXPECTED_FILE"
+            else
+              echo "Expected executable file does not exist: $EXPECTED_FILE"
+              echo "Available files in build directory:"
+              ls -la "bin/${{ github.ref_name }}/"
+              exit 1
+            fi
+          else
+            echo "Build directory does not exist: bin/${{ github.ref_name }}"
+            exit 1
+          fi
+        else
+          echo "bin directory does not exist"
+          echo "Current directory contents:"
+          ls -la
+          exit 1
+        fi
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact_name }}-${{ github.ref_name }}
+        path: |
+          bin/${{ github.ref_name }}/codebase-indexer-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.ref_name }}*
+        retention-days: 30
+
+  upload-release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        
+    - name: Prepare release assets
+      run: |
+        mkdir -p release-assets
+        find artifacts -name "codebase-indexer-*" -type f | while read file; do
+          cp "$file" release-assets/
+        done
+        ls -la release-assets/
+        
+    - name: Create Release and Upload Assets
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
+        body: |
+          Codebase Indexer ${{ github.ref_name }}
+          
+          ## 构建信息
+          - 版本: ${{ github.ref_name }}
+          - 构建时间: ${{ github.event.created_at }}
+          
+          ## 下载说明
+          请根据您的操作系统和架构选择对应的二进制文件：
+          
+          - Linux: `codebase-indexer-linux-*`
+          - Windows: `codebase-indexer-windows-*.exe`
+          - macOS: `codebase-indexer-darwin-*`
+          
+          ## 支持的平台和架构
+          - Linux amd64, arm64, 386, arm
+          - Windows amd64
+          - macOS amd64, arm64
+        files: release-assets/*
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
