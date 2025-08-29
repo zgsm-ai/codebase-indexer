@@ -157,7 +157,6 @@ func (wc *writeCounter) Write(p []byte) (int, error) {
 
 // UploadFile uploads file to server
 func (hs *HTTPSync) UploadFile(filePath string, uploadReq dto.UploadReq) error {
-	mu := sync.Mutex{}
 	hs.logger.Info("uploading file: %s", filePath)
 
 	// 验证配置
@@ -188,9 +187,7 @@ func (hs *HTTPSync) UploadFile(filePath string, uploadReq dto.UploadReq) error {
 	counter := &writeCounter{}
 	startTime := time.Now()
 	defer func() {
-		mu.Lock()
 		duration := time.Since(startTime)
-		mu.Unlock()
 		hs.logger.Info("upload stats - file: %s, size: %d bytes, uploaded: %d bytes (%.1f%%), duration: %v, speed: %.2f KB/s",
 			filePath, fileSize, counter.n, float64(counter.n)/float64(fileSize)*100, duration, float64(counter.n)/1024/duration.Seconds())
 	}()

@@ -183,7 +183,7 @@ func (sc *embeddingStatusService) getUploadingEventsForWorkspace(workspacePath s
 // checkEventBuildStatus 检查单个event的构建状态
 func (sc *embeddingStatusService) checkEventBuildStatus(workspacePath string, event *model.Event) error {
 	if event.SyncId == "" {
-		sc.logger.Warn("event has empty syncId, workspace: %s, file: %s", workspacePath, event.SourceFilePath)
+		sc.logger.Warn("event no syncId, workspace: %s, file: %s", workspacePath, event.SourceFilePath)
 		return nil
 	}
 
@@ -318,7 +318,7 @@ func (sc *embeddingStatusService) handleBuildCompletion(workspacePath string, ev
 		}
 		if fileItemPath == filePath {
 			status = fileItem.Status
-			sc.logger.Info("file %s status: %s", fileItemPath, fileItem.Status)
+			sc.logger.Info("sync: %s, file %s build status: %s", event.SyncId, fileItemPath, fileItem.Status)
 			break
 		}
 	}
@@ -328,11 +328,10 @@ func (sc *embeddingStatusService) handleBuildCompletion(workspacePath string, ev
 	switch status {
 	case dto.EmbeddingComplete, dto.EmbeddingUnsupported:
 		updateEvent.EmbeddingStatus = model.EmbeddingStatusSuccess
-		sc.logger.Info("file %s built successfully for syncId: %s", filePath, event.SyncId)
 	case dto.EmbeddingFailed:
 		updateEvent.EmbeddingStatus = model.EmbeddingStatusBuildFailed
-		sc.logger.Info("file %s failed to build for syncId: %s", filePath, event.SyncId)
 	default:
+		sc.logger.Warn("sync: %s, file %s unknown build status: %s", event.SyncId, filePath, status)
 		return nil
 	}
 

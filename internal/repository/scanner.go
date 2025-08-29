@@ -248,7 +248,7 @@ func (s *FileScanner) loadGitignore(codebasePath string) []string {
 			}
 		}
 	} else {
-		s.logger.Warn("Failed to read .gitignore file: %v", err)
+		s.logger.Info("no .gitignore file: %v", err)
 	}
 	return ignores
 }
@@ -265,7 +265,7 @@ func (s *FileScanner) loadCoignore(codebasePath string) []string {
 			}
 		}
 	} else {
-		s.logger.Warn("Failed to read .coignore file: %v", err)
+		s.logger.Info("no .coignore file: %v", err)
 	}
 	return ignores
 }
