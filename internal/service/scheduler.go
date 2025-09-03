@@ -136,7 +136,9 @@ func (s *Scheduler) LoadConfig(ctx context.Context) {
 	// Update scanner configuration
 	scannerConfig := &config.ScannerConfig{
 		FolderIgnorePatterns: clientConfig.Sync.FolderIgnorePatterns,
+		FileIncludePatterns:  clientConfig.Sync.FileIncludePatterns,
 		MaxFileSizeKB:        clientConfig.Sync.MaxFileSizeKB,
+		MaxFileCount:         clientConfig.Sync.MaxFileCount,
 	}
 	s.fileScanner.SetScannerConfig(scannerConfig)
 }

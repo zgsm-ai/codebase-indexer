@@ -172,12 +172,15 @@ func (d *Daemon) updateConfig() {
 		IntervalMinutes:       newConfig.Sync.IntervalMinutes,
 		RegisterExpireMinutes: newConfig.Server.RegisterExpireMinutes,
 		HashTreeExpireHours:   newConfig.Server.HashTreeExpireHours,
+		MaxRetries:            newConfig.Sync.MaxRetries,
+		RetryIntervalSeconds:  newConfig.Sync.RetryDelaySeconds,
 	})
 	// Update file scanner configuration
 	d.fileScanner.SetScannerConfig(&config.ScannerConfig{
 		FolderIgnorePatterns: newConfig.Sync.FolderIgnorePatterns,
 		FileIncludePatterns:  newConfig.Sync.FileIncludePatterns,
 		MaxFileSizeKB:        newConfig.Sync.MaxFileSizeKB,
+		MaxFileCount:         newConfig.Sync.MaxFileCount,
 	})
 
 	d.logger.Info("client config updated")
@@ -234,8 +237,11 @@ func configChanged(current, new config.ClientConfig) bool {
 		current.Server.HashTreeExpireHours != new.Server.HashTreeExpireHours ||
 		current.Sync.IntervalMinutes != new.Sync.IntervalMinutes ||
 		current.Sync.MaxFileSizeKB != new.Sync.MaxFileSizeKB ||
+		current.Sync.MaxFileCount != new.Sync.MaxFileCount ||
 		current.Sync.MaxRetries != new.Sync.MaxRetries ||
 		current.Sync.RetryDelaySeconds != new.Sync.RetryDelaySeconds ||
+		current.Sync.EmbeddingSuccessPercent != new.Sync.EmbeddingSuccessPercent ||
+		current.Sync.CodegraphSuccessPercent != new.Sync.CodegraphSuccessPercent ||
 		!equalIgnorePatterns(current.Sync.FolderIgnorePatterns, new.Sync.FolderIgnorePatterns) ||
 		!equalIgnorePatterns(current.Sync.FileIncludePatterns, new.Sync.FileIncludePatterns)
 }

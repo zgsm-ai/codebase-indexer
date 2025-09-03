@@ -75,10 +75,10 @@ func (s *FileScanner) SetScannerConfig(config *config.ScannerConfig) {
 	if len(config.FileIncludePatterns) > 0 {
 		s.scannerConfig.FileIncludePatterns = config.FileIncludePatterns
 	}
-	if config.MaxFileSizeKB > 10 && config.MaxFileSizeKB <= 500 {
+	if config.MaxFileSizeKB > 10 && config.MaxFileSizeKB <= 20480 {
 		s.scannerConfig.MaxFileSizeKB = config.MaxFileSizeKB
 	}
-	if config.MaxFileCount < 100 && config.MaxFileCount > 100000 {
+	if config.MaxFileCount > 100 && config.MaxFileCount <= 100000 {
 		s.scannerConfig.MaxFileCount = config.MaxFileCount
 	}
 }

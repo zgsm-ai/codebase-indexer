@@ -1101,8 +1101,12 @@ func (s *extensionService) calculateEmbeddingStatus(workspace *model.Workspace) 
 
 	// 计算进度
 	if workspace.FileNum > 0 {
-		status.Process = float32(math.Round(float64(workspace.EmbeddingFileNum)/float64(workspace.FileNum)*100*10) / 10)
-		if status.Process > 100 { // 进度不能超过100%
+		if workspace.EmbeddingFileNum <= 0 {
+			status.Process = 0
+		} else {
+			status.Process = float32(math.Round(float64(workspace.EmbeddingFileNum)/float64(workspace.FileNum)*100*10) / 10)
+		}
+		if status.Process >= 100 { // 进度不能超过100%
 			status.Process = 100
 			status.Status = dto.ProcessStatusSuccess
 			return status
@@ -1178,8 +1182,12 @@ func (s *extensionService) calculateCodegraphStatus(workspace *model.Workspace) 
 
 	// 计算进度
 	if workspace.FileNum > 0 {
-		status.Process = float32(math.Round(float64(workspace.CodegraphFileNum)/float64(workspace.FileNum)*100*10) / 10)
-		if status.Process > 100 { // 进度不能超过100%
+		if workspace.CodegraphFileNum <= 0 {
+			status.Process = 0
+		} else {
+			status.Process = float32(math.Round(float64(workspace.CodegraphFileNum)/float64(workspace.FileNum)*100*10) / 10)
+		}
+		if status.Process >= 100 { // 进度不能超过100%
 			status.Process = 100
 			status.Status = dto.ProcessStatusSuccess
 			return status

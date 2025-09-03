@@ -87,12 +87,13 @@ var DefaultFolderIgnorePatterns = []string{
 }
 
 var DefaultFileIncludePatterns = []string{
-	".md",
+	".md", ".mdx",
+	".json", ".yaml",
 }
 
 var DefaultConfigSync = ConfigSync{
-	IntervalMinutes:         5,    // Default sync interval in minutes
-	MaxFileSizeKB:           2048, // Default maximum file size in KB
+	IntervalMinutes:         5,     // Default sync interval in minutes
+	MaxFileSizeKB:           10240, // Default maximum file size in KB
 	MaxFileCount:            10000,
 	MaxRetries:              3,                           // Default maximum retry count
 	RetryDelaySeconds:       3,                           // Default retry delay in seconds
