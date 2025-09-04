@@ -7,6 +7,7 @@ package mocks
 import (
 	model "codebase-indexer/internal/model"
 	reflect "reflect"
+	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 )
@@ -60,6 +61,20 @@ func (m *MockEventRepository) BatchDeleteEvents(ids []int64) error {
 func (mr *MockEventRepositoryMockRecorder) BatchDeleteEvents(ids interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchDeleteEvents", reflect.TypeOf((*MockEventRepository)(nil).BatchDeleteEvents), ids)
+}
+
+// ClearTable mocks base method.
+func (m *MockEventRepository) ClearTable() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearTable")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ClearTable indicates an expected call of ClearTable.
+func (mr *MockEventRepositoryMockRecorder) ClearTable() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearTable", reflect.TypeOf((*MockEventRepository)(nil).ClearTable))
 }
 
 // CreateEvent mocks base method.
@@ -226,18 +241,33 @@ func (mr *MockEventRepositoryMockRecorder) GetEventsCountByType(eventTypes inter
 }
 
 // GetEventsCountByWorkspaceAndStatus mocks base method.
-func (m *MockEventRepository) GetEventsCountByWorkspaceAndStatus(workspacePath string, embeddingStatuses, codegraphStatuses []int) (int64, error) {
+func (m *MockEventRepository) GetEventsCountByWorkspaceAndStatus(workspacePaths []string, embeddingStatuses, codegraphStatuses []int) (int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetEventsCountByWorkspaceAndStatus", workspacePath, embeddingStatuses, codegraphStatuses)
+	ret := m.ctrl.Call(m, "GetEventsCountByWorkspaceAndStatus", workspacePaths, embeddingStatuses, codegraphStatuses)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetEventsCountByWorkspaceAndStatus indicates an expected call of GetEventsCountByWorkspaceAndStatus.
-func (mr *MockEventRepositoryMockRecorder) GetEventsCountByWorkspaceAndStatus(workspacePath, embeddingStatuses, codegraphStatuses interface{}) *gomock.Call {
+func (mr *MockEventRepositoryMockRecorder) GetEventsCountByWorkspaceAndStatus(workspacePaths, embeddingStatuses, codegraphStatuses interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventsCountByWorkspaceAndStatus", reflect.TypeOf((*MockEventRepository)(nil).GetEventsCountByWorkspaceAndStatus), workspacePath, embeddingStatuses, codegraphStatuses)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventsCountByWorkspaceAndStatus", reflect.TypeOf((*MockEventRepository)(nil).GetEventsCountByWorkspaceAndStatus), workspacePaths, embeddingStatuses, codegraphStatuses)
+}
+
+// GetExpiredEventIDs mocks base method.
+func (m *MockEventRepository) GetExpiredEventIDs(cutoffTime time.Time) ([]int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetExpiredEventIDs", cutoffTime)
+	ret0, _ := ret[0].([]int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetExpiredEventIDs indicates an expected call of GetExpiredEventIDs.
+func (mr *MockEventRepositoryMockRecorder) GetExpiredEventIDs(cutoffTime interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExpiredEventIDs", reflect.TypeOf((*MockEventRepository)(nil).GetExpiredEventIDs), cutoffTime)
 }
 
 // GetLatestEventByWorkspaceAndSourcePath mocks base method.
@@ -268,6 +298,20 @@ func (m *MockEventRepository) GetRecentEvents(workspacePath string, limit int) (
 func (mr *MockEventRepositoryMockRecorder) GetRecentEvents(workspacePath, limit interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRecentEvents", reflect.TypeOf((*MockEventRepository)(nil).GetRecentEvents), workspacePath, limit)
+}
+
+// GetTableName mocks base method.
+func (m *MockEventRepository) GetTableName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTableName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetTableName indicates an expected call of GetTableName.
+func (mr *MockEventRepositoryMockRecorder) GetTableName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTableName", reflect.TypeOf((*MockEventRepository)(nil).GetTableName))
 }
 
 // UpdateEvent mocks base method.

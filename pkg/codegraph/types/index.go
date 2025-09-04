@@ -55,6 +55,14 @@ type QueryReferenceOptions struct {
 	SymbolName string
 }
 
+type QueryCallGraphOptions struct {
+	Workspace  string
+	FilePath   string
+	StartLine  int
+	EndLine    int
+	SymbolName string
+	MaxLayer   int
+}
 type RelationNode struct {
 	FilePath   string          `json:"filePath,omitempty"`
 	SymbolName string          `json:"symbolName,omitempty"`
@@ -63,7 +71,12 @@ type RelationNode struct {
 	NodeType   string          `json:"nodeType,omitempty"`
 	Children   []*RelationNode `json:"children,omitempty"`
 }
-
+type CallerElement struct {
+	FilePath   string   `json:"filePath,omitempty"`
+	SymbolName string   `json:"symbolName,omitempty"`
+	Position   Position `json:"position,omitempty"`
+	ParamCount int      `json:"paramCount,omitempty"`
+}
 type CodeGraphSummary struct {
 	TotalFiles int `json:"totalFiles"`
 }

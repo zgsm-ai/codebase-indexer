@@ -13,6 +13,7 @@ import (
 func SetupBackendRoutes(router *gin.Engine, backendHandler *handler.BackendHandler, logger logger.Logger) {
 	api := router.Group("/codebase-indexer/api/v1")
 	{
+		api.GET("/callgraph", AuthMiddleware(logger), BackendRateLimitMiddleware(logger), backendHandler.SearchCallGraph)
 		api.GET("/search/reference", AuthMiddleware(logger), BackendRateLimitMiddleware(logger), backendHandler.SearchReference)
 		api.GET("/search/definition", AuthMiddleware(logger), BackendRateLimitMiddleware(logger), backendHandler.SearchDefinition)
 		api.GET("/files/content", AuthMiddleware(logger), BackendRateLimitMiddleware(logger), backendHandler.GetFileContent)

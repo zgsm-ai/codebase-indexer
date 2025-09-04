@@ -101,6 +101,43 @@ func (h *BackendHandler) SearchDefinition(c *gin.Context) {
 	response.OkJson(c, definitions)
 }
 
+// SearchCallGraph 获取元素内调用链及其定义，支持代码片段查询
+// @Summary 获取函数调用链
+// @Description 获取代码片段内部元素或单符号内的调用链及其里面的元素定义，支持代码片段检索
+// @Tags search
+// @Accept json
+// @Produce json
+// @Param clientId query string true "用户机器ID"
+// @Param codebasePath query string true "代码库绝对路径"
+// @Param filePath query string true "文件绝对路径"
+// @Param startLine query int false "开始行号，从1开始"
+// @Param endLine query int false "结束行号，从1开始"
+// @Param symbolName query string false "符号名，比如函数名、类名等"
+// @Param maxLayer query int false "最大层数，默认最大10层"
+// @Success 200 {object} response.Response{data=dto.CallGraphData} "成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /codebase-indexer/api/v1/callgraph [get]
+func (h *BackendHandler) SearchCallGraph(c *gin.Context) {
+	var req dto.SearchCallGraphRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		h.logger.Error("invalid request format: %v", err)
+		response.Error(c, http.StatusBadRequest, err)
+		return
+	}
+	h.logger.Info("search callgraph request: ClientId=%s, Workspace=%s, FilePath=%s", req.ClientId, req.CodebasePath, req.FilePath)
+	callGraph, err := h.codebaseService.QueryCallGraph(c, &req)
+	if  err != nil{
+		h.logger.Error("search callgraph err:%v", err)
+		response.Error(c, http.StatusBadRequest, err)
+		return
+	}
+	response.OkJson(c,callGraph)
+}
+
+
+
+
 // GetFileContent 获取源文件内容接口
 // @Summary 获取文件内容
 // @Description 获取源文件内容，以二进制流形式返回

@@ -54,6 +54,9 @@ type CodebaseService interface {
 	// QueryReference 查询代码间的关系（如调用、引用等）
 	QueryReference(ctx context.Context, req *dto.SearchReferenceRequest) (*dto.ReferenceData, error)
 
+	// QueryCallGraph 查询代码片段内部元素或单符号的调用链及其里面的元素定义，支持代码片段检索
+	QueryCallGraph(ctx context.Context, req *dto.SearchCallGraphRequest) (*dto.CallGraphData, error)
+
 	// Summarize 获取代码库索引摘要信息
 	Summarize(ctx context.Context, req *dto.GetIndexSummaryRequest) (*dto.IndexSummary, error)
 
@@ -505,6 +508,54 @@ func (l *codebaseService) QueryReference(ctx context.Context, req *dto.SearchRef
 	}
 
 	return &dto.ReferenceData{
+		List: nodes,
+	}, nil
+}
+
+const defaultMaxLayer = 10
+const maxLayerNodeLimit = 50
+func (l *codebaseService) QueryCallGraph(ctx context.Context, req *dto.SearchCallGraphRequest) (resp *dto.CallGraphData, err error) {
+	// 二次校验
+	if req.CodebasePath == types.EmptyString {
+		return nil, errs.NewMissingParamError("codebasePath")
+	}
+	if req.FilePath == types.EmptyString {
+		return nil, errs.NewMissingParamError("filePath")
+	}
+	if !filepath.IsAbs(req.FilePath) {
+		return nil, fmt.Errorf("param filePath must be absolute path")
+	}
+	if req.MaxLayer <= 0 || req.MaxLayer > defaultMaxLayer {
+		req.MaxLayer = defaultMaxLayer
+	}
+	if req.StartLine <= 0 {
+		req.StartLine = 1
+	}
+	if req.EndLine <= 0 || req.EndLine < req.StartLine {
+		// 如果 EndLine 非法（小于等于0 或小于 StartLine），则将 EndLine 设置为 StartLine
+		req.EndLine = req.StartLine
+	}
+	if delta := req.EndLine - req.StartLine; delta > maxLineLimit {
+		req.EndLine = req.StartLine + maxLineLimit
+	}
+
+	nodes, err := l.indexer.QueryCallGraph(ctx, &types.QueryCallGraphOptions{
+		Workspace:  req.CodebasePath,
+		FilePath:   req.FilePath,
+		StartLine:  req.StartLine,
+		EndLine:    req.EndLine,
+		SymbolName: req.SymbolName,
+		MaxLayer:   req.MaxLayer,
+	})
+	if err != nil {
+		return nil, err
+	}
+	// 填充content，控制层数和节点数
+	// TODO 每层的节点数限制有问题
+	if err = l.fillContent(ctx, nodes, req.MaxLayer, maxLayerNodeLimit); err != nil {
+		l.logger.Error("fill graph query contents err:%v", err)
+	}
+	return &dto.CallGraphData{
 		List: nodes,
 	}, nil
 }

@@ -393,7 +393,6 @@ func TestIndexer_RemoveIndexes(t *testing.T) {
 	env := setupTestEnvironment(t)
 	defer teardownTestEnvironment(t, env, nil)
 	err := initWorkspaceModel(env)
-	err = initWorkspaceModel(env)
 	assert.NoError(t, err)
 	// 创建测试索引器
 	indexer := createTestIndexer(env, testVisitPattern)
@@ -679,6 +678,324 @@ func TestInitConfig(t *testing.T) {
 				} else {
 					os.Unsetenv(key)
 				}
+			}
+		})
+	}
+}
+
+// printCallGraphToFile 将调用链以层次结构打印到文件
+func printCallGraphToFile(t *testing.T, nodes []*types.RelationNode, filename string) {
+	output, err := os.Create(filename)
+	assert.NoError(t, err)
+	defer output.Close()
+
+	fmt.Fprintf(output, "调用链分析结果 (生成时间: %s)\n", time.Now().Format("2006-01-02 15:04:05"))
+	fmt.Fprintf(output, "===========================================\n\n")
+
+	for i, node := range nodes {
+		fmt.Fprintf(output, "根节点 %d:\n", i+1)
+		printNodeRecursive(output, node, 0)
+		fmt.Fprintf(output, "\n")
+	}
+}
+
+// printNodeRecursive 递归打印节点及其子节点
+func printNodeRecursive(output *os.File, node *types.RelationNode, depth int) {
+	indent := strings.Repeat("  ", depth)
+	fmt.Fprintf(output, "%s├─ %s [%s]\n", indent, node.SymbolName, node.NodeType)
+	fmt.Fprintf(output, "%s   文件: %s\n", indent, node.FilePath)
+	if node.Position.StartLine > 0 || node.Position.EndLine > 0 {
+		fmt.Fprintf(output, "%s   位置: 行%d-%d, 列%d-%d\n", indent,
+			node.Position.StartLine, node.Position.EndLine,
+			node.Position.StartColumn, node.Position.EndColumn)
+	}
+	if node.Content != "" {
+		// 只显示内容的前50个字符
+		content := strings.ReplaceAll(node.Content, "\n", "\\n")
+		if len(content) > 50 {
+			content = content[:50] + "..."
+		}
+		fmt.Fprintf(output, "%s   内容: %s\n", indent, content)
+	}
+	fmt.Fprintf(output, "%s   子调用数: %d\n", indent, len(node.Children))
+
+	for _, child := range node.Children {
+		printNodeRecursive(output, child, depth+1)
+	}
+}
+
+// TestIndexer_QueryCallGraph_BySymbolName 测试基于符号名的调用链查询
+func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
+	// 设置测试环境
+	env := setupTestEnvironment(t)
+	defer teardownTestEnvironment(t, env, nil)
+
+	err := initWorkspaceModel(env)
+	assert.NoError(t, err)
+
+	// 创建测试索引器
+	testIndexer := createTestIndexer(env, testVisitPattern)
+
+	// 查找工作区中的项目
+	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, testVisitPattern)
+
+	// 清理索引存储
+	err = cleanIndexStoreTest(env.ctx, projects, env.storage)
+	assert.NoError(t, err)
+
+	// 步骤1: 索引整个工作区
+	_, err = testIndexer.IndexWorkspace(env.ctx, env.workspaceDir)
+	assert.NoError(t, err)
+
+	// 步骤2: 测试基于符号名的调用链查询
+	testCases := []struct {
+		name       string
+		filePath   string
+		symbolName string
+		maxLayer   int
+		desc       string
+	}{
+		// {
+		// 	name:       "NewCodeIndexer函数调用链",
+		// 	filePath:   "internal/service/indexer.go",
+		// 	symbolName: "NewCodeIndexer",
+		// 	maxLayer:   3,
+		// 	desc:       "查询NewCodeIndexer函数的调用链",
+		// },
+		// {name: "initWorkspaceModel",
+		// 	filePath:   "test/codegraph/test_utils.go",
+		// 	symbolName: "initWorkspaceModel",
+		// 	maxLayer:   1,
+		// 	desc:       "查询initWorkspaceModel函数的调用链",
+		// },
+		{
+			name:       "IndexWorkspace方法调用链",
+			filePath:   "internal/service/indexer.go",
+			symbolName: "IndexWorkspace",
+			maxLayer:   20,
+			desc:       "查询IndexWorkspace方法的调用链",
+		},
+		// {
+		// 	name:       "buildCallChainRecursive方法调用链",
+		// 	filePath:   "internal/service/indexer.go",
+		// 	symbolName: "buildCallChainRecursive",
+		// 	maxLayer:   550,
+		// 	desc:       "查询buildCallChainRecursive方法的调用链",
+		// },
+		// {
+		// 	name:       "setupTestEnvironment函数调用链",
+		// 	filePath:   "internal/service/indexer_test.go",
+		// 	symbolName: "setupTestEnvironment",
+		// 	maxLayer:   3,
+		// 	desc:       "查询setupTestEnvironment测试函数的调用链",
+		// },
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 构建完整文件路径
+			fullPath := filepath.Join(env.workspaceDir, tc.filePath)
+
+			// 查询调用链
+			opts := &types.QueryCallGraphOptions{
+				Workspace:  env.workspaceDir,
+				FilePath:   fullPath,
+				SymbolName: tc.symbolName,
+				MaxLayer:   tc.maxLayer,
+			}
+
+			nodes, err := testIndexer.QueryCallGraph(env.ctx, opts)
+			assert.NoError(t, err)
+
+			// 验证结果
+			assert.NotNil(t, nodes, "调用链结果不应为空")
+			t.Logf("符号 %s 的调用链包含 %d 个根节点", tc.symbolName, len(nodes))
+
+			// 将结果输出到文件
+			outputFile := filepath.Join(tempDir, fmt.Sprintf("callgraph_%s_symbol.txt", tc.symbolName))
+			printCallGraphToFile(t, nodes, outputFile)
+			t.Logf("调用链输出到文件: %s", outputFile)
+
+			// 基本验证
+			if len(nodes) > 0 {
+				for _, node := range nodes {
+					assert.NotEmpty(t, node.SymbolName, "符号名不应为空")
+					assert.NotEmpty(t, node.FilePath, "文件路径不应为空")
+					assert.Equal(t, tc.symbolName, node.SymbolName, "根节点符号名应该匹配")
+				}
+			}
+		})
+	}
+}
+
+// TestIndexer_QueryCallGraph_ByLineRange 测试基于行范围的调用链查询
+func TestIndexer_QueryCallGraph_ByLineRange(t *testing.T) {
+	// 设置测试环境
+	env := setupTestEnvironment(t)
+	defer teardownTestEnvironment(t, env, nil)
+
+	err := initWorkspaceModel(env)
+	assert.NoError(t, err)
+
+	// 创建测试索引器
+	testIndexer := createTestIndexer(env, testVisitPattern)
+
+	// 查找工作区中的项目
+	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, testVisitPattern)
+
+	// 清理索引存储
+	err = cleanIndexStoreTest(env.ctx, projects, env.storage)
+	assert.NoError(t, err)
+
+	// 步骤1: 索引整个工作区
+	_, err = testIndexer.IndexWorkspace(env.ctx, env.workspaceDir)
+	assert.NoError(t, err)
+
+	// 步骤2: 测试基于行范围的调用链查询
+	testCases := []struct {
+		name      string
+		filePath  string
+		startLine int
+		endLine   int
+		maxLayer  int
+		desc      string
+	}{
+		// {
+		// 	name:      "NewCodeIndexer函数范围",
+		// 	filePath:  "internal/service/indexer.go",
+		// 	startLine: 153, // NewCodeIndexer函数开始行
+		// 	endLine:   175, // 函数结束行
+		// 	maxLayer:  3,
+		// 	desc:      "查询NewCodeIndexer函数范围内的调用链",
+		// },
+		{
+			name:      "test_utils.go文件范围",
+			filePath:  "test/codegraph/test_utils.go",
+			startLine: 180,
+			endLine:   203,
+			maxLayer:  1,
+			desc:      "查询test_utils.go文件范围内的调用链",
+		},
+
+		{
+			name:      "IndexWorkspace方法范围",
+			filePath:  "internal/service/indexer.go",
+			startLine: 228, // IndexWorkspace方法开始行
+			endLine:   250, // 方法部分范围
+			maxLayer:  2,
+			desc:      "查询IndexWorkspace方法范围内的调用链",
+		},
+		{
+			name:      "setupTestEnvironment函数范围",
+			filePath:  "internal/service/indexer_test.go",
+			startLine: 52, // setupTestEnvironment函数开始行
+			endLine:   70, // 函数部分范围
+			maxLayer:  2,
+			desc:      "查询setupTestEnvironment函数范围内的调用链",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 构建完整文件路径
+			fullPath := filepath.Join(env.workspaceDir, tc.filePath)
+
+			// 查询调用链
+			opts := &types.QueryCallGraphOptions{
+				Workspace: env.workspaceDir,
+				FilePath:  fullPath,
+				StartLine: tc.startLine,
+				EndLine:   tc.endLine,
+				MaxLayer:  tc.maxLayer,
+			}
+
+			nodes, err := testIndexer.QueryCallGraph(env.ctx, opts)
+			assert.NoError(t, err)
+
+			// 验证结果
+			assert.NotNil(t, nodes, "调用链结果不应为空")
+			t.Logf("行范围 %d-%d 的调用链包含 %d 个根节点", tc.startLine, tc.endLine, len(nodes))
+
+			// 将结果输出到文件
+			outputFile := filepath.Join(tempDir, fmt.Sprintf("callgraph_lines_%d_%d.txt", tc.startLine, tc.endLine))
+			printCallGraphToFile(t, nodes, outputFile)
+			t.Logf("调用链输出到文件: %s", outputFile)
+
+			// 基本验证
+			if len(nodes) > 0 {
+				for _, node := range nodes {
+					assert.NotEmpty(t, node.SymbolName, "符号名不应为空")
+					assert.NotEmpty(t, node.FilePath, "文件路径不应为空")
+					assert.Equal(t, string(types.NodeTypeDefinition), node.NodeType, "根节点应该是定义类型")
+				}
+			}
+		})
+	}
+}
+
+// TestIndexer_QueryCallGraph_InvalidOptions 测试无效参数的情况
+func TestIndexer_QueryCallGraph_InvalidOptions(t *testing.T) {
+	// 设置测试环境
+	env := setupTestEnvironment(t)
+	defer teardownTestEnvironment(t, env, nil)
+
+	err := initWorkspaceModel(env)
+	assert.NoError(t, err)
+
+	// 创建测试索引器
+	testIndexer := createTestIndexer(env, testVisitPattern)
+
+	// 测试无效选项
+	testCases := []struct {
+		name      string
+		opts      *types.QueryCallGraphOptions
+		expectErr bool
+		desc      string
+	}{
+		{
+			name: "无符号名且无行范围",
+			opts: &types.QueryCallGraphOptions{
+				Workspace: env.workspaceDir,
+				FilePath:  filepath.Join(env.workspaceDir, "internal/service/indexer.go"),
+				MaxLayer:  3,
+			},
+			expectErr: true,
+			desc:      "既没有符号名也没有行范围应该返回错误",
+		},
+		{
+			name: "不存在的文件",
+			opts: &types.QueryCallGraphOptions{
+				Workspace:  env.workspaceDir,
+				FilePath:   filepath.Join(env.workspaceDir, "non_existent_file.go"),
+				SymbolName: "SomeFunction",
+				MaxLayer:   3,
+			},
+			expectErr: true,
+			desc:      "不存在的文件应该返回错误",
+		},
+		{
+			name: "无效的行范围",
+			opts: &types.QueryCallGraphOptions{
+				Workspace: env.workspaceDir,
+				FilePath:  filepath.Join(env.workspaceDir, "internal/service/indexer.go"),
+				StartLine: 100,
+				EndLine:   50, // 结束行小于开始行
+				MaxLayer:  3,
+			},
+			expectErr: false, // 应该会被NormalizeLineRange处理
+			desc:      "无效的行范围会被自动修正",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			nodes, err := testIndexer.QueryCallGraph(env.ctx, tc.opts)
+
+			if tc.expectErr {
+				assert.Error(t, err, tc.desc)
+			} else {
+				assert.NoError(t, err, tc.desc)
+				assert.NotNil(t, nodes, "调用链结果不应为空")
 			}
 		})
 	}

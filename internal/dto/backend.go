@@ -44,6 +44,22 @@ type SearchDefinitionRequest struct {
 	CodeSnippet  string `form:"codeSnippet,omitempty"`
 }
 
+// CallGraphData 代码片段内部元素或单符号的调用链
+type CallGraphData struct {
+	List []*types.RelationNode `json:"list"`
+}
+
+// GetCallGraphRequest 获取函数调用链及其函数定义
+type SearchCallGraphRequest struct {
+	ClientId     string `form:"clientId" binding:"required"`
+	CodebasePath string `form:"codebasePath" binding:"required"`
+	FilePath     string `form:"filePath" binding:"required"`
+	StartLine    int    `form:"startLine,omitempty"`
+	EndLine      int    `form:"endLine,omitempty"`
+	SymbolName   string `form:"symbolName,omitempty"`
+	MaxLayer     int    `form:"maxLayer,omitempty"`
+}
+
 type ReadCodeSnippetsRequest struct {
 	ClientId      string              `json:"clientId" binding:"required"`
 	WorkspacePath string              `json:"workspacePath" binding:"required"`
