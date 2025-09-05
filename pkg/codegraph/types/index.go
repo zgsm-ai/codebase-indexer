@@ -76,6 +76,7 @@ type CallerElement struct {
 	SymbolName string   `json:"symbolName,omitempty"`
 	Position   Position `json:"position,omitempty"`
 	ParamCount int      `json:"paramCount,omitempty"`
+	Score      int      `json:"score,omitempty"`
 }
 type CodeGraphSummary struct {
 	TotalFiles int `json:"totalFiles"`

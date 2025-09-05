@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package codegraphpb;
+
+option go_package = "pkg/codegraph/proto/codegraphpb;codegraphpb";
+
+// CallerInfo 调用者信息
+message CallerInfo {
+  string symbol_name = 1;    // 符号名称
+  string file_path = 2;      // 文件路径
+  Position position = 3;     // 位置信息
+  int32 param_count = 4;     // 参数数量
+  double score = 5;          // 评分
+}
+
+// Position 位置信息
+message Position {
+  int32 start_line = 1;      // 开始行（从1开始）
+  int32 start_column = 2;    // 开始列（从1开始）
+  int32 end_line = 3;        // 结束行（从1开始）
+  int32 end_column = 4;      // 结束列（从1开始）
+}

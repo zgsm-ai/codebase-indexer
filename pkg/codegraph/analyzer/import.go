@@ -95,11 +95,14 @@ func (da *DependencyAnalyzer) normalizeImportPath(path string) string {
 	return filepath.Clean(path)
 }
 
-// IsImportPathInFilePath 简化版：将文件目录转为.分隔格式后与import路径比对
-func IsImportPathInFilePath(imp *codegraphpb.Import, filePath string) bool {
+// IsFilePathInImportPackage 判断文件路径是否属于导入包的范围
+func IsFilePathInImportPackage(filePath string, imp *codegraphpb.Import) bool {
+	// imp是文件A的导入路径，filePath是文件B的路径
+	// 目的是判断文件A是否可导入文件B里面的符号，如果可以，则返回true
 	// 转换为.分隔格式（替换所有系统分隔符）
 	filePath = strings.ReplaceAll(filePath, types.WindowsSeparator, types.Dot)
 	filePath = strings.ReplaceAll(filePath, types.UnixSeparator, types.Dot)
 
+	// 如果满足则说明，filePath(绝对路径)是imp包(相对路径)下面的一个文件，则大概率可以说明文件A可导入文件B里面的符号
 	return strings.Contains(filePath, imp.Name) || strings.Contains(filePath, imp.Source)
 }

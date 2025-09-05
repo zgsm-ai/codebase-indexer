@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/antlabs/strsim"
 	"os"
 	"strconv"
 )
@@ -203,9 +204,9 @@ func (da *DependencyAnalyzer) FilterByImports(filePath string, imports []*codegr
 			continue
 		}
 
-		// 3、根据import，当前def的路径包含imp的路径
+		// 3、根据import判断，def的文件路径是否在imp的范围内
 		for _, imp := range imports {
-			if IsImportPathInFilePath(imp, filePath) {
+			if IsFilePathInImportPackage(def.Path, imp) {
 				found = append(found, def)
 				break
 			}
@@ -213,3 +214,28 @@ func (da *DependencyAnalyzer) FilterByImports(filePath string, imports []*codegr
 	}
 	return found
 }
+
+func (da *DependencyAnalyzer) CalculateSymbolMatchScore(callerImports []*codegraphpb.Import, callerFilePath string, calleeFilePath string, calleeSymbolName string) int {
+	// 1、同文件
+	if callerFilePath == calleeFilePath {
+		return 10
+	}
+
+	// 2、同包(同父路径)
+	if utils.IsSameParentDir(callerFilePath, calleeFilePath) {
+		return 10
+	}
+
+	// 3、根据import判断，def的文件路径是否在imp的范围内
+	for _, imp := range callerImports {
+		if IsFilePathInImportPackage(calleeFilePath, imp) {
+			return 10
+		}
+	}
+
+	// 4、路径相似性匹配
+	similarity := strsim.Compare(callerFilePath, calleeFilePath, strsim.Cosine())
+	score := int(5 * similarity) * 0
+	return score
+}
+

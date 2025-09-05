@@ -22,6 +22,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	// lru "github.com/hashicorp/golang-lru/v2"
 )
 
 const maxQueryLineLimit = 200
@@ -147,6 +149,8 @@ const (
 	defaultMaxFiles      = 10000
 	defaultMaxProjects   = 3
 	defaultCacheCapacity = 10_0000 // 假定单个文件平均10个元素,1万个文件
+	defaultTopN          = 50
+	defaultFilterScore   = 3
 )
 
 // NewCodeIndexer 创建新的代码索引器
@@ -1319,10 +1323,6 @@ func (i *indexer) QueryCallGraph(ctx context.Context, opts *types.QueryCallGraph
 	if err != nil {
 		return nil, err
 	}
-	language, err := lang.InferLanguage(opts.FilePath)
-	if err != nil {
-		return nil, lang.ErrUnSupportedLanguage
-	}
 
 	defer func() {
 		i.logger.Info("query callgraph cost %d ms", time.Since(startTime).Milliseconds())
@@ -1332,13 +1332,13 @@ func (i *indexer) QueryCallGraph(ctx context.Context, opts *types.QueryCallGraph
 	// 根据查询类型处理
 	if opts.SymbolName != "" {
 		// 查询组合1：文件路径+符号名(类、函数)
-		results, err = i.queryCallGraphBySymbol(ctx, projectUuid, language, opts.FilePath, opts.SymbolName, opts.MaxLayer)
+		results, err = i.queryCallGraphBySymbol(ctx, projectUuid, opts.FilePath, opts.SymbolName, opts.MaxLayer)
 		return results, err
 	}
 
 	if opts.StartLine > 0 && opts.EndLine > 0 && opts.EndLine >= opts.StartLine {
 		// 查询组合2：文件路径+行范围
-		results, err = i.queryCallGraphByLineRange(ctx, projectUuid, language, opts.FilePath, startLine, endLine, opts.MaxLayer)
+		results, err = i.queryCallGraphByLineRange(ctx, projectUuid, opts.FilePath, startLine, endLine, opts.MaxLayer)
 		return results, err
 	}
 
@@ -1346,7 +1346,7 @@ func (i *indexer) QueryCallGraph(ctx context.Context, opts *types.QueryCallGraph
 }
 
 // queryCallGraphBySymbol 根据符号名查询调用链
-func (i *indexer) queryCallGraphBySymbol(ctx context.Context, projectUuid string, language lang.Language, filePath, symbolName string, maxLayer int) ([]*types.RelationNode, error) {
+func (i *indexer) queryCallGraphBySymbol(ctx context.Context, projectUuid string, filePath, symbolName string, maxLayer int) ([]*types.RelationNode, error) {
 	// 查找符号定义
 	fileTable, err := i.getFileElementTableByPath(ctx, projectUuid, filePath)
 	if err != nil {
@@ -1357,9 +1357,8 @@ func (i *indexer) queryCallGraphBySymbol(ctx context.Context, projectUuid string
 
 	// 检索符号定义
 	var definitions []*types.RelationNode
-	// symbolMap 去重+储存参数个数
-	var symbolMap = make(map[string]int)
-	// 找定义节点，如函数、方法，理论上只有一个符号被检索
+	var calleeElements []*CalleeInfo
+	// 找定义节点，如函数、方法
 	for _, symbol := range foundSymbols {
 		// 根节点只能是函数、方法的定义
 		if !symbol.IsDefinition {
@@ -1367,10 +1366,6 @@ func (i *indexer) queryCallGraphBySymbol(ctx context.Context, projectUuid string
 		}
 		if symbol.ElementType != codegraphpb.ElementType_METHOD &&
 			symbol.ElementType != codegraphpb.ElementType_FUNCTION {
-			continue
-		}
-		if _, ok := symbolMap[symbol.Name+"::"+filePath]; ok {
-			// 去重
 			continue
 		}
 		params, err := proto.GetParametersFromExtraData(symbol.ExtraData)
@@ -1382,22 +1377,24 @@ func (i *indexer) queryCallGraphBySymbol(ctx context.Context, projectUuid string
 			SymbolName: symbol.Name,
 			FilePath:   filePath,
 			NodeType:   string(types.NodeTypeDefinition),
-			Position:   i.convertRangeToPosition(symbol.Range),
-			Content:    i.getFileContent(ctx, projectUuid, filePath, symbol.Range),
+			Position:   types.ToPosition(symbol.Range),
 			Children:   make([]*types.RelationNode, 0),
 		}
-		symbolMap[symbol.Name+"::"+filePath] = len(params)
+		callee := &CalleeInfo{
+			SymbolName: symbol.Name,
+			FilePath:   filePath,
+			ParamCount: len(params),
+		}
 		definitions = append(definitions, node)
+		calleeElements = append(calleeElements, callee)
 	}
 	visited := make(map[string]struct{})
-	for _, node := range definitions {
-		i.buildCallChainRecursive(ctx, projectUuid, language, node, symbolMap[node.SymbolName+"::"+node.FilePath], maxLayer, &visited)
-	}
+	i.buildCallGraphBFS(ctx, projectUuid, definitions, calleeElements, maxLayer, visited)
 	return definitions, nil
 }
 
 // queryCallGraphByLineRange 根据行范围查询调用链
-func (i *indexer) queryCallGraphByLineRange(ctx context.Context, projectUuid string, language lang.Language, filePath string, startLine, endLine, maxLayer int) ([]*types.RelationNode, error) {
+func (i *indexer) queryCallGraphByLineRange(ctx context.Context, projectUuid string, filePath string, startLine, endLine, maxLayer int) ([]*types.RelationNode, error) {
 	// 获取文件元素表
 	fileTable, err := i.getFileElementTableByPath(ctx, projectUuid, filePath)
 	if err != nil {
@@ -1411,8 +1408,7 @@ func (i *indexer) queryCallGraphByLineRange(ctx context.Context, projectUuid str
 
 	// 提取调用函数或方法调用，构建调用图
 	var definitions []*types.RelationNode
-	// symbolMap 去重+储存参数个数
-	var symbolMap = make(map[string]int)
+	var calleeElements []*CalleeInfo
 	for _, symbol := range foundSymbols {
 		// 根节点只能是函数、方法的定义
 		if !symbol.IsDefinition {
@@ -1422,71 +1418,165 @@ func (i *indexer) queryCallGraphByLineRange(ctx context.Context, projectUuid str
 			symbol.ElementType != codegraphpb.ElementType_FUNCTION {
 			continue
 		}
-		if _, ok := symbolMap[symbol.Name+"::"+filePath]; ok {
-			// 去重
-			continue
-		}
 		params, err := proto.GetParametersFromExtraData(symbol.ExtraData)
 		if err != nil {
 			i.logger.Error("failed to get parameters from extra data, err: %v", err)
 			continue
 		}
-		symbolMap[symbol.Name+"::"+filePath] = len(params)
 		node := &types.RelationNode{
 			SymbolName: symbol.Name,
 			FilePath:   filePath,
 			NodeType:   string(types.NodeTypeDefinition),
-			Position:   i.convertRangeToPosition(symbol.Range),
-			Content:    i.getFileContent(ctx, projectUuid, filePath, symbol.Range),
+			Position:   types.ToPosition(symbol.Range),
 			Children:   make([]*types.RelationNode, 0),
 		}
+		callee := &CalleeInfo{
+			SymbolName: symbol.Name,
+			FilePath:   filePath,
+			ParamCount: len(params),
+		}
 		definitions = append(definitions, node)
+		calleeElements = append(calleeElements, callee)
 	}
 	visited := make(map[string]struct{})
-	for _, node := range definitions {
-		i.buildCallChainRecursive(ctx, projectUuid, language, node, symbolMap[node.SymbolName+"::"+node.FilePath], maxLayer, &visited)
-	}
+	i.buildCallGraphBFS(ctx, projectUuid, definitions, calleeElements, maxLayer, visited)
 
 	return definitions, nil
 }
+const MaxCalleeMapCacheCapacity = 10000
 
-// buildCallGraphRecursive 递归构建调用链
-func (i *indexer) buildCallChainRecursive(ctx context.Context, projectUuid string, language lang.Language, node *types.RelationNode, paramCount int, maxLayer int, visited *map[string]struct{}) {
-	if node == nil || maxLayer <= 0 {
+// buildCallGraphBFS 使用BFS层次遍历构建调用链
+func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, rootNodes []*types.RelationNode, calleeInfos []*CalleeInfo, maxLayer int, visited map[string]struct{}) {
+	if len(rootNodes) == 0 || maxLayer <= 0 {
 		return
 	}
-	// 防止循环引用
-	nodeKey := node.SymbolName + "::" + node.FilePath
-	if _, ok := (*visited)[nodeKey]; ok {
-		return
-	}
-	(*visited)[nodeKey] = struct{}{}
-	// 查找调用当前符号的函数/方法
-	callers := i.findCallersOfSymbol(ctx, projectUuid, node.SymbolName, paramCount)
 
-	for _, caller := range callers {
-		// 创建调用者节点
-		callerNode := &types.RelationNode{
-			FilePath:   caller.FilePath,
-			SymbolName: caller.SymbolName,
-			Position:   caller.Position,
-			NodeType:   string(types.NodeTypeReference),
-			Children:   make([]*types.RelationNode, 0),
+	// 初始化队列，存储当前层的节点和对应的被调用元素
+	type layerNode struct {
+		node   *types.RelationNode
+		callee *CalleeInfo
+	}
+
+	currentLayerNodes := make([]*layerNode, 0)
+
+	// 初始化第一层
+	for i, node := range rootNodes {
+		if _, ok := visited[node.SymbolName+"::"+node.FilePath]; !ok {
+			visited[node.SymbolName+"::"+node.FilePath] = struct{}{}
+			currentLayerNodes = append(currentLayerNodes, &layerNode{
+				node:   node,
+				callee: calleeInfos[i],
+			})
 		}
-		// 递归查找调用这个调用者的函数
-		i.buildCallChainRecursive(ctx, projectUuid, language, callerNode, caller.ParamCount, maxLayer-1, visited)
-
-		// 将调用者添加到当前节点的父级调用链中
-		node.Children = append(node.Children, callerNode)
 	}
 
+	// cache, _ := lru.New[string, *codegraphpb.FileElementTable](MaxCacheCapacity)
+	// _, _ = lru.NewWithEvict[string,[]CallerInfo](MaxCalleeMapCacheCapacity, func(key string, value []CallerInfo) {
+	// 	i.storage.BatchSave(ctx, projectUuid, store.Entries{
+	// 		store.CalleeMapKey{ProjectUuid: projectUuid, SymbolName: key, ParamCount: len(value)}: store.MarshalValue(value),
+	// 	})
+	// })
+
+	// 构建反向索引映射：callee -> []caller
+	calleeMap := i.buildCalleeMap(ctx, projectUuid)
+
+	// BFS层次遍历
+	for layer := 0; layer < maxLayer && len(currentLayerNodes) > 0; layer++ {
+		nextLayerNodes := make([]*layerNode, 0)
+		// 去重剪枝
+		currentCalleesMap := make(map[string]struct{})
+		for _, ln := range currentLayerNodes {
+			if _, ok := currentCalleesMap[ln.callee.SymbolName+"::"+ln.callee.FilePath]; !ok {
+				currentCalleesMap[ln.callee.SymbolName+"::"+ln.callee.FilePath] = struct{}{}
+			}
+		}
+
+		// 使用反向索引直接查找调用者
+		for _, ln := range currentLayerNodes {
+			// 构建callee的key
+			calleeKey := ln.callee.SymbolName + "::" + strconv.Itoa(ln.callee.ParamCount)
+
+			// 从反向索引中获取调用者列表
+			callers, exists := calleeMap[calleeKey]
+			if !exists {
+				// 没有调用者，跳过
+				continue
+			}
+
+			// 限制调用者数量
+			maxCallers := defaultTopN
+			if len(callers) > maxCallers {
+				callers = callers[:maxCallers]
+			}
+
+			for _, caller := range callers {
+				callerKey := caller.SymbolName + "::" + caller.FilePath
+				// 防止循环引用
+				if _, ok := visited[callerKey]; ok {
+					continue
+				}
+
+				// 计算匹配分数
+				score := i.analyzer.CalculateSymbolMatchScore(nil, caller.FilePath, ln.callee.FilePath, ln.callee.SymbolName)
+
+				// 创建调用者节点
+				callerNode := &types.RelationNode{
+					FilePath:   caller.FilePath,
+					SymbolName: caller.SymbolName,
+					Position:   caller.Position,
+					NodeType:   string(types.NodeTypeReference),
+					Children:   make([]*types.RelationNode, 0),
+				}
+				// 将调用者添加到当前节点的children中
+				ln.node.Children = append(ln.node.Children, callerNode)
+				// 创建对应的被调用元素
+				calleeInfo := &CalleeInfo{
+					FilePath:   caller.FilePath,
+					SymbolName: caller.SymbolName,
+					ParamCount: caller.ParamCount,
+				}
+				// 标记为已访问，并添加到下一层
+				visited[callerKey] = struct{}{}
+				nextLayerNodes = append(nextLayerNodes, &layerNode{
+					node:   callerNode,
+					callee: calleeInfo,
+				})
+
+				// 记录分数用于调试
+				_ = score
+			}
+		}
+
+		// 移动到下一层
+		currentLayerNodes = nextLayerNodes
+	}
 }
 
-// findCallersOfSymbol 查找调用指定符号的函数/方法，filepath是symbol的定义位置
-func (i *indexer) findCallersOfSymbol(ctx context.Context, projectUuid string, symbolName string, paramCount int) []*types.CallerElement {
-	var callers []*types.CallerElement
+// CalledSymbol 表示被调用的符号信息
+type CalledSymbol struct {
+	Name       string
+	ParamCount int
+}
 
-	// 遍历所有文件，查找调用该符号的地方
+type CalleeInfo struct {
+	FilePath   string `json:"filePath,omitempty"`
+	SymbolName string `json:"symbolName,omitempty"`
+	ParamCount int    `json:"paramCount,omitempty"`
+}
+
+// CallerInfo 表示调用者信息
+type CallerInfo struct {
+	SymbolName string
+	FilePath   string
+	Position   types.Position
+	ParamCount int
+	Score      float64
+}
+
+// buildCalleeMap 构建反向索引映射：callee -> []caller
+func (i *indexer) buildCalleeMap(ctx context.Context, projectUuid string) map[string][]CallerInfo {
+	calleeMap := make(map[string][]CallerInfo)
+
 	iter := i.storage.Iter(ctx, projectUuid)
 	defer iter.Close()
 
@@ -1495,6 +1585,100 @@ func (i *indexer) findCallersOfSymbol(ctx context.Context, projectUuid string, s
 		if store.IsSymbolNameKey(key) {
 			continue
 		}
+
+		var elementTable codegraphpb.FileElementTable
+		if err := store.UnmarshalValue(iter.Value(), &elementTable); err != nil {
+			i.logger.Error("failed to unmarshal file %s element_table value, err: %v", elementTable.Path, err)
+			continue
+		}
+
+		// 遍历所有函数/方法定义
+		for _, element := range elementTable.Elements {
+			if !element.IsDefinition ||
+				(element.ElementType != codegraphpb.ElementType_FUNCTION &&
+					element.ElementType != codegraphpb.ElementType_METHOD) {
+				continue
+			}
+
+			// 获取调用者参数个数
+			callerParams, err := proto.GetParametersFromExtraData(element.ExtraData)
+			if err != nil {
+				i.logger.Debug("parse caller parameters from extra data, err: %v", err)
+				continue
+			}
+			callerParamCount := len(callerParams)
+
+			// 查找该函数内部的所有调用
+			calledSymbols := i.extractCalledSymbols(&elementTable, element.Range[0], element.Range[2])
+
+			// 为每个被调用的符号添加调用者信息
+			for _, called := range calledSymbols {
+				calleeKey := called.Name + "::" + strconv.Itoa(called.ParamCount)
+
+				callerInfo := CallerInfo{
+					SymbolName: element.Name,
+					FilePath:   elementTable.Path,
+					Position:   types.ToPosition(element.Range),
+					ParamCount: callerParamCount,
+					Score:      0, // 稍后计算
+				}
+
+				calleeMap[calleeKey] = append(calleeMap[calleeKey], callerInfo)
+			}
+		}
+	}
+
+	return calleeMap
+}
+
+// extractCalledSymbols 提取函数定义范围内的所有被调用符号
+func (i *indexer) extractCalledSymbols(fileTable *codegraphpb.FileElementTable, startLine, endLine int32) []CalledSymbol {
+	var calledSymbols []CalledSymbol
+
+	// 直接遍历元素，避免调用 findSymbolInDocByLineRange
+	for _, element := range fileTable.Elements {
+		if len(element.Range) < 2 {
+			continue
+		}
+
+		// 检查是否在指定范围内
+		if element.Range[0] < startLine || element.Range[0] > endLine {
+			continue
+		}
+
+		// 只处理调用类型的元素
+		if element.ElementType != codegraphpb.ElementType_CALL {
+			continue
+		}
+
+		// 获取参数个数
+		params, err := proto.GetParametersFromExtraData(element.ExtraData)
+		if err != nil {
+			i.logger.Debug("failed to get parameters from extra data, err: %v", err)
+			continue
+		}
+		// 被调用的符号
+		calledSymbols = append(calledSymbols, CalledSymbol{
+			Name:       element.Name,
+			ParamCount: len(params),
+		})
+	}
+
+	return calledSymbols
+}
+
+// findTopNCallersOfSymbol 查找调用指定符号的函数/方法，filepath是symbol的定义位置
+func (i *indexer) findTopNCallersOfSymbol(ctx context.Context, projectUuid string, language lang.Language, symbolName string, filePath string, paramCount int, topN int) []*types.CallerElement {
+	var callers []*types.CallerElement
+	iter := i.storage.Iter(ctx, projectUuid)
+	defer iter.Close()
+	count := 0
+	for iter.Next() {
+		key := iter.Key()
+		if store.IsSymbolNameKey(key) {
+			continue
+		}
+
 		var elementTable codegraphpb.FileElementTable
 		if err := store.UnmarshalValue(iter.Value(), &elementTable); err != nil {
 			i.logger.Error("failed to unmarshal file %s element_table value, err: %v", elementTable.Path, err)
@@ -1517,13 +1701,20 @@ func (i *indexer) findCallersOfSymbol(ctx context.Context, projectUuid string, s
 					continue
 				}
 				callerParamCount := len(callerParams)
+				score := i.analyzer.CalculateSymbolMatchScore(elementTable.Imports, elementTable.Path, filePath, symbolName)
 				caller := &types.CallerElement{
 					FilePath:   elementTable.Path,
 					SymbolName: element.Name,
 					Position:   types.ToPosition(element.Range),
 					ParamCount: callerParamCount,
+					Score:      score,
 				}
 				callers = append(callers, caller)
+				count += 1
+				if count >= topN {
+					break
+				}
+
 			}
 		}
 	}
@@ -1532,21 +1723,31 @@ func (i *indexer) findCallersOfSymbol(ctx context.Context, projectUuid string, s
 
 // containsCallToSymbol  检查函数定义范围内是否调用了指定的符号，并且参数个数一致
 func (i *indexer) containsCallToSymbol(fileTable *codegraphpb.FileElementTable, startLine, endLine int32, symbolName string, paramCount int) bool {
-	// 查找函数定义范围内的所有元素
-	symbols := i.findSymbolInDocByLineRange(context.Background(), fileTable, startLine, endLine)
-	// 遍历所有元素，检查是否调用了指定的符号，并且参数个数一致
-	for _, symbol := range symbols {
+	// 直接遍历元素，避免调用 findSymbolInDocByLineRange 的开销
+	for _, element := range fileTable.Elements {
+		if len(element.Range) < 2 {
+			continue
+		}
+
+		// 检查是否在指定范围内
+		if element.Range[0] < startLine || element.Range[0] > endLine {
+			continue
+		}
+
 		// 过滤其他元素，只保留函数/方法的调用
-		if symbol.GetElementType() != codegraphpb.ElementType_CALL {
+		if element.ElementType != codegraphpb.ElementType_CALL {
 			continue
 		}
-		// 名字校验
-		if symbol.Name != symbolName {
+
+		// 校验调用符号是否是期望的符号
+		if element.Name != symbolName {
 			continue
 		}
-		params, err := proto.GetParametersFromExtraData(symbol.ExtraData)
+
+		// 参数个数校验
+		params, err := proto.GetParametersFromExtraData(element.ExtraData)
 		if err != nil {
-			i.logger.Error("failed to get parameters from extra data, err: %v", err)
+			i.logger.Debug("failed to get parameters from extra data, err: %v", err)
 			continue
 		}
 		if len(params) != paramCount {
@@ -1555,28 +1756,6 @@ func (i *indexer) containsCallToSymbol(fileTable *codegraphpb.FileElementTable, 
 		return true
 	}
 	return false
-}
-
-// convertRangeToPosition 将Range转换为Position
-func (i *indexer) convertRangeToPosition(ranges []int32) types.Position {
-	if len(ranges) < 3 {
-		return types.Position{}
-	}
-
-	return types.Position{
-		StartLine:   int(ranges[0]) + 1,
-		StartColumn: int(ranges[1]) + 1,
-		EndLine:     int(ranges[2]) + 1,
-		EndColumn:   int(ranges[3]) + 1,
-	}
-}
-
-// getFileContent 获取文件内容
-func (i *indexer) getFileContent(ctx context.Context, projectUuid, filePath string, ranges []int32) string {
-	// 这里可以调用workspaceReader来获取文件内容
-	// 或者从缓存中获取
-	// 暂时返回空字符串，实际实现时需要完善
-	return ""
 }
 
 func (i *indexer) searchSymbolNames(ctx context.Context, projectUuid string, language lang.Language, names []string, imports []*codegraphpb.Import) (
@@ -1623,7 +1802,7 @@ func (i *indexer) searchSymbolNames(ctx context.Context, projectUuid string, lan
 			filtered := make([]*codegraphpb.Occurrence, 0, len(v))
 			for _, occ := range v {
 				for _, imp := range imports {
-					if analyzer.IsImportPathInFilePath(imp, occ.Path) {
+					if analyzer.IsFilePathInImportPackage(occ.Path, imp) {
 						filtered = append(filtered, occ)
 						break
 					}

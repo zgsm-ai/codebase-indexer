@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/pprof"
 	"slices"
 	"strings"
 	"testing"
@@ -729,10 +730,19 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 	// 设置测试环境
 	env := setupTestEnvironment(t)
 	defer teardownTestEnvironment(t, env, nil)
+	f, err := os.Create("cpu.prof")
+    if err != nil {
+        panic(err)
+    }
+    defer f.Close()
 
-	err := initWorkspaceModel(env)
+    // 开始 CPU profile
+    pprof.StartCPUProfile(f)
+    defer pprof.StopCPUProfile()
+	// env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/java/hadoop"
+	err = initWorkspaceModel(env)
 	assert.NoError(t, err)
-
+	// testVisitPattern.IncludeExts = []string{".java"}
 	// 创建测试索引器
 	testIndexer := createTestIndexer(env, testVisitPattern)
 
@@ -776,6 +786,13 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 			desc:       "查询IndexWorkspace方法的调用链",
 		},
 		// {
+		// 	name:       "QueryCallGraph方法调用链",
+		// 	filePath: "hadoop-common-project/hadoop-auth/src/main/java/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java",
+		// 	symbolName: "authenticate",
+		// 	maxLayer:   20,
+		// 	desc:       "查询isValid方法的调用链",
+		// },
+		// {
 		// 	name:       "buildCallChainRecursive方法调用链",
 		// 	filePath:   "internal/service/indexer.go",
 		// 	symbolName: "buildCallChainRecursive",
@@ -794,8 +811,9 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// 构建完整文件路径
+			start:=time.Now()
 			fullPath := filepath.Join(env.workspaceDir, tc.filePath)
-
+			t.Log("fullPath", fullPath)
 			// 查询调用链
 			opts := &types.QueryCallGraphOptions{
 				Workspace:  env.workspaceDir,
@@ -824,6 +842,7 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 					assert.Equal(t, tc.symbolName, node.SymbolName, "根节点符号名应该匹配")
 				}
 			}
+			t.Logf("查询调用链时间: %s", time.Since(start))
 		})
 	}
 }

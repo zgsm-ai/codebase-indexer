@@ -48,6 +48,7 @@ type Iterator interface {
 const (
 	PathKeySystemPrefix = "@path"
 	SymKeySystemPrefix  = "@sym"
+	CalleeMapKeySystemPrefix = "@callee"
 	dataDir             = "data"
 )
 
@@ -83,6 +84,16 @@ func (s SymbolNameKey) Get() (string, error) {
 		return types.EmptyString, fmt.Errorf("ElementPathKey field Name must not be empty")
 	}
 	return fmt.Sprintf("%s:%s:%s", SymKeySystemPrefix, s.Language, s.Name), nil
+}
+
+type CalleeMapKey struct {
+	ProjectUuid string
+	SymbolName  string
+	ParamCount  int
+}
+
+func (c CalleeMapKey) Get() (string, error) {
+	return fmt.Sprintf("%s:%s:%s:%d", CalleeMapKeySystemPrefix, c.ProjectUuid, c.SymbolName, c.ParamCount), nil
 }
 
 func IsSymbolNameKey(key string) bool {
