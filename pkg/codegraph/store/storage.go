@@ -46,10 +46,10 @@ type Iterator interface {
 }
 
 const (
-	PathKeySystemPrefix = "@path"
-	SymKeySystemPrefix  = "@sym"
+	PathKeySystemPrefix      = "@path"
+	SymKeySystemPrefix       = "@sym"
 	CalleeMapKeySystemPrefix = "@callee"
-	dataDir             = "data"
+	dataDir                  = "data"
 )
 
 type Key interface {
@@ -87,13 +87,12 @@ func (s SymbolNameKey) Get() (string, error) {
 }
 
 type CalleeMapKey struct {
-	ProjectUuid string
-	SymbolName  string
-	ParamCount  int
+	SymbolName string
+	ParamCount int
 }
 
 func (c CalleeMapKey) Get() (string, error) {
-	return fmt.Sprintf("%s:%s:%s:%d", CalleeMapKeySystemPrefix, c.ProjectUuid, c.SymbolName, c.ParamCount), nil
+	return fmt.Sprintf("%s:%s:%s:%d", CalleeMapKeySystemPrefix, c.SymbolName, c.ParamCount), nil
 }
 
 func IsSymbolNameKey(key string) bool {

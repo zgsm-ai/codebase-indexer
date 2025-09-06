@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	// lru "github.com/hashicorp/golang-lru/v2"
+	lru "github.com/hashicorp/golang-lru/v2"
 )
 
 const maxQueryLineLimit = 200
@@ -1443,7 +1443,8 @@ func (i *indexer) queryCallGraphByLineRange(ctx context.Context, projectUuid str
 
 	return definitions, nil
 }
-const MaxCalleeMapCacheCapacity = 10000
+
+const MaxCalleeMapCacheCapacity = 2000
 
 // buildCallGraphBFS 使用BFS层次遍历构建调用链
 func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, rootNodes []*types.RelationNode, calleeInfos []*CalleeInfo, maxLayer int, visited map[string]struct{}) {
@@ -1471,15 +1472,27 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 	}
 
 	// cache, _ := lru.New[string, *codegraphpb.FileElementTable](MaxCacheCapacity)
-	// _, _ = lru.NewWithEvict[string,[]CallerInfo](MaxCalleeMapCacheCapacity, func(key string, value []CallerInfo) {
-	// 	i.storage.BatchSave(ctx, projectUuid, store.Entries{
-	// 		store.CalleeMapKey{ProjectUuid: projectUuid, SymbolName: key, ParamCount: len(value)}: store.MarshalValue(value),
-	// 	})
-	// })
 
 	// 构建反向索引映射：callee -> []caller
-	calleeMap := i.buildCalleeMap(ctx, projectUuid)
-
+	calleeMapForWrite := i.buildCalleeMapForWrite(ctx, projectUuid)
+	if calleeMapForWrite == nil {
+		i.logger.Error("failed to build callee map for write")
+		return
+	}
+	// 取消驱逐函数，因为不需要写回数据库了
+	calleeMap, err := lru.New[CalledSymbol, []CallerInfo](MaxCalleeMapCacheCapacity)
+	if err != nil {
+		i.logger.Error("failed to create callee map cache for read, err: %v", err)
+		return 
+	}
+	// 数据拷贝
+	for _, key := range calleeMapForWrite.Keys() {
+		if value, ok := calleeMapForWrite.Get(key); ok {
+			calleeMap.Add(key, value)
+		}
+	}
+	// 清空缓存，写回数据库
+	calleeMapForWrite.Purge()
 	// BFS层次遍历
 	for layer := 0; layer < maxLayer && len(currentLayerNodes) > 0; layer++ {
 		nextLayerNodes := make([]*layerNode, 0)
@@ -1494,13 +1507,20 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 		// 使用反向索引直接查找调用者
 		for _, ln := range currentLayerNodes {
 			// 构建callee的key
-			calleeKey := ln.callee.SymbolName + "::" + strconv.Itoa(ln.callee.ParamCount)
+			calleeKey := CalledSymbol{SymbolName: ln.callee.SymbolName, ParamCount: ln.callee.ParamCount}
 
 			// 从反向索引中获取调用者列表
-			callers, exists := calleeMap[calleeKey]
+			callers, exists := calleeMap.Get(calleeKey)
 			if !exists {
-				// 没有调用者，跳过
-				continue
+				// 从数据库查询
+				dbCallers, err := i.queryCallersFromDB(ctx, projectUuid, calleeKey)
+				if err != nil {
+					// cache miss
+					continue
+				}
+				callers = dbCallers
+				// 更新缓存
+				calleeMap.Add(calleeKey, callers)
 			}
 
 			// 限制调用者数量
@@ -1510,9 +1530,8 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 			}
 
 			for _, caller := range callers {
-				callerKey := caller.SymbolName + "::" + caller.FilePath
 				// 防止循环引用
-				if _, ok := visited[callerKey]; ok {
+				if _, ok := visited[caller.SymbolName+"::"+caller.FilePath]; ok {
 					continue
 				}
 
@@ -1536,7 +1555,7 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 					ParamCount: caller.ParamCount,
 				}
 				// 标记为已访问，并添加到下一层
-				visited[callerKey] = struct{}{}
+				visited[caller.SymbolName+"::"+caller.FilePath] = struct{}{}
 				nextLayerNodes = append(nextLayerNodes, &layerNode{
 					node:   callerNode,
 					callee: calleeInfo,
@@ -1550,11 +1569,12 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 		// 移动到下一层
 		currentLayerNodes = nextLayerNodes
 	}
+	// TODO 清理数据库
 }
 
 // CalledSymbol 表示被调用的符号信息
 type CalledSymbol struct {
-	Name       string
+	SymbolName string
 	ParamCount int
 }
 
@@ -1574,9 +1594,49 @@ type CallerInfo struct {
 }
 
 // buildCalleeMap 构建反向索引映射：callee -> []caller
-func (i *indexer) buildCalleeMap(ctx context.Context, projectUuid string) map[string][]CallerInfo {
-	calleeMap := make(map[string][]CallerInfo)
+func (i *indexer) buildCalleeMapForWrite(ctx context.Context, projectUuid string) *lru.Cache[CalledSymbol, []CallerInfo] {
+	calleeMap, err := lru.NewWithEvict(MaxCalleeMapCacheCapacity, func(key CalledSymbol, value []CallerInfo) {
+		var oldItem codegraphpb.CalleeMapItem
+		result, err := i.storage.Get(ctx, projectUuid, store.CalleeMapKey{SymbolName: key.SymbolName, ParamCount: key.ParamCount})
+		// 出现错误，直接不管reuslt
+		if err == nil {
+			if err = store.UnmarshalValue(result, &oldItem); err != nil {
+				i.logger.Error("failed to unmarshal caller info", "err", err)
+			}
+		}
+		// 合并新旧数据
+		mergedCallers := make([]*codegraphpb.CallerInfo, 0, len(value)+len(oldItem.Callers))
+		// 添加旧数据
+		mergedCallers = append(mergedCallers, oldItem.Callers...)
 
+		// 添加新数据
+		for _, v := range value {
+			mergedCallers = append(mergedCallers, &codegraphpb.CallerInfo{
+				SymbolName: v.SymbolName,
+				FilePath:   v.FilePath,
+				Position: &codegraphpb.Position{
+					StartLine:   int32(v.Position.StartLine),
+					StartColumn: int32(v.Position.StartColumn),
+					EndLine:     int32(v.Position.EndLine),
+					EndColumn:   int32(v.Position.EndColumn),
+				},
+				ParamCount: int32(v.ParamCount),
+				Score:      v.Score,
+			})
+		}
+
+		// 保存合并后的数据
+		calleeMapItem := &codegraphpb.CalleeMapItem{
+			CalleeName: key.SymbolName,
+			ParamCount: int32(key.ParamCount),
+			Callers:    mergedCallers,
+		}
+		i.storage.BatchSave(ctx, projectUuid, workspace.CalleeMapItems([]*codegraphpb.CalleeMapItem{calleeMapItem}))
+	})
+	if err != nil {
+		i.logger.Error("failed to create callee map cache, err: %v", err)
+		return nil
+	}
 	iter := i.storage.Iter(ctx, projectUuid)
 	defer iter.Close()
 
@@ -1612,9 +1672,8 @@ func (i *indexer) buildCalleeMap(ctx context.Context, projectUuid string) map[st
 			calledSymbols := i.extractCalledSymbols(&elementTable, element.Range[0], element.Range[2])
 
 			// 为每个被调用的符号添加调用者信息
-			for _, called := range calledSymbols {
-				calleeKey := called.Name + "::" + strconv.Itoa(called.ParamCount)
-
+			for _, calledSymbol := range calledSymbols {
+				// TODO	 判断可达性
 				callerInfo := CallerInfo{
 					SymbolName: element.Name,
 					FilePath:   elementTable.Path,
@@ -1622,8 +1681,11 @@ func (i *indexer) buildCalleeMap(ctx context.Context, projectUuid string) map[st
 					ParamCount: callerParamCount,
 					Score:      0, // 稍后计算
 				}
-
-				calleeMap[calleeKey] = append(calleeMap[calleeKey], callerInfo)
+				if val, ok := calleeMap.Get(calledSymbol); ok {
+					calleeMap.Add(calledSymbol, append(val, callerInfo))
+				} else {
+					calleeMap.Add(calledSymbol, []CallerInfo{callerInfo})
+				}
 			}
 		}
 	}
@@ -1659,7 +1721,7 @@ func (i *indexer) extractCalledSymbols(fileTable *codegraphpb.FileElementTable, 
 		}
 		// 被调用的符号
 		calledSymbols = append(calledSymbols, CalledSymbol{
-			Name:       element.Name,
+			SymbolName: element.Name,
 			ParamCount: len(params),
 		})
 	}
@@ -2412,4 +2474,37 @@ func (i *indexer) getFileElementTable(ctx context.Context, projectUuid string, l
 	}
 
 	return &fileElementTable, nil
+}
+
+// queryCallersFromDB 从数据库查询指定符号的调用者列表
+func (i *indexer) queryCallersFromDB(ctx context.Context, projectUuid string, calleeKey CalledSymbol) ([]CallerInfo, error) {
+	var item codegraphpb.CalleeMapItem
+	result, err := i.storage.Get(ctx, projectUuid, store.CalleeMapKey{
+		SymbolName: calleeKey.SymbolName,
+		ParamCount: calleeKey.ParamCount,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("storage query failed: %w", err)
+	}
+
+	if err := store.UnmarshalValue(result, &item); err != nil {
+		return nil, fmt.Errorf("unmarshal failed: %w", err)
+	}
+
+	callers := make([]CallerInfo, 0, len(item.Callers))
+	for _, c := range item.Callers {
+		callers = append(callers, CallerInfo{
+			SymbolName: c.SymbolName,
+			FilePath:   c.FilePath,
+			Position: types.Position{
+				StartLine:   int(c.Position.StartLine),
+				StartColumn: int(c.Position.StartColumn),
+				EndLine:     int(c.Position.EndLine),
+				EndColumn:   int(c.Position.EndColumn),
+			},
+			ParamCount: int(c.ParamCount),
+			Score:      c.Score,
+		})
+	}
+	return callers, nil
 }

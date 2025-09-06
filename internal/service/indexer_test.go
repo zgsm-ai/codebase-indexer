@@ -730,19 +730,28 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 	// 设置测试环境
 	env := setupTestEnvironment(t)
 	defer teardownTestEnvironment(t, env, nil)
-	f, err := os.Create("cpu.prof")
-    if err != nil {
-        panic(err)
-    }
-    defer f.Close()
 
-    // 开始 CPU profile
-    pprof.StartCPUProfile(f)
-    defer pprof.StopCPUProfile()
-	// env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/java/hadoop"
+	// CPU profiling
+	cpuFile, err := os.Create("cpu.pprof")
+	if err != nil {
+		panic(err)
+	}
+	defer cpuFile.Close()
+	pprof.StartCPUProfile(cpuFile)
+	defer pprof.StopCPUProfile()
+
+	// Memory profiling
+	memFile, err := os.Create("mem.pprof")
+	if err != nil {
+		panic(err)
+	}
+	defer memFile.Close()
+	defer pprof.WriteHeapProfile(memFile)
+
+	env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/java/hadoop"
 	err = initWorkspaceModel(env)
 	assert.NoError(t, err)
-	// testVisitPattern.IncludeExts = []string{".java"}
+	testVisitPattern.IncludeExts = []string{".java"}
 	// 创建测试索引器
 	testIndexer := createTestIndexer(env, testVisitPattern)
 
@@ -778,20 +787,20 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 		// 	maxLayer:   1,
 		// 	desc:       "查询initWorkspaceModel函数的调用链",
 		// },
-		{
-			name:       "IndexWorkspace方法调用链",
-			filePath:   "internal/service/indexer.go",
-			symbolName: "IndexWorkspace",
-			maxLayer:   20,
-			desc:       "查询IndexWorkspace方法的调用链",
-		},
 		// {
-		// 	name:       "QueryCallGraph方法调用链",
-		// 	filePath: "hadoop-common-project/hadoop-auth/src/main/java/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java",
-		// 	symbolName: "authenticate",
+		// 	name:       "IndexWorkspace方法调用链",
+		// 	filePath:   "internal/service/indexer.go",
+		// 	symbolName: "IndexWorkspace",
 		// 	maxLayer:   20,
-		// 	desc:       "查询isValid方法的调用链",
+		// 	desc:       "查询IndexWorkspace方法的调用链",
 		// },
+		{
+			name:       "authenticate方法调用链",
+			filePath:   "hadoop-common-project/hadoop-auth/src/main/java/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java",
+			symbolName: "authenticate",
+			maxLayer:   20,
+			desc:       "查询authenticate方法的调用链",
+		},
 		// {
 		// 	name:       "buildCallChainRecursive方法调用链",
 		// 	filePath:   "internal/service/indexer.go",
@@ -811,7 +820,7 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// 构建完整文件路径
-			start:=time.Now()
+			start := time.Now()
 			fullPath := filepath.Join(env.workspaceDir, tc.filePath)
 			t.Log("fullPath", fullPath)
 			// 查询调用链

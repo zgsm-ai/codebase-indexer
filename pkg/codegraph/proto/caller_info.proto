@@ -13,6 +13,13 @@ message CallerInfo {
   double score = 5;          // 评分
 }
 
+// CalleeMapItem 被调用者映射项
+message CalleeMapItem {
+  string callee_name = 1;    // 被调用者名称
+  int32 param_count = 2;     // 参数数量
+  repeated CallerInfo callers = 3;  // 调用者列表（数组）
+}
+
 // Position 位置信息
 message Position {
   int32 start_line = 1;      // 开始行（从1开始）

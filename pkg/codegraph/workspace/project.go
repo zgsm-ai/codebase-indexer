@@ -80,3 +80,12 @@ func (l SymbolOccurrences) Value(i int) proto.Message {
 func (l SymbolOccurrences) Key(i int) store.Key {
 	return store.SymbolNameKey{Language: lang.Language(l[i].Language), Name: l[i].Name}
 }
+
+type CalleeMapItems []*codegraphpb.CalleeMapItem
+func (l CalleeMapItems) Len() int { return len(l) }
+func (l CalleeMapItems) Value(i int) proto.Message {
+	return l[i]
+}
+func (l CalleeMapItems) Key(i int) store.Key {
+	return store.CalleeMapKey{SymbolName: l[i].CalleeName, ParamCount: int(l[i].ParamCount)}
+}
