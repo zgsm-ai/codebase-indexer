@@ -737,8 +737,6 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 		panic(err)
 	}
 	defer cpuFile.Close()
-	pprof.StartCPUProfile(cpuFile)
-	defer pprof.StopCPUProfile()
 
 	// Memory profiling
 	memFile, err := os.Create("mem.pprof")
@@ -748,10 +746,12 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 	defer memFile.Close()
 	defer pprof.WriteHeapProfile(memFile)
 
-	env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/java/hadoop"
+	// env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/java/hadoop"
+	env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/cpp/grpc"
 	err = initWorkspaceModel(env)
 	assert.NoError(t, err)
-	testVisitPattern.IncludeExts = []string{".java"}
+	// testVisitPattern.IncludeExts = []string{".java"}
+	testVisitPattern.IncludeExts = []string{".cpp", ".cc", ".cxx", ".hpp", ".h"}
 	// 创建测试索引器
 	testIndexer := createTestIndexer(env, testVisitPattern)
 
@@ -765,7 +765,8 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 	// 步骤1: 索引整个工作区
 	_, err = testIndexer.IndexWorkspace(env.ctx, env.workspaceDir)
 	assert.NoError(t, err)
-
+	pprof.StartCPUProfile(cpuFile)
+	defer pprof.StopCPUProfile()
 	// 步骤2: 测试基于符号名的调用链查询
 	testCases := []struct {
 		name       string
@@ -773,48 +774,41 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 		symbolName string
 		maxLayer   int
 		desc       string
+		project    string
 	}{
-		// {
-		// 	name:       "NewCodeIndexer函数调用链",
-		// 	filePath:   "internal/service/indexer.go",
-		// 	symbolName: "NewCodeIndexer",
-		// 	maxLayer:   3,
-		// 	desc:       "查询NewCodeIndexer函数的调用链",
-		// },
-		// {name: "initWorkspaceModel",
-		// 	filePath:   "test/codegraph/test_utils.go",
-		// 	symbolName: "initWorkspaceModel",
-		// 	maxLayer:   1,
-		// 	desc:       "查询initWorkspaceModel函数的调用链",
-		// },
 		// {
 		// 	name:       "IndexWorkspace方法调用链",
 		// 	filePath:   "internal/service/indexer.go",
 		// 	symbolName: "IndexWorkspace",
 		// 	maxLayer:   20,
 		// 	desc:       "查询IndexWorkspace方法的调用链",
+		// 	project:    "codebase-indexer",
 		// },
+		// {
+		// 	name:       "authenticate方法调用链",
+		// 	filePath:   "hadoop-common-project/hadoop-auth/src/main/java/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java",
+		// 	symbolName: "authenticate",
+		// 	maxLayer:   5,
+		// 	desc:       "查询authenticate方法的调用链",
+		// 	project:    "hadoop",
+		// },
+		// {
+		// 	name:       "Get方法调用链",
+		// 	filePath:   "staging/src/k8s.io/component-base/version/version.go",
+		// 	symbolName: "Get",
+		// 	maxLayer:   20,
+		// 	desc:       "查询Get方法的调用链",
+		// 	project:    "kubernetes",
+		// },
+
 		{
-			name:       "authenticate方法调用链",
-			filePath:   "hadoop-common-project/hadoop-auth/src/main/java/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java",
-			symbolName: "authenticate",
-			maxLayer:   20,
-			desc:       "查询authenticate方法的调用链",
+			name:"RunServer",
+			filePath: "examples/cpp/generic_api/greeter_server.cc",
+			symbolName: "RunServer",
+			maxLayer: 20,
+			desc: "查询greeter_server.cc文件的调用链",
+			project: "grpc",
 		},
-		// {
-		// 	name:       "buildCallChainRecursive方法调用链",
-		// 	filePath:   "internal/service/indexer.go",
-		// 	symbolName: "buildCallChainRecursive",
-		// 	maxLayer:   550,
-		// 	desc:       "查询buildCallChainRecursive方法的调用链",
-		// },
-		// {
-		// 	name:       "setupTestEnvironment函数调用链",
-		// 	filePath:   "internal/service/indexer_test.go",
-		// 	symbolName: "setupTestEnvironment",
-		// 	maxLayer:   3,
-		// 	desc:       "查询setupTestEnvironment测试函数的调用链",
-		// },
 	}
 
 	for _, tc := range testCases {

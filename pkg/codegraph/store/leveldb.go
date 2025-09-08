@@ -170,7 +170,6 @@ func (s *LevelDBStorage) BatchSave(ctx context.Context, projectUuid string, valu
 	if err := utils.CheckContext(ctx); err != nil {
 		return fmt.Errorf("context cancelled: %w", err)
 	}
-
 	db, err := s.getDB(projectUuid)
 	if err != nil {
 		return fmt.Errorf("failed to get database: %w", err)
@@ -322,6 +321,27 @@ func (s *LevelDBStorage) DeleteAll(ctx context.Context, projectUuid string) erro
 	err = db.CompactRange(util.Range{})
 	s.logger.Info("delete all for project %s end, after size: %d", projectUuid,
 		s.Size(ctx, projectUuid, types.EmptyString))
+	return err	
+}
+func (s *LevelDBStorage) DeleteAllWithPrefix(ctx context.Context, projectUuid string, keyPrefix string) error {
+	db, err := s.getDB(projectUuid)
+	if err != nil {
+		s.logger.Debug("failed to get database. project %s, error: %v", projectUuid, err)
+		return nil
+	}
+	s.logger.Info("start to delete all for project %s", projectUuid)
+	iter := s.Iter(ctx, projectUuid)
+	for iter.Next() {
+		if strings.HasPrefix(iter.Key(), keyPrefix) {
+			_ = db.Delete([]byte(iter.Key()), nil)
+		}
+	}
+	if err = iter.Close(); err != nil {
+		s.logger.Debug("failed to close iter for project %s, error: %v", projectUuid, err)
+	}
+	err = db.CompactRange(util.Range{})
+	s.logger.Info("delete all with prefix %s for project %s end, after size: %d", keyPrefix, projectUuid,
+		s.Size(ctx, projectUuid, keyPrefix))
 	return err
 }
 

@@ -21,6 +21,7 @@ type GraphStorage interface {
 	Exists(ctx context.Context, projectUuid string, key Key) (bool, error)
 	Delete(ctx context.Context, projectUuid string, key Key) error
 	DeleteAll(ctx context.Context, projectUuid string) error
+	DeleteAllWithPrefix(ctx context.Context, projectUuid string, prefix string) error
 	Iter(ctx context.Context, projectUuid string) Iterator
 	Size(ctx context.Context, projectUuid string, keyPrefix string) int
 	Close() error
@@ -92,13 +93,15 @@ type CalleeMapKey struct {
 }
 
 func (c CalleeMapKey) Get() (string, error) {
-	return fmt.Sprintf("%s:%s:%s:%d", CalleeMapKeySystemPrefix, c.SymbolName, c.ParamCount), nil
+	return fmt.Sprintf("%s:%s:%d", CalleeMapKeySystemPrefix, c.SymbolName, c.ParamCount), nil
 }
 
 func IsSymbolNameKey(key string) bool {
 	return strings.HasPrefix(key, SymKeySystemPrefix)
 }
-
+func IsCalleeMapKey(key string) bool {
+	return strings.HasPrefix(key, CalleeMapKeySystemPrefix)
+}
 func IsElementPathKey(key string) bool {
 	return strings.HasPrefix(key, PathKeySystemPrefix)
 }

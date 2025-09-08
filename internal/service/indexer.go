@@ -1444,7 +1444,7 @@ func (i *indexer) queryCallGraphByLineRange(ctx context.Context, projectUuid str
 	return definitions, nil
 }
 
-const MaxCalleeMapCacheCapacity = 2000
+const MaxCalleeMapCacheCapacity = 1600
 
 // buildCallGraphBFS 使用BFS层次遍历构建调用链
 func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, rootNodes []*types.RelationNode, calleeInfos []*CalleeInfo, maxLayer int, visited map[string]struct{}) {
@@ -1474,25 +1474,12 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 	// cache, _ := lru.New[string, *codegraphpb.FileElementTable](MaxCacheCapacity)
 
 	// 构建反向索引映射：callee -> []caller
-	calleeMapForWrite := i.buildCalleeMapForWrite(ctx, projectUuid)
-	if calleeMapForWrite == nil {
+	calleeMap := i.buildCalleeMap(ctx, projectUuid)
+	if calleeMap == nil {
 		i.logger.Error("failed to build callee map for write")
 		return
 	}
-	// 取消驱逐函数，因为不需要写回数据库了
-	calleeMap, err := lru.New[CalledSymbol, []CallerInfo](MaxCalleeMapCacheCapacity)
-	if err != nil {
-		i.logger.Error("failed to create callee map cache for read, err: %v", err)
-		return 
-	}
-	// 数据拷贝
-	for _, key := range calleeMapForWrite.Keys() {
-		if value, ok := calleeMapForWrite.Get(key); ok {
-			calleeMap.Add(key, value)
-		}
-	}
-	// 清空缓存，写回数据库
-	calleeMapForWrite.Purge()
+
 	// BFS层次遍历
 	for layer := 0; layer < maxLayer && len(currentLayerNodes) > 0; layer++ {
 		nextLayerNodes := make([]*layerNode, 0)
@@ -1569,7 +1556,11 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 		// 移动到下一层
 		currentLayerNodes = nextLayerNodes
 	}
-	// TODO 清理数据库
+	// 清除数据库
+	err := i.storage.DeleteAllWithPrefix(ctx, projectUuid, store.CalleeMapKeySystemPrefix)
+	if err != nil {
+		i.logger.Error("failed to delete callee map for project %s, err: %v", projectUuid, err)
+	}
 }
 
 // CalledSymbol 表示被调用的符号信息
@@ -1592,47 +1583,101 @@ type CallerInfo struct {
 	ParamCount int
 	Score      float64
 }
+type MapBatcher struct {
+	storage     store.GraphStorage // 存储
+	logger      logger.Logger
+	projectUuid string
 
-// buildCalleeMap 构建反向索引映射：callee -> []caller
-func (i *indexer) buildCalleeMapForWrite(ctx context.Context, projectUuid string) *lru.Cache[CalledSymbol, []CallerInfo] {
-	calleeMap, err := lru.NewWithEvict(MaxCalleeMapCacheCapacity, func(key CalledSymbol, value []CallerInfo) {
-		var oldItem codegraphpb.CalleeMapItem
-		result, err := i.storage.Get(ctx, projectUuid, store.CalleeMapKey{SymbolName: key.SymbolName, ParamCount: key.ParamCount})
-		// 出现错误，直接不管reuslt
-		if err == nil {
-			if err = store.UnmarshalValue(result, &oldItem); err != nil {
-				i.logger.Error("failed to unmarshal caller info", "err", err)
-			}
+	batchSize int // 批量写入的大小限制
+	calleeMap map[CalledSymbol][]CallerInfo
+}
+
+func NewMapBatcher(storage store.GraphStorage, logger logger.Logger, projectUuid string, batchSize int) *MapBatcher {
+	mb := &MapBatcher{
+		storage:     storage,
+		logger:      logger,
+		projectUuid: projectUuid,
+		batchSize:   batchSize,
+		calleeMap:   make(map[CalledSymbol][]CallerInfo),
+	}
+	return mb
+}
+
+// 对外 Add 接口
+func (mb *MapBatcher) Add(key CalledSymbol, val []CallerInfo, merge bool) {
+	if merge {
+		mb.calleeMap[key] = append(mb.calleeMap[key], val...)
+	} else {
+		mb.calleeMap[key] = val
+	}
+	// 达到批次立即推送
+	if len(mb.calleeMap) >= mb.batchSize {
+		tempCalleeMap := mb.calleeMap
+		mb.calleeMap = make(map[CalledSymbol][]CallerInfo)
+		mb.flush(tempCalleeMap)
+	}
+}
+
+// 先合并老数据，然后批量写入数据库
+func (mb *MapBatcher) flush(tempCalleeMap map[CalledSymbol][]CallerInfo) {
+	if len(tempCalleeMap) == 0 {
+		return
+	}
+	items := make([]*codegraphpb.CalleeMapItem, 0, len(tempCalleeMap))
+
+	for callee, callers := range tempCalleeMap {
+		item := &codegraphpb.CalleeMapItem{
+			CalleeName: callee.SymbolName,
+			ParamCount: int32(callee.ParamCount),
+			Callers:    make([]*codegraphpb.CallerInfo, 0, len(callers)),
 		}
-		// 合并新旧数据
-		mergedCallers := make([]*codegraphpb.CallerInfo, 0, len(value)+len(oldItem.Callers))
-		// 添加旧数据
-		mergedCallers = append(mergedCallers, oldItem.Callers...)
-
-		// 添加新数据
-		for _, v := range value {
-			mergedCallers = append(mergedCallers, &codegraphpb.CallerInfo{
-				SymbolName: v.SymbolName,
-				FilePath:   v.FilePath,
+		for _, c := range callers {
+			item.Callers = append(item.Callers, &codegraphpb.CallerInfo{
+				SymbolName: c.SymbolName,
+				FilePath:   c.FilePath,
 				Position: &codegraphpb.Position{
-					StartLine:   int32(v.Position.StartLine),
-					StartColumn: int32(v.Position.StartColumn),
-					EndLine:     int32(v.Position.EndLine),
-					EndColumn:   int32(v.Position.EndColumn),
+					StartLine:   int32(c.Position.StartLine),
+					StartColumn: int32(c.Position.StartColumn),
+					EndLine:     int32(c.Position.EndLine),
+					EndColumn:   int32(c.Position.EndColumn),
 				},
-				ParamCount: int32(v.ParamCount),
-				Score:      v.Score,
+				ParamCount: int32(c.ParamCount),
+				Score:      c.Score,
 			})
 		}
 
-		// 保存合并后的数据
-		calleeMapItem := &codegraphpb.CalleeMapItem{
-			CalleeName: key.SymbolName,
-			ParamCount: int32(key.ParamCount),
-			Callers:    mergedCallers,
+		// 合并旧数据
+		old, _ := mb.storage.Get(context.Background(), mb.projectUuid,
+			store.CalleeMapKey{SymbolName: callee.SymbolName, ParamCount: callee.ParamCount})
+		if old != nil {
+			var oldItem codegraphpb.CalleeMapItem
+			if err := store.UnmarshalValue(old, &oldItem); err == nil {
+				item.Callers = append(item.Callers, oldItem.Callers...)
+			}
 		}
-		i.storage.BatchSave(ctx, projectUuid, workspace.CalleeMapItems([]*codegraphpb.CalleeMapItem{calleeMapItem}))
+		items = append(items, item)
+	}
+
+	if err := mb.storage.BatchSave(context.Background(), mb.projectUuid,
+		workspace.CalleeMapItems(items)); err != nil {
+		mb.logger.Error("batch save failed: %v", err)
+	}
+}
+
+// 手动刷盘
+func (mb *MapBatcher) Flush() {
+	mb.flush(mb.calleeMap)
+}
+
+// buildCalleeMap 构建反向索引映射：callee -> []caller
+func (i *indexer) buildCalleeMap(ctx context.Context, projectUuid string) *lru.Cache[CalledSymbol, []CallerInfo] {
+	// 创建batcher实例
+	batcher := NewMapBatcher(i.storage, i.logger, projectUuid, 5)
+	calleeMap, err := lru.NewWithEvict(MaxCalleeMapCacheCapacity, func(key CalledSymbol, value []CallerInfo) {
+		batcher.Add(key, value, true)
 	})
+	defer batcher.Flush()
+
 	if err != nil {
 		i.logger.Error("failed to create callee map cache, err: %v", err)
 		return nil
@@ -1690,7 +1735,21 @@ func (i *indexer) buildCalleeMapForWrite(ctx context.Context, projectUuid string
 		}
 	}
 
-	return calleeMap
+	// 取消驱逐函数，因为不需要写回数据库了
+	calleeMapForRead, err := lru.New[CalledSymbol, []CallerInfo](MaxCalleeMapCacheCapacity)
+	if err != nil {
+		i.logger.Error("failed to create callee map cache for read, err: %v", err)
+		return calleeMapForRead
+	}
+	// 数据拷贝
+	for _, key := range calleeMap.Keys() {
+		if value, ok := calleeMap.Get(key); ok {
+			calleeMapForRead.Add(key, value)
+		}
+	}
+	// 清空缓存，写回数据库
+	calleeMap.Purge()
+	return calleeMapForRead
 }
 
 // extractCalledSymbols 提取函数定义范围内的所有被调用符号
