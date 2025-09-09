@@ -144,6 +144,7 @@ func (sc *embeddingStatusService) checkWorkspaceBuildingStates(workspacePath str
 			sc.logger.Error("failed to fetch file status for syncId %s: %v", syncId, err)
 			continue
 		}
+		sc.logger.Info("syncId %s file status resp: %v", syncId, fileStatusResp)
 
 		// 批量处理该syncId下的所有事件
 		if err := sc.processEventsWithFileStatus(workspacePath, syncIdEvents, fileStatusResp); err != nil {
@@ -258,23 +259,16 @@ func (sc *embeddingStatusService) processEventsWithFileStatus(workspacePath stri
 		return nil
 	}
 
-	syncId := events[0].SyncId
-	sc.logger.Info("processing build status for syncId: %s, %d events", syncId, len(events))
-
 	fileStatusData := fileStatusResp.Data
 	processStatus := fileStatusData.Process
 
-	sc.logger.Debug("processing file status for syncId %s: process=%s", syncId, processStatus)
-
 	// 当process为pending时，不处理
 	if processStatus == dto.EmbeddingStatusPending {
-		sc.logger.Info("build is pending for syncId: %s", syncId)
 		return nil
 	}
 
 	// 当process为failed时，将所有事件的embeddingstatus改为failed
 	if processStatus == dto.EmbeddingFailed {
-		sc.logger.Info("build failed for syncId: %s", syncId)
 		// 构建失败，批量更新事件状态为构建失败
 		eventIDs := make([]int64, 0, len(events))
 		for _, event := range events {
@@ -288,7 +282,6 @@ func (sc *embeddingStatusService) processEventsWithFileStatus(workspacePath stri
 	}
 
 	// 其他情况保持原来的处理逻辑，批量处理构建完成
-	sc.logger.Debug("build completed for syncId: %s", syncId)
 	return sc.batchHandleBuildCompletion(workspacePath, events, fileStatusData.FileList)
 }
 
@@ -512,7 +505,7 @@ func (sc *embeddingStatusService) batchHandleBuildCompletion(workspacePath strin
 		var status string
 		if fileStatus, exists := fileStatusMap[filePath]; exists {
 			status = fileStatus
-			sc.logger.Info("file %s status: %s", filePath, fileStatus)
+			sc.logger.Debug("file %s status: %s, syncId: %s", filePath, fileStatus, event.SyncId)
 		}
 
 		// 更新事件状态
@@ -520,10 +513,10 @@ func (sc *embeddingStatusService) batchHandleBuildCompletion(workspacePath strin
 		switch status {
 		case dto.EmbeddingComplete, dto.EmbeddingUnsupported:
 			updateEvent.EmbeddingStatus = model.EmbeddingStatusSuccess
-			sc.logger.Info("file %s built successfully for syncId: %s", filePath, event.SyncId)
+			sc.logger.Debug("file %s built successfully for syncId: %s", filePath, event.SyncId)
 		case dto.EmbeddingFailed:
 			updateEvent.EmbeddingStatus = model.EmbeddingStatusBuildFailed
-			sc.logger.Info("file %s failed to build for syncId: %s", filePath, event.SyncId)
+			sc.logger.Debug("file %s failed to build for syncId: %s", filePath, event.SyncId)
 		default:
 			continue
 		}

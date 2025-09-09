@@ -969,8 +969,6 @@ func (us *uploadService) isRetryableError(err error) bool {
 
 	// 网络相关错误可重试
 	if strings.Contains(errStr, "timeout") ||
-		strings.Contains(errStr, "connection refused") ||
-		strings.Contains(errStr, "network is unreachable") ||
 		strings.Contains(errStr, "connection reset") {
 		return true
 	}
