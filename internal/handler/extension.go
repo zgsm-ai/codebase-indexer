@@ -11,6 +11,7 @@ import (
 
 	"codebase-indexer/internal/config"
 	"codebase-indexer/internal/dto"
+	"codebase-indexer/internal/errs"
 	"codebase-indexer/internal/service"
 	"codebase-indexer/pkg/logger"
 )
@@ -186,7 +187,7 @@ func (h *ExtensionHandler) ShareAccessToken(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Error("invalid request format: %v", err)
 		c.JSON(http.StatusBadRequest, dto.ShareAccessTokenResponse{
-			Code:    "400",
+			Code:    errs.ErrBadRequest,
 			Success: false,
 			Message: "invalid request format",
 		})
@@ -200,7 +201,7 @@ func (h *ExtensionHandler) ShareAccessToken(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("failed to update sync config: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.ShareAccessTokenResponse{
-			Code:    "500",
+			Code:    errs.ErrInternalServerError,
 			Success: false,
 			Message: "failed to update sync config",
 		})
@@ -273,7 +274,7 @@ func (h *ExtensionHandler) CheckIgnoreFile(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Error("invalid request format: %v", err)
 		c.JSON(http.StatusBadRequest, dto.CheckIgnoreFileResponse{
-			Code:    "400",
+			Code:    errs.ErrBadRequest,
 			Success: false,
 			Ignore:  false,
 			Message: "invalid request format",
@@ -288,7 +289,7 @@ func (h *ExtensionHandler) CheckIgnoreFile(c *gin.Context) {
 	if req.WorkspacePath == "" || req.WorkspaceName == "" || len(req.FilePaths) == 0 {
 		h.logger.Error("invalid check ignore file parameters")
 		c.JSON(http.StatusBadRequest, dto.CheckIgnoreFileResponse{
-			Code:    "400",
+			Code:    errs.ErrBadRequest,
 			Success: false,
 			Ignore:  false,
 			Message: "invalid parameters",
@@ -305,7 +306,7 @@ func (h *ExtensionHandler) CheckIgnoreFile(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("failed to check ignore files: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.CheckIgnoreFileResponse{
-			Code:    "500",
+			Code:    errs.ErrInternalServerError,
 			Success: false,
 			Ignore:  false,
 			Message: "internal server error",
@@ -349,7 +350,7 @@ func (h *ExtensionHandler) PublishEvents(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Error("invalid request format: %v", err)
 		c.JSON(http.StatusBadRequest, dto.PublishEventsResponse{
-			Code:    "400",
+			Code:    errs.ErrBadRequest,
 			Success: false,
 			Message: "invalid request format",
 			Data:    0,
@@ -365,7 +366,7 @@ func (h *ExtensionHandler) PublishEvents(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("failed to publish events: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.PublishEventsResponse{
-			Code:    "500",
+			Code:    errs.ErrInternalServerError,
 			Success: false,
 			Message: "failed to publish events",
 			Data:    0,
@@ -398,7 +399,7 @@ func (h *ExtensionHandler) TriggerIndex(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.logger.Error("invalid request format: %v", err)
 		c.JSON(http.StatusBadRequest, dto.TriggerIndexResponse{
-			Code:    "400",
+			Code:    errs.ErrBadRequest,
 			Success: false,
 			Message: "invalid request format",
 			Data:    0,
@@ -409,9 +410,9 @@ func (h *ExtensionHandler) TriggerIndex(c *gin.Context) {
 	if req.Type != dto.IndexTypeAll && req.Type != dto.IndexTypeEmbedding && req.Type != dto.IndexTypeCodegraph {
 		h.logger.Error("invalid index type: %s", req.Type)
 		c.JSON(http.StatusBadRequest, dto.TriggerIndexResponse{
-			Code:    "400",
+			Code:    errs.ErrBadRequest,
 			Success: false,
-			Message: "invalid index type",
+			Message: fmt.Sprintf("invalid index type: %s", req.Type),
 			Data:    0,
 		})
 		return
@@ -421,9 +422,9 @@ func (h *ExtensionHandler) TriggerIndex(c *gin.Context) {
 	if _, err := os.Stat(req.Workspace); os.IsNotExist(err) {
 		h.logger.Error("workspace path does not exist: %s", req.Workspace)
 		c.JSON(http.StatusBadRequest, dto.TriggerIndexResponse{
-			Code:    "400",
+			Code:    errs.ErrBadRequest,
 			Success: false,
-			Message: "workspace path does not exist",
+			Message: fmt.Sprintf("workspace path does not exist: %s", req.Workspace),
 			Data:    0,
 		})
 		return
@@ -437,7 +438,7 @@ func (h *ExtensionHandler) TriggerIndex(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("failed to trigger index: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.TriggerIndexResponse{
-			Code:    "500",
+			Code:    errs.ErrInternalServerError,
 			Success: false,
 			Message: fmt.Sprintf("failed to trigger index: %v", err),
 			Data:    0,
@@ -471,7 +472,7 @@ func (h *ExtensionHandler) GetIndexStatus(c *gin.Context) {
 	if err := c.ShouldBindQuery(&query); err != nil {
 		h.logger.Error("invalid query parameters: %v", err)
 		c.JSON(http.StatusBadRequest, dto.IndexStatusResponse{
-			Code:    "400",
+			Code:    errs.ErrBadRequest,
 			Message: "invalid query parameters",
 		})
 		return
@@ -483,8 +484,15 @@ func (h *ExtensionHandler) GetIndexStatus(c *gin.Context) {
 	response, err := h.extensionService.GetIndexStatus(c.Request.Context(), query.Workspace)
 	if err != nil {
 		h.logger.Error("failed to get index status: %v", err)
+		if strings.Contains(err.Error(), "workspace not found") {
+			c.JSON(http.StatusBadRequest, dto.IndexStatusResponse{
+				Code:    errs.ErrWorkspaceNotRegistered,
+				Message: fmt.Sprintf("workspace not registered: %s", query.Workspace),
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, dto.IndexStatusResponse{
-			Code:    "500",
+			Code:    errs.ErrInternalServerError,
 			Message: "failed to get index status",
 		})
 		return
@@ -510,7 +518,7 @@ func (h *ExtensionHandler) SwitchIndex(c *gin.Context) {
 	if err := c.ShouldBindQuery(&query); err != nil {
 		h.logger.Error("invalid query parameters: %v", err)
 		c.JSON(http.StatusBadRequest, dto.IndexSwitchResponse{
-			Code:    "400",
+			Code:    errs.ErrBadRequest,
 			Success: false,
 			Message: "invalid query parameters",
 			Data:    false,
@@ -521,7 +529,7 @@ func (h *ExtensionHandler) SwitchIndex(c *gin.Context) {
 	if query.Workspace == "" || query.Switch == "" {
 		h.logger.Error("invalid query parameters: %v", query)
 		c.JSON(http.StatusBadRequest, dto.IndexSwitchResponse{
-			Code:    "400",
+			Code:    errs.ErrBadRequest,
 			Success: false,
 			Message: "invalid query parameters",
 			Data:    false,
@@ -532,9 +540,9 @@ func (h *ExtensionHandler) SwitchIndex(c *gin.Context) {
 	if query.Switch != dto.SwitchOn && query.Switch != dto.SwitchOff {
 		h.logger.Error("invalid switch status: %s", query.Switch)
 		c.JSON(http.StatusBadRequest, dto.IndexSwitchResponse{
-			Code:    "400",
+			Code:    errs.ErrBadRequest,
 			Success: false,
-			Message: "invalid query parameters",
+			Message: "invalid switch status",
 			Data:    false,
 		})
 		return
@@ -547,7 +555,7 @@ func (h *ExtensionHandler) SwitchIndex(c *gin.Context) {
 	if err != nil {
 		h.logger.Error("failed to switch index: %v", err)
 		c.JSON(http.StatusInternalServerError, dto.IndexSwitchResponse{
-			Code:    "500",
+			Code:    errs.ErrInternalServerError,
 			Success: false,
 			Message: "failed to switch index",
 			Data:    false,

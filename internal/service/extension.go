@@ -496,16 +496,19 @@ func (s *extensionService) processEvents(workspacePath, clientID string, events 
 	ignoreConfig := s.fileScanner.LoadIgnoreConfig(workspacePath)
 	for _, event := range events {
 		if !extensionEventTypeMap[event.EventType] {
+			s.logger.Warn("invalid event type: %s", event.EventType)
 			continue
 		}
 
 		if event.EventType == model.EventTypeCloseWorkspace {
+			s.logger.Info("close workspace event, workspace path: %s", workspacePath)
 			s.handleCloseWorkspaceEvent(workspacePath)
 			successCount++
 			break
 		}
 
 		if event.EventType == model.EventTypeOpenWorkspace {
+			s.logger.Info("open workspace event, workspace path: %s", workspacePath)
 			s.handleOpenWorkspaceEvent(workspacePath, clientID)
 			event.SourcePath = ""
 			event.TargetPath = ""
