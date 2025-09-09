@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
@@ -80,6 +81,7 @@ type indexer struct {
 	workspaceRepository repository.WorkspaceRepository
 	config              *IndexerConfig
 	logger              logger.Logger
+	mu                  sync.Mutex
 }
 
 // BatchProcessParams 批处理参数
@@ -146,6 +148,7 @@ type ProgressInfo struct {
 const (
 	defaultConcurrency   = 1
 	defaultBatchSize     = 50
+	defaultMapBatchSize  = 5
 	defaultMaxFiles      = 10000
 	defaultMaxProjects   = 3
 	defaultCacheCapacity = 10_0000 // 假定单个文件平均10个元素,1万个文件
@@ -1672,7 +1675,7 @@ func (mb *MapBatcher) Flush() {
 // buildCalleeMap 构建反向索引映射：callee -> []caller
 func (i *indexer) buildCalleeMap(ctx context.Context, projectUuid string) *lru.Cache[CalledSymbol, []CallerInfo] {
 	// 创建batcher实例
-	batcher := NewMapBatcher(i.storage, i.logger, projectUuid, 5)
+	batcher := NewMapBatcher(i.storage, i.logger, projectUuid, defaultMapBatchSize)
 	calleeMap, err := lru.NewWithEvict(MaxCalleeMapCacheCapacity, func(key CalledSymbol, value []CallerInfo) {
 		batcher.Add(key, value, true)
 	})
@@ -1786,97 +1789,6 @@ func (i *indexer) extractCalledSymbols(fileTable *codegraphpb.FileElementTable, 
 	}
 
 	return calledSymbols
-}
-
-// findTopNCallersOfSymbol 查找调用指定符号的函数/方法，filepath是symbol的定义位置
-func (i *indexer) findTopNCallersOfSymbol(ctx context.Context, projectUuid string, language lang.Language, symbolName string, filePath string, paramCount int, topN int) []*types.CallerElement {
-	var callers []*types.CallerElement
-	iter := i.storage.Iter(ctx, projectUuid)
-	defer iter.Close()
-	count := 0
-	for iter.Next() {
-		key := iter.Key()
-		if store.IsSymbolNameKey(key) {
-			continue
-		}
-
-		var elementTable codegraphpb.FileElementTable
-		if err := store.UnmarshalValue(iter.Value(), &elementTable); err != nil {
-			i.logger.Error("failed to unmarshal file %s element_table value, err: %v", elementTable.Path, err)
-			continue
-		}
-
-		// 查找调用该符号的函数/方法
-		for _, element := range elementTable.Elements {
-			// 只查找函数/方法的定义
-			if !element.IsDefinition ||
-				(element.ElementType != codegraphpb.ElementType_FUNCTION &&
-					element.ElementType != codegraphpb.ElementType_METHOD) {
-				continue
-			}
-			// 检查函数定义范围内是否调用了指定的符号，并且参数个数一致
-			if i.containsCallToSymbol(&elementTable, element.Range[0], element.Range[2], symbolName, paramCount) {
-				callerParams, err := proto.GetParametersFromExtraData(element.ExtraData)
-				if err != nil {
-					i.logger.Debug("parse caller parameters from extra data, err: %v", err)
-					continue
-				}
-				callerParamCount := len(callerParams)
-				score := i.analyzer.CalculateSymbolMatchScore(elementTable.Imports, elementTable.Path, filePath, symbolName)
-				caller := &types.CallerElement{
-					FilePath:   elementTable.Path,
-					SymbolName: element.Name,
-					Position:   types.ToPosition(element.Range),
-					ParamCount: callerParamCount,
-					Score:      score,
-				}
-				callers = append(callers, caller)
-				count += 1
-				if count >= topN {
-					break
-				}
-
-			}
-		}
-	}
-	return callers
-}
-
-// containsCallToSymbol  检查函数定义范围内是否调用了指定的符号，并且参数个数一致
-func (i *indexer) containsCallToSymbol(fileTable *codegraphpb.FileElementTable, startLine, endLine int32, symbolName string, paramCount int) bool {
-	// 直接遍历元素，避免调用 findSymbolInDocByLineRange 的开销
-	for _, element := range fileTable.Elements {
-		if len(element.Range) < 2 {
-			continue
-		}
-
-		// 检查是否在指定范围内
-		if element.Range[0] < startLine || element.Range[0] > endLine {
-			continue
-		}
-
-		// 过滤其他元素，只保留函数/方法的调用
-		if element.ElementType != codegraphpb.ElementType_CALL {
-			continue
-		}
-
-		// 校验调用符号是否是期望的符号
-		if element.Name != symbolName {
-			continue
-		}
-
-		// 参数个数校验
-		params, err := proto.GetParametersFromExtraData(element.ExtraData)
-		if err != nil {
-			i.logger.Debug("failed to get parameters from extra data, err: %v", err)
-			continue
-		}
-		if len(params) != paramCount {
-			continue
-		}
-		return true
-	}
-	return false
 }
 
 func (i *indexer) searchSymbolNames(ctx context.Context, projectUuid string, language lang.Language, names []string, imports []*codegraphpb.Import) (

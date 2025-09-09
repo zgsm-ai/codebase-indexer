@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 
@@ -97,6 +98,7 @@ type codebaseService struct {
 	workspaceRepository  repository.WorkspaceRepository
 	fileDefinitionParser *definition.DefParser
 	indexer              Indexer
+	mu                   sync.Mutex
 }
 
 func (s *codebaseService) checkPath(ctx context.Context, workspacePath string, filePaths []string) error {
@@ -514,6 +516,7 @@ func (l *codebaseService) QueryReference(ctx context.Context, req *dto.SearchRef
 
 const defaultMaxLayer = 10
 const maxLayerNodeLimit = 50
+
 func (l *codebaseService) QueryCallGraph(ctx context.Context, req *dto.SearchCallGraphRequest) (resp *dto.CallGraphData, err error) {
 	// 二次校验
 	if req.CodebasePath == types.EmptyString {
@@ -538,7 +541,9 @@ func (l *codebaseService) QueryCallGraph(ctx context.Context, req *dto.SearchCal
 	if delta := req.EndLine - req.StartLine; delta > maxLineLimit {
 		req.EndLine = req.StartLine + maxLineLimit
 	}
-
+	// 保证同一时间只有一个查询调用，避免内存过高
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	nodes, err := l.indexer.QueryCallGraph(ctx, &types.QueryCallGraphOptions{
 		Workspace:  req.CodebasePath,
 		FilePath:   req.FilePath,
@@ -551,7 +556,6 @@ func (l *codebaseService) QueryCallGraph(ctx context.Context, req *dto.SearchCal
 		return nil, err
 	}
 	// 填充content，控制层数和节点数
-	// TODO 每层的节点数限制有问题
 	if err = l.fillContent(ctx, nodes, req.MaxLayer, maxLayerNodeLimit); err != nil {
 		l.logger.Error("fill graph query contents err:%v", err)
 	}
