@@ -3,9 +3,13 @@ package service
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"codebase-indexer/internal/config"
+	"codebase-indexer/internal/dto"
 	"codebase-indexer/internal/errs"
 	"codebase-indexer/internal/model"
 	"codebase-indexer/internal/repository"
@@ -20,11 +24,9 @@ type EmbeddingProcessService interface {
 	ProcessModifyFileEvent(ctx context.Context, event *model.Event) (*utils.FileStatus, error)
 	ProcessDeleteFileEvent(ctx context.Context, event *model.Event) (*utils.FileStatus, error)
 	ProcessRenameFileEvent(ctx context.Context, event *model.Event) (*utils.FileStatus, error)
-	ProcessDeleteFileEvents(ctx context.Context, events []*model.Event) error
-	ProcessRenameFileEvents(ctx context.Context, events []*model.Event) error
 	ProcessEmbeddingEvents(ctx context.Context, workspacePaths []string) error
 	CleanWorkspaceFilePath(ctx context.Context, fileStatus *utils.FileStatus, event *model.Event) error
-	CleanWorkspaceFilePaths(ctx context.Context, events []*model.Event) error
+	CleanWorkspaceFilePaths(ctx context.Context, workspacePath string, events []*model.Event) error
 }
 
 // embeddingProcessService 事件处理服务实现
@@ -33,6 +35,7 @@ type embeddingProcessService struct {
 	eventRepo             repository.EventRepository
 	codebaseEmbeddingRepo repository.EmbeddingFileRepository
 	uploadService         UploadService
+	syncer                repository.SyncInterface
 	logger                logger.Logger
 }
 
@@ -42,6 +45,7 @@ func NewEmbeddingProcessService(
 	eventRepo repository.EventRepository,
 	codebaseEmbeddingRepo repository.EmbeddingFileRepository,
 	uploadService UploadService,
+	syncer repository.SyncInterface,
 	logger logger.Logger,
 ) EmbeddingProcessService {
 	return &embeddingProcessService{
@@ -49,6 +53,7 @@ func NewEmbeddingProcessService(
 		eventRepo:             eventRepo,
 		codebaseEmbeddingRepo: codebaseEmbeddingRepo,
 		uploadService:         uploadService,
+		syncer:                syncer,
 		logger:                logger,
 	}
 }
@@ -222,40 +227,22 @@ func (ep *embeddingProcessService) ProcessRenameFileEvent(ctx context.Context, e
 	return fileStatus, nil
 }
 
-// ProcessDeleteFileEvents 批量处理删除文件事件
-func (ep *embeddingProcessService) ProcessDeleteFileEvents(ctx context.Context, events []*model.Event) error {
-	ep.logger.Info("processing %d delete file events", len(events))
-
-	for _, event := range events {
-		_, err := ep.ProcessDeleteFileEvent(ctx, event)
-		if err != nil {
-			ep.logger.Error("failed to process delete file event for file %s: %v", event.SourceFilePath, err)
-			// 继续处理其他事件，不因单个事件失败而中断整个批量处理
-			continue
-		}
-	}
-
-	return nil
-}
-
-// ProcessRenameFileEvents 批量处理重命名文件事件
-func (ep *embeddingProcessService) ProcessRenameFileEvents(ctx context.Context, events []*model.Event) error {
-	ep.logger.Info("processing %d rename file events", len(events))
-
-	for _, event := range events {
-		_, err := ep.ProcessRenameFileEvent(ctx, event)
-		if err != nil {
-			ep.logger.Error("failed to process rename file event for file %s -> %s: %v", event.SourceFilePath, event.TargetFilePath, err)
-			// 继续处理其他事件，不因单个事件失败而中断整个批量处理
-			continue
-		}
-	}
-
-	return nil
-}
-
 // ProcessEmbeddingEvents 处理事件记录
 func (ep *embeddingProcessService) ProcessEmbeddingEvents(ctx context.Context, workspacePaths []string) error {
+	// 遍历每个工作区，逐个处理
+	for _, workspacePath := range workspacePaths {
+		err := ep.processWorkspaceEvents(ctx, workspacePath)
+		if err != nil {
+			ep.logger.Error("failed to process events for workspace %s: %v", workspacePath, err)
+			// 继续处理其他工作区，不因单个工作区失败而中断整个处理
+			continue
+		}
+	}
+	return nil
+}
+
+// processWorkspaceEvents 处理指定工作区的事件
+func (ep *embeddingProcessService) processWorkspaceEvents(ctx context.Context, workspacePath string) error {
 	// 定义需要处理的事件状态：初始化、上报失败、构建失败
 	targetStatuses := []int{
 		model.EmbeddingStatusInit,
@@ -263,87 +250,282 @@ func (ep *embeddingProcessService) ProcessEmbeddingEvents(ctx context.Context, w
 		model.EmbeddingStatusBuildFailed,
 	}
 
-	// 获取待处理的添加文件事件
-	addEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeAddFile}, workspacePaths, 20, false, targetStatuses, nil)
+	// 获取待处理的添加和修改文件事件（合并处理）
+	addModifyEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeAddFile, model.EventTypeModifyFile}, []string{workspacePath}, 100, false, targetStatuses, nil)
 	if err != nil {
-		return fmt.Errorf("failed to get add file events: %w", err)
+		return fmt.Errorf("failed to get add/modify file events: %w", err)
 	}
 
-	// 处理添加文件事件
-	for _, event := range addEvents {
-		fileStatus, err := ep.ProcessAddFileEvent(ctx, event)
-		if err != nil {
-			ep.logger.Error("failed to process add file event: %v", err)
-			continue
-		}
-		err = ep.CleanWorkspaceFilePath(ctx, fileStatus, event)
-		if err != nil {
-			ep.logger.Error("failed to clean workspace filepath %s: %v", event.SourceFilePath, err)
-			continue
-		}
-	}
-
-	// 获取修改文件事件
-	modifyEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeModifyFile}, workspacePaths, 20, false, targetStatuses, nil)
+	// 获取待处理的重命名和删除文件事件（合并处理）
+	renameDeleteEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeRenameFile, model.EventTypeDeleteFile}, []string{workspacePath}, 100, false, targetStatuses, nil)
 	if err != nil {
-		return fmt.Errorf("failed to get modify file events: %w", err)
+		return fmt.Errorf("failed to get rename/delete file events: %w", err)
 	}
 
-	// 处理修改文件事件
-	for _, event := range modifyEvents {
-		fileStatus, err := ep.ProcessModifyFileEvent(ctx, event)
-		if err != nil {
-			ep.logger.Error("failed to process modify file event: %v", err)
-			continue
-		}
-		err = ep.CleanWorkspaceFilePath(ctx, fileStatus, event)
-		if err != nil {
-			ep.logger.Error("failed to clean workspace filepath %s: %v", event.SourceFilePath, err)
-			continue
-		}
+	if len(addModifyEvents) == 0 && len(renameDeleteEvents) == 0 {
+		ep.logger.Debug("no events to process for workspace: %s", workspacePath)
+		return nil
 	}
 
-	// 获取重命名文件事件
-	renameEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeRenameFile}, workspacePaths, 20, false, targetStatuses, nil)
+	// 获取上传令牌
+	workspaceName := filepath.Base(workspacePath)
+	authInfo := config.GetAuthInfo()
+	tokenReq := dto.UploadTokenReq{
+		ClientId:     authInfo.ClientId,
+		CodebasePath: workspacePath,
+		CodebaseName: workspaceName,
+	}
+
+	// 需要通过 uploadService 获取 syncer 来获取上传令牌
+	uploadTokenResp, err := ep.syncer.FetchUploadToken(tokenReq)
 	if err != nil {
-		return fmt.Errorf("failed to get rename file events: %w", err)
+		return fmt.Errorf("failed to get upload token for workspace %s: %w", workspacePath, err)
 	}
+	uploadToken := uploadTokenResp.Data.Token
 
-	// 处理重命名文件事件
-	for _, event := range renameEvents {
-		fileStatus, err := ep.ProcessRenameFileEvent(ctx, event)
+	config := config.GetClientConfig()
+	maxFileSizeKB := config.Sync.MaxFileSizeKB
+
+	// 批量处理添加和修改事件
+	if len(addModifyEvents) > 0 {
+		err := ep.processBatchAddModifyEvents(ctx, workspacePath, addModifyEvents, uploadToken, maxFileSizeKB)
 		if err != nil {
-			ep.logger.Error("failed to process rename file event: %v", err)
-			continue
-		}
-		err = ep.CleanWorkspaceFilePath(ctx, fileStatus, event)
-		if err != nil {
-			ep.logger.Error("failed to clean workspace filepath %s: %v", event.SourceFilePath, err)
-			continue
+			ep.logger.Error("failed to process batch add/modify events for workspace %s: %v", workspacePath, err)
 		}
 	}
 
-	// 获取删除文件事件
-	deleteEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeDeleteFile}, workspacePaths, 20, false, targetStatuses, nil)
-	if err != nil {
-		return fmt.Errorf("failed to get delete file events: %w", err)
+	// 批量处理重命名和删除事件
+	if len(renameDeleteEvents) > 0 {
+		err := ep.processBatchRenameDeleteEvents(ctx, workspacePath, renameDeleteEvents, uploadToken, maxFileSizeKB)
+		if err != nil {
+			ep.logger.Error("failed to process batch rename/delete events for workspace %s: %v", workspacePath, err)
+		}
 	}
 
-	// 处理删除文件事件
-	for _, event := range deleteEvents {
-		fileStatus, err := ep.ProcessDeleteFileEvent(ctx, event)
-		if err != nil {
-			ep.logger.Error("failed to process delete file event: %v", err)
-			continue
+	return nil
+}
+
+// processBatchEvents 批量处理添加和修改事件
+func (ep *embeddingProcessService) processBatchAddModifyEvents(ctx context.Context, workspacePath string, events []*model.Event, uploadToken string, maxFileSizeKB int) error {
+	ep.logger.Info("processing %d add/modify events for workspace: %s", len(events), workspacePath)
+
+	// 分批处理，每批10个事件
+	batchSize := 10
+	for i := 0; i < len(events); i += batchSize {
+		end := i + batchSize
+		if end > len(events) {
+			end = len(events)
 		}
-		err = ep.CleanWorkspaceFilePath(ctx, fileStatus, event)
+
+		batch := events[i:end]
+		err := ep.processBatchAddModify(ctx, workspacePath, batch, uploadToken, maxFileSizeKB)
 		if err != nil {
-			ep.logger.Error("failed to clean workspace filepath %s: %v", event.SourceFilePath, err)
+			ep.logger.Error("failed to process batch add/modify events [%d:%d]: %v", i, end, err)
+			// 继续处理下一批，不因单批失败而中断整个处理
 			continue
 		}
 	}
 
 	return nil
+}
+
+// processBatchAddModify 批量处理添加和修改事件
+func (ep *embeddingProcessService) processBatchAddModify(ctx context.Context, workspacePath string, events []*model.Event, uploadToken string, maxFileSizeKB int) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	// 1. 批量更新事件状态为上传中
+	eventIDs := make([]int64, len(events))
+	for i, event := range events {
+		eventIDs[i] = event.ID
+	}
+	err := ep.eventRepo.UpdateEventsEmbeddingStatus(eventIDs, model.EmbeddingStatusUploading)
+	if err != nil {
+		return fmt.Errorf("failed to update events status to uploading: %w", err)
+	}
+
+	// 2. 计算changes
+	changes := make([]*utils.FileStatus, len(events))
+	for i, event := range events {
+		status := utils.FILE_STATUS_ADDED
+		if event.EventType == model.EventTypeModifyFile {
+			status = utils.FILE_STATUS_MODIFIED
+		}
+
+		// 生成文件哈希
+		fileHash, err := buildFileHash(workspacePath, event.SourceFilePath, maxFileSizeKB)
+		if err != nil {
+			ep.logger.Error("failed to build file hash: %v", err)
+			continue
+		}
+
+		changes[i] = &utils.FileStatus{
+			Path:       event.SourceFilePath,
+			TargetPath: event.TargetFilePath,
+			Hash:       fileHash,
+			Status:     status,
+		}
+	}
+
+	// 3. 使用UploadChangesWithRetry批量上报，传入uploadToken
+	fileStatuses, err := ep.uploadService.UploadChangesWithRetryWithToken(workspacePath, changes, 1, uploadToken)
+	if err != nil {
+		// 上报失败，批量更新事件状态为上报失败
+		updateErr := ep.eventRepo.UpdateEventsEmbeddingStatus(eventIDs, model.EmbeddingStatusUploadFailed)
+		if updateErr != nil {
+			ep.logger.Error("failed to update events status to uploadFailed: %v", updateErr)
+		}
+
+		// 批量处理失败的文件路径
+		ep.uploadFilePathsFailed(workspacePath, events, err)
+
+		return fmt.Errorf("failed to upload batch add/modify files: %w", err)
+	}
+
+	// 4. 批量更新事件状态为构建中
+	updateEvents := make([]*model.Event, len(events))
+	for i, event := range events {
+		updateEvents[i] = &model.Event{
+			ID:              event.ID,
+			EmbeddingStatus: model.EmbeddingStatusBuilding,
+			SyncId:          fileStatuses[i].RequestId,
+			FileHash:        fileStatuses[i].Hash,
+		}
+		events[i].FileHash = fileStatuses[i].Hash
+	}
+	err = ep.eventRepo.UpdateEventsEmbedding(updateEvents)
+	if err != nil {
+		return fmt.Errorf("failed to update events status to building: %w", err)
+	}
+
+	// 5. 批量清理工作区文件路径
+	err = ep.CleanWorkspaceFilePaths(ctx, workspacePath, events)
+	if err != nil {
+		ep.logger.Error("failed to clean workspace filepaths: %v", err)
+		// 继续处理，不因清理失败而中断整个批量处理
+	}
+
+	ep.logger.Info("successfully processed batch of %d add/modify events", len(events))
+	return nil
+}
+
+// processBatchRenameDeleteEvents 批量处理重命名和删除事件
+func (ep *embeddingProcessService) processBatchRenameDeleteEvents(ctx context.Context, workspacePath string, events []*model.Event, uploadToken string, maxFileSizeKB int) error {
+	ep.logger.Info("processing %d rename/delete events for workspace: %s", len(events), workspacePath)
+
+	// rename和delete事件不需要实际上传文件，直接处理所有事件
+	err := ep.processBatchRenameDelete(ctx, workspacePath, events, uploadToken, maxFileSizeKB)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// processBatchRenameDelete 批量处理重命名和删除事件
+func (ep *embeddingProcessService) processBatchRenameDelete(ctx context.Context, workspacePath string, events []*model.Event, uploadToken string, maxFileSizeKB int) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	// 1. 批量更新事件状态为上传中
+	eventIDs := make([]int64, len(events))
+	for i, event := range events {
+		eventIDs[i] = event.ID
+	}
+	err := ep.eventRepo.UpdateEventsEmbeddingStatus(eventIDs, model.EmbeddingStatusUploading)
+	if err != nil {
+		return fmt.Errorf("failed to update events status to uploading: %w", err)
+	}
+
+	// 2. 计算changes
+	changes := make([]*utils.FileStatus, len(events))
+	for i, event := range events {
+		if event.EventType == model.EventTypeRenameFile {
+			fileHash, err := buildFileHash(workspacePath, event.TargetFilePath, maxFileSizeKB)
+			if err != nil {
+				ep.logger.Error("failed to build file hash: %v", err)
+				continue
+			}
+			changes[i] = &utils.FileStatus{
+				Path:       event.SourceFilePath,
+				TargetPath: event.TargetFilePath,
+				Hash:       fileHash,
+				Status:     utils.FILE_STATUS_RENAME,
+			}
+		} else if event.EventType == model.EventTypeDeleteFile {
+			changes[i] = &utils.FileStatus{
+				Path:       event.SourceFilePath,
+				TargetPath: event.TargetFilePath,
+				Status:     utils.FILE_STATUS_DELETED,
+			}
+		}
+	}
+
+	// 3. 使用UploadChangesWithRetry批量上报，传入uploadToken
+	fileStatuses, err := ep.uploadService.UploadChangesWithRetryWithToken(workspacePath, changes, 1, uploadToken)
+	if err != nil {
+		// 上报失败，批量更新事件状态为上报失败
+		updateErr := ep.eventRepo.UpdateEventsEmbeddingStatus(eventIDs, model.EmbeddingStatusUploadFailed)
+		if updateErr != nil {
+			ep.logger.Error("failed to update events status to uploadFailed: %v", updateErr)
+		}
+
+		// 批量处理失败的文件路径
+		ep.uploadFilePathsFailed(workspacePath, events, err)
+
+		return fmt.Errorf("failed to upload batch rename/delete files: %w", err)
+	}
+
+	// 4. 批量更新事件状态为构建中
+	updateEvents := make([]*model.Event, len(events))
+	for i, event := range events {
+		updateEvents[i] = &model.Event{
+			ID:              event.ID,
+			EmbeddingStatus: model.EmbeddingStatusBuilding,
+			SyncId:          fileStatuses[i].RequestId,
+			FileHash:        fileStatuses[i].Hash,
+		}
+		events[i].FileHash = fileStatuses[i].Hash
+	}
+	err = ep.eventRepo.UpdateEventsEmbedding(updateEvents)
+	if err != nil {
+		return fmt.Errorf("failed to update events status to building: %w", err)
+	}
+
+	// 5. 批量清理工作区文件路径
+	err = ep.CleanWorkspaceFilePaths(ctx, workspacePath, events)
+	if err != nil {
+		ep.logger.Error("failed to clean workspace filepaths: %v", err)
+		// 继续处理，不因清理失败而中断整个批量处理
+	}
+
+	ep.logger.Info("successfully processed batch of %d rename/delete events", len(events))
+	return nil
+}
+
+func buildFileHash(workspacePath string, filePath string, maxFileSizeKB int) (string, error) {
+	// 1. 验证文件路径
+	fullPath := filepath.Join(workspacePath, filePath)
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		return "", fmt.Errorf("file does not exist: %s", fullPath)
+	}
+
+	// 2. 检查文件大小
+	fileInfo, err := os.Stat(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get file info: %w", err)
+	}
+
+	fileSizeKB := float64(fileInfo.Size()) / 1024
+	if fileSizeKB > float64(maxFileSizeKB) {
+		return "", fmt.Errorf("file size %.2fKB exceeds limit %dKB", fileSizeKB, maxFileSizeKB)
+	}
+
+	fileTimestamp := fileInfo.ModTime().UnixMilli()
+
+	return fmt.Sprintf("%d", fileTimestamp), nil
 }
 
 func (ep *embeddingProcessService) uploadFilePathFailed(event *model.Event, uploadErr error) error {
@@ -413,6 +595,85 @@ func (ep *embeddingProcessService) uploadFilePathFailed(event *model.Event, uplo
 		return fmt.Errorf("failed to update workspace: %w", err)
 	}
 	return nil
+}
+
+// uploadFilePathsFailed 批量处理文件路径失败的情况
+func (ep *embeddingProcessService) uploadFilePathsFailed(workspacePath string, events []*model.Event, uploadErr error) {
+	codebaseId := utils.GenerateCodebaseEmbeddingID(workspacePath)
+	codebaseEmbeddingConfig, err := ep.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseId)
+	if err != nil {
+		ep.logger.Error("failed to get codebase embedding config for workspace %s: %v", workspacePath, err)
+		return
+	}
+
+	if codebaseEmbeddingConfig.HashTree == nil {
+		codebaseEmbeddingConfig.HashTree = make(map[string]string)
+	}
+	if codebaseEmbeddingConfig.FailedFiles == nil {
+		codebaseEmbeddingConfig.FailedFiles = make(map[string]string)
+	}
+	if codebaseEmbeddingConfig.SyncFiles == nil {
+		codebaseEmbeddingConfig.SyncFiles = make(map[string]string)
+	}
+
+	// 批量处理失败文件
+	for _, event := range events {
+		filePath := event.SourceFilePath
+		if event.EventType == model.EventTypeRenameFile {
+			filePath = event.TargetFilePath
+		}
+
+		delete(codebaseEmbeddingConfig.HashTree, filePath)
+		delete(codebaseEmbeddingConfig.SyncFiles, filePath)
+		if event.EventType == model.EventTypeRenameFile {
+			delete(codebaseEmbeddingConfig.HashTree, event.SourceFilePath)
+			delete(codebaseEmbeddingConfig.SyncFiles, event.SourceFilePath)
+		}
+
+		if utils.IsUnauthorizedError(uploadErr) {
+			codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrAuthenticationFailed
+		} else if utils.IsTooManyRequestsError(uploadErr) {
+			codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrInternalServerError
+		} else if utils.IsServiceUnavailableError(uploadErr) {
+			codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrInternalServerError
+		} else {
+			codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrFileEmbeddingFailed
+		}
+	}
+
+	// 保存 codebase embedding 配置
+	err = ep.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig)
+	if err != nil {
+		ep.logger.Error("failed to save codebase embedding config for workspace %s: %v", workspacePath, err)
+		return
+	}
+
+	// 更新工作区信息
+	embeddingFileNum := len(codebaseEmbeddingConfig.HashTree)
+	var embeddingFailedFilePaths string
+	var embeddingMessage string
+	embeddingFaildFiles := codebaseEmbeddingConfig.FailedFiles
+	failedKeys := make([]string, 0, len(embeddingFaildFiles))
+	for k, v := range embeddingFaildFiles {
+		failedKeys = append(failedKeys, k)
+		embeddingMessage = v
+		if len(failedKeys) > 5 {
+			break
+		}
+	}
+	if len(failedKeys) == 0 {
+		embeddingFailedFilePaths = ""
+		embeddingMessage = ""
+	} else if len(failedKeys) > 5 {
+		embeddingFailedFilePaths = strings.Join(failedKeys[:5], ",")
+	} else {
+		embeddingFailedFilePaths = strings.Join(failedKeys, ",")
+	}
+
+	err = ep.workspaceRepo.UpdateEmbeddingInfo(workspacePath, embeddingFileNum, time.Now().Unix(), embeddingMessage, embeddingFailedFilePaths)
+	if err != nil {
+		ep.logger.Error("failed to update workspace %s: %v", workspacePath, err)
+	}
 }
 
 // CleanWorkspaceFilePath 删除 workspace 中指定文件的 filepath 记录
@@ -532,83 +793,72 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePath(ctx context.Context, f
 }
 
 // CleanWorkspaceFilePaths 批量删除 workspace 中指定文件的 filepath 记录
-func (ep *embeddingProcessService) CleanWorkspaceFilePaths(ctx context.Context, events []*model.Event) error {
-	ep.logger.Info("cleaning workspace filepath for %d events", len(events))
+func (ep *embeddingProcessService) CleanWorkspaceFilePaths(ctx context.Context, workspacePath string, events []*model.Event) error {
+	// 获取 codebase embedding 配置
+	codebaseEmbeddingId := utils.GenerateCodebaseEmbeddingID(workspacePath)
+	codebaseEmbeddingConfig, err := ep.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseEmbeddingId)
+	if err != nil {
+		return fmt.Errorf("failed to get codebase embedding config for workspace %s: %w", workspacePath, err)
+	}
 
-	// 统计成功和失败的数量
-	successCount := 0
-	failureCount := 0
-	codebaseEmbeddingFilePaths := make(map[string][]string)
+	if codebaseEmbeddingConfig.HashTree == nil {
+		codebaseEmbeddingConfig.HashTree = make(map[string]string)
+	}
+	if codebaseEmbeddingConfig.FailedFiles == nil {
+		codebaseEmbeddingConfig.FailedFiles = make(map[string]string)
+	}
+	if codebaseEmbeddingConfig.SyncFiles == nil {
+		codebaseEmbeddingConfig.SyncFiles = make(map[string]string)
+	}
 
+	// 批量处理文件路径
 	for _, event := range events {
-		// 根据事件类型处理不同的文件路径
-		codebaseEmbeddingId := utils.GenerateCodebaseEmbeddingID(event.WorkspacePath)
-		switch event.EventType {
-		case model.EventTypeAddFile, model.EventTypeModifyFile, model.EventTypeDeleteFile:
-			if codebaseEmbeddingFilePaths[codebaseEmbeddingId] == nil {
-				codebaseEmbeddingFilePaths[codebaseEmbeddingId] = []string{event.SourceFilePath}
-			} else {
-				codebaseEmbeddingFilePaths[codebaseEmbeddingId] = append(codebaseEmbeddingFilePaths[codebaseEmbeddingId], event.SourceFilePath)
-			}
-		case model.EventTypeRenameFile:
-			if codebaseEmbeddingFilePaths[codebaseEmbeddingId] == nil {
-				codebaseEmbeddingFilePaths[codebaseEmbeddingId] = []string{event.SourceFilePath, event.TargetFilePath}
-			} else {
-				codebaseEmbeddingFilePaths[codebaseEmbeddingId] = append(codebaseEmbeddingFilePaths[codebaseEmbeddingId], event.TargetFilePath)
-			}
-		default:
-			continue
+		filePath := event.SourceFilePath
+		if event.EventType == model.EventTypeRenameFile {
+			filePath = event.TargetFilePath
+		}
+
+		delete(codebaseEmbeddingConfig.HashTree, filePath)
+		delete(codebaseEmbeddingConfig.FailedFiles, filePath)
+		if event.EventType == model.EventTypeRenameFile {
+			delete(codebaseEmbeddingConfig.HashTree, event.SourceFilePath)
+			delete(codebaseEmbeddingConfig.FailedFiles, event.SourceFilePath)
+		}
+		if oldHash, exists := codebaseEmbeddingConfig.SyncFiles[filePath]; !exists || oldHash != event.FileHash {
+			codebaseEmbeddingConfig.SyncFiles[filePath] = event.FileHash
 		}
 	}
 
-	codebaseEmbeddingConfigs := ep.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfigs()
-
-	// 从 HashTree 中删除对应的文件路径记录
-	for codebaseEmbeddingId, filePaths := range codebaseEmbeddingFilePaths {
-		codebaseEmbeddingConfig := codebaseEmbeddingConfigs[codebaseEmbeddingId]
-		if codebaseEmbeddingConfig == nil {
-			ep.logger.Error("codebase config not found for codebaseEmbeddingId: %s", codebaseEmbeddingId)
-			continue
-		}
-		updated := false
-		for _, filePath := range filePaths {
-			if _, exists := codebaseEmbeddingConfig.HashTree[filePath]; exists {
-				delete(codebaseEmbeddingConfig.HashTree, filePath)
-				updated = true
-				ep.logger.Debug("removed filepath from hash tree: %s", filePath)
-			}
-		}
-
-		// 如果有更新，保存配置
-		if updated {
-			if err := ep.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig); err != nil {
-				ep.logger.Error("failed to save codebase embedding config after cleaning filepath: %v", err)
-				failureCount++
-				continue
-			}
-			embeddingFileNum := len(codebaseEmbeddingConfig.HashTree)
-			updateWorkspace := model.Workspace{
-				WorkspacePath:    codebaseEmbeddingConfig.CodebasePath,
-				EmbeddingFileNum: embeddingFileNum,
-			}
-			err := ep.workspaceRepo.UpdateWorkspace(&updateWorkspace)
-			if err != nil {
-				ep.logger.Error("failed to update workspace: %v", err)
-				failureCount++
-				continue
-			}
-			ep.logger.Info("workspace filepath cleaned successfully for codebaseEmbeddingId: %s", codebaseEmbeddingId)
-			successCount++
-		} else {
-			ep.logger.Debug("no filepath records found to clean for codebaseEmbeddingId: %s", codebaseEmbeddingId)
-		}
+	// 保存 codebase embedding 配置
+	if err := ep.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig); err != nil {
+		return fmt.Errorf("failed to save codebase embedding config: %w", err)
 	}
 
-	ep.logger.Info("workspace filepath cleaning completed: %d succeeded, %d failed", successCount, failureCount)
+	// 更新工作区信息
+	embeddingFileNum := len(codebaseEmbeddingConfig.HashTree)
+	var embeddingFailedFilePaths string
+	var embeddingMessage string
+	embeddingFaildFiles := codebaseEmbeddingConfig.FailedFiles
+	failedKeys := make([]string, 0, len(embeddingFaildFiles))
+	for k, v := range embeddingFaildFiles {
+		failedKeys = append(failedKeys, k)
+		embeddingMessage = v
+		if len(failedKeys) > 5 {
+			break
+		}
+	}
+	if len(failedKeys) == 0 {
+		embeddingFailedFilePaths = ""
+		embeddingMessage = ""
+	} else if len(failedKeys) > 5 {
+		embeddingFailedFilePaths = strings.Join(failedKeys[:5], ",")
+	} else {
+		embeddingFailedFilePaths = strings.Join(failedKeys, ",")
+	}
 
-	// 如果全部失败，返回错误
-	if failureCount > 0 && successCount == 0 {
-		return fmt.Errorf("all %d events failed to clean workspace filepath", failureCount)
+	err = ep.workspaceRepo.UpdateEmbeddingInfo(workspacePath, embeddingFileNum, time.Now().Unix(), embeddingMessage, embeddingFailedFilePaths)
+	if err != nil {
+		return fmt.Errorf("failed to update workspace file num: %w", err)
 	}
 
 	return nil
