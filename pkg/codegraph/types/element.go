@@ -359,6 +359,7 @@ const (
 	// 用于判断变量是否是局部变量
 	NodeKindFunctionDeclaration NodeKind = "function_declaration"
 	NodeKindMethodDeclaration   NodeKind = "method_declaration"
+	NodeKindClassDefinition     NodeKind = "class_definition"
 )
 
 var NodeKindMappings = map[string]NodeKind{
@@ -452,6 +453,8 @@ var NodeKindMappings = map[string]NodeKind{
 	string(NodeKindQualifiedIdentifier):  NodeKindQualifiedIdentifier,
 	string(NodeKindTypeList):             NodeKindTypeList,
 	string(NodeKindBaseClassClause):      NodeKindBaseClassClause,
+	string(NodeKindFunctionDeclaration): NodeKindFunctionDeclaration,
+	string(NodeKindClassDefinition):     NodeKindClassDefinition,
 }
 
 // 用于接收函数的返回类型和字段的类型

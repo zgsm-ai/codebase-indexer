@@ -96,6 +96,10 @@ func (py *PythonResolver) resolveMethod(ctx context.Context, element *Method, rc
 			element.Declaration.ReturnType = collectPyTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
 		}
 	}
+	pnode := findMethodOwner(&rootCap.Node)
+	if pnode != nil {
+		element.Owner = extractNodeName(pnode, rc.SourceFile.Content)
+	}
 	element.BaseElement.Scope = types.ScopeClass
 	return []Element{element}, nil
 }

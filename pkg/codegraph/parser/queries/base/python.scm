@@ -55,30 +55,28 @@
 ;; ------------------------------------method-----------------------------------
 ;; 带装饰器
 (class_definition
-  name: (identifier) @definition.method.owner
   body: (block
     (decorated_definition
-      (decorator) @definition.method.decorator
+      (decorator) 
       definition: (function_definition
         name: (identifier) @definition.method.name
         parameters: (parameters) @definition.method.parameters
         return_type: (type)? @definition.method.return_type
-      )
+      )@definition.method
     )
   )
-) @definition.method
+) 
 
 ;; 无装饰器
 (class_definition
-  name: (identifier) @definition.method.owner
   body: (block
     (function_definition
       name: (identifier) @definition.method.name
       parameters: (parameters) @definition.method.parameters
       return_type: (type)? @definition.method.return_type
-    )
+    )@definition.method
   )
-) @definition.method
+) 
 
 ;; ----------------------------------Variable-------------------------------------
 ;; Variable assignments
