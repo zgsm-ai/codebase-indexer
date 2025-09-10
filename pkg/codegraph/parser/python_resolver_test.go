@@ -1792,7 +1792,7 @@ func TestPythonResolver_ResolveCall(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{
-						Name: "json.loads",
+						Name: "loads",
 					},
 					Parameters: []*resolver.Parameter{
 						{Name: "data"},
@@ -1801,7 +1801,7 @@ func TestPythonResolver_ResolveCall(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{
-						Name: "XMLParser.parse",
+						Name: "parse",
 					},
 					Parameters: []*resolver.Parameter{
 						{Name: "xml_string"},
@@ -1809,7 +1809,7 @@ func TestPythonResolver_ResolveCall(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{
-						Name: "YAMLConfig.load",
+						Name: "load",
 					},
 					Parameters: []*resolver.Parameter{
 						{Name: "config.yaml"},
@@ -1817,7 +1817,7 @@ func TestPythonResolver_ResolveCall(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{
-						Name: "User.objects.get",
+						Name: "get",
 					},
 					Parameters: []*resolver.Parameter{
 						{Name: "id=1"},
@@ -1825,7 +1825,7 @@ func TestPythonResolver_ResolveCall(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{
-						Name: "User.objects.filter",
+						Name: "filter",
 					},
 					Parameters: []*resolver.Parameter{
 						{Name: "age__gte=18"},
@@ -1833,7 +1833,7 @@ func TestPythonResolver_ResolveCall(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{
-						Name: "DatabaseSession.create",
+						Name: "create",
 					},
 					Parameters: []*resolver.Parameter{
 						{Name: "engine_url"},
@@ -1841,7 +1841,7 @@ func TestPythonResolver_ResolveCall(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{
-						Name: "AppConfig.Builder",
+						Name: "Builder",
 					},
 					Parameters: []*resolver.Parameter{},
 				},
@@ -1869,7 +1869,7 @@ func TestPythonResolver_ResolveCall(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{
-						Name: "SettingsLoader.load_from_file",
+						Name: "load_from_file",
 					},
 					Parameters: []*resolver.Parameter{
 						{Name: "settings.ini"},
@@ -1877,7 +1877,7 @@ func TestPythonResolver_ResolveCall(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{
-						Name: "CommandLineParser.parse_args",
+						Name: "parse_args",
 					},
 					Parameters: []*resolver.Parameter{
 						{Name: "sys.argv[1:]"},
@@ -1893,6 +1893,12 @@ func TestPythonResolver_ResolveCall(t *testing.T) {
 				},
 				{
 					BaseElement: &resolver.BaseElement{
+						Name: "a",
+					},
+					Parameters: []*resolver.Parameter{},
+				},
+				{
+					BaseElement: &resolver.BaseElement{
 						Name: "filter",
 					},
 					Parameters: []*resolver.Parameter{},
@@ -1900,6 +1906,24 @@ func TestPythonResolver_ResolveCall(t *testing.T) {
 				{
 					BaseElement: &resolver.BaseElement{
 						Name: "transform",
+					},
+					Parameters: []*resolver.Parameter{},
+				},
+				{
+					BaseElement: &resolver.BaseElement{
+						Name: "List",
+					},
+					Parameters: []*resolver.Parameter{},
+				},
+				{
+					BaseElement: &resolver.BaseElement{
+						Name: "Dict",
+					},
+					Parameters: []*resolver.Parameter{},
+				},
+				{
+					BaseElement: &resolver.BaseElement{
+						Name: "Optional",
 					},
 					Parameters: []*resolver.Parameter{},
 				},
@@ -1911,12 +1935,21 @@ func TestPythonResolver_ResolveCall(t *testing.T) {
 			res, err := parser.Parse(context.Background(), tt.sourceFile)
 			assert.ErrorIs(t, err, tt.wantErr)
 			assert.NotNil(t, res)
-			// if err == nil {
-			// 	assert.Equal(t, tt.wantCalls, res.Elements)
-			// 	for _, call := range tt.wantCalls {
-			// 		assert.Contains(t, res.Elements, call)
-			// 	}
-			// }
+			if err == nil {
+				assert.Equal(t, len(tt.wantCalls), len(res.Elements))
+				for _, call := range tt.wantCalls {
+					found := false
+					for _, elem := range res.Elements {
+						if c, ok := elem.(*resolver.Call); ok {
+							if c.GetName() == call.GetName() && len(call.Parameters) == len(c.Parameters) {
+								found = true
+								break
+							}
+						}
+					}
+					assert.True(t, found, "未找到函数调用: %s", call.GetName())
+				}
+			}
 		})
 	}
 }

@@ -88,10 +88,45 @@
 
 ;; ---------------------------------Call---------------------------------
 (call
-  function: (_) @call.function.name
+  function: (attribute
+              object: (identifier) 
+              attribute: (identifier) @call.function.name
+            )
   arguments: (argument_list) @call.function.arguments
 ) @call.function
 
+;; 对象方法调用，object 是 attribute
+(call
+  function: (attribute
+              object: (attribute) 
+              attribute: (identifier) @call.function.name
+            )
+  arguments: (argument_list) @call.function.arguments
+) @call.function
+
+;; 对象方法调用，object 是 call
+(call
+  function: (attribute
+              object: (call) 
+              attribute: (identifier) @call.function.name
+            )
+  arguments: (argument_list) @call.function.arguments
+) @call.function
+
+;; 下标调用
+(call
+  function: (subscript
+              value: (identifier) @call.function.name
+              subscript: (identifier) 
+            )
+  arguments: (argument_list) @call.function.arguments
+) @call.function
+
+;; 普通函数调用
+(call
+  function: (identifier) @call.function.name
+  arguments: (argument_list) @call.function.arguments
+) @call.function
 
 
 ;; Type aliases

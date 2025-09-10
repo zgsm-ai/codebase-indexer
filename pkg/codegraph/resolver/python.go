@@ -175,17 +175,7 @@ func (py *PythonResolver) resolveCall(ctx context.Context, element *Call, rc *Re
 		}
 		switch types.ToElementType(captureName) {
 		case types.ElementTypeFunctionCallName:
-			nameOrTypes := collectPyTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
-			if len(nameOrTypes) > 1 {
-				// Dict[str, int] 考虑将类型抛出去
-				for _, typ := range nameOrTypes {
-					// TODO 过滤官方标准类型
-					// ref里面是会有函数名的
-					refs = append(refs, NewReference(element, &cap.Node, typ, types.EmptyString))
-				}
-			}
-			// 第一个作为函数名
-			element.BaseElement.Name = nameOrTypes[0]
+			element.BaseElement.Name = cap.Node.Utf8Text(rc.SourceFile.Content)
 		case types.ElementTypeFunctionArguments:
 			args := getArgs(&cap.Node, rc.SourceFile.Content)
 			for _, arg := range args {
@@ -207,8 +197,8 @@ func getArgs(node *sitter.Node, content []byte) []string {
 		return nil
 	}
 	var args []string
-	for i := uint(0); i < node.ChildCount(); i++ {
-		child := node.Child(i)
+	for i := uint(0); i < node.NamedChildCount(); i++ {
+		child := node.NamedChild(i)
 		if child.IsMissing() || child.IsError() {
 			continue
 		}
