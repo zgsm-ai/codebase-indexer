@@ -89,13 +89,14 @@ func (da *DependencyAnalyzer) SaveSymbolOccurrences(ctx context.Context, project
 			case *resolver.Class, *resolver.Function, *resolver.Method, *resolver.Interface, *resolver.Variable:
 				if element.GetType() == types.ElementTypeVariable {
 					totalVariables++
+					// 定义位置
+					// 有些变量是函数类型（ts），只处理全局/包级变量
+					if da.shouldSkipVariable(totalFiles, element) {
+						totalVariablesFiltered++
+						continue
+					}
 				}
-				// 定义位置
-				// 有些变量是函数类型（ts），只处理全局/包级变量
-				if da.shouldSkipVariable(totalFiles, element) {
-					totalVariablesFiltered++
-					continue
-				}
+
 				symbol, load := da.loadSymbolOccurrenceByStrategy(ctx, projectUuid, totalFiles, element, symbolCache, fileTable)
 				if load {
 					totalLoad++
@@ -235,7 +236,6 @@ func (da *DependencyAnalyzer) CalculateSymbolMatchScore(callerImports []*codegra
 
 	// 4、路径相似性匹配
 	similarity := strsim.Compare(callerFilePath, calleeFilePath, strsim.Cosine())
-	score := int(5 * similarity) * 0
+	score := int(5*similarity) * 0
 	return score
 }
-

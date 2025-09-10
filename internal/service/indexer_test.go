@@ -746,12 +746,12 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 	defer memFile.Close()
 	defer pprof.WriteHeapProfile(memFile)
 
-	// env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/java/hadoop"
-	env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/cpp/grpc"
+	env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/java/hadoop"
+	// env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/cpp/grpc"
 	err = initWorkspaceModel(env)
 	assert.NoError(t, err)
-	// testVisitPattern.IncludeExts = []string{".java"}
-	testVisitPattern.IncludeExts = []string{".cpp", ".cc", ".cxx", ".hpp", ".h"}
+	testVisitPattern.IncludeExts = []string{".java"}
+	// testVisitPattern.IncludeExts = []string{".cpp", ".cc", ".cxx", ".hpp", ".h"}
 	// 创建测试索引器
 	testIndexer := createTestIndexer(env, testVisitPattern)
 
@@ -784,14 +784,14 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 		// 	desc:       "查询IndexWorkspace方法的调用链",
 		// 	project:    "codebase-indexer",
 		// },
-		// {
-		// 	name:       "authenticate方法调用链",
-		// 	filePath:   "hadoop-common-project/hadoop-auth/src/main/java/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java",
-		// 	symbolName: "authenticate",
-		// 	maxLayer:   5,
-		// 	desc:       "查询authenticate方法的调用链",
-		// 	project:    "hadoop",
-		// },
+		{
+			name:       "authenticate方法调用链",
+			filePath:   "hadoop-common-project/hadoop-auth/src/main/java/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java",
+			symbolName: "authenticate",
+			maxLayer:   5,
+			desc:       "查询authenticate方法的调用链",
+			project:    "hadoop",
+		},
 		// {
 		// 	name:       "Get方法调用链",
 		// 	filePath:   "staging/src/k8s.io/component-base/version/version.go",
@@ -801,14 +801,14 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 		// 	project:    "kubernetes",
 		// },
 
-		{
-			name:"RunServer",
-			filePath: "examples/cpp/generic_api/greeter_server.cc",
-			symbolName: "RunServer",
-			maxLayer: 20,
-			desc: "查询greeter_server.cc文件的调用链",
-			project: "grpc",
-		},
+		// {
+		// 	name:"RunServer",
+		// 	filePath: "examples/cpp/generic_api/greeter_server.cc",
+		// 	symbolName: "RunServer",
+		// 	maxLayer: 20,
+		// 	desc: "查询greeter_server.cc文件的调用链",
+		// 	project: "grpc",
+		// },
 	}
 
 	for _, tc := range testCases {
