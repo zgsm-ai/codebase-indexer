@@ -87,11 +87,11 @@ func (py *PythonResolver) resolveMethod(ctx context.Context, element *Method, rc
 		case types.ElementTypeMethodName:
 			element.BaseElement.Name = content
 			element.Declaration.Name = content
-		case types.ElementTypeMethodOwner:
-			element.Owner = content
 		case types.ElementTypeMethodParameters:
-			// 保留了self参数
 			element.Declaration.Parameters = parsePyFuncParams(&cap.Node, rc.SourceFile.Content)
+			if len(element.Declaration.Parameters) > 0 && element.Declaration.Parameters[0].Name == "self" {
+				element.Declaration.Parameters = element.Declaration.Parameters[1:]
+			}
 		case types.ElementTypeMethodReturnType:
 			element.Declaration.ReturnType = collectPyTypeIdentifiers(&cap.Node, rc.SourceFile.Content)
 		}
@@ -124,6 +124,7 @@ func (py *PythonResolver) resolveClass(ctx context.Context, element *Class, rc *
 			}
 		}
 	}
+	element.Scope = types.ScopePackage
 	elements := []Element{element}
 	for _, r := range refs {
 		elements = append(elements, r)
@@ -167,7 +168,6 @@ func (py *PythonResolver) resolveInterface(ctx context.Context, element *Interfa
 func (py *PythonResolver) resolveCall(ctx context.Context, element *Call, rc *ResolveContext) ([]Element, error) {
 	rootCap := rc.Match.Captures[0]
 	updateRootElement(element, &rootCap, rc.CaptureNames[rootCap.Index], rc.SourceFile.Content)
-	var refs []*Reference
 	for _, cap := range rc.Match.Captures {
 		captureName := rc.CaptureNames[cap.Index]
 		if cap.Node.IsMissing() || cap.Node.IsError() {
@@ -187,9 +187,6 @@ func (py *PythonResolver) resolveCall(ctx context.Context, element *Call, rc *Re
 	}
 	element.BaseElement.Scope = types.ScopeFunction
 	elements := []Element{element}
-	for _, r := range refs {
-		elements = append(elements, r)
-	}
 	return elements, nil
 }
 func getArgs(node *sitter.Node, content []byte) []string {
@@ -213,17 +210,13 @@ func parsePyFuncParams(node *sitter.Node, content []byte) []Parameter {
 		return nil
 	}
 	var params []Parameter
-	for i := uint(0); i < node.ChildCount(); i++ {
-		child := node.Child(i)
+	for i := uint(0); i < node.NamedChildCount(); i++ {
+		child := node.NamedChild(i)
 		if child.IsMissing() || child.IsError() {
 			continue
 		}
 		// fmt.Println("child", child.Kind())
 		switch types.ToNodeKind(child.Kind()) {
-		case types.NodeKindIdentifier:
-			params = append(params, Parameter{
-				Name: child.Utf8Text(content),
-			})
 		case types.NodeKindListSplatPattern:
 			name := child.Utf8Text(content)
 			name = strings.ReplaceAll(name, "*", "...")

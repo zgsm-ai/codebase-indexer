@@ -455,8 +455,8 @@ func findMethodOwner(node *sitter.Node) *sitter.Node {
 	for current != nil {
 		kind := current.Kind()
 		switch types.ToNodeKind(kind) {
-		// 找到类、接口、方法声明，返回当前节点（支持java、c、cpp）
-		case types.NodeKindClassDeclaration, types.NodeKindClassSpecifier, types.NodeKindStructSpecifier:
+		// 找到类、接口、方法声明，返回当前节点（支持java、c、cpp、python）
+		case types.NodeKindClassDeclaration, types.NodeKindClassSpecifier, types.NodeKindStructSpecifier,types.NodeKindClassDefinition:
 			return current
 		// 找到接口声明，返回当前节点
 		case types.NodeKindInterfaceDeclaration:

@@ -207,3 +207,10 @@ func ToLanguage(language string) (Language, error) {
 	}
 	return types.EmptyString, ErrUnSupportedLanguage
 }
+func GetAllSupportedLanguages() []Language {
+	var languages []Language
+	for _, parser := range treeSitterParsers {
+		languages = append(languages, parser.Language)
+	}
+	return languages
+}

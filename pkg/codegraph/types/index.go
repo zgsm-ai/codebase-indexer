@@ -44,6 +44,7 @@ type QueryDefinitionOptions struct {
 	EndLine     int
 	Workspace   string
 	FilePath    string
+	SymbolName  string
 	CodeSnippet []byte
 }
 

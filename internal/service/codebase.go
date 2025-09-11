@@ -422,6 +422,7 @@ func (l *codebaseService) QueryDefinition(ctx context.Context, req *dto.SearchDe
 		EndLine:     req.EndLine,
 		FilePath:    req.FilePath,
 		CodeSnippet: []byte(req.CodeSnippet),
+		SymbolName:  req.SymbolName,
 	})
 	if err != nil {
 		return nil, err

@@ -746,11 +746,15 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 	defer memFile.Close()
 	defer pprof.WriteHeapProfile(memFile)
 
-	env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/java/hadoop"
+	// env.workspaceDir = "/home/kcx/codeWorkspace/codebase-indexer/pkg/codegraph/parser/testdata/test"
+	// env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/python/django"
+	// env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/java/mall"
+	// env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/java/hadoop"
 	// env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/cpp/grpc"
 	err = initWorkspaceModel(env)
 	assert.NoError(t, err)
-	testVisitPattern.IncludeExts = []string{".java"}
+	// testVisitPattern.IncludeExts = []string{".py"}
+	// testVisitPattern.IncludeExts = []string{".java"}
 	// testVisitPattern.IncludeExts = []string{".cpp", ".cc", ".cxx", ".hpp", ".h"}
 	// 创建测试索引器
 	testIndexer := createTestIndexer(env, testVisitPattern)
@@ -764,6 +768,7 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 
 	// 步骤1: 索引整个工作区
 	_, err = testIndexer.IndexWorkspace(env.ctx, env.workspaceDir)
+	
 	assert.NoError(t, err)
 	pprof.StartCPUProfile(cpuFile)
 	defer pprof.StopCPUProfile()
@@ -785,13 +790,45 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 		// 	project:    "codebase-indexer",
 		// },
 		{
-			name:       "authenticate方法调用链",
-			filePath:   "hadoop-common-project/hadoop-auth/src/main/java/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java",
-			symbolName: "authenticate",
-			maxLayer:   5,
-			desc:       "查询authenticate方法的调用链",
-			project:    "hadoop",
+			name:       "测试递归",
+			filePath:   "internal/service/codebase.go",
+			symbolName: "fillContent",
+			maxLayer:   20,
+			desc:       "查询fillContent方法的调用链",
+			project:    "codebase-indexer",
 		},
+		// {
+		// 	name:       "authenticate方法调用链",
+		// 	filePath:   "hadoop-common-project/hadoop-auth/src/main/java/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java",
+		// 	symbolName: "authenticate",
+		// 	maxLayer:   1,
+		// 	desc:       "查询authenticate方法的调用链",
+		// 	project:    "hadoop",
+		// },
+		// {
+		// 	name:       "listBrand方法调用链",
+		// 	filePath:   "mall-demo/src/main/java/com/macro/mall/demo/service/impl/DemoServiceImpl.java",
+		// 	symbolName: "listBrand",
+		// 	maxLayer:   3,
+		// 	desc:       "查询listBrand方法的调用链",
+		// 	project:    "mall",
+		// },
+		// {
+		// 	name:       "parse方法调用链",
+		// 	filePath:   "django/http/multipartparser.py",
+		// 	symbolName: "parse",
+		// 	maxLayer:   2,
+		// 	desc:       "查询parse方法的调用链",
+		// 	project:    "django",
+		// },
+		// {
+		// 	name:       "parse方法调用链",
+		// 	filePath:   "multipartparser.py",
+		// 	symbolName: "parse",
+		// 	maxLayer:   3,
+		// 	desc:       "查询parse方法的调用链",
+		// 	project:    "test",
+		// },
 		// {
 		// 	name:       "Get方法调用链",
 		// 	filePath:   "staging/src/k8s.io/component-base/version/version.go",
@@ -803,10 +840,18 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 
 		// {
 		// 	name:"RunServer",
-		// 	filePath: "examples/cpp/generic_api/greeter_server.cc",
+		// 	filePath: "examples/cpp/deadline/server.cc",
 		// 	symbolName: "RunServer",
-		// 	maxLayer: 20,
-		// 	desc: "查询greeter_server.cc文件的调用链",
+		// 	maxLayer: 3,
+		// 	desc: "查询server.cc文件的调用链",
+		// 	project: "grpc",
+		// },
+		// {
+		// 	name:"SayHello",
+		// 	filePath: "examples/cpp/error_details/greeter_client.cc",
+		// 	symbolName: "SayHello",
+		// 	maxLayer: 2,
+		// 	desc: "查询greeter_client.cc文件的调用链",
 		// 	project: "grpc",
 		// },
 	}
@@ -827,15 +872,14 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 
 			nodes, err := testIndexer.QueryCallGraph(env.ctx, opts)
 			assert.NoError(t, err)
-
 			// 验证结果
 			assert.NotNil(t, nodes, "调用链结果不应为空")
-			t.Logf("符号 %s 的调用链包含 %d 个根节点", tc.symbolName, len(nodes))
+			fmt.Printf("符号 %s 的调用链包含 %d 个根节点\n", tc.symbolName, len(nodes))
 
 			// 将结果输出到文件
-			outputFile := filepath.Join(tempDir, fmt.Sprintf("callgraph_%s_symbol.txt", tc.symbolName))
+			outputFile := filepath.Join(tempDir, fmt.Sprintf("callgraph_%s_%s_symbol.txt", tc.symbolName,tc.project))
 			printCallGraphToFile(t, nodes, outputFile)
-			t.Logf("调用链输出到文件: %s", outputFile)
+			fmt.Printf("调用链输出到文件: %s\n", outputFile)
 
 			// 基本验证
 			if len(nodes) > 0 {
@@ -845,7 +889,7 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 					assert.Equal(t, tc.symbolName, node.SymbolName, "根节点符号名应该匹配")
 				}
 			}
-			t.Logf("查询调用链时间: %s", time.Since(start))
+			fmt.Printf("查询调用链时间: %s\n", time.Since(start))
 		})
 	}
 }

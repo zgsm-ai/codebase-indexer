@@ -913,11 +913,11 @@ func (i *indexer) QueryReferences(ctx context.Context, opts *types.QueryReferenc
 	opts.StartLine = start
 	opts.EndLine = end
 
-	projectUuid, err := i.GetProjectUuid(ctx, opts.Workspace, filePath)
+	project, err := i.GetProjectByFilePath(ctx, opts.Workspace, filePath)
 	if err != nil {
 		return nil, err
 	}
-
+	projectUuid := project.Uuid
 	defer func() {
 		i.logger.Info("Query_reference execution time: %d ms", time.Since(startTime).Milliseconds())
 	}()
@@ -1148,168 +1148,378 @@ func (i *indexer) querySymbolsByName(doc *codegraphpb.FileElementTable, opts *ty
 //	}
 //}
 
-func (i *indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefinitionOptions) ([]*types.Definition, error) {
-	filePath := options.FilePath
-	project, err := i.workspaceReader.GetProjectByFilePath(ctx, options.Workspace, filePath, true)
+// func (i *indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefinitionOptions) ([]*types.Definition, error) {
+// 	filePath := options.FilePath
+// 	project, err := i.workspaceReader.GetProjectByFilePath(ctx, options.Workspace, filePath, true)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	projectUuid := project.Uuid
+
+// 	language, err := lang.InferLanguage(filePath)
+// 	if err != nil {
+// 		return nil, lang.ErrUnSupportedLanguage
+// 	}
+
+// 	exists, err := i.storage.ProjectIndexExists(projectUuid)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to check workspace %s index, err:%v", options.Workspace, err)
+// 	}
+// 	if !exists {
+// 		return nil, fmt.Errorf("workspace %s index not exists", options.Workspace)
+// 	}
+
+// 	startTime := time.Now()
+// 	defer func() {
+// 		i.logger.Info("query definitions cost %d ms", time.Since(startTime).Milliseconds())
+// 	}()
+
+// 	res := make([]*types.Definition, 0)
+
+// 	var foundSymbols []*codegraphpb.Element
+// 	queryStartLine := int32(options.StartLine - 1)
+// 	queryEndLine := int32(options.EndLine - 1)
+
+// 	snippet := options.CodeSnippet
+
+// 	var currentImports []*codegraphpb.Import
+// 	// 根据代码片段中的标识符名模糊搜索
+// 	if len(snippet) > 0 {
+// 		// 调用tree_sitter 解析，获取所有的标识符及位置
+// 		parsedData, err := i.parser.Parse(ctx, &types.SourceFile{
+// 			Path:    filePath,
+// 			Content: snippet},
+// 		)
+// 		if err != nil {
+// 			return nil, fmt.Errorf("faled to parse code snippet for definition query: %w", err)
+// 		}
+// 		imports := parsedData.Imports
+// 		elements := parsedData.Elements
+// 		// TODO 找到所有的外部依赖, call、
+// 		var dependencyNames []string
+// 		for _, e := range elements {
+// 			if c, ok := e.(*resolver.Call); ok {
+// 				dependencyNames = append(dependencyNames, c.Name)
+// 			} else if r, ok := e.(*resolver.Reference); ok {
+// 				dependencyNames = append(dependencyNames, r.Name)
+// 			}
+// 		}
+// 		if len(dependencyNames) == 0 {
+// 			return res, nil
+// 		}
+// 		// TODO resolve go modules
+// 		// 对imports预处理
+// 		if filteredImps, err := i.analyzer.PreprocessImports(ctx, language, project, imports); err == nil {
+// 			imports = filteredImps
+// 		}
+// 		for _, imp := range imports {
+// 			currentImports = append(currentImports, &codegraphpb.Import{
+// 				Name:   imp.Name,
+// 				Alias:  imp.Alias,
+// 				Source: imp.Source,
+// 				Range:  imp.Range,
+// 			})
+// 		}
+
+// 		// 根据所找到的call 的name + currentImports， 去模糊匹配symbol
+// 		symDefs, err := i.searchSymbolNames(ctx, projectUuid, language, dependencyNames, currentImports)
+// 		if err != nil {
+// 			return nil, fmt.Errorf("failed to search index by names: %w", err)
+// 		}
+// 		if len(symDefs) == 0 {
+// 			return res, nil
+// 		}
+// 		for name, def := range symDefs {
+// 			for _, d := range def {
+// 				if d == nil {
+// 					continue
+// 				}
+// 				res = append(res, &types.Definition{
+// 					Name:  name,
+// 					Type:  string(proto.ElementTypeFromProto(d.ElementType)),
+// 					Path:  d.Path,
+// 					Range: d.Range,
+// 				})
+// 			}
+
+// 		}
+
+// 	} else {
+// 		// 1. 获取文档
+// 		var fileTable codegraphpb.FileElementTable
+// 		fileTableBytes, err := i.storage.Get(ctx, projectUuid, store.ElementPathKey{Language: language, Path: filePath})
+// 		if errors.Is(err, store.ErrKeyNotFound) {
+// 			return nil, fmt.Errorf("index not found for file %s", filePath)
+// 		}
+// 		if err != nil {
+// 			return nil, fmt.Errorf("failed to get file %s index, err: %v", filePath, err)
+// 		}
+// 		if err = store.UnmarshalValue(fileTableBytes, &fileTable); err != nil {
+// 			return nil, fmt.Errorf("failed to unmarshal file %s index value, err: %v", filePath, err)
+// 		}
+
+// 		foundSymbols = i.findSymbolInDocByLineRange(ctx, &fileTable, queryStartLine, queryEndLine)
+// 		currentImports = fileTable.Imports
+// 	}
+
+// 	// 去重, 如果range 出现过，则剔除
+// 	//existedDefs := make(map[string]bool)
+// 	// 遍历，封装结果，取定义
+// 	for _, s := range foundSymbols {
+// 		// 本身是定义
+// 		if s.IsDefinition {
+// 			// 去掉本范围内的定义，仅过滤范围查询，不过滤全文检索
+// 			if len(s.Range) > 0 && len(snippet) > 0 && isInLinesRange(s.Range[0], queryStartLine, queryEndLine) {
+// 				continue
+// 			}
+// 			res = append(res, &types.Definition{
+// 				Path:  filePath,
+// 				Name:  s.Name,
+// 				Range: s.Range,
+// 				Type:  string(proto.ElementTypeFromProto(s.ElementType)),
+// 			})
+// 			continue
+// 		} else { // 引用
+// 			// 加载定义
+// 			bytes, err := i.storage.Get(ctx, projectUuid, store.SymbolNameKey{Name: s.GetName(),
+// 				Language: language})
+// 			if err == nil {
+// 				var exist codegraphpb.SymbolOccurrence
+// 				if err = store.UnmarshalValue(bytes, &exist); err == nil {
+// 					filtered := i.analyzer.FilterByImports(filePath, currentImports, exist.Occurrences)
+// 					if len(filtered) == 0 {
+// 						// 防止全部过滤掉
+// 						filtered = exist.Occurrences
+// 					}
+// 					for _, o := range filtered {
+// 						res = append(res, &types.Definition{
+// 							Path:  o.Path,
+// 							Name:  s.Name,
+// 							Range: o.Range,
+// 							Type:  string(proto.ToDefinitionElementType(proto.ElementTypeFromProto(s.ElementType))),
+// 						})
+// 					}
+// 				} else {
+// 					i.logger.Debug("unmarshal symbol occurrence err:%v", err)
+// 				}
+
+// 			} else if !errors.Is(err, store.ErrKeyNotFound) {
+// 				i.logger.Debug("get symbol occurrence err:%v", err)
+// 			}
+// 		}
+// 	}
+
+// 	return res, nil
+// }
+
+func (i *indexer) QueryDefinitions(ctx context.Context, opts *types.QueryDefinitionOptions) ([]*types.Definition, error) {
+	// 参数验证
+	if opts.Workspace == "" {
+		return nil, fmt.Errorf("workspace cannot be empty")
+	}
+	if opts.FilePath == "" {
+		return nil, fmt.Errorf("file path cannot be empty")
+	}
+
+	// 获取项目信息
+	project, err := i.GetProjectByFilePath(ctx, opts.Workspace, opts.FilePath)
 	if err != nil {
 		return nil, err
 	}
 	projectUuid := project.Uuid
 
-	language, err := lang.InferLanguage(filePath)
+	// 推断语言类型
+	language, err := lang.InferLanguage(opts.FilePath)
 	if err != nil {
 		return nil, lang.ErrUnSupportedLanguage
 	}
 
-	exists, err := i.storage.ProjectIndexExists(projectUuid)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check workspace %s index, err:%v", options.Workspace, err)
-	}
-	if !exists {
-		return nil, fmt.Errorf("workspace %s index not exists", options.Workspace)
-	}
-
+	// 性能监控
 	startTime := time.Now()
 	defer func() {
-		i.logger.Info("query definitions cost %d ms", time.Since(startTime).Milliseconds())
+		i.logger.Info("query func definitions cost %d ms", time.Since(startTime).Milliseconds())
 	}()
 
-	res := make([]*types.Definition, 0)
+	// 根据不同的查询模式处理
+	switch {
+	case len(opts.CodeSnippet) > 0:
+		return i.queryFuncDefinitionsBySnippet(ctx, project, language, opts)
+	case opts.StartLine > 0 && opts.EndLine > 0:
+		if opts.EndLine < opts.StartLine {
+			opts.EndLine = opts.StartLine
+			i.logger.Debug("end line is less than start line, set end line to start line")
+		}
+		return i.queryFuncDefinitionsByLineRange(ctx, projectUuid, language, opts)
+	case opts.SymbolName != "":
+		return i.queryFuncDefinitionsBySymbolName(ctx, projectUuid, opts)
+	default:
+		return nil, fmt.Errorf("invalid query definition options: at least one of CodeSnippet, line range, or SymbolName must be provided")
+	}
+}
 
-	var foundSymbols []*codegraphpb.Element
-	queryStartLine := int32(options.StartLine - 1)
-	queryEndLine := int32(options.EndLine - 1)
-
-	snippet := options.CodeSnippet
-
-	var currentImports []*codegraphpb.Import
-	// 根据代码片段中的标识符名模糊搜索
-	if len(snippet) > 0 {
-		// 调用tree_sitter 解析，获取所有的标识符及位置
-		parsedData, err := i.parser.Parse(ctx, &types.SourceFile{
-			Path:    filePath,
-			Content: snippet},
-		)
-		if err != nil {
-			return nil, fmt.Errorf("faled to parse code snippet for definition query: %w", err)
+// queryFuncDefinitionsBySnippet 查询代码片段里面所有依赖的符号的定义
+func (i *indexer) queryFuncDefinitionsBySnippet(ctx context.Context, project *workspace.Project, language lang.Language, opts *types.QueryDefinitionOptions) ([]*types.Definition, error) {
+	parsedData, err := i.parser.Parse(ctx, &types.SourceFile{
+		Path:    opts.FilePath,
+		Content: opts.CodeSnippet},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("faled to parse code snippet for definition query: %w", err)
+	}
+	imports := parsedData.Imports
+	elements := parsedData.Elements
+	// TODO 找到所有的外部依赖, call、
+	var dependencyNames []string
+	for _, e := range elements {
+		if c, ok := e.(*resolver.Call); ok {
+			dependencyNames = append(dependencyNames, c.Name)
+		} else if r, ok := e.(*resolver.Reference); ok {
+			dependencyNames = append(dependencyNames, r.Name)
 		}
-		imports := parsedData.Imports
-		elements := parsedData.Elements
-		// TODO 找到所有的外部依赖, call、
-		var dependencyNames []string
-		for _, e := range elements {
-			if c, ok := e.(*resolver.Call); ok {
-				dependencyNames = append(dependencyNames, c.Name)
-			} else if r, ok := e.(*resolver.Reference); ok {
-				dependencyNames = append(dependencyNames, r.Name)
-			}
-		}
-		if len(dependencyNames) == 0 {
-			return res, nil
-		}
-		// TODO resolve go modules
-		// 对imports预处理
-		if filteredImps, err := i.analyzer.PreprocessImports(ctx, language, project, imports); err == nil {
-			imports = filteredImps
-		}
-		for _, imp := range imports {
-			currentImports = append(currentImports, &codegraphpb.Import{
-				Name:   imp.Name,
-				Alias:  imp.Alias,
-				Source: imp.Source,
-				Range:  imp.Range,
-			})
-		}
-
-		// 根据所找到的call 的name + currentImports， 去模糊匹配symbol
-		symDefs, err := i.searchSymbolNames(ctx, projectUuid, language, dependencyNames, currentImports)
-		if err != nil {
-			return nil, fmt.Errorf("failed to search index by names: %w", err)
-		}
-		if len(symDefs) == 0 {
-			return res, nil
-		}
-		for name, def := range symDefs {
-			for _, d := range def {
-				if d == nil {
-					continue
-				}
-				res = append(res, &types.Definition{
-					Name:  name,
-					Type:  string(proto.ElementTypeFromProto(d.ElementType)),
-					Path:  d.Path,
-					Range: d.Range,
-				})
-			}
-
-		}
-
-	} else {
-		// 1. 获取文档
-		var fileTable codegraphpb.FileElementTable
-		fileTableBytes, err := i.storage.Get(ctx, projectUuid, store.ElementPathKey{Language: language, Path: filePath})
-		if errors.Is(err, store.ErrKeyNotFound) {
-			return nil, fmt.Errorf("index not found for file %s", filePath)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to get file %s index, err: %v", filePath, err)
-		}
-		if err = store.UnmarshalValue(fileTableBytes, &fileTable); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal file %s index value, err: %v", filePath, err)
-		}
-
-		foundSymbols = i.findSymbolInDocByLineRange(ctx, &fileTable, queryStartLine, queryEndLine)
-		currentImports = fileTable.Imports
+	}
+	if len(dependencyNames) == 0 {
+		return nil, nil
 	}
 
-	// 去重, 如果range 出现过，则剔除
-	//existedDefs := make(map[string]bool)
-	// 遍历，封装结果，取定义
-	for _, s := range foundSymbols {
-		// 本身是定义
-		if s.IsDefinition {
-			// 去掉本范围内的定义，仅过滤范围查询，不过滤全文检索
-			if len(s.Range) > 0 && len(snippet) > 0 && isInLinesRange(s.Range[0], queryStartLine, queryEndLine) {
+	// TODO resolve go modules
+	// 对imports预处理
+	if filteredImps, err := i.analyzer.PreprocessImports(ctx, language, project, imports); err == nil {
+		imports = filteredImps
+	}
+
+	// 转化为protobuf格式
+	var currentImports []*codegraphpb.Import
+	for _, imp := range imports {
+		currentImports = append(currentImports, &codegraphpb.Import{
+			Name:   imp.Name,
+			Alias:  imp.Alias,
+			Source: imp.Source,
+			Range:  imp.Range,
+		})
+	}
+
+	// 根据所找到的call 的name + currentImports， 去模糊匹配symbol
+	symDefs, err := i.searchSymbolNames(ctx, project.Uuid, language, dependencyNames, currentImports)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search index by names: %w", err)
+	}
+	if len(symDefs) == 0 {
+		return nil, nil
+	}
+
+	// 封装返回结果
+	var results []*types.Definition
+	for name, def := range symDefs {
+		for _, d := range def {
+			if d == nil {
 				continue
 			}
-			res = append(res, &types.Definition{
-				Path:  filePath,
+			results = append(results, &types.Definition{
+				Name:  name,
+				Type:  string(proto.ElementTypeFromProto(d.ElementType)),
+				Path:  d.Path,
+				Range: d.Range,
+			})
+		}
+	}
+	return results, nil
+}
+
+// queryFuncDefinitionsByLineRange 通过行号范围查询函数定义
+func (i *indexer) queryFuncDefinitionsByLineRange(ctx context.Context, projectUuid string, language lang.Language, opts *types.QueryDefinitionOptions) ([]*types.Definition, error) {
+	// 首先查询出来范围内的所有符号
+	var fileTable codegraphpb.FileElementTable
+	fileTableBytes, err := i.storage.Get(ctx, projectUuid, store.ElementPathKey{Language: language, Path: opts.FilePath})
+	if errors.Is(err, store.ErrKeyNotFound) {
+		return nil, fmt.Errorf("index not found for file %s", opts.FilePath)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file %s index, err: %v", opts.FilePath, err)
+	}
+	if err = store.UnmarshalValue(fileTableBytes, &fileTable); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal file %s index value, err: %v", opts.FilePath, err)
+	}
+
+	// 查询范围内的所有符号
+	queryStartLine := int32(opts.StartLine - 1)
+	queryEndLine := int32(opts.EndLine - 1)
+	foundSymbols := i.findSymbolInDocByLineRange(ctx, &fileTable, queryStartLine, queryEndLine)
+	currentImports := fileTable.Imports
+
+	var results []*types.Definition
+	for _, s := range foundSymbols {
+		if s.IsDefinition {
+			// 直接加入结果
+			results = append(results, &types.Definition{
+				Path:  opts.FilePath,
 				Name:  s.Name,
 				Range: s.Range,
 				Type:  string(proto.ElementTypeFromProto(s.ElementType)),
 			})
 			continue
-		} else { // 引用
-			// 加载定义
+		} else {
+			// 加载其他符号的定义
 			bytes, err := i.storage.Get(ctx, projectUuid, store.SymbolNameKey{Name: s.GetName(),
 				Language: language})
-			if err == nil {
-				var exist codegraphpb.SymbolOccurrence
-				if err = store.UnmarshalValue(bytes, &exist); err == nil {
-					filtered := i.analyzer.FilterByImports(filePath, currentImports, exist.Occurrences)
-					if len(filtered) == 0 {
-						// 防止全部过滤掉
-						filtered = exist.Occurrences
-					}
-					for _, o := range filtered {
-						res = append(res, &types.Definition{
-							Path:  o.Path,
-							Name:  s.Name,
-							Range: o.Range,
-							Type:  string(proto.ToDefinitionElementType(proto.ElementTypeFromProto(s.ElementType))),
-						})
-					}
-				} else {
-					i.logger.Debug("unmarshal symbol occurrence err:%v", err)
+			if err != nil {
+				if !errors.Is(err, store.ErrKeyNotFound) {
+					i.logger.Debug("get symbol occurrence err:%v", err)
 				}
+				continue
+			}
+			var exist codegraphpb.SymbolOccurrence
+			if err = store.UnmarshalValue(bytes, &exist); err != nil {
+				i.logger.Debug("unmarshal symbol occurrence err:%v", err)
+				continue
+			}
 
-			} else if !errors.Is(err, store.ErrKeyNotFound) {
-				i.logger.Debug("get symbol occurrence err:%v", err)
+			// TODO 过滤效果待定
+			filtered := i.analyzer.FilterByImports(opts.FilePath, currentImports, exist.Occurrences)
+			if len(filtered) == 0 {
+				// 防止全部过滤掉
+				filtered = exist.Occurrences
+			}
+			for _, o := range filtered {
+				results = append(results, &types.Definition{
+					Path:  o.Path,
+					Name:  s.Name,
+					Range: o.Range,
+					Type:  string(proto.ToDefinitionElementType(proto.ElementTypeFromProto(s.ElementType))),
+				})
 			}
 		}
 	}
 
-	return res, nil
+	// 最后返回结果
+	return results, nil
+}
+
+// queryFuncDefinitionsBySymbolName 通过符号名查询函数定义
+func (i *indexer) queryFuncDefinitionsBySymbolName(ctx context.Context, projectUuid string, opts *types.QueryDefinitionOptions) ([]*types.Definition, error) {
+	// 遍历所有的语言，查询该符号的Occurrence
+	var results []*types.Definition
+	languages := lang.GetAllSupportedLanguages()
+	for _, language := range languages {
+		bytes, err := i.storage.Get(ctx, projectUuid, store.SymbolNameKey{Name: opts.SymbolName,
+			Language: language})
+		if err != nil {
+			return nil, err
+		}
+		var exist codegraphpb.SymbolOccurrence
+		if err = store.UnmarshalValue(bytes, &exist); err != nil {
+			return nil, err
+		}
+		// 根据Occurrence信息封装为定义
+		for _, o := range exist.Occurrences {
+			results = append(results, &types.Definition{
+				Path:  o.Path,
+				Name:  opts.SymbolName,
+				Range: o.Range,
+				Type:  string(proto.ToDefinitionElementType(proto.ElementTypeFromProto(o.ElementType))),
+			})
+		}
+	}
+	return results, nil
 }
 
 // 获取符号定义代码块里面的调用图
@@ -1322,11 +1532,11 @@ func (i *indexer) QueryCallGraph(ctx context.Context, opts *types.QueryCallGraph
 	}
 	startLine, endLine := NormalizeLineRange(opts.StartLine, opts.EndLine, 1000)
 
-	projectUuid, err := i.GetProjectUuid(ctx, opts.Workspace, opts.FilePath)
+	project, err := i.GetProjectByFilePath(ctx, opts.Workspace, opts.FilePath)
 	if err != nil {
 		return nil, err
 	}
-
+	projectUuid := project.Uuid
 	defer func() {
 		i.logger.Info("query callgraph cost %d ms", time.Since(startTime).Milliseconds())
 	}()
@@ -1387,6 +1597,7 @@ func (i *indexer) queryCallGraphBySymbol(ctx context.Context, projectUuid string
 			SymbolName: symbol.Name,
 			FilePath:   filePath,
 			ParamCount: len(params),
+			Position:   types.ToPosition(symbol.Range),
 		}
 		definitions = append(definitions, node)
 		calleeElements = append(calleeElements, callee)
@@ -1437,6 +1648,7 @@ func (i *indexer) queryCallGraphByLineRange(ctx context.Context, projectUuid str
 			SymbolName: symbol.Name,
 			FilePath:   filePath,
 			ParamCount: len(params),
+			Position:   types.ToPosition(symbol.Range),
 		}
 		definitions = append(definitions, node)
 		calleeElements = append(calleeElements, callee)
@@ -1464,36 +1676,32 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 	currentLayerNodes := make([]*layerNode, 0)
 
 	// 初始化第一层
-	for i, node := range rootNodes {
-		if _, ok := visited[node.SymbolName+"::"+node.FilePath]; !ok {
-			visited[node.SymbolName+"::"+node.FilePath] = struct{}{}
+	for k, node := range rootNodes {
+		calleeInfo := calleeInfos[k]
+		key := calleeInfo.Key()
+		// visited 用于防止递归的情况，同时可以进行剪枝，避免重复计算，提高性能
+		if _, ok := visited[key]; !ok {
+			visited[key] = struct{}{}
 			currentLayerNodes = append(currentLayerNodes, &layerNode{
 				node:   node,
-				callee: calleeInfos[i],
+				callee: calleeInfo,
 			})
 		}
 	}
-
-	// cache, _ := lru.New[string, *codegraphpb.FileElementTable](MaxCacheCapacity)
-
 	// 构建反向索引映射：callee -> []caller
-	calleeMap := i.buildCalleeMap(ctx, projectUuid)
-	if calleeMap == nil {
-		i.logger.Error("failed to build callee map for write")
+	err := i.buildCalleeMap(ctx, projectUuid)
+	if err != nil {
+		i.logger.Error("failed to build callee map for write, err: %v", err)
 		return
 	}
-
+	calleeMap, err := lru.New[CalledSymbol, []CallerInfo](MaxCalleeMapCacheCapacity / 2)
+	if err != nil {
+		i.logger.Error("failed to create callee map cache, err: %v", err)
+		return
+	}
 	// BFS层次遍历
 	for layer := 0; layer < maxLayer && len(currentLayerNodes) > 0; layer++ {
 		nextLayerNodes := make([]*layerNode, 0)
-		// 去重剪枝
-		currentCalleesMap := make(map[string]struct{})
-		for _, ln := range currentLayerNodes {
-			if _, ok := currentCalleesMap[ln.callee.SymbolName+"::"+ln.callee.FilePath]; !ok {
-				currentCalleesMap[ln.callee.SymbolName+"::"+ln.callee.FilePath] = struct{}{}
-			}
-		}
-
 		// 使用反向索引直接查找调用者
 		for _, ln := range currentLayerNodes {
 			// 构建callee的key
@@ -1506,6 +1714,7 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 				dbCallers, err := i.queryCallersFromDB(ctx, projectUuid, calleeKey)
 				if err != nil {
 					// cache miss
+					// i.logger.Debug("query callers from db for callee %s,err: %v", calleeKey.SymbolName, err)
 					continue
 				}
 				callers = dbCallers
@@ -1520,14 +1729,21 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 			}
 
 			for _, caller := range callers {
+				// 可以保留递归情况的层次信息，但是不继续遍历下去
 				// 防止循环引用
-				if _, ok := visited[caller.SymbolName+"::"+caller.FilePath]; ok {
+				if _, ok := visited[caller.Key()]; ok {
 					continue
 				}
 
 				// 计算匹配分数
 				score := i.analyzer.CalculateSymbolMatchScore(nil, caller.FilePath, ln.callee.FilePath, ln.callee.SymbolName)
-
+				// 创建对应的被调用元素
+				calleeInfo := &CalleeInfo{
+					FilePath:   caller.FilePath,
+					SymbolName: caller.SymbolName,
+					ParamCount: caller.ParamCount,
+					Position:   caller.Position,
+				}
 				// 创建调用者节点
 				callerNode := &types.RelationNode{
 					FilePath:   caller.FilePath,
@@ -1538,20 +1754,14 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 				}
 				// 将调用者添加到当前节点的children中
 				ln.node.Children = append(ln.node.Children, callerNode)
-				// 创建对应的被调用元素
-				calleeInfo := &CalleeInfo{
-					FilePath:   caller.FilePath,
-					SymbolName: caller.SymbolName,
-					ParamCount: caller.ParamCount,
-				}
 				// 标记为已访问，并添加到下一层
-				visited[caller.SymbolName+"::"+caller.FilePath] = struct{}{}
+				visited[calleeInfo.Key()] = struct{}{}
+				// i.logger.Debug("add caller node: %s, filePath: %s, to next layer,key: %s", caller.SymbolName, caller.FilePath, calleeInfo.Key()	)
 				nextLayerNodes = append(nextLayerNodes, &layerNode{
 					node:   callerNode,
 					callee: calleeInfo,
 				})
-
-				// 记录分数用于调试
+				// TODO 根据score进行排序
 				_ = score
 			}
 		}
@@ -1560,9 +1770,10 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 		currentLayerNodes = nextLayerNodes
 	}
 	// 清除数据库
-	err := i.storage.DeleteAllWithPrefix(ctx, projectUuid, store.CalleeMapKeySystemPrefix)
+	err = i.storage.DeleteAllWithPrefix(ctx, projectUuid, store.CalleeMapKeySystemPrefix)
 	if err != nil {
 		i.logger.Error("failed to delete callee map for project %s, err: %v", projectUuid, err)
+		return
 	}
 }
 
@@ -1573,9 +1784,21 @@ type CalledSymbol struct {
 }
 
 type CalleeInfo struct {
-	FilePath   string `json:"filePath,omitempty"`
-	SymbolName string `json:"symbolName,omitempty"`
-	ParamCount int    `json:"paramCount,omitempty"`
+	FilePath   string         `json:"filePath,omitempty"`
+	Position   types.Position `json:"range,omitempty"`
+	SymbolName string         `json:"symbolName,omitempty"`
+	ParamCount int            `json:"paramCount,omitempty"`
+}
+
+func (c *CalleeInfo) Key() string {
+	return fmt.Sprintf("%s::%s::%d:%d:%d:%d",
+		c.SymbolName,
+		c.FilePath,
+		c.Position.StartLine,
+		c.Position.StartColumn,
+		c.Position.EndLine,
+		c.Position.EndColumn,
+	)
 }
 
 // CallerInfo 表示调用者信息
@@ -1584,8 +1807,20 @@ type CallerInfo struct {
 	FilePath   string
 	Position   types.Position
 	ParamCount int
-	Score      float64
+	Score      float64 // TODO 起到排序的作用
 }
+
+func (c *CallerInfo) Key() string {
+	return fmt.Sprintf("%s::%s::%d:%d:%d:%d",
+		c.SymbolName,
+		c.FilePath,
+		c.Position.StartLine,
+		c.Position.StartColumn,
+		c.Position.EndLine,
+		c.Position.EndColumn,
+	)
+}
+
 type MapBatcher struct {
 	storage     store.GraphStorage // 存储
 	logger      logger.Logger
@@ -1673,7 +1908,7 @@ func (mb *MapBatcher) Flush() {
 }
 
 // buildCalleeMap 构建反向索引映射：callee -> []caller
-func (i *indexer) buildCalleeMap(ctx context.Context, projectUuid string) *lru.Cache[CalledSymbol, []CallerInfo] {
+func (i *indexer) buildCalleeMap(ctx context.Context, projectUuid string) error {
 	// 创建batcher实例
 	batcher := NewMapBatcher(i.storage, i.logger, projectUuid, defaultMapBatchSize)
 	calleeMap, err := lru.NewWithEvict(MaxCalleeMapCacheCapacity, func(key CalledSymbol, value []CallerInfo) {
@@ -1682,8 +1917,7 @@ func (i *indexer) buildCalleeMap(ctx context.Context, projectUuid string) *lru.C
 	defer batcher.Flush()
 
 	if err != nil {
-		i.logger.Error("failed to create callee map cache, err: %v", err)
-		return nil
+		return fmt.Errorf("failed to create callee map cache, err: %v", err)
 	}
 	iter := i.storage.Iter(ctx, projectUuid)
 	defer iter.Close()
@@ -1738,21 +1972,9 @@ func (i *indexer) buildCalleeMap(ctx context.Context, projectUuid string) *lru.C
 		}
 	}
 
-	// 取消驱逐函数，因为不需要写回数据库了
-	calleeMapForRead, err := lru.New[CalledSymbol, []CallerInfo](MaxCalleeMapCacheCapacity)
-	if err != nil {
-		i.logger.Error("failed to create callee map cache for read, err: %v", err)
-		return calleeMapForRead
-	}
-	// 数据拷贝
-	for _, key := range calleeMap.Keys() {
-		if value, ok := calleeMap.Get(key); ok {
-			calleeMapForRead.Add(key, value)
-		}
-	}
-	// 清空缓存，写回数据库
+	// 清空缓存，必须全部写到数据库里面去，保证数据库是最新的
 	calleeMap.Purge()
-	return calleeMapForRead
+	return nil
 }
 
 // extractCalledSymbols 提取函数定义范围内的所有被调用符号
@@ -1761,20 +1983,18 @@ func (i *indexer) extractCalledSymbols(fileTable *codegraphpb.FileElementTable, 
 
 	// 直接遍历元素，避免调用 findSymbolInDocByLineRange
 	for _, element := range fileTable.Elements {
-		if len(element.Range) < 2 {
+		if len(element.Range) < 4 {
 			continue
 		}
 
 		// 检查是否在指定范围内
-		if element.Range[0] < startLine || element.Range[0] > endLine {
+		if !(element.Range[0] >= startLine && element.Range[2] <= endLine) {
 			continue
 		}
-
 		// 只处理调用类型的元素
 		if element.ElementType != codegraphpb.ElementType_CALL {
 			continue
 		}
-
 		// 获取参数个数
 		params, err := proto.GetParametersFromExtraData(element.ExtraData)
 		if err != nil {
@@ -2412,21 +2632,31 @@ func (i *indexer) filterSourceFiles(ctx context.Context, workspacePath string, f
 	return results
 }
 
-// 获取项目uuid
-func (i *indexer) GetProjectUuid(ctx context.Context, workspace, filePath string) (string, error) {
-	project, err := i.workspaceReader.GetProjectByFilePath(ctx, workspace, filePath, true)
-	if err != nil {
-		return "", err
+// GetProjectByFilePath 根据文件路径获取项目并检查项目索引是否存在
+func (i *indexer) GetProjectByFilePath(ctx context.Context, workspace, filePath string) (*workspace.Project, error) {
+	// 参数验证
+	if workspace == "" {
+		return nil, fmt.Errorf("workspace path cannot be empty")
 	}
-	exists, err := i.storage.ProjectIndexExists(project.Uuid)
-	if err != nil {
-		return "", fmt.Errorf("failed to check workspace %s index, err:%v", workspace, err)
-	}
-	if !exists {
-		return "", fmt.Errorf("workspace %s index not exists", workspace)
+	if filePath == "" {
+		return nil, fmt.Errorf("file path cannot be empty")
 	}
 
-	return project.Uuid, nil
+	// 获取项目信息
+	project, err := i.workspaceReader.GetProjectByFilePath(ctx, workspace, filePath, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project for workspace %s, file %s: %w", workspace, filePath, err)
+	}
+
+	// 验证项目索引是否存在
+	exists, err := i.storage.ProjectIndexExists(project.Uuid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check workspace %s index existence: %w", workspace, err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("workspace %s index does not exist, project uuid: %s", workspace, project.Uuid)
+	}
+	return project, nil
 }
 
 // 根据文件路径获取文件元素表

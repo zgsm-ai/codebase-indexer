@@ -39,6 +39,7 @@ type SearchDefinitionRequest struct {
 	ClientId     string `form:"clientId" binding:"required"`
 	CodebasePath string `form:"codebasePath" binding:"required"`
 	FilePath     string `form:"filePath" binding:"required"`
+	SymbolName   string `form:"symbolName,omitempty"`
 	StartLine    int    `form:"startLine,omitempty"`
 	EndLine      int    `form:"endLine,omitempty"`
 	CodeSnippet  string `form:"codeSnippet,omitempty"`
