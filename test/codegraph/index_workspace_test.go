@@ -39,7 +39,7 @@ import (
 // g:\tmp\projects\typescript\TypeScript
 // g:\tmp\projects\typescript\vue-next
 
-const testRootDir = "/home/kcx/codeWorkspace/codebase-indexer/test/tmp/projects"
+const testRootDir = "/home/kcx/codeWorkspace/testProjects"
 
 func getSupportedExtByLanguageTestHelper(language lang.Language) []string {
 	parser, err := lang.GetSitterParserByLanguage(language)
@@ -248,7 +248,7 @@ func TestIndexMixedLanguages(t *testing.T) {
 			wantErr:    nil,
 		},
 		{
-			Name:       "500000 文件项目",
+			Name:       "50000 文件项目",
 			Language:   "typescript",
 			FilesLimit: 50000,
 			Path:       filepath.Join(testRootDir, "typescript", "TypeScript"),
@@ -305,6 +305,8 @@ func TestIndexMixedLanguages(t *testing.T) {
 		}
 		t.Logf("###############################耗时统计#####################################")
 		t.Log(strings.Join(cost, "\n"))
+		fmt.Println("###############################耗时统计#####################################")
+		fmt.Println(strings.Join(cost, "\n"))
 		for {
 			time.Sleep(1 * time.Second)
 		}

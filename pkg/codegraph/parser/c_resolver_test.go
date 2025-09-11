@@ -15,8 +15,8 @@ func TestCResolver(t *testing.T) {
 	logger := initLogger()                // 如果有日志初始化
 	parser := NewSourceFileParser(logger) // 假设有类似 Java 的解析器
 	res, err := parser.Parse(context.Background(), &types.SourceFile{
-		Path:    "testdata/python/test.py",
-		Content: readFile("testdata/python/test.py"),
+		Path:    "testdata/ts/test.ts",
+		Content: readFile("testdata/ts/test.ts"),
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, res)

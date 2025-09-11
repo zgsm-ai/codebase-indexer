@@ -379,8 +379,10 @@ func (l *codebaseService) ParseFileDefinitions(ctx context.Context, req *dto.Get
 func (l *codebaseService) QueryDefinition(ctx context.Context, req *dto.SearchDefinitionRequest) (resp *dto.DefinitionData, err error) {
 	// 参数验证
 	// 支持三种检索方式：（FilePaths 必传）
-	// 1. 根据行号
-	// 2. 根据代码片段模糊检索（解析出其中的符号）
+	// 查询优先顺序：
+	// 1. 根据符号名 (SymbolName) 查询
+	// 2. 根据代码片段 (CodeSnippet) 模糊检索（解析出其中的符号）
+	// 3. 根据行号范围查询
 
 	// 索引是否关闭
 	if l.manager.GetCodebaseEnv().Switch == dto.SwitchOff {

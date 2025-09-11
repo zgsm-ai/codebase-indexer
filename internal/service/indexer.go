@@ -1341,17 +1341,19 @@ func (i *indexer) QueryDefinitions(ctx context.Context, opts *types.QueryDefinit
 	}()
 
 	// 根据不同的查询模式处理
+	// 优先根据SymbolName查询
+	// 其次根据CodeSnippet查询
+	// 最后根据行号范围查询
 	switch {
+	case opts.SymbolName != "":
+		return i.queryFuncDefinitionsBySymbolName(ctx, projectUuid, opts)
 	case len(opts.CodeSnippet) > 0:
 		return i.queryFuncDefinitionsBySnippet(ctx, project, language, opts)
 	case opts.StartLine > 0 && opts.EndLine > 0:
 		if opts.EndLine < opts.StartLine {
 			opts.EndLine = opts.StartLine
-			i.logger.Debug("end line is less than start line, set end line to start line")
 		}
 		return i.queryFuncDefinitionsByLineRange(ctx, projectUuid, language, opts)
-	case opts.SymbolName != "":
-		return i.queryFuncDefinitionsBySymbolName(ctx, projectUuid, opts)
 	default:
 		return nil, fmt.Errorf("invalid query definition options: at least one of CodeSnippet, line range, or SymbolName must be provided")
 	}
@@ -1503,7 +1505,7 @@ func (i *indexer) queryFuncDefinitionsBySymbolName(ctx context.Context, projectU
 		bytes, err := i.storage.Get(ctx, projectUuid, store.SymbolNameKey{Name: opts.SymbolName,
 			Language: language})
 		if err != nil {
-			return nil, err
+			continue
 		}
 		var exist codegraphpb.SymbolOccurrence
 		if err = store.UnmarshalValue(bytes, &exist); err != nil {
@@ -1855,6 +1857,7 @@ func (mb *MapBatcher) Add(key CalledSymbol, val []CallerInfo, merge bool) {
 		mb.flush(tempCalleeMap)
 	}
 }
+
 
 // 先合并老数据，然后批量写入数据库
 func (mb *MapBatcher) flush(tempCalleeMap map[CalledSymbol][]CallerInfo) {

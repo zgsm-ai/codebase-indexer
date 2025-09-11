@@ -727,9 +727,6 @@ func printNodeRecursive(output *os.File, node *types.RelationNode, depth int) {
 
 // TestIndexer_QueryCallGraph_BySymbolName 测试基于符号名的调用链查询
 func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
-	// 设置测试环境
-	env := setupTestEnvironment(t)
-	defer teardownTestEnvironment(t, env, nil)
 
 	// CPU profiling
 	cpuFile, err := os.Create("cpu.pprof")
@@ -746,122 +743,161 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 	defer memFile.Close()
 	defer pprof.WriteHeapProfile(memFile)
 
-	// env.workspaceDir = "/home/kcx/codeWorkspace/codebase-indexer/pkg/codegraph/parser/testdata/test"
-	// env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/python/django"
-	// env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/java/mall"
-	// env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/java/hadoop"
-	// env.workspaceDir = "/home/kcx/codeWorkspace/testProjects/cpp/grpc"
-	err = initWorkspaceModel(env)
-	assert.NoError(t, err)
-	// testVisitPattern.IncludeExts = []string{".py"}
-	// testVisitPattern.IncludeExts = []string{".java"}
-	// testVisitPattern.IncludeExts = []string{".cpp", ".cc", ".cxx", ".hpp", ".h"}
-	// 创建测试索引器
-	testIndexer := createTestIndexer(env, testVisitPattern)
-
-	// 查找工作区中的项目
-	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, testVisitPattern)
-
-	// 清理索引存储
-	err = cleanIndexStoreTest(env.ctx, projects, env.storage)
-	assert.NoError(t, err)
-
-	// 步骤1: 索引整个工作区
-	_, err = testIndexer.IndexWorkspace(env.ctx, env.workspaceDir)
-	
 	assert.NoError(t, err)
 	pprof.StartCPUProfile(cpuFile)
 	defer pprof.StopCPUProfile()
 	// 步骤2: 测试基于符号名的调用链查询
 	testCases := []struct {
-		name       string
-		filePath   string
-		symbolName string
-		maxLayer   int
-		desc       string
-		project    string
+		name         string
+		filePath     string
+		symbolName   string
+		maxLayer     int
+		desc         string
+		project      string
+		workspaceDir string
+		IncludeExts  []string
 	}{
 		// {
-		// 	name:       "IndexWorkspace方法调用链",
-		// 	filePath:   "internal/service/indexer.go",
-		// 	symbolName: "IndexWorkspace",
-		// 	maxLayer:   20,
-		// 	desc:       "查询IndexWorkspace方法的调用链",
-		// 	project:    "codebase-indexer",
+		// 	name:         "IndexWorkspace方法调用链",
+		// 	filePath:     "internal/service/indexer.go",
+		// 	symbolName:   "IndexWorkspace",
+		// 	maxLayer:     20,
+		// 	desc:         "查询IndexWorkspace方法的调用链",
+		// 	project:      "codebase-indexer",
+		// 	workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+		// 	IncludeExts:  []string{".go"},
+		// },
+		// {
+		// 	name:         "测试递归",
+		// 	filePath:     "internal/service/codebase.go",
+		// 	symbolName:   "fillContent",
+		// 	maxLayer:     20,
+		// 	desc:         "查询fillContent方法的调用链",
+		// 	project:      "codebase-indexer",
+		// 	workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+		// 	IncludeExts:  []string{".go"},
+		// },
+		// {
+		// 	name:         "authenticate方法调用链",
+		// 	filePath:     "hadoop-common-project/hadoop-auth/src/main/java/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java",
+		// 	symbolName:   "authenticate",
+		// 	maxLayer:     1,
+		// 	desc:         "查询authenticate方法的调用链",
+		// 	project:      "hadoop",
+		// 	workspaceDir: "/home/kcx/codeWorkspace/testProjects/java/hadoop",
+		// 	IncludeExts:  []string{".java"},
+		// },
+		// {
+		// 	name:         "listBrand方法调用链",
+		// 	filePath:     "mall-demo/src/main/java/com/macro/mall/demo/service/impl/DemoServiceImpl.java",
+		// 	symbolName:   "listBrand",
+		// 	maxLayer:     3,
+		// 	desc:         "查询listBrand方法的调用链",
+		// 	project:      "mall",
+		// 	workspaceDir: "/home/kcx/codeWorkspace/testProjects/java/mall",
+		// 	IncludeExts:  []string{".java"},
+		// },
+		// {
+		// 	name:         "parse方法调用链",
+		// 	filePath:     "django/http/multipartparser.py",
+		// 	symbolName:   "parse",
+		// 	maxLayer:     2,
+		// 	desc:         "查询parse方法的调用链",
+		// 	project:      "django",
+		// 	workspaceDir: "/home/kcx/codeWorkspace/testProjects/python/django",
+		// 	IncludeExts:  []string{".py"},
+		// },
+		// {
+		// 	name:         "Get方法调用链",
+		// 	filePath:     "staging/src/k8s.io/component-base/version/version.go",
+		// 	symbolName:   "Get",
+		// 	maxLayer:     20,
+		// 	desc:         "查询Get方法的调用链",
+		// 	project:      "kubernetes",
+		// 	workspaceDir: "/home/kcx/codeWorkspace/testProjects/go/kubernetes",
+		// 	IncludeExts:  []string{".go"},
+		// },
+		// {
+		// 	name:         "RunServer",
+		// 	filePath:     "examples/cpp/deadline/server.cc",
+		// 	symbolName:   "RunServer",
+		// 	maxLayer:     3,
+		// 	desc:         "查询server.cc文件的调用链",
+		// 	project:      "grpc",
+		// 	workspaceDir: "/home/kcx/codeWorkspace/testProjects/cpp/grpc",
+		// 	IncludeExts:  []string{".cpp", ".cc", ".cxx", ".hpp", ".h"},
+		// },
+		// {
+		// 	name:         "SayHello",
+		// 	filePath:     "examples/cpp/error_details/greeter_client.cc",
+		// 	symbolName:   "SayHello",
+		// 	maxLayer:     2,
+		// 	desc:         "查询greeter_client.cc文件的调用链",
+		// 	project:      "grpc",
+		// 	workspaceDir: "/home/kcx/codeWorkspace/testProjects/cpp/grpc",
+		// 	IncludeExts:  []string{".cpp", ".cc", ".cxx", ".hpp", ".h"},
+		// },
+		// { // 项目太大，被限制到了10000，查询效果很差
+		// 	name:         "getSourceMapSpanString",
+		// 	filePath:     "src/harness/sourceMapRecorder.ts",
+		// 	symbolName:   "getSourceMapSpanString",
+		// 	maxLayer:     5,
+		// 	desc:         "查询getSourceMapSpanString函数的调用链",
+		// 	project:      "TypeScript",
+		// 	workspaceDir: "/home/kcx/codeWorkspace/testProjects/typescript/TypeScript",
+		// 	IncludeExts:  []string{".ts", ".tsx"},
+		// },
+		// {
+		// 	name:         "compileTemplate",
+		// 	filePath:     "packages/compiler-sfc/src/compileTemplate.ts",
+		// 	symbolName:   "compileTemplate",
+		// 	maxLayer:     5,
+		// 	desc:         "查询compileTemplate函数的调用链",
+		// 	project:      "vue-next",
+		// 	workspaceDir: "/home/kcx/codeWorkspace/testProjects/typescript/vue-next",
+		// 	IncludeExts:  []string{".ts", ".tsx"},
 		// },
 		{
-			name:       "测试递归",
-			filePath:   "internal/service/codebase.go",
-			symbolName: "fillContent",
-			maxLayer:   20,
-			desc:       "查询fillContent方法的调用链",
-			project:    "codebase-indexer",
+			name:         "rewriteDefaultAST",
+			filePath:     "packages/compiler-sfc/src/rewriteDefault.ts",
+			symbolName:   "rewriteDefaultAST",
+			maxLayer:     20,
+			desc:         "查询rewriteDefaultAST函数的调用链",
+			project:      "vue-next",
+			workspaceDir: "/home/kcx/codeWorkspace/testProjects/typescript/vue-next",
+			IncludeExts:  []string{".ts", ".tsx"},
 		},
-		// {
-		// 	name:       "authenticate方法调用链",
-		// 	filePath:   "hadoop-common-project/hadoop-auth/src/main/java/org/apache/hadoop/security/authentication/client/KerberosAuthenticator.java",
-		// 	symbolName: "authenticate",
-		// 	maxLayer:   1,
-		// 	desc:       "查询authenticate方法的调用链",
-		// 	project:    "hadoop",
-		// },
-		// {
-		// 	name:       "listBrand方法调用链",
-		// 	filePath:   "mall-demo/src/main/java/com/macro/mall/demo/service/impl/DemoServiceImpl.java",
-		// 	symbolName: "listBrand",
-		// 	maxLayer:   3,
-		// 	desc:       "查询listBrand方法的调用链",
-		// 	project:    "mall",
-		// },
-		// {
-		// 	name:       "parse方法调用链",
-		// 	filePath:   "django/http/multipartparser.py",
-		// 	symbolName: "parse",
-		// 	maxLayer:   2,
-		// 	desc:       "查询parse方法的调用链",
-		// 	project:    "django",
-		// },
-		// {
-		// 	name:       "parse方法调用链",
-		// 	filePath:   "multipartparser.py",
-		// 	symbolName: "parse",
-		// 	maxLayer:   3,
-		// 	desc:       "查询parse方法的调用链",
-		// 	project:    "test",
-		// },
-		// {
-		// 	name:       "Get方法调用链",
-		// 	filePath:   "staging/src/k8s.io/component-base/version/version.go",
-		// 	symbolName: "Get",
-		// 	maxLayer:   20,
-		// 	desc:       "查询Get方法的调用链",
-		// 	project:    "kubernetes",
-		// },
-
-		// {
-		// 	name:"RunServer",
-		// 	filePath: "examples/cpp/deadline/server.cc",
-		// 	symbolName: "RunServer",
-		// 	maxLayer: 3,
-		// 	desc: "查询server.cc文件的调用链",
-		// 	project: "grpc",
-		// },
-		// {
-		// 	name:"SayHello",
-		// 	filePath: "examples/cpp/error_details/greeter_client.cc",
-		// 	symbolName: "SayHello",
-		// 	maxLayer: 2,
-		// 	desc: "查询greeter_client.cc文件的调用链",
-		// 	project: "grpc",
-		// },
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 设置测试环境
+			env := setupTestEnvironment(t)
+			defer teardownTestEnvironment(t, env, nil)
+
+			env.workspaceDir = tc.workspaceDir
+			testVisitPattern.IncludeExts = tc.IncludeExts
+
+			err := initWorkspaceModel(env)
+			assert.NoError(t, err)
+			// 创建测试索引器
+			testIndexer := createTestIndexer(env, testVisitPattern)
+
+			// 查找工作区中的项目
+			projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, testVisitPattern)
+
+			// 清理索引存储
+			err = cleanIndexStoreTest(env.ctx, projects, env.storage)
+			assert.NoError(t, err)
+			indexStart := time.Now()
+			// 步骤1: 索引整个工作区
+			metrics, err := testIndexer.IndexWorkspace(env.ctx, env.workspaceDir)
+			assert.NoError(t, err)
+			indexEnd := time.Now()
+
 			// 构建完整文件路径
 			start := time.Now()
 			fullPath := filepath.Join(env.workspaceDir, tc.filePath)
-			t.Log("fullPath", fullPath)
 			// 查询调用链
 			opts := &types.QueryCallGraphOptions{
 				Workspace:  env.workspaceDir,
@@ -875,9 +911,10 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 			// 验证结果
 			assert.NotNil(t, nodes, "调用链结果不应为空")
 			fmt.Printf("符号 %s 的调用链包含 %d 个根节点\n", tc.symbolName, len(nodes))
-
+			fmt.Printf("查询调用链时间: %s\n", time.Since(start))
+			fmt.Printf("索引项目 %s 时间: %s, 索引 %d 个文件\n", tc.project, indexEnd.Sub(indexStart), metrics.TotalFiles)
 			// 将结果输出到文件
-			outputFile := filepath.Join(tempDir, fmt.Sprintf("callgraph_%s_%s_symbol.txt", tc.symbolName,tc.project))
+			outputFile := filepath.Join(tempDir, fmt.Sprintf("callgraph_%s_%s_symbol.txt", tc.symbolName, tc.project))
 			printCallGraphToFile(t, nodes, outputFile)
 			fmt.Printf("调用链输出到文件: %s\n", outputFile)
 
@@ -889,83 +926,89 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 					assert.Equal(t, tc.symbolName, node.SymbolName, "根节点符号名应该匹配")
 				}
 			}
-			fmt.Printf("查询调用链时间: %s\n", time.Since(start))
+
 		})
 	}
 }
 
 // TestIndexer_QueryCallGraph_ByLineRange 测试基于行范围的调用链查询
 func TestIndexer_QueryCallGraph_ByLineRange(t *testing.T) {
-	// 设置测试环境
-	env := setupTestEnvironment(t)
-	defer teardownTestEnvironment(t, env, nil)
-
-	err := initWorkspaceModel(env)
-	assert.NoError(t, err)
-
-	// 创建测试索引器
-	testIndexer := createTestIndexer(env, testVisitPattern)
-
-	// 查找工作区中的项目
-	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, testVisitPattern)
-
-	// 清理索引存储
-	err = cleanIndexStoreTest(env.ctx, projects, env.storage)
-	assert.NoError(t, err)
-
-	// 步骤1: 索引整个工作区
-	_, err = testIndexer.IndexWorkspace(env.ctx, env.workspaceDir)
-	assert.NoError(t, err)
-
-	// 步骤2: 测试基于行范围的调用链查询
+	// 步骤1: 测试基于行范围的调用链查询
 	testCases := []struct {
-		name      string
-		filePath  string
-		startLine int
-		endLine   int
-		maxLayer  int
-		desc      string
+		name         string
+		filePath     string
+		startLine    int
+		endLine      int
+		maxLayer     int
+		desc         string
+		project      string
+		workspaceDir string
+		IncludeExts  []string
 	}{
-		// {
-		// 	name:      "NewCodeIndexer函数范围",
-		// 	filePath:  "internal/service/indexer.go",
-		// 	startLine: 153, // NewCodeIndexer函数开始行
-		// 	endLine:   175, // 函数结束行
-		// 	maxLayer:  3,
-		// 	desc:      "查询NewCodeIndexer函数范围内的调用链",
-		// },
 		{
-			name:      "test_utils.go文件范围",
-			filePath:  "test/codegraph/test_utils.go",
-			startLine: 180,
-			endLine:   203,
-			maxLayer:  1,
-			desc:      "查询test_utils.go文件范围内的调用链",
-		},
-
-		{
-			name:      "IndexWorkspace方法范围",
-			filePath:  "internal/service/indexer.go",
-			startLine: 228, // IndexWorkspace方法开始行
-			endLine:   250, // 方法部分范围
-			maxLayer:  2,
-			desc:      "查询IndexWorkspace方法范围内的调用链",
+			name:         "test_utils.go文件范围",
+			filePath:     "test/codegraph/test_utils.go",
+			startLine:    180,
+			endLine:      203,
+			maxLayer:     1,
+			desc:         "查询test_utils.go文件范围内的调用链",
+			project:      "codebase-indexer",
+			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			IncludeExts:  []string{".go"},
 		},
 		{
-			name:      "setupTestEnvironment函数范围",
-			filePath:  "internal/service/indexer_test.go",
-			startLine: 52, // setupTestEnvironment函数开始行
-			endLine:   70, // 函数部分范围
-			maxLayer:  2,
-			desc:      "查询setupTestEnvironment函数范围内的调用链",
+			name:         "IndexWorkspace方法范围",
+			filePath:     "internal/service/indexer.go",
+			startLine:    228, // IndexWorkspace方法开始行
+			endLine:      250, // 方法部分范围
+			maxLayer:     2,
+			desc:         "查询IndexWorkspace方法范围内的调用链",
+			project:      "codebase-indexer",
+			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			IncludeExts:  []string{".go"},
+		},
+		{
+			name:         "setupTestEnvironment函数范围",
+			filePath:     "internal/service/indexer_test.go",
+			startLine:    52, // setupTestEnvironment函数开始行
+			endLine:      70, // 函数部分范围
+			maxLayer:     2,
+			desc:         "查询setupTestEnvironment函数范围内的调用链",
+			project:      "codebase-indexer",
+			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			IncludeExts:  []string{".go"},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// 构建完整文件路径
-			fullPath := filepath.Join(env.workspaceDir, tc.filePath)
+			// 设置测试环境
+			env := setupTestEnvironment(t)
+			defer teardownTestEnvironment(t, env, nil)
 
+			env.workspaceDir = tc.workspaceDir
+			testVisitPattern.IncludeExts = tc.IncludeExts
+
+			err := initWorkspaceModel(env)
+			assert.NoError(t, err)
+			// 创建测试索引器
+			testIndexer := createTestIndexer(env, testVisitPattern)
+
+			// 查找工作区中的项目
+			projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, testVisitPattern)
+
+			// 清理索引存储
+			err = cleanIndexStoreTest(env.ctx, projects, env.storage)
+			assert.NoError(t, err)
+			indexStart := time.Now()
+			// 步骤1: 索引整个工作区
+			metrics, err := testIndexer.IndexWorkspace(env.ctx, env.workspaceDir)
+			assert.NoError(t, err)
+			indexEnd := time.Now()
+
+			// 构建完整文件路径
+			start := time.Now()
+			fullPath := filepath.Join(env.workspaceDir, tc.filePath)
 			// 查询调用链
 			opts := &types.QueryCallGraphOptions{
 				Workspace: env.workspaceDir,
@@ -977,15 +1020,15 @@ func TestIndexer_QueryCallGraph_ByLineRange(t *testing.T) {
 
 			nodes, err := testIndexer.QueryCallGraph(env.ctx, opts)
 			assert.NoError(t, err)
-
 			// 验证结果
 			assert.NotNil(t, nodes, "调用链结果不应为空")
-			t.Logf("行范围 %d-%d 的调用链包含 %d 个根节点", tc.startLine, tc.endLine, len(nodes))
-
+			fmt.Printf("行范围 %d-%d 的调用链包含 %d 个根节点\n", tc.startLine, tc.endLine, len(nodes))
+			fmt.Printf("查询调用链时间: %s\n", time.Since(start))
+			fmt.Printf("索引项目 %s 时间: %s, 索引 %d 个文件\n", tc.project, indexEnd.Sub(indexStart), metrics.TotalFiles)
 			// 将结果输出到文件
-			outputFile := filepath.Join(tempDir, fmt.Sprintf("callgraph_lines_%d_%d.txt", tc.startLine, tc.endLine))
+			outputFile := filepath.Join(tempDir, fmt.Sprintf("callgraph_lines_%d_%d_%s.txt", tc.startLine, tc.endLine, tc.project))
 			printCallGraphToFile(t, nodes, outputFile)
-			t.Logf("调用链输出到文件: %s", outputFile)
+			fmt.Printf("调用链输出到文件: %s\n", outputFile)
 
 			// 基本验证
 			if len(nodes) > 0 {
@@ -1065,4 +1108,217 @@ func TestIndexer_QueryCallGraph_InvalidOptions(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestIndexer_QueryDefinitionsBySymbolName 测试基于符号名的定义查询
+// 该测试验证 Indexer.QueryDefinitions 方法在给定符号名时能够正确查询到符号的定义
+// 测试覆盖以下场景：
+// 1. 函数定义查询
+// 2. 方法定义查询
+// 3. 结构体定义查询
+// 4. 接口定义查询
+// 5. 不存在的符号查询
+// 6. 空符号名查询
+// 7. 错误处理（无效路径、空参数等）
+func TestIndexer_QueryDefinitionsBySymbolName(t *testing.T) {
+	// 步骤1: 测试基于符号名的定义查询
+	testCases := []struct {
+		name         string
+		filePath     string
+		symbolName   string
+		desc         string
+		project      string
+		workspaceDir string
+		IncludeExts  []string
+		expectCount  int // 期望找到的定义数量
+	}{
+		{
+			name:         "Go语言函数定义查询",
+			filePath:     "internal/service/indexer.go",
+			symbolName:   "flush",
+			desc:         "查询flush函数的定义",
+			project:      "codebase-indexer",
+			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			IncludeExts:  []string{".go"},
+			expectCount:  1,
+		},
+		{
+			name:         "Go语言方法定义查询",
+			filePath:     "internal/service/indexer.go",
+			symbolName:   "QueryDefinitions",
+			desc:         "查询QueryDefinitions方法的定义",
+			project:      "codebase-indexer",
+			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			IncludeExts:  []string{".go"},
+			expectCount:  1,
+		},
+		{
+			name:         "Go语言结构体定义查询",
+			filePath:     "internal/service/indexer.go",
+			symbolName:   "indexer",
+			desc:         "查询indexer结构体的定义",
+			project:      "codebase-indexer",
+			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			IncludeExts:  []string{".go"},
+			expectCount:  1,
+		},
+		{
+			name:         "不存在的符号查询",
+			filePath:     "internal/service/indexer.go",
+			symbolName:   "NonExistentSymbol",
+			desc:         "查询不存在的符号定义",
+			project:      "codebase-indexer",
+			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			IncludeExts:  []string{".go"},
+			expectCount:  0,
+		},
+		{
+			name:         "空符号名查询",
+			filePath:     "internal/service/indexer.go",
+			symbolName:   "",
+			desc:         "查询空符号名定义",
+			project:      "codebase-indexer",
+			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			IncludeExts:  []string{".go"},
+			expectCount:  0,
+		},
+		{
+			name:         "Go语言接口定义查询",
+			filePath:     "internal/service/indexer.go",
+			symbolName:   "Indexer",
+			desc:         "查询Indexer接口的定义",
+			project:      "codebase-indexer",
+			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			IncludeExts:  []string{".go"},
+			expectCount:  1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 设置测试环境
+			env := setupTestEnvironment(t)
+			defer teardownTestEnvironment(t, env, nil)
+
+			env.workspaceDir = tc.workspaceDir
+			testVisitPattern.IncludeExts = tc.IncludeExts
+
+			err := initWorkspaceModel(env)
+			assert.NoError(t, err)
+			// 创建测试索引器
+			testIndexer := createTestIndexer(env, testVisitPattern)
+
+			// 查找工作区中的项目
+			projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, testVisitPattern)
+
+			// 清理索引存储
+			err = cleanIndexStoreTest(env.ctx, projects, env.storage)
+			assert.NoError(t, err)
+			indexStart := time.Now()
+			// 步骤1: 索引整个工作区
+			metrics, err := testIndexer.IndexWorkspace(env.ctx, env.workspaceDir)
+			assert.NoError(t, err)
+			indexEnd := time.Now()
+
+			// 构建完整文件路径
+			start := time.Now()
+			fullPath := filepath.Join(env.workspaceDir, tc.filePath)
+			// 查询定义
+			opts := &types.QueryDefinitionOptions{
+				Workspace:  tc.workspaceDir,
+				FilePath:   fullPath,
+				SymbolName: tc.symbolName,
+			}
+
+			definitions, err := testIndexer.QueryDefinitions(env.ctx, opts)
+			queryTime := time.Since(start)
+
+			// 验证结果
+			assert.NoError(t, err, "查询定义不应出错")
+
+			if tc.expectCount == 0 {
+				assert.Empty(t, definitions, "定义结果应为空")
+				assert.Equal(t, tc.expectCount, len(definitions),
+					fmt.Sprintf("符号 %s 应该找到 %d 个定义，实际找到 %d 个",
+						tc.symbolName, tc.expectCount, len(definitions)))
+			} else {
+				assert.NotNil(t, definitions, "定义结果不应为空")
+				assert.Greater(t, len(definitions), 0, "符号 %s 应该找到 %d 个定义，实际找到 %d 个",
+					tc.symbolName, tc.expectCount, len(definitions))
+			}
+
+			fmt.Printf("符号 %s 的定义查询时间: %s\n", tc.symbolName, queryTime)
+			fmt.Printf("索引项目 %s 时间: %s, 索引 %d 个文件\n", tc.project, indexEnd.Sub(indexStart), metrics.TotalFiles)
+
+			// 验证定义内容
+			if len(definitions) > 0 {
+				for _, def := range definitions {
+					assert.NotEmpty(t, def.Name, "定义名称不应为空")
+					assert.NotEmpty(t, def.Path, "定义路径不应为空")
+					assert.Equal(t, tc.symbolName, def.Name, "定义名称应该匹配查询的符号名")
+					assert.NotNil(t, def.Range, "定义范围不应为空")
+					assert.NotEmpty(t, def.Type, "定义类型不应为空")
+
+					if len(def.Range) >= 4 {
+						fmt.Printf("找到定义: %s 在 %s:%d-%d (类型: %s)\n",
+							def.Name, def.Path, def.Range[0], def.Range[2], def.Type)
+					} else {
+						fmt.Printf("找到定义: %s 在 %s (类型: %s, 范围: %v)\n",
+							def.Name, def.Path, def.Type, def.Range)
+					}
+				}
+			} else {
+				fmt.Printf("未找到符号 %s 的定义\n", tc.symbolName)
+			}
+		})
+	}
+
+	// 步骤2: 测试错误处理
+	t.Run("错误处理测试", func(t *testing.T) {
+		// 设置测试环境
+		env := setupTestEnvironment(t)
+		defer teardownTestEnvironment(t, env, nil)
+
+		err := initWorkspaceModel(env)
+		assert.NoError(t, err)
+
+		// 创建测试索引器
+		testIndexer := createTestIndexer(env, testVisitPattern)
+
+		// 测试无效的工作区路径
+		opts := &types.QueryDefinitionOptions{
+			Workspace:  "/invalid/workspace/path",
+			FilePath:   "/invalid/workspace/path/internal/service/indexer.go",
+			SymbolName: "IndexWorkspace",
+		}
+		_, err = testIndexer.QueryDefinitions(env.ctx, opts)
+		assert.Error(t, err, "无效的工作区路径应该返回错误")
+
+		// 测试无效的文件路径
+		opts = &types.QueryDefinitionOptions{
+			Workspace:  env.workspaceDir,
+			FilePath:   "/invalid/file/path.go",
+			SymbolName: "IndexWorkspace",
+		}
+		_, err = testIndexer.QueryDefinitions(env.ctx, opts)
+		assert.Error(t, err, "无效的文件路径应该返回错误")
+
+		// 测试空的工作区路径
+		opts = &types.QueryDefinitionOptions{
+			Workspace:  "",
+			FilePath:   filepath.Join(env.workspaceDir, "internal/service/indexer.go"),
+			SymbolName: "IndexWorkspace",
+		}
+		_, err = testIndexer.QueryDefinitions(env.ctx, opts)
+		assert.Error(t, err, "空的工作区路径应该返回错误")
+
+		// 测试空的文件路径
+		opts = &types.QueryDefinitionOptions{
+			Workspace:  env.workspaceDir,
+			FilePath:   "",
+			SymbolName: "IndexWorkspace",
+		}
+		_, err = testIndexer.QueryDefinitions(env.ctx, opts)
+		assert.Error(t, err, "空的文件路径应该返回错误")
+	})
 }
