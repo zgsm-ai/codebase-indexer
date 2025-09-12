@@ -7,10 +7,10 @@ import "codebase-indexer/pkg/codegraph/types"
 type SearchReferenceRequest struct {
 	ClientId     string `form:"clientId" binding:"required"`
 	CodebasePath string `form:"codebasePath" binding:"required"`
-	FilePath     string `form:"filePath" binding:"required"`
-	StartLine    int    `form:"startLine,omitempty"`
-	EndLine      int    `form:"endLine,omitempty"`
-	SymbolName   string `form:"symbolName,omitempty"`
+	FilePath     string `form:"filePath"` // 可选，适配单符号查询
+	StartLine    int    `form:"startLine"`
+	EndLine      int    `form:"endLine"`
+	SymbolName   string `form:"symbolName"`
 }
 
 // RelationNode 关系节点

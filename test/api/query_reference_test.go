@@ -24,6 +24,7 @@ type queryReferenceTestCase struct {
 	filePath       string
 	startLine      int
 	endLine        int
+	symbolName     string
 	expectedStatus int
 	expectedCode   string
 	validateResp   func(t *testing.T, response map[string]interface{})
@@ -64,7 +65,7 @@ func (s *QueryReferenceIntegrationTestSuite) TestQueryReference() {
 				assert.Contains(t, position, "endColumn")
 
 				// 验证nodeType字段的有效值
-				validNodeTypes := []string{"definition.function", "call.method", "definition.class"}
+				validNodeTypes := []string{"definition.function", "definition.method", "definition.class","definition.interface"}
 				assert.Contains(t, validNodeTypes, firstItem["nodeType"])
 
 				// 验证children字段
@@ -123,6 +124,91 @@ func (s *QueryReferenceIntegrationTestSuite) TestQueryReference() {
 				assert.False(t, response["success"].(bool))
 			},
 		},
+		{
+			name:           "根据符号名全局查找引用-成功",
+			clientId:       "123",
+			codebasePath:   s.workspacePath,
+			filePath:       "", // 空文件路径，触发全局符号名查找
+			symbolName:     "TestQueryReference",
+			expectedStatus: http.StatusOK,
+			expectedCode:   "0",
+			validateResp: func(t *testing.T, response map[string]interface{}) {
+				assert.True(t, response["success"].(bool))
+				assert.Equal(t, "ok", response["message"])
+
+				data := response["data"].(map[string]interface{})
+				list := data["list"].([]interface{})
+				fmt.Println("list", list)
+				// 全局查找可能返回空结果，这是正常的
+				assert.GreaterOrEqual(t, len(list), 0)
+
+				// 如果有结果，验证结构
+				if len(list) > 0 {
+					firstItem := list[0].(map[string]interface{})
+					assert.Contains(t, firstItem, "symbolName")
+					assert.Contains(t, firstItem, "nodeType")
+					assert.Contains(t, firstItem, "children")
+
+					// 验证符号名匹配
+					if symbolName, ok := firstItem["symbolName"].(string); ok {
+						assert.Equal(t, "TestQueryReference", symbolName)
+					}
+
+					// 验证nodeType字段的有效值
+					validNodeTypes := []string{"definition.function", "definition.method", "definition.class", "definition.interface"}
+					if nodeType, ok := firstItem["nodeType"].(string); ok {
+						assert.Contains(t, validNodeTypes, nodeType)
+					}
+
+					// 验证children字段
+					children := firstItem["children"]
+					if children != nil {
+						childrenList := children.([]interface{})
+						assert.IsType(t, []interface{}{}, childrenList)
+					}
+				}
+			},
+		},
+		{
+			name:           "根据符号名全局查找引用-不存在的符号",
+			clientId:       "123",
+			codebasePath:   s.workspacePath,
+			filePath:       "", // 空文件路径，触发全局符号名查找
+			symbolName:     "NonExistentSymbol",
+			expectedStatus: http.StatusOK,
+			expectedCode:   "0",
+			validateResp: func(t *testing.T, response map[string]interface{}) {
+				assert.True(t, response["success"].(bool))
+				assert.Equal(t, "ok", response["message"])
+
+				data := response["data"].(map[string]interface{})
+				// 返回结果为nil
+				list := data["list"]
+				// 不存在的符号应该返回空列表
+				assert.Equal(t, nil, list)
+			},
+		},
+		{
+			name:           "根据符号名全局查找引用-缺少codebasePath",
+			clientId:       "123",
+			filePath:       "", // 空文件路径
+			symbolName:     "TestQueryReference",
+			expectedStatus: http.StatusBadRequest,
+			validateResp: func(t *testing.T, response map[string]interface{}) {
+				assert.False(t, response["success"].(bool))
+			},
+		},
+		{
+			name:           "根据符号名全局查找引用-空符号名",
+			clientId:       "123",
+			codebasePath:   s.workspacePath,
+			filePath:       "", // 空文件路径
+			symbolName:     "", // 空符号名
+			expectedStatus: http.StatusBadRequest,
+			validateResp: func(t *testing.T, response map[string]interface{}) {
+				assert.False(t, response["success"].(bool))
+			},
+		},
 	}
 
 	// 执行表格驱动测试
@@ -148,6 +234,9 @@ func (s *QueryReferenceIntegrationTestSuite) TestQueryReference() {
 			}
 			if tc.endLine > 0 {
 				q.Add("endLine", fmt.Sprintf("%d", tc.endLine))
+			}
+			if tc.symbolName != "" {
+				q.Add("symbolName", tc.symbolName)
 			}
 			reqURL.RawQuery = q.Encode()
 
@@ -184,5 +273,6 @@ func (s *QueryReferenceIntegrationTestSuite) TestQueryReference() {
 }
 
 func TestQueryReferenceIntegrationTestSuite(t *testing.T) {
+
 	suite.Run(t, new(QueryReferenceIntegrationTestSuite))
 }

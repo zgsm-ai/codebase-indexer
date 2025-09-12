@@ -1,6 +1,7 @@
 package service
 
 import (
+	"codebase-indexer/internal/errs"
 	"codebase-indexer/internal/repository"
 	"codebase-indexer/pkg/codegraph/analyzer"
 	"codebase-indexer/pkg/codegraph/cache"
@@ -904,8 +905,75 @@ func NormalizeLineRange(start, end, maxLimit int) (int, int) {
 
 	return start, end
 }
+func (i *indexer) queryReferencesBySymbolName(ctx context.Context, opts *types.QueryReferenceOptions) ([]*types.RelationNode, error) {
+	startTime := time.Now()
+	defer func() {
+		i.logger.Info("Query_reference execution time: %d ms", time.Since(startTime).Milliseconds())
+	}()
+	projects := i.workspaceReader.FindProjects(ctx, opts.Workspace, true, workspace.DefaultVisitPattern)
+	if len(projects) == 0 {
+		return nil, fmt.Errorf("query references by symbol name [%s] failed, no project found in workspace %s", opts.SymbolName, opts.Workspace)
+	}
+	var defMap = make(map[string]*types.RelationNode)
+	var definitions []*types.RelationNode
+	findDefinition := func() {
+		for _, project := range projects {
+			// 查询同名定义
+			iter := i.storage.Iter(ctx, project.Uuid)
+			defer iter.Close()
+			for iter.Next() {
+				key := iter.Key()
+				if store.IsSymbolNameKey(key) {
+					continue
+				}
+				var elementTable codegraphpb.FileElementTable
+				if err := store.UnmarshalValue(iter.Value(), &elementTable); err != nil {
+					i.logger.Error("failed to unmarshal file element_table value, err: %v", err)
+					continue
+				}
+				for _, elem := range elementTable.Elements {
+					if !elem.IsDefinition {
+						continue
+					}
+					if elem.ElementType != codegraphpb.ElementType_CLASS &&
+						elem.ElementType != codegraphpb.ElementType_INTERFACE &&
+						elem.ElementType != codegraphpb.ElementType_METHOD &&
+						elem.ElementType != codegraphpb.ElementType_FUNCTION {
+						continue
+					}
+					// 只处理 类、接口、函数、方法
+					if elem.Name != opts.SymbolName {
+						continue
+					}
+					def := &types.RelationNode{
+						SymbolName: elem.Name,
+						NodeType:   string(proto.ElementTypeFromProto(elem.ElementType)),
+						Children:   make([]*types.RelationNode, 0),
+					}
+					definitions = append(definitions, def)
+					// 相同的name得到的结果是一样的，所以不重复添加，找到一个就返回
+					defMap[elem.Name] = def
+					return
+				}
+			}
+		}
+	}
+	findDefinition()
+	if len(definitions) == 0 {
+		// 提前返回，避免遍历所有文件
+		return definitions, nil
+	}
+	for _, project := range projects {
+		// 找定义的所有引用，通过遍历所有文件的方式
+		i.findSymbolReferences(ctx, project.Uuid, defMap, opts.FilePath)
+	}
+	return definitions, nil
+}
 
 // QueryReferences 实现查询接口
+// 支持根据符号名全局查找引用
+// 支持查询某个文件内的符号的引用
+// 支持查询某个文件内的行范围的符号的引用
 func (i *indexer) QueryReferences(ctx context.Context, opts *types.QueryReferenceOptions) ([]*types.RelationNode, error) {
 	startTime := time.Now()
 	filePath := opts.FilePath
@@ -913,6 +981,17 @@ func (i *indexer) QueryReferences(ctx context.Context, opts *types.QueryReferenc
 	opts.StartLine = start
 	opts.EndLine = end
 
+	if filePath == types.EmptyString {
+		if opts.SymbolName != types.EmptyString {
+			// 根据符号名查询，根据SymbolName查询引用的位置
+			return i.queryReferencesBySymbolName(ctx, opts)
+		}
+		return nil, errs.NewMissingParamError("filePath")
+	}
+
+	if !filepath.IsAbs(filePath) {
+		return nil, fmt.Errorf("param filePath must be absolute path")
+	}
 	project, err := i.GetProjectByFilePath(ctx, opts.Workspace, filePath)
 	if err != nil {
 		return nil, err
@@ -982,7 +1061,7 @@ func (i *indexer) QueryReferences(ctx context.Context, opts *types.QueryReferenc
 	return definitions, nil
 }
 
-// findReferencesForDefinitions 查找定义节点内部的所有引用
+// findSymbolReferences 查找符号被调用或引用的位置
 func (i *indexer) findSymbolReferences(ctx context.Context, projectUuid string, definitionNames map[string]*types.RelationNode, filePath string) {
 	iter := i.storage.Iter(ctx, projectUuid)
 	defer iter.Close()
@@ -1061,257 +1140,6 @@ func (i *indexer) querySymbolsByName(doc *codegraphpb.FileElementTable, opts *ty
 	return nodes
 }
 
-//
-//// buildChildrenRecursive recursively builds the child nodes for a given RelationNode and its corresponding Symbol.
-//func (i *indexer) buildChildrenRecursive(ctx context.Context, projectUuid string,
-//	language lang.Language, node *types.RelationNode, maxLayer int) {
-//	if maxLayer <= 0 || node == nil {
-//		i.logger.Debug("buildChildrenRecursive stopped: maxLayer=%d, node is nil=%v", maxLayer, node == nil)
-//		return
-//	}
-//	maxLayer-- // 防止死递归
-//
-//	startTime := time.Now()
-//	defer func() {
-//		i.logger.Debug("buildChildrenRecursive for node %s took %v", node.SymbolName, time.Since(startTime))
-//	}()
-//
-//	symbolPath := node.FilePath
-//	symbolName := node.SymbolName
-//	position := node.Position
-//
-//	// 根据path和position，定义到 symbol，从而找到它的relation
-//	var elementTable codegraphpb.FileElementTable
-//	fileTableBytes, err := i.storage.Get(ctx, projectUuid, store.ElementPathKey{
-//		Language: language, Path: symbolPath})
-//	if err != nil {
-//		i.logger.Error("failed to get fileTable by def: %s, err: %v", err)
-//		return
-//	}
-//
-//	if err = store.UnmarshalValue(fileTableBytes, &elementTable); err != nil {
-//		i.logger.Error("Failed to unmarshal fileTable by path: %s, err:%v", symbolPath, err)
-//		return
-//	}
-//
-//	if err != nil {
-//		i.logger.Debug("Failed to find elementTable for path %s: %v", symbolPath, err)
-//		return
-//	}
-//
-//	symbol := i.findSymbolInDocByRange(&elementTable, types.ToRange(position))
-//	if symbol == nil {
-//		i.logger.Debug("Symbol not found in elementTable: path %s, name %s", symbolPath, symbolName)
-//		return
-//	}
-//
-//	var referenceChildren []*types.RelationNode
-//
-//	// 找到symbol 的relation. 只有定义的symbol 有reference，引用节点的relation是定义节点
-//	if len(symbol.Relations) > 0 {
-//		for _, r := range symbol.Relations {
-//			if r.RelationType == codegraphpb.RelationType_RELATION_TYPE_REFERENCE {
-//				// 引用节点，加入node的children
-//				referenceChildren = append(referenceChildren, &types.RelationNode{
-//					FilePath:   r.ElementPath,
-//					SymbolName: r.ElementName,
-//					Position:   types.ToPosition(r.Range),
-//					NodeType:   string(types.NodeTypeReference),
-//				})
-//			}
-//		}
-//		i.logger.Debug("Found %d reference relations for symbol %s", len(referenceChildren), symbolName)
-//	}
-//
-//	if len(referenceChildren) == 0 {
-//		// 如果references 为空，说明当前 node 是引用节点， 找到它所属的函数/类/结构体的definition节点，再找引用
-//		foundDefSymbol := i.findReferenceSymbolBelonging(&elementTable, symbol)
-//		if foundDefSymbol != nil {
-//			referenceChildren = append(referenceChildren, &types.RelationNode{
-//				FilePath:   elementTable.Path,
-//				SymbolName: foundDefSymbol.Name,
-//				Position:   types.ToPosition(foundDefSymbol.Range),
-//				NodeType:   string(types.NodeTypeDefinition),
-//			})
-//		} else {
-//			i.logger.Debug("failed to find reference symbol %s belongs to", symbolName)
-//		}
-//
-//	}
-//
-//	//当前节点的子节点
-//	node.Children = referenceChildren
-//
-//	// 继续递归
-//	for _, ch := range referenceChildren {
-//		i.buildChildrenRecursive(ctx, projectUuid, language, ch, maxLayer)
-//	}
-//}
-
-// func (i *indexer) QueryDefinitions(ctx context.Context, options *types.QueryDefinitionOptions) ([]*types.Definition, error) {
-// 	filePath := options.FilePath
-// 	project, err := i.workspaceReader.GetProjectByFilePath(ctx, options.Workspace, filePath, true)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	projectUuid := project.Uuid
-
-// 	language, err := lang.InferLanguage(filePath)
-// 	if err != nil {
-// 		return nil, lang.ErrUnSupportedLanguage
-// 	}
-
-// 	exists, err := i.storage.ProjectIndexExists(projectUuid)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to check workspace %s index, err:%v", options.Workspace, err)
-// 	}
-// 	if !exists {
-// 		return nil, fmt.Errorf("workspace %s index not exists", options.Workspace)
-// 	}
-
-// 	startTime := time.Now()
-// 	defer func() {
-// 		i.logger.Info("query definitions cost %d ms", time.Since(startTime).Milliseconds())
-// 	}()
-
-// 	res := make([]*types.Definition, 0)
-
-// 	var foundSymbols []*codegraphpb.Element
-// 	queryStartLine := int32(options.StartLine - 1)
-// 	queryEndLine := int32(options.EndLine - 1)
-
-// 	snippet := options.CodeSnippet
-
-// 	var currentImports []*codegraphpb.Import
-// 	// 根据代码片段中的标识符名模糊搜索
-// 	if len(snippet) > 0 {
-// 		// 调用tree_sitter 解析，获取所有的标识符及位置
-// 		parsedData, err := i.parser.Parse(ctx, &types.SourceFile{
-// 			Path:    filePath,
-// 			Content: snippet},
-// 		)
-// 		if err != nil {
-// 			return nil, fmt.Errorf("faled to parse code snippet for definition query: %w", err)
-// 		}
-// 		imports := parsedData.Imports
-// 		elements := parsedData.Elements
-// 		// TODO 找到所有的外部依赖, call、
-// 		var dependencyNames []string
-// 		for _, e := range elements {
-// 			if c, ok := e.(*resolver.Call); ok {
-// 				dependencyNames = append(dependencyNames, c.Name)
-// 			} else if r, ok := e.(*resolver.Reference); ok {
-// 				dependencyNames = append(dependencyNames, r.Name)
-// 			}
-// 		}
-// 		if len(dependencyNames) == 0 {
-// 			return res, nil
-// 		}
-// 		// TODO resolve go modules
-// 		// 对imports预处理
-// 		if filteredImps, err := i.analyzer.PreprocessImports(ctx, language, project, imports); err == nil {
-// 			imports = filteredImps
-// 		}
-// 		for _, imp := range imports {
-// 			currentImports = append(currentImports, &codegraphpb.Import{
-// 				Name:   imp.Name,
-// 				Alias:  imp.Alias,
-// 				Source: imp.Source,
-// 				Range:  imp.Range,
-// 			})
-// 		}
-
-// 		// 根据所找到的call 的name + currentImports， 去模糊匹配symbol
-// 		symDefs, err := i.searchSymbolNames(ctx, projectUuid, language, dependencyNames, currentImports)
-// 		if err != nil {
-// 			return nil, fmt.Errorf("failed to search index by names: %w", err)
-// 		}
-// 		if len(symDefs) == 0 {
-// 			return res, nil
-// 		}
-// 		for name, def := range symDefs {
-// 			for _, d := range def {
-// 				if d == nil {
-// 					continue
-// 				}
-// 				res = append(res, &types.Definition{
-// 					Name:  name,
-// 					Type:  string(proto.ElementTypeFromProto(d.ElementType)),
-// 					Path:  d.Path,
-// 					Range: d.Range,
-// 				})
-// 			}
-
-// 		}
-
-// 	} else {
-// 		// 1. 获取文档
-// 		var fileTable codegraphpb.FileElementTable
-// 		fileTableBytes, err := i.storage.Get(ctx, projectUuid, store.ElementPathKey{Language: language, Path: filePath})
-// 		if errors.Is(err, store.ErrKeyNotFound) {
-// 			return nil, fmt.Errorf("index not found for file %s", filePath)
-// 		}
-// 		if err != nil {
-// 			return nil, fmt.Errorf("failed to get file %s index, err: %v", filePath, err)
-// 		}
-// 		if err = store.UnmarshalValue(fileTableBytes, &fileTable); err != nil {
-// 			return nil, fmt.Errorf("failed to unmarshal file %s index value, err: %v", filePath, err)
-// 		}
-
-// 		foundSymbols = i.findSymbolInDocByLineRange(ctx, &fileTable, queryStartLine, queryEndLine)
-// 		currentImports = fileTable.Imports
-// 	}
-
-// 	// 去重, 如果range 出现过，则剔除
-// 	//existedDefs := make(map[string]bool)
-// 	// 遍历，封装结果，取定义
-// 	for _, s := range foundSymbols {
-// 		// 本身是定义
-// 		if s.IsDefinition {
-// 			// 去掉本范围内的定义，仅过滤范围查询，不过滤全文检索
-// 			if len(s.Range) > 0 && len(snippet) > 0 && isInLinesRange(s.Range[0], queryStartLine, queryEndLine) {
-// 				continue
-// 			}
-// 			res = append(res, &types.Definition{
-// 				Path:  filePath,
-// 				Name:  s.Name,
-// 				Range: s.Range,
-// 				Type:  string(proto.ElementTypeFromProto(s.ElementType)),
-// 			})
-// 			continue
-// 		} else { // 引用
-// 			// 加载定义
-// 			bytes, err := i.storage.Get(ctx, projectUuid, store.SymbolNameKey{Name: s.GetName(),
-// 				Language: language})
-// 			if err == nil {
-// 				var exist codegraphpb.SymbolOccurrence
-// 				if err = store.UnmarshalValue(bytes, &exist); err == nil {
-// 					filtered := i.analyzer.FilterByImports(filePath, currentImports, exist.Occurrences)
-// 					if len(filtered) == 0 {
-// 						// 防止全部过滤掉
-// 						filtered = exist.Occurrences
-// 					}
-// 					for _, o := range filtered {
-// 						res = append(res, &types.Definition{
-// 							Path:  o.Path,
-// 							Name:  s.Name,
-// 							Range: o.Range,
-// 							Type:  string(proto.ToDefinitionElementType(proto.ElementTypeFromProto(s.ElementType))),
-// 						})
-// 					}
-// 				} else {
-// 					i.logger.Debug("unmarshal symbol occurrence err:%v", err)
-// 				}
-
-// 			} else if !errors.Is(err, store.ErrKeyNotFound) {
-// 				i.logger.Debug("get symbol occurrence err:%v", err)
-// 			}
-// 		}
-// 	}
-
-// 	return res, nil
-// }
-
 func (i *indexer) QueryDefinitions(ctx context.Context, opts *types.QueryDefinitionOptions) ([]*types.Definition, error) {
 	// 参数验证
 	if opts.Workspace == "" {
@@ -1346,9 +1174,9 @@ func (i *indexer) QueryDefinitions(ctx context.Context, opts *types.QueryDefinit
 	// 最后根据行号范围查询
 	switch {
 	case opts.SymbolName != "":
-		return i.queryFuncDefinitionsBySymbolName(ctx, projectUuid, opts)
+		return i.queryFuncDefinitionsBySymbolName(ctx, projectUuid, opts.SymbolName)
 	case len(opts.CodeSnippet) > 0:
-		return i.queryFuncDefinitionsBySnippet(ctx, project, language, opts)
+		return i.queryFuncDefinitionsBySnippet(ctx, project, language, opts.FilePath, opts.CodeSnippet)
 	case opts.StartLine > 0 && opts.EndLine > 0:
 		if opts.EndLine < opts.StartLine {
 			opts.EndLine = opts.StartLine
@@ -1360,10 +1188,10 @@ func (i *indexer) QueryDefinitions(ctx context.Context, opts *types.QueryDefinit
 }
 
 // queryFuncDefinitionsBySnippet 查询代码片段里面所有依赖的符号的定义
-func (i *indexer) queryFuncDefinitionsBySnippet(ctx context.Context, project *workspace.Project, language lang.Language, opts *types.QueryDefinitionOptions) ([]*types.Definition, error) {
+func (i *indexer) queryFuncDefinitionsBySnippet(ctx context.Context, project *workspace.Project, language lang.Language, filePath string, codeSnippet []byte) ([]*types.Definition, error) {
 	parsedData, err := i.parser.Parse(ctx, &types.SourceFile{
-		Path:    opts.FilePath,
-		Content: opts.CodeSnippet},
+		Path:    filePath,
+		Content: codeSnippet},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("faled to parse code snippet for definition query: %w", err)
@@ -1497,12 +1325,12 @@ func (i *indexer) queryFuncDefinitionsByLineRange(ctx context.Context, projectUu
 }
 
 // queryFuncDefinitionsBySymbolName 通过符号名查询函数定义
-func (i *indexer) queryFuncDefinitionsBySymbolName(ctx context.Context, projectUuid string, opts *types.QueryDefinitionOptions) ([]*types.Definition, error) {
+func (i *indexer) queryFuncDefinitionsBySymbolName(ctx context.Context, projectUuid string, symbolName string) ([]*types.Definition, error) {
 	// 遍历所有的语言，查询该符号的Occurrence
 	var results []*types.Definition
 	languages := lang.GetAllSupportedLanguages()
 	for _, language := range languages {
-		bytes, err := i.storage.Get(ctx, projectUuid, store.SymbolNameKey{Name: opts.SymbolName,
+		bytes, err := i.storage.Get(ctx, projectUuid, store.SymbolNameKey{Name: symbolName,
 			Language: language})
 		if err != nil {
 			continue
@@ -1515,7 +1343,7 @@ func (i *indexer) queryFuncDefinitionsBySymbolName(ctx context.Context, projectU
 		for _, o := range exist.Occurrences {
 			results = append(results, &types.Definition{
 				Path:  o.Path,
-				Name:  opts.SymbolName,
+				Name:  symbolName,
 				Range: o.Range,
 				Type:  string(proto.ToDefinitionElementType(proto.ElementTypeFromProto(o.ElementType))),
 			})
@@ -1857,7 +1685,6 @@ func (mb *MapBatcher) Add(key CalledSymbol, val []CallerInfo, merge bool) {
 		mb.flush(tempCalleeMap)
 	}
 }
-
 
 // 先合并老数据，然后批量写入数据库
 func (mb *MapBatcher) flush(tempCalleeMap map[CalledSymbol][]CallerInfo) {

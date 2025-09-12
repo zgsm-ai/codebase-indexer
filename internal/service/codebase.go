@@ -488,14 +488,6 @@ func (l *codebaseService) QueryReference(ctx context.Context, req *dto.SearchRef
 		return nil, errs.NewMissingParamError("codebasePath")
 	}
 
-	if req.FilePath == types.EmptyString {
-		return nil, errs.NewMissingParamError("filePath")
-	}
-
-	if !filepath.IsAbs(req.FilePath) {
-		return nil, fmt.Errorf("param filePath must be absolute path")
-	}
-
 	nodes, err := l.indexer.QueryReferences(ctx, &types.QueryReferenceOptions{
 		Workspace:  req.CodebasePath,
 		FilePath:   req.FilePath,
@@ -506,15 +498,23 @@ func (l *codebaseService) QueryReference(ctx context.Context, req *dto.SearchRef
 	if err != nil {
 		return nil, err
 	}
-
+	// 如果filePath为空，且symbolName不为空，则根据symbolName查询引用
+	if req.FilePath == types.EmptyString && req.SymbolName != types.EmptyString {
+		if len(nodes) == 0 {
+			return &dto.ReferenceData{List: nodes}, nil
+		}	
+		// 填充content，控制层数和节点数，只填充子节点内容，不填充根节点内容
+		if err = l.fillContent(ctx, nodes[0].Children, relationFillContentLayerLimit, relationFillContentLayerNodeLimit); err != nil {
+			l.logger.Error("fill graph query contents err:%v", err)
+		}
+		return &dto.ReferenceData{List: nodes}, nil
+	}
+	// 如果filePath不为空，则根据filePath查询引用
 	// 填充content，控制层数和节点数
 	if err = l.fillContent(ctx, nodes, relationFillContentLayerLimit, relationFillContentLayerNodeLimit); err != nil {
 		l.logger.Error("fill graph query contents err:%v", err)
 	}
-
-	return &dto.ReferenceData{
-		List: nodes,
-	}, nil
+	return &dto.ReferenceData{List: nodes}, nil
 }
 
 const defaultMaxLayer = 10
