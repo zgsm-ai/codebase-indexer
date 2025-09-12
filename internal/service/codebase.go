@@ -6,7 +6,6 @@ import (
 	"codebase-indexer/internal/model"
 	"codebase-indexer/internal/repository"
 	"codebase-indexer/pkg/codegraph/definition"
-	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
 	"codebase-indexer/pkg/codegraph/store"
 	"codebase-indexer/pkg/codegraph/types"
@@ -403,20 +402,11 @@ func (l *codebaseService) QueryDefinition(ctx context.Context, req *dto.SearchDe
 	if req.EndLine-req.StartLine > maxLineLimit {
 		req.EndLine = req.StartLine + maxLineLimit
 	}
-
-	if req.FilePath == types.EmptyString {
-		return nil, fmt.Errorf("missing param: filePath")
-	}
+	// codebasePath不能为空
 	if req.CodebasePath == types.EmptyString {
 		return nil, fmt.Errorf("missing param: codebasePath")
 	}
-	if !filepath.IsAbs(req.FilePath) {
-		return nil, fmt.Errorf("param filePath must be absolute path")
-	}
-	_, err = lang.InferLanguage(req.FilePath)
-	if err != nil {
-		return nil, errs.ErrUnSupportedLanguage
-	}
+	
 
 	nodes, err := l.indexer.QueryDefinitions(ctx, &types.QueryDefinitionOptions{
 		Workspace:   req.CodebasePath,

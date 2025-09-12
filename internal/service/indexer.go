@@ -1141,14 +1141,25 @@ func (i *indexer) querySymbolsByName(doc *codegraphpb.FileElementTable, opts *ty
 	}
 	return nodes
 }
-
+// QueryDefinitions 支持单符号全局查询、行号范围内的符号定义查询、代码片段内的符号定义查询
 func (i *indexer) QueryDefinitions(ctx context.Context, opts *types.QueryDefinitionOptions) ([]*types.Definition, error) {
 	// 参数验证
 	if opts.Workspace == "" {
 		return nil, fmt.Errorf("workspace cannot be empty")
 	}
 	if opts.FilePath == "" {
+		// 查询符号可以不用文件路径
+		if opts.SymbolName != "" {
+			return i.queryFuncDefinitionsBySymbolName(ctx, opts.Workspace, opts.SymbolName)
+		}
 		return nil, fmt.Errorf("file path cannot be empty")
+	}
+	if !filepath.IsAbs(opts.FilePath) {
+		return nil, fmt.Errorf("param filePath must be absolute path")
+	}
+	_, err := lang.InferLanguage(opts.FilePath)
+	if err != nil {
+		return nil, errs.ErrUnSupportedLanguage
 	}
 
 	// 获取项目信息
@@ -1175,8 +1186,6 @@ func (i *indexer) QueryDefinitions(ctx context.Context, opts *types.QueryDefinit
 	// 其次根据CodeSnippet查询
 	// 最后根据行号范围查询
 	switch {
-	case opts.SymbolName != "":
-		return i.queryFuncDefinitionsBySymbolName(ctx, projectUuid, opts.SymbolName)
 	case len(opts.CodeSnippet) > 0:
 		return i.queryFuncDefinitionsBySnippet(ctx, project, language, opts.FilePath, opts.CodeSnippet)
 	case opts.StartLine > 0 && opts.EndLine > 0:
@@ -1327,28 +1336,34 @@ func (i *indexer) queryFuncDefinitionsByLineRange(ctx context.Context, projectUu
 }
 
 // queryFuncDefinitionsBySymbolName 通过符号名查询函数定义
-func (i *indexer) queryFuncDefinitionsBySymbolName(ctx context.Context, projectUuid string, symbolName string) ([]*types.Definition, error) {
+func (i *indexer) queryFuncDefinitionsBySymbolName(ctx context.Context, workspacePath string, symbolName string) ([]*types.Definition, error) {
 	// 遍历所有的语言，查询该符号的Occurrence
 	var results []*types.Definition
 	languages := lang.GetAllSupportedLanguages()
-	for _, language := range languages {
-		bytes, err := i.storage.Get(ctx, projectUuid, store.SymbolNameKey{Name: symbolName,
-			Language: language})
-		if err != nil {
-			continue
-		}
-		var exist codegraphpb.SymbolOccurrence
-		if err = store.UnmarshalValue(bytes, &exist); err != nil {
-			return nil, err
-		}
-		// 根据Occurrence信息封装为定义
-		for _, o := range exist.Occurrences {
-			results = append(results, &types.Definition{
-				Path:  o.Path,
-				Name:  symbolName,
-				Range: o.Range,
-				Type:  string(proto.ToDefinitionElementType(proto.ElementTypeFromProto(o.ElementType))),
-			})
+	projects := i.workspaceReader.FindProjects(ctx, workspacePath, true, workspace.DefaultVisitPattern)
+	if len(projects) == 0 {
+		return nil, fmt.Errorf("query definitions by symbol name [%s] failed, no project found in workspace %s", symbolName, workspacePath)
+	}
+	for _, project := range projects {
+		for _, language := range languages {
+			bytes, err := i.storage.Get(ctx, project.Uuid, store.SymbolNameKey{Name: symbolName,
+				Language: language})
+			if err != nil {
+				continue
+			}
+			var exist codegraphpb.SymbolOccurrence
+			if err = store.UnmarshalValue(bytes, &exist); err != nil {
+				return nil, err
+			}
+			// 根据Occurrence信息封装为定义
+			for _, o := range exist.Occurrences {
+				results = append(results, &types.Definition{
+					Path:  o.Path,
+					Name:  symbolName,
+					Range: o.Range,
+					Type:  string(proto.ToDefinitionElementType(proto.ElementTypeFromProto(o.ElementType))),
+				})
+			}
 		}
 	}
 	return results, nil

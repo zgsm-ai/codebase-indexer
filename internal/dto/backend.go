@@ -38,7 +38,7 @@ type ReferenceData struct {
 type SearchDefinitionRequest struct {
 	ClientId     string `form:"clientId" binding:"required"`
 	CodebasePath string `form:"codebasePath" binding:"required"`
-	FilePath     string `form:"filePath" binding:"required"`
+	FilePath     string `form:"filePath"`
 	SymbolName   string `form:"symbolName,omitempty"`
 	StartLine    int    `form:"startLine,omitempty"`
 	EndLine      int    `form:"endLine,omitempty"`

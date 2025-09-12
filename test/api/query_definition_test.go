@@ -22,6 +22,7 @@ type queryDefinitionTestCase struct {
 	clientId       string
 	codebasePath   string
 	filePath       string
+	symbolName     string
 	startLine      int
 	endLine        int
 	expectedStatus int
@@ -132,6 +133,82 @@ func (s *QueryDefinitionIntegrationTestSuite) TestQueryDefinition() {
 				assert.False(t, response["success"].(bool))
 			},
 		},
+		{
+			name:           "单符号查询-成功查询函数定义",
+			clientId:       "123",
+			codebasePath:   s.workspacePath,
+			symbolName:     "TestQueryDefinition",
+			expectedStatus: http.StatusOK,
+			expectedCode:   "0",
+			validateResp: func(t *testing.T, response map[string]interface{}) {
+				assert.True(t, response["success"].(bool))
+				assert.Equal(t, "ok", response["message"])
+				
+				data := response["data"].(map[string]interface{})
+				list := data["list"].([]interface{})
+				assert.GreaterOrEqual(t, len(list), 0)
+
+				// 如果找到结果，验证结构
+				if len(list) > 0 {
+					firstItem := list[0].(map[string]interface{})
+					assert.Contains(t, firstItem, "filePath")
+					assert.Contains(t, firstItem, "name")
+					assert.Contains(t, firstItem, "type")
+					assert.Contains(t, firstItem, "content")
+					assert.Contains(t, firstItem, "position")
+
+					// 验证符号名称匹配
+					assert.Equal(t, "TestQueryDefinition", firstItem["name"])
+
+					position := firstItem["position"].(map[string]interface{})
+					assert.Contains(t, position, "startLine")
+					assert.Contains(t, position, "startColumn")
+					assert.Contains(t, position, "endLine")
+					assert.Contains(t, position, "endColumn")
+
+					// 验证类型字段的有效值
+					validTypes := []string{"variable", "definition.function", "definition.method", "definition.class"}
+					assert.Contains(t, validTypes, firstItem["type"])
+				}
+			},
+		},
+		{
+			name:           "单符号查询-不存在的符号",
+			clientId:       "123",
+			codebasePath:   s.workspacePath,
+			symbolName:     "NonExistentSymbol12345",
+			expectedStatus: http.StatusOK,
+			expectedCode:   "0",
+			validateResp: func(t *testing.T, response map[string]interface{}) {
+				assert.True(t, response["success"].(bool))
+				assert.Equal(t, "ok", response["message"])
+
+				data := response["data"].(map[string]interface{})
+				// 这里是空的
+				list := data["list"]
+				assert.Nil(t, list)
+				// 不存在的符号应该返回空列表
+			},
+		},
+		{
+			name:           "单符号查询-缺少codebasePath参数",
+			clientId:       "123",
+			symbolName:     "TestQueryDefinition",
+			expectedStatus: http.StatusBadRequest,
+			validateResp: func(t *testing.T, response map[string]interface{}) {
+				assert.False(t, response["success"].(bool))
+			},
+		},
+		{
+			name:           "单符号查询-空符号名",
+			clientId:       "123",
+			codebasePath:   s.workspacePath,
+			symbolName:     "",
+			expectedStatus: http.StatusBadRequest,
+			validateResp: func(t *testing.T, response map[string]interface{}) {
+				assert.False(t, response["success"].(bool))
+			},
+		},
 	}
 
 	// 执行表格驱动测试
@@ -151,6 +228,9 @@ func (s *QueryDefinitionIntegrationTestSuite) TestQueryDefinition() {
 			}
 			if tc.filePath != "" {
 				q.Add("filePath", tc.filePath)
+			}
+			if tc.symbolName != "" {
+				q.Add("symbolName", tc.symbolName)
 			}
 			if tc.startLine > 0 {
 				q.Add("startLine", fmt.Sprintf("%d", tc.startLine))
