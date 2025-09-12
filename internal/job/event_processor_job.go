@@ -13,13 +13,14 @@ import (
 
 // EventProcessorJob 事件处理任务
 type EventProcessorJob struct {
-	httpSync  repository.SyncInterface
-	embedding service.EmbeddingProcessService
-	codegraph service.CodegraphProcessService
-	storage   repository.StorageInterface
-	logger    logger.Logger
-	ctx       context.Context
-	cancel    context.CancelFunc
+	httpSync          repository.SyncInterface
+	embedding         service.EmbeddingProcessService
+	codegraph         service.CodegraphProcessService
+	storage           repository.StorageInterface
+	logger            logger.Logger
+	embeddingInterval time.Duration
+	ctx               context.Context
+	cancel            context.CancelFunc
 }
 
 // NewEventProcessorJob 创建事件处理任务
@@ -28,17 +29,19 @@ func NewEventProcessorJob(
 	httpSync repository.SyncInterface,
 	embedding service.EmbeddingProcessService,
 	codegraph service.CodegraphProcessService,
+	embeddingInterval time.Duration,
 	storage repository.StorageInterface,
 ) *EventProcessorJob {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &EventProcessorJob{
-		httpSync:  httpSync,
-		embedding: embedding,
-		codegraph: codegraph,
-		storage:   storage,
-		logger:    logger,
-		ctx:       ctx,
-		cancel:    cancel,
+		httpSync:          httpSync,
+		embedding:         embedding,
+		codegraph:         codegraph,
+		storage:           storage,
+		logger:            logger,
+		embeddingInterval: embeddingInterval,
+		ctx:               ctx,
+		cancel:            cancel,
 	}
 }
 
@@ -53,7 +56,7 @@ func (j *EventProcessorJob) Start(ctx context.Context) {
 
 	// 立即执行一次事件处理
 	authInfo := config.GetAuthInfo()
-	if authInfo.ClientId != "" && authInfo.Token != "" && authInfo.ServerURL != "" {
+	if j.embeddingInterval > 0 && authInfo.ClientId != "" && authInfo.Token != "" && authInfo.ServerURL != "" {
 		j.embeddingProcessWorkspaces(ctx)
 	}
 
@@ -63,7 +66,7 @@ func (j *EventProcessorJob) Start(ctx context.Context) {
 				j.logger.Error("recovered from panic in embedding processor: %v", r)
 			}
 		}()
-		ticker := time.NewTicker(5 * time.Second)
+		ticker := time.NewTicker(j.embeddingInterval)
 		defer ticker.Stop()
 
 		for {

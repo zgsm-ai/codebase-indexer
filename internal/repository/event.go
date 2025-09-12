@@ -49,6 +49,10 @@ type EventRepository interface {
 	BatchCreateEvents(events []*model.Event) error
 	// BatchDeleteEvents 批量删除事件
 	BatchDeleteEvents(ids []int64) error
+	// UpdateEvents 批量更新事件嵌入信息
+	UpdateEventsEmbedding(events []*model.Event) error
+	// UpdateEventsEmbeddingStatus 批量更新事件嵌入状态
+	UpdateEventsEmbeddingStatus(eventIDs []int64, status int) error
 	// GetExpiredEventIDs 获取过期事件的ID列表
 	GetExpiredEventIDs(cutoffTime time.Time) ([]int64, error)
 	// GetTableName 获取表名
@@ -1356,6 +1360,102 @@ func (r *eventRepository) BatchDeleteEvents(ids []int64) error {
 	}
 
 	r.logger.Info("Successfully deleted total %d events", totalDeleted)
+	return nil
+}
+
+// UpdateEvents 批量更新事件嵌入信息
+func (r *eventRepository) UpdateEventsEmbedding(events []*model.Event) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	tx, err := r.db.GetDB().Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	query := `
+		UPDATE events
+		SET embedding_status = ?, sync_id = ?, file_hash = ?, updated_at = ?
+		WHERE id = ?
+	`
+
+	nowTime := time.Now()
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, event := range events {
+		_, err = stmt.Exec(
+			event.EmbeddingStatus,
+			event.SyncId,
+			event.FileHash,
+			nowTime,
+			event.ID,
+		)
+		if err != nil {
+			r.logger.Error("Failed to update event %d: %v", event.ID, err)
+			return fmt.Errorf("failed to update event %d: %w", event.ID, err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	r.logger.Info("Successfully updated %d events", len(events))
+	return nil
+}
+
+// UpdateEventsEmbeddingStatus 批量更新事件嵌入状态
+func (r *eventRepository) UpdateEventsEmbeddingStatus(eventIDs []int64, status int) error {
+	if len(eventIDs) == 0 {
+		return nil
+	}
+
+	tx, err := r.db.GetDB().Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	query := `
+		UPDATE events
+		SET embedding_status = ?, updated_at = ?
+		WHERE id = ?
+	`
+
+	nowTime := time.Now()
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, id := range eventIDs {
+		_, err = stmt.Exec(status, nowTime, id)
+		if err != nil {
+			r.logger.Error("Failed to update event status for ID %d: %v", id, err)
+			return fmt.Errorf("failed to update event status for ID %d: %w", id, err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	r.logger.Info("Successfully updated status for %d events", len(eventIDs))
 	return nil
 }
 

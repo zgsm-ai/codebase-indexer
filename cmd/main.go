@@ -136,7 +136,7 @@ func main() {
 	schedulerService := service.NewScheduler(syncRepo, scanRepo, storageManager, appLogger)
 	fileScanService := service.NewFileScanService(workspaceRepo, eventRepo, scanRepo, storageManager, codebaseEmbeddingRepo, appLogger)
 	uploadService := service.NewUploadService(schedulerService, syncRepo, appLogger, syncServiceConfig)
-	embeddingProcessService := service.NewEmbeddingProcessService(workspaceRepo, eventRepo, codebaseEmbeddingRepo, uploadService, appLogger)
+	embeddingProcessService := service.NewEmbeddingProcessService(workspaceRepo, eventRepo, codebaseEmbeddingRepo, uploadService, syncRepo, appLogger)
 	embeddingStatusService := service.NewEmbeddingStatusService(codebaseEmbeddingRepo, workspaceRepo, eventRepo, syncRepo, appLogger)
 
 	// 创建存储
@@ -168,7 +168,7 @@ func main() {
 
 	// Initialize job layer
 	fileScanJob := job.NewFileScanJob(fileScanService, storageManager, syncRepo, appLogger, 5*time.Minute)
-	eventProcessorJob := job.NewEventProcessorJob(appLogger, syncRepo, embeddingProcessService, codegraphProcessor, storageManager)
+	eventProcessorJob := job.NewEventProcessorJob(appLogger, syncRepo, embeddingProcessService, codegraphProcessor, 10*time.Second, storageManager)
 	statusCheckerJob := job.NewStatusCheckerJob(embeddingStatusService, storageManager, syncRepo, appLogger, 5*time.Second)
 	eventCleanerJob := job.NewEventCleanerJob(eventRepo, appLogger)
 	indexCleanJob := job.NewIndexCleanJob(appLogger, indexer, workspaceRepo)
