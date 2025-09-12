@@ -1041,10 +1041,11 @@ func (i *indexer) QueryReferences(ctx context.Context, opts *types.QueryReferenc
 			continue
 		} // 只处理 类、接口、函数、方法
 		// 是定义，查找它的引用。当前采用遍历的方式（通过import过滤）
+		position := types.ToPosition(s.Range)
 		def := &types.RelationNode{
 			FilePath:   fileElementTable.Path,
 			SymbolName: s.Name,
-			Position:   types.ToPosition(s.Range),
+			Position:   &position,
 			NodeType:   string(proto.ElementTypeFromProto(s.ElementType)),
 			Children:   make([]*types.RelationNode, 0),
 		}
@@ -1087,10 +1088,11 @@ func (i *indexer) findSymbolReferences(ctx context.Context, projectUuid string, 
 			}
 			// 引用
 			if v, ok := definitionNames[element.Name]; ok {
+				position := types.ToPosition(element.Range)
 				v.Children = append(v.Children, &types.RelationNode{
 					FilePath:   elementTable.Path,
 					SymbolName: element.Name,
-					Position:   types.ToPosition(element.Range),
+					Position:   &position,
 					NodeType:   string(proto.ElementTypeFromProto(element.ElementType)),
 				})
 			}
@@ -1416,11 +1418,12 @@ func (i *indexer) queryCallGraphBySymbol(ctx context.Context, projectUuid string
 			i.logger.Error("failed to get parameters from extra data, err: %v", err)
 			continue
 		}
+		position := types.ToPosition(symbol.Range)
 		node := &types.RelationNode{
 			SymbolName: symbol.Name,
 			FilePath:   filePath,
 			NodeType:   string(types.NodeTypeDefinition),
-			Position:   types.ToPosition(symbol.Range),
+			Position:   &position,
 			Children:   make([]*types.RelationNode, 0),
 		}
 		callee := &CalleeInfo{
@@ -1467,11 +1470,12 @@ func (i *indexer) queryCallGraphByLineRange(ctx context.Context, projectUuid str
 			i.logger.Error("failed to get parameters from extra data, err: %v", err)
 			continue
 		}
+		position := types.ToPosition(symbol.Range)
 		node := &types.RelationNode{
 			SymbolName: symbol.Name,
 			FilePath:   filePath,
 			NodeType:   string(types.NodeTypeDefinition),
-			Position:   types.ToPosition(symbol.Range),
+			Position:   &position,
 			Children:   make([]*types.RelationNode, 0),
 		}
 		callee := &CalleeInfo{
@@ -1578,7 +1582,7 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 				callerNode := &types.RelationNode{
 					FilePath:   caller.FilePath,
 					SymbolName: caller.SymbolName,
-					Position:   caller.Position,
+					Position:   &caller.Position,
 					NodeType:   string(types.NodeTypeReference),
 					Children:   make([]*types.RelationNode, 0),
 				}
