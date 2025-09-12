@@ -341,3 +341,31 @@ func (mr *MockEventRepositoryMockRecorder) UpdateEventByMap(id, updates interfac
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateEventByMap", reflect.TypeOf((*MockEventRepository)(nil).UpdateEventByMap), id, updates)
 }
+
+// UpdateEventsEmbedding mocks base method.
+func (m *MockEventRepository) UpdateEventsEmbedding(events []*model.Event) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateEventsEmbedding", events)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateEventsEmbedding indicates an expected call of UpdateEventsEmbedding.
+func (mr *MockEventRepositoryMockRecorder) UpdateEventsEmbedding(events interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateEventsEmbedding", reflect.TypeOf((*MockEventRepository)(nil).UpdateEventsEmbedding), events)
+}
+
+// UpdateEventsEmbeddingStatus mocks base method.
+func (m *MockEventRepository) UpdateEventsEmbeddingStatus(eventIDs []int64, status int) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateEventsEmbeddingStatus", eventIDs, status)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateEventsEmbeddingStatus indicates an expected call of UpdateEventsEmbeddingStatus.
+func (mr *MockEventRepositoryMockRecorder) UpdateEventsEmbeddingStatus(eventIDs, status interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateEventsEmbeddingStatus", reflect.TypeOf((*MockEventRepository)(nil).UpdateEventsEmbeddingStatus), eventIDs, status)
+}
