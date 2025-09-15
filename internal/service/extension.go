@@ -740,7 +740,8 @@ func (s *extensionService) createCodebaseConfig(workspacePath, clientID string) 
 	workspaceName := filepath.Base(workspacePath)
 	codebaseID := utils.GenerateCodebaseID(workspacePath)
 
-	currentHashTree, err := s.fileScanner.ScanCodebase(workspacePath)
+	ignoreConfig := s.fileScanner.LoadIgnoreConfig(workspacePath)
+	currentHashTree, err := s.fileScanner.ScanCodebase(ignoreConfig, workspacePath)
 	if err != nil {
 		currentHashTree = make(map[string]string)
 	}

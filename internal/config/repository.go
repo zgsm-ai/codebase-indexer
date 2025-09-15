@@ -8,10 +8,11 @@ import (
 
 // ScannerConfig holds the configuration for file scanning
 type ScannerConfig struct {
-	FolderIgnorePatterns []string
-	FileIncludePatterns  []string
-	MaxFileSizeKB        int // File size limit in KB
-	MaxFileCount         int
+	FolderIgnorePatterns         []string
+	FileIncludePatterns          []string
+	DeepwikiFolderIgnorePatterns []string
+	MaxFileSizeKB                int // File size limit in KB
+	MaxFileCount                 int
 }
 
 // SyncConfig holds the sync configuration

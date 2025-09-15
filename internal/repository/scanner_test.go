@@ -18,10 +18,12 @@ var (
 	scannerConfig = &config.ScannerConfig{
 		// IgnorePatterns: []string{".git", ".idea", "node_modules/", "vendor/", "dist/", "build/"},
 		// FileIgnorePatterns:   []string{".*", "*.bak"},
-		FolderIgnorePatterns: []string{".*", "build/", "dist/", "node_modules/", "vendor/"},
-		FileIncludePatterns:  []string{".go"},
+		FolderIgnorePatterns:         []string{".*", "build/", "dist/", "node_modules/", "vendor/"},
+		FileIncludePatterns:          []string{".go"},
+		DeepwikiFolderIgnorePatterns: []string{".*", "build/", "dist/", "node_modules/", "vendor/"},
 		// MaxFileSizeMB:  10,
 		MaxFileSizeKB: 100,
+		MaxFileCount:  10000,
 	}
 )
 
@@ -134,7 +136,8 @@ func TestScanDirectory(t *testing.T) {
 			t.Logf("src/pkg/utils.go size: %d bytes", info.Size())
 		}
 
-		hashTree, err := fs.ScanCodebase(codebasePath)
+		ignoreConfig := fs.LoadIgnoreConfig(codebasePath)
+		hashTree, err := fs.ScanCodebase(ignoreConfig, codebasePath)
 		logger.AssertCalled(t, "Info", "starting codebase scan: %s", mock.Anything)
 		require.NoError(t, err)
 
@@ -173,7 +176,8 @@ func TestScanDirectory(t *testing.T) {
 
 		codebasePath := setupTestDir(t)
 		fs := &FileScanner{scannerConfig: scannerConfig, logger: logger}
-		hashTree, err := fs.ScanCodebase(codebasePath)
+		ignoreConfig := fs.LoadIgnoreConfig(codebasePath)
+		hashTree, err := fs.ScanCodebase(ignoreConfig, codebasePath)
 		require.NoError(t, err)
 
 		// Verify with Windows-style paths
@@ -214,7 +218,8 @@ func BenchmarkScanCodebase_10000Files(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := fs.ScanCodebase(tempDir)
+		ignoreConfig := fs.LoadIgnoreConfig(tempDir)
+		_, err := fs.ScanCodebase(ignoreConfig, tempDir)
 		require.NoError(b, err)
 	}
 

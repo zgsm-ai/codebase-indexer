@@ -135,10 +135,11 @@ func (s *Scheduler) LoadConfig(ctx context.Context) {
 
 	// Update scanner configuration
 	scannerConfig := &config.ScannerConfig{
-		FolderIgnorePatterns: clientConfig.Sync.FolderIgnorePatterns,
-		FileIncludePatterns:  clientConfig.Sync.FileIncludePatterns,
-		MaxFileSizeKB:        clientConfig.Sync.MaxFileSizeKB,
-		MaxFileCount:         clientConfig.Sync.MaxFileCount,
+		FolderIgnorePatterns:         clientConfig.Scan.FolderIgnorePatterns,
+		FileIncludePatterns:          clientConfig.Scan.FileIncludePatterns,
+		DeepwikiFolderIgnorePatterns: clientConfig.Scan.DeepwikiFolderIgnorePatterns,
+		MaxFileSizeKB:                clientConfig.Scan.MaxFileSizeKB,
+		MaxFileCount:                 clientConfig.Scan.MaxFileCount,
 	}
 	s.fileScanner.SetScannerConfig(scannerConfig)
 }
@@ -223,7 +224,8 @@ func (s *Scheduler) performSync() {
 func (s *Scheduler) performSyncForCodebase(config *config.CodebaseConfig) error {
 	s.logger.Info("starting sync for codebase: %s", config.CodebaseId)
 	nowTime := time.Now()
-	localHashTree, err := s.fileScanner.ScanCodebase(config.CodebasePath)
+	ignoreConfig := s.fileScanner.LoadIgnoreConfig(config.CodebasePath)
+	localHashTree, err := s.fileScanner.ScanCodebase(ignoreConfig, config.CodebasePath)
 	if err != nil {
 		s.logger.Error("failed to scan directory (%s): %v", config.CodebasePath, err)
 		return fmt.Errorf("scan directory (%s) failed: %v", config.CodebasePath, err)
