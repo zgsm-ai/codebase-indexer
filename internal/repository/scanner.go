@@ -26,14 +26,16 @@ type ScannerInterface interface {
 	SetScannerConfig(config *config.ScannerConfig)
 	GetScannerConfig() *config.ScannerConfig
 	LoadIgnoreRules(codebasePath string) *gitignore.GitIgnore
+	LoadDeepwikiIgnoreRules(codebasePath string) *gitignore.GitIgnore
 	LoadFileIgnoreRules(codebasePath string) *gitignore.GitIgnore
 	LoadFolderIgnoreRules(codebasePath string) *gitignore.GitIgnore
 	LoadIncludeFiles() []string
-	ScanCodebase(codebasePath string) (map[string]string, error)
+	ScanCodebase(ignoreConfig *config.IgnoreConfig, codebasePath string) (map[string]string, error)
 	ScanFilePaths(codebasePath string, filePaths []string) (map[string]string, error)
 	ScanDirectory(codebasePath, dirPath string) (map[string]string, error)
 	ScanFile(codebasePath, filePath string) (string, error)
 	LoadIgnoreConfig(codebasePath string) *config.IgnoreConfig
+	LoadDeepwikiIgnoreConfig(codebasePath string) *config.IgnoreConfig
 	CheckIgnoreFile(ignoreConfig *config.IgnoreConfig, codebasePath string, fileInfo *types.FileInfo) (bool, error)
 }
 
@@ -53,10 +55,11 @@ func NewFileScanner(logger logger.Logger) ScannerInterface {
 // defaultScannerConfig returns default scanner configuration
 func defaultScannerConfig() *config.ScannerConfig {
 	return &config.ScannerConfig{
-		FolderIgnorePatterns: config.DefaultConfigSync.FolderIgnorePatterns,
-		FileIncludePatterns:  config.DefaultConfigSync.FileIncludePatterns,
-		MaxFileSizeKB:        config.DefaultConfigSync.MaxFileSizeKB,
-		MaxFileCount:         config.DefaultConfigSync.MaxFileCount,
+		FolderIgnorePatterns:         config.DefaultConfigScan.FolderIgnorePatterns,
+		FileIncludePatterns:          config.DefaultConfigScan.FileIncludePatterns,
+		DeepwikiFolderIgnorePatterns: config.DefaultConfigScan.DeepwikiFolderIgnorePatterns,
+		MaxFileSizeKB:                config.DefaultConfigScan.MaxFileSizeKB,
+		MaxFileCount:                 config.DefaultConfigScan.MaxFileCount,
 	}
 }
 
@@ -72,6 +75,9 @@ func (s *FileScanner) SetScannerConfig(config *config.ScannerConfig) {
 	}
 	if len(config.FileIncludePatterns) > 0 {
 		s.scannerConfig.FileIncludePatterns = config.FileIncludePatterns
+	}
+	if len(config.DeepwikiFolderIgnorePatterns) > 0 {
+		s.scannerConfig.DeepwikiFolderIgnorePatterns = config.DeepwikiFolderIgnorePatterns
 	}
 	if config.MaxFileSizeKB > 10 && config.MaxFileSizeKB <= 20480 {
 		s.scannerConfig.MaxFileSizeKB = config.MaxFileSizeKB
@@ -93,6 +99,16 @@ func (s *FileScanner) LoadIgnoreConfig(codebasePath string) *config.IgnoreConfig
 	return &config.IgnoreConfig{
 		IgnoreRules:  s.LoadIgnoreRules(codebasePath),
 		IncludeRules: s.LoadIncludeFiles(),
+		MaxFileCount: s.scannerConfig.MaxFileCount,
+		MaxFileSize:  s.scannerConfig.MaxFileSizeKB,
+	}
+}
+
+// LoadDeepwikiIgnoreConfig 加载 deepwiki 的忽略配置
+func (s *FileScanner) LoadDeepwikiIgnoreConfig(codebasePath string) *config.IgnoreConfig {
+	return &config.IgnoreConfig{
+		IgnoreRules:  s.LoadDeepwikiIgnoreRules(codebasePath),
+		IncludeRules: []string{},
 		MaxFileCount: s.scannerConfig.MaxFileCount,
 		MaxFileSize:  s.scannerConfig.MaxFileSizeKB,
 	}
@@ -154,11 +170,41 @@ func (s *FileScanner) CheckIgnoreFile(ignoreConfig *config.IgnoreConfig, codebas
 	return false, nil
 }
 
-// Load and combine default ignore rules with .gitignore rules
+// LoadIgnoreRules Load and combine default ignore rules with .gitignore rules
 func (s *FileScanner) LoadIgnoreRules(codebasePath string) *gitignore.GitIgnore {
 	// First create ignore object with default rules
 	// fileIngoreRules := s.scannerConfig.FileIgnorePatterns
 	currentIgnoreRules := s.scannerConfig.FolderIgnorePatterns
+
+	// Read and merge .gitignore file
+	gitignoreRules := s.loadGitignore(codebasePath)
+	if len(gitignoreRules) > 0 {
+		currentIgnoreRules = append(currentIgnoreRules, gitignoreRules...)
+	}
+
+	// Read and merge .coignore file
+	coignoreRules := s.loadCoignore(codebasePath)
+	if len(coignoreRules) > 0 {
+		currentIgnoreRules = append(currentIgnoreRules, coignoreRules...)
+	}
+
+	// Remove duplicate rules
+	uniqueRules := utils.UniqueStringSlice(currentIgnoreRules)
+	// 转义
+	for i, rule := range uniqueRules {
+		// 处理 $
+		uniqueRules[i] = strings.ReplaceAll(rule, "$", `\$`)
+	}
+
+	compiledIgnore := gitignore.CompileIgnoreLines(uniqueRules...)
+
+	return compiledIgnore
+}
+
+// LoadDeepwikiIgnoreRules Load and combine default ignore rules with .gitignore rules
+func (s *FileScanner) LoadDeepwikiIgnoreRules(codebasePath string) *gitignore.GitIgnore {
+	// First create ignore object with default rules
+	currentIgnoreRules := s.scannerConfig.DeepwikiFolderIgnorePatterns
 
 	// Read and merge .gitignore file
 	gitignoreRules := s.loadGitignore(codebasePath)
@@ -287,21 +333,23 @@ func (s *FileScanner) LoadIncludeFiles() []string {
 }
 
 // ScanCodebase scans codebase directory and generates hash tree
-func (s *FileScanner) ScanCodebase(codebasePath string) (map[string]string, error) {
+func (s *FileScanner) ScanCodebase(ignoreConfig *config.IgnoreConfig, codebasePath string) (map[string]string, error) {
 	s.logger.Info("starting codebase scan: %s", codebasePath)
 	startTime := time.Now()
 
 	hashTree := make(map[string]string)
 	var filesScanned int
 
-	// fileIgnore := s.LoadFileIgnoreRules(codebasePath)
-	// folderIgnore := s.LoadFolderIgnoreRules(codebasePath)
-	ignore := s.LoadIgnoreRules(codebasePath)
-	fileInclude := s.LoadIncludeFiles()
+	if ignoreConfig == nil || codebasePath == "" {
+		return hashTree, fmt.Errorf("ignoreConfig or codebasePath is nil")
+	}
+	ignore := ignoreConfig.IgnoreRules
+	fileInclude := ignoreConfig.IncludeRules
 	fileIncludeMap := utils.StringSlice2Map(fileInclude)
-
-	maxFileSizeKB := s.scannerConfig.MaxFileSizeKB
+	maxFileSizeKB := ignoreConfig.MaxFileSize
 	maxFileSize := int64(maxFileSizeKB * 1024)
+	maxFileCount := ignoreConfig.MaxFileCount
+
 	err := filepath.WalkDir(codebasePath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			s.logger.Warn("error accessing file %s: %v", path, err)
@@ -360,7 +408,7 @@ func (s *FileScanner) ScanCodebase(codebasePath string) (map[string]string, erro
 		}
 
 		filesScanned++
-		if filesScanned > s.scannerConfig.MaxFileCount {
+		if filesScanned > maxFileCount {
 			return fmt.Errorf("reached maximum file count limit: %d", filesScanned)
 		}
 
@@ -433,8 +481,6 @@ func (s *FileScanner) ScanDirectory(codebasePath, dirPath string) (map[string]st
 	hashTree := make(map[string]string)
 	var filesScanned int
 
-	// fileIgnore := s.LoadFileIgnoreRules(codebasePath)
-	// folderIgnore := s.LoadFolderIgnoreRules(codebasePath)
 	ignore := s.LoadIgnoreRules(codebasePath)
 	fileInclude := s.LoadIncludeFiles()
 	fileIncludeMap := utils.StringSlice2Map(fileInclude)

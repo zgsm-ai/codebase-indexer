@@ -284,7 +284,7 @@ func (ep *embeddingProcessService) processWorkspaceEvents(ctx context.Context, w
 	uploadToken := uploadTokenResp.Data.Token
 
 	config := config.GetClientConfig()
-	maxFileSizeKB := config.Sync.MaxFileSizeKB
+	maxFileSizeKB := config.Scan.MaxFileSizeKB
 
 	// 批量处理添加和修改事件
 	if len(addModifyEvents) > 0 {

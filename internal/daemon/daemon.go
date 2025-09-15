@@ -177,10 +177,11 @@ func (d *Daemon) updateConfig() {
 	})
 	// Update file scanner configuration
 	d.fileScanner.SetScannerConfig(&config.ScannerConfig{
-		FolderIgnorePatterns: newConfig.Sync.FolderIgnorePatterns,
-		FileIncludePatterns:  newConfig.Sync.FileIncludePatterns,
-		MaxFileSizeKB:        newConfig.Sync.MaxFileSizeKB,
-		MaxFileCount:         newConfig.Sync.MaxFileCount,
+		FolderIgnorePatterns:         newConfig.Scan.FolderIgnorePatterns,
+		FileIncludePatterns:          newConfig.Scan.FileIncludePatterns,
+		DeepwikiFolderIgnorePatterns: newConfig.Scan.DeepwikiFolderIgnorePatterns,
+		MaxFileSizeKB:                newConfig.Scan.MaxFileSizeKB,
+		MaxFileCount:                 newConfig.Scan.MaxFileCount,
 	})
 
 	d.logger.Info("client config updated")
@@ -236,14 +237,15 @@ func configChanged(current, new config.ClientConfig) bool {
 	return current.Server.RegisterExpireMinutes != new.Server.RegisterExpireMinutes ||
 		current.Server.HashTreeExpireHours != new.Server.HashTreeExpireHours ||
 		current.Sync.IntervalMinutes != new.Sync.IntervalMinutes ||
-		current.Sync.MaxFileSizeKB != new.Sync.MaxFileSizeKB ||
-		current.Sync.MaxFileCount != new.Sync.MaxFileCount ||
 		current.Sync.MaxRetries != new.Sync.MaxRetries ||
 		current.Sync.RetryDelaySeconds != new.Sync.RetryDelaySeconds ||
 		current.Sync.EmbeddingSuccessPercent != new.Sync.EmbeddingSuccessPercent ||
 		current.Sync.CodegraphSuccessPercent != new.Sync.CodegraphSuccessPercent ||
-		!equalIgnorePatterns(current.Sync.FolderIgnorePatterns, new.Sync.FolderIgnorePatterns) ||
-		!equalIgnorePatterns(current.Sync.FileIncludePatterns, new.Sync.FileIncludePatterns)
+		current.Scan.MaxFileSizeKB != new.Scan.MaxFileSizeKB ||
+		current.Scan.MaxFileCount != new.Scan.MaxFileCount ||
+		!equalIgnorePatterns(current.Scan.FolderIgnorePatterns, new.Scan.FolderIgnorePatterns) ||
+		!equalIgnorePatterns(current.Scan.FileIncludePatterns, new.Scan.FileIncludePatterns) ||
+		!equalIgnorePatterns(current.Scan.DeepwikiFolderIgnorePatterns, new.Scan.DeepwikiFolderIgnorePatterns)
 }
 
 // equalIgnorePatterns compares whether ignore patterns are same
