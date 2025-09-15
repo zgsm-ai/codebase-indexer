@@ -15,9 +15,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/antlabs/strsim"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 type DependencyAnalyzer struct {
@@ -219,23 +220,49 @@ func (da *DependencyAnalyzer) FilterByImports(filePath string, imports []*codegr
 func (da *DependencyAnalyzer) CalculateSymbolMatchScore(callerImports []*codegraphpb.Import, callerFilePath string, calleeFilePath string, calleeSymbolName string) int {
 	// 1、同文件
 	if callerFilePath == calleeFilePath {
-		return 10
+		return 100
 	}
 
 	// 2、同包(同父路径)
 	if utils.IsSameParentDir(callerFilePath, calleeFilePath) {
-		return 10
+		return 100
 	}
 
 	// 3、根据import判断，def的文件路径是否在imp的范围内
 	for _, imp := range callerImports {
 		if IsFilePathInImportPackage(calleeFilePath, imp) {
-			return 10
+			return 100
 		}
 	}
 
-	// 4、路径相似性匹配
-	similarity := strsim.Compare(callerFilePath, calleeFilePath, strsim.Cosine())
-	score := int(5*similarity) * 0
-	return score
+	// 4、最长公共前缀
+	packageLevel := calculatePackageLevel(callerFilePath, calleeFilePath)
+	return packageLevel
+}
+func calculatePackageLevel(callerPath string, calleePath string) int {
+	callerPath = strings.ReplaceAll(callerPath, types.WindowsSeparator, types.Dot)
+	callerPath = strings.ReplaceAll(callerPath, types.UnixSeparator, types.Dot)
+	callerDir := filepath.Dir(callerPath)
+
+	calleePath = strings.ReplaceAll(calleePath, types.WindowsSeparator, types.Dot)
+	calleePath = strings.ReplaceAll(calleePath, types.UnixSeparator, types.Dot)
+	calleeDir := filepath.Dir(calleePath)
+
+
+	// 计算共同前缀长度
+	commonPrefix := 0
+	callerParts := strings.Split(callerDir, types.UnixSeparator)
+	calleeParts := strings.Split(calleeDir, types.UnixSeparator)
+
+	minLen := min(len(callerParts), len(calleeParts))
+	for i := 0; i < minLen; i++ {
+		if callerParts[i] == calleeParts[i] {
+			commonPrefix++
+		} else {
+			break
+		}
+	}
+
+	// 层级越近，分数越高
+	return commonPrefix
 }

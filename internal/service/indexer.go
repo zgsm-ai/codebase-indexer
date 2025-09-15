@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -153,8 +154,7 @@ const (
 	defaultMaxFiles      = 10000
 	defaultMaxProjects   = 3
 	defaultCacheCapacity = 10_0000 // 假定单个文件平均10个元素,1万个文件
-	defaultTopN          = 50
-	defaultFilterScore   = 3
+	defaultTopN          = 10
 )
 
 // NewCodeIndexer 创建新的代码索引器
@@ -1141,6 +1141,7 @@ func (i *indexer) querySymbolsByName(doc *codegraphpb.FileElementTable, opts *ty
 	}
 	return nodes
 }
+
 // QueryDefinitions 支持单符号全局查询、行号范围内的符号定义查询、代码片段内的符号定义查询
 func (i *indexer) QueryDefinitions(ctx context.Context, opts *types.QueryDefinitionOptions) ([]*types.Definition, error) {
 	// 参数验证
@@ -1562,7 +1563,6 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 				// 从数据库查询
 				dbCallers, err := i.queryCallersFromDB(ctx, projectUuid, calleeKey)
 				if err != nil {
-					// cache miss
 					// i.logger.Debug("query callers from db for callee %s,err: %v", calleeKey.SymbolName, err)
 					continue
 				}
@@ -1571,33 +1571,45 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 				calleeMap.Add(calleeKey, callers)
 			}
 
-			// 限制调用者数量
-			maxCallers := defaultTopN
-			if len(callers) > maxCallers {
-				callers = callers[:maxCallers]
-			}
-
-			for _, caller := range callers {
+			for idx := range len(callers) {
 				// 可以保留递归情况的层次信息，但是不继续遍历下去
 				// 防止循环引用
-				if _, ok := visited[caller.Key()]; ok {
+				if _, ok := visited[callers[idx].Key()]; ok {
 					continue
 				}
 
+				fileElementTable, err := i.getFileElementTableByPath(ctx, projectUuid, callers[idx].FilePath)
+				if err != nil {
+					i.logger.Error("failed to get file element table by path, err: %v", err)
+					continue
+				}
+				imports := fileElementTable.Imports
 				// 计算匹配分数
-				score := i.analyzer.CalculateSymbolMatchScore(nil, caller.FilePath, ln.callee.FilePath, ln.callee.SymbolName)
+				score := i.analyzer.CalculateSymbolMatchScore(imports, callers[idx].FilePath, ln.callee.FilePath, ln.callee.SymbolName)
+				callers[idx].Score = float64(score)
+			}
+
+			sort.Slice(callers, func(i, j int) bool {
+				return callers[i].Score > callers[j].Score
+			})
+			// 第一层不限制，其他层限制
+			if layer != 0 && len(callers) > defaultTopN {
+				callers = callers[:defaultTopN]
+			}
+
+			for idx := range len(callers) {
 				// 创建对应的被调用元素
 				calleeInfo := &CalleeInfo{
-					FilePath:   caller.FilePath,
-					SymbolName: caller.SymbolName,
-					ParamCount: caller.ParamCount,
-					Position:   caller.Position,
+					FilePath:   callers[idx].FilePath,
+					SymbolName: callers[idx].SymbolName,
+					ParamCount: callers[idx].ParamCount,
+					Position:   callers[idx].Position,
 				}
 				// 创建调用者节点
 				callerNode := &types.RelationNode{
-					FilePath:   caller.FilePath,
-					SymbolName: caller.SymbolName,
-					Position:   &caller.Position,
+					FilePath:   callers[idx].FilePath,
+					SymbolName: callers[idx].SymbolName,
+					Position:   &callers[idx].Position,
 					NodeType:   string(types.NodeTypeReference),
 					Children:   make([]*types.RelationNode, 0),
 				}
@@ -1605,13 +1617,11 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 				ln.node.Children = append(ln.node.Children, callerNode)
 				// 标记为已访问，并添加到下一层
 				visited[calleeInfo.Key()] = struct{}{}
-				// i.logger.Debug("add caller node: %s, filePath: %s, to next layer,key: %s", caller.SymbolName, caller.FilePath, calleeInfo.Key()	)
+
 				nextLayerNodes = append(nextLayerNodes, &layerNode{
 					node:   callerNode,
 					callee: calleeInfo,
 				})
-				// TODO 根据score进行排序
-				_ = score
 			}
 		}
 

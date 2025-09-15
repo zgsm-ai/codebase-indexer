@@ -508,7 +508,7 @@ func (l *codebaseService) QueryReference(ctx context.Context, req *dto.SearchRef
 }
 
 const defaultMaxLayer = 10
-const maxLayerNodeLimit = 50
+const maxLayerNodeLimit = 8
 
 func (l *codebaseService) QueryCallGraph(ctx context.Context, req *dto.SearchCallGraphRequest) (resp *dto.CallGraphData, err error) {
 	// 二次校验
