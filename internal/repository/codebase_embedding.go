@@ -13,53 +13,53 @@ import (
 )
 
 type EmbeddingFileRepository interface {
-	GetCodebaseEmbeddingConfigs() map[string]*config.CodebaseEmbeddingConfig
-	GetCodebaseEmbeddingConfig(codebaseId string) (*config.CodebaseEmbeddingConfig, error)
-	SaveCodebaseEmbeddingConfig(config *config.CodebaseEmbeddingConfig) error
-	DeleteCodebaseEmbeddingConfig(codebaseId string) error
+	GetEmbeddingConfigs() map[string]*config.EmbeddingConfig
+	GetEmbeddingConfig(embeddingId string) (*config.EmbeddingConfig, error)
+	SaveEmbeddingConfig(config *config.EmbeddingConfig) error
+	DeleteEmbeddingConfig(embeddingId string) error
 }
 
 type EmbeddingFileRepo struct {
-	codebasePath    string
-	codebaseConfigs map[string]*config.CodebaseEmbeddingConfig // Stores all codebase configurations
-	logger          logger.Logger
-	rwMutex         sync.RWMutex
+	embeddingPath    string
+	embeddingConfigs map[string]*config.EmbeddingConfig // Stores all embedding configurations
+	logger           logger.Logger
+	rwMutex          sync.RWMutex
 }
 
 // NewEmbeddingFileRepo creates a new configuration manager
-func NewEmbeddingFileRepo(workspaceDir string, logger logger.Logger) (EmbeddingFileRepository, error) {
-	if workspaceDir == "" || strings.Contains(workspaceDir, "\x00") {
-		return nil, fmt.Errorf("invalid codebase embedding directory path")
+func NewEmbeddingFileRepo(embeddingDir string, logger logger.Logger) (EmbeddingFileRepository, error) {
+	if embeddingDir == "" || strings.Contains(embeddingDir, "\x00") {
+		return nil, fmt.Errorf("invalid embedding directory path")
 	}
 
 	// Try to create directory to verify write permission
-	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create codebase embedding directory: %v", err)
+	if err := os.MkdirAll(embeddingDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create embedding directory: %v", err)
 	}
 
-	// Initialize codebaseConfigs map
+	// Initialize embeddingConfigs map
 	sm := &EmbeddingFileRepo{
-		codebasePath:    workspaceDir,
-		logger:          logger,
-		codebaseConfigs: make(map[string]*config.CodebaseEmbeddingConfig),
+		embeddingPath:    embeddingDir,
+		logger:           logger,
+		embeddingConfigs: make(map[string]*config.EmbeddingConfig),
 	}
 
 	sm.loadAllConfigs()
 	return sm, nil
 }
 
-// GetCodebaseEmbeddingConfigs retrieves all project configurations
-func (s *EmbeddingFileRepo) GetCodebaseEmbeddingConfigs() map[string]*config.CodebaseEmbeddingConfig {
+// GetEmbeddingConfigs retrieves all project configurations
+func (s *EmbeddingFileRepo) GetEmbeddingConfigs() map[string]*config.EmbeddingConfig {
 	s.rwMutex.RLock()
 	defer s.rwMutex.RUnlock()
-	return s.codebaseConfigs
+	return s.embeddingConfigs
 }
 
-// GetCodebaseEmbeddingConfig loads codebase configuration
+// GetEmbeddingConfig loads embedding configuration
 // First checks in memory, if not found then loads from filesystem
-func (s *EmbeddingFileRepo) GetCodebaseEmbeddingConfig(codebaseId string) (*config.CodebaseEmbeddingConfig, error) {
+func (s *EmbeddingFileRepo) GetEmbeddingConfig(embeddingId string) (*config.EmbeddingConfig, error) {
 	s.rwMutex.RLock()
-	config, exists := s.codebaseConfigs[codebaseId]
+	config, exists := s.embeddingConfigs[embeddingId]
 	s.rwMutex.RUnlock()
 
 	if exists {
@@ -67,23 +67,23 @@ func (s *EmbeddingFileRepo) GetCodebaseEmbeddingConfig(codebaseId string) (*conf
 	}
 
 	// Not found in memory, try loading from file
-	config, err := s.loadCodebaseConfig(codebaseId)
+	config, err := s.loadEmbeddingConfig(embeddingId)
 	if err != nil {
 		return nil, err
 	}
 
 	s.rwMutex.Lock()
-	s.codebaseConfigs[codebaseId] = config
+	s.embeddingConfigs[embeddingId] = config
 	s.rwMutex.Unlock()
 
 	return config, nil
 }
 
-// Load all codebase configuration files
+// Load all embedding configuration files
 func (s *EmbeddingFileRepo) loadAllConfigs() {
-	files, err := os.ReadDir(s.codebasePath)
+	files, err := os.ReadDir(s.embeddingPath)
 	if err != nil {
-		s.logger.Error("failed to read codebase embedding directory: %v", err)
+		s.logger.Error("failed to read embedding directory: %v", err)
 		return
 	}
 
@@ -92,53 +92,53 @@ func (s *EmbeddingFileRepo) loadAllConfigs() {
 			continue
 		}
 
-		config, err := s.loadCodebaseConfig(file.Name())
+		config, err := s.loadEmbeddingConfig(file.Name())
 		if err != nil {
-			s.logger.Error("failed to load codebase embedding file %s: %v", file.Name(), err)
+			s.logger.Error("failed to load embedding file %s: %v", file.Name(), err)
 			continue
 		}
-		s.codebaseConfigs[file.Name()] = config
+		s.embeddingConfigs[file.Name()] = config
 	}
 }
 
-// loadCodebaseConfig loads a codebase configuration file
-func (s *EmbeddingFileRepo) loadCodebaseConfig(codebaseId string) (*config.CodebaseEmbeddingConfig, error) {
-	s.logger.Info("loading codebase embedding file content: %s", codebaseId)
+// loadEmbeddingConfig loads a embedding configuration file
+func (s *EmbeddingFileRepo) loadEmbeddingConfig(embeddingId string) (*config.EmbeddingConfig, error) {
+	s.logger.Info("loading embedding file content: %s", embeddingId)
 
 	s.rwMutex.RLock()
 	defer s.rwMutex.RUnlock()
 
-	filePath := filepath.Join(s.codebasePath, codebaseId)
+	filePath := filepath.Join(s.embeddingPath, embeddingId)
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("codebase embedding file does not exist: %s", filePath)
+			return nil, fmt.Errorf("embedding file does not exist: %s", filePath)
 		}
-		return nil, fmt.Errorf("failed to read codebase embedding file: %v", err)
+		return nil, fmt.Errorf("failed to read embedding file: %v", err)
 	}
 
-	var config config.CodebaseEmbeddingConfig
+	var config config.EmbeddingConfig
 	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse codebase embedding file: %v", err)
+		return nil, fmt.Errorf("failed to parse embedding file: %v", err)
 	}
 
-	if config.CodebaseId != codebaseId {
-		return nil, fmt.Errorf("codebase embedding Id mismatch: expected %s, got %s",
-			codebaseId, config.CodebaseId)
+	if config.CodebaseId != embeddingId {
+		return nil, fmt.Errorf("embedding Id mismatch: expected %s, got %s",
+			embeddingId, config.CodebaseId)
 	}
 
-	s.logger.Info("codebase embedding file loaded successfully, path: %s", filePath)
+	s.logger.Info("embedding file loaded successfully, path: %s", filePath)
 
 	return &config, nil
 }
 
-// SaveCodebaseEmbeddingConfig saves codebase configuration
-func (s *EmbeddingFileRepo) SaveCodebaseEmbeddingConfig(config *config.CodebaseEmbeddingConfig) error {
+// SaveEmbeddingConfig saves embedding configuration
+func (s *EmbeddingFileRepo) SaveEmbeddingConfig(config *config.EmbeddingConfig) error {
 	if config == nil {
-		return fmt.Errorf("codebase config is empty: %v", config)
+		return fmt.Errorf("embedding config is empty: %v", config)
 	}
-	s.logger.Info("saving codebase embedding config: %s", config.CodebasePath)
+	s.logger.Info("saving embedding config: %s", config.CodebasePath)
 
 	s.rwMutex.Lock()
 	defer s.rwMutex.Unlock()
@@ -148,46 +148,46 @@ func (s *EmbeddingFileRepo) SaveCodebaseEmbeddingConfig(config *config.CodebaseE
 		return fmt.Errorf("failed to serialize config: %v", err)
 	}
 
-	filePath := filepath.Join(s.codebasePath, config.CodebaseId)
+	filePath := filepath.Join(s.embeddingPath, config.CodebaseId)
 	if err := os.WriteFile(filePath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write config file: %v", err)
 	}
 
 	// Atomically update in-memory configuration
-	s.codebaseConfigs[config.CodebaseId] = config
-	s.logger.Info("codebase embedding config saved successfully, path: %s", filePath)
+	s.embeddingConfigs[config.CodebaseId] = config
+	s.logger.Info("embedding config saved successfully, path: %s", filePath)
 	return nil
 }
 
-// DeleteCodebaseEmbeddingConfig deletes codebase configuration
-func (s *EmbeddingFileRepo) DeleteCodebaseEmbeddingConfig(codebaseId string) error {
-	s.logger.Info("deleting codebase embedding config: %s", codebaseId)
+// DeleteEmbeddingConfig deletes embedding configuration
+func (s *EmbeddingFileRepo) DeleteEmbeddingConfig(embeddingId string) error {
+	s.logger.Info("deleting embedding config: %s", embeddingId)
 
-	filePath := filepath.Join(s.codebasePath, codebaseId)
+	filePath := filepath.Join(s.embeddingPath, embeddingId)
 
 	s.rwMutex.Lock()
 	defer s.rwMutex.Unlock()
 
-	exists := s.codebaseConfigs[codebaseId] != nil
+	exists := s.embeddingConfigs[embeddingId] != nil
 
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		if exists {
-			delete(s.codebaseConfigs, codebaseId)
-			s.logger.Info("codebase embedding config deleted: %s (memory only)", codebaseId)
+			delete(s.embeddingConfigs, embeddingId)
+			s.logger.Info("embedding config deleted: %s (memory only)", embeddingId)
 		}
 		return nil
 	}
 
 	if err := os.Remove(filePath); err != nil {
-		return fmt.Errorf("failed to delete codebase file: %v", err)
+		return fmt.Errorf("failed to delete embedding file: %v", err)
 	}
 
 	// Only delete in-memory config after file deletion succeeds
 	if exists {
-		delete(s.codebaseConfigs, codebaseId)
-		s.logger.Info("codebase embedding config deleted: %s (file and memory)", filePath)
+		delete(s.embeddingConfigs, embeddingId)
+		s.logger.Info("embedding config deleted: %s (file and memory)", filePath)
 	} else {
-		s.logger.Info("codebase embedding file deleted: %s (file only)", filePath)
+		s.logger.Info("embedding file deleted: %s (file only)", filePath)
 	}
 	return nil
 }

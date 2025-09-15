@@ -25,27 +25,27 @@ type EmbeddingStatusService interface {
 
 // embeddingStatusService 状态检查服务实现
 type embeddingStatusService struct {
-	codebaseEmbeddingRepo repository.EmbeddingFileRepository
-	workspaceRepo         repository.WorkspaceRepository
-	eventRepo             repository.EventRepository
-	syncer                repository.SyncInterface
-	logger                logger.Logger
+	embeddingRepo repository.EmbeddingFileRepository
+	workspaceRepo repository.WorkspaceRepository
+	eventRepo     repository.EventRepository
+	syncer        repository.SyncInterface
+	logger        logger.Logger
 }
 
 // NewEmbeddingStatusService 创建状态检查服务
 func NewEmbeddingStatusService(
-	codebaseEmbeddingRepo repository.EmbeddingFileRepository,
+	embeddingRepo repository.EmbeddingFileRepository,
 	workspaceRepo repository.WorkspaceRepository,
 	eventRepo repository.EventRepository,
 	syncer repository.SyncInterface,
 	logger logger.Logger,
 ) EmbeddingStatusService {
 	return &embeddingStatusService{
-		codebaseEmbeddingRepo: codebaseEmbeddingRepo,
-		workspaceRepo:         workspaceRepo,
-		eventRepo:             eventRepo,
-		syncer:                syncer,
-		logger:                logger,
+		embeddingRepo: embeddingRepo,
+		workspaceRepo: workspaceRepo,
+		eventRepo:     eventRepo,
+		syncer:        syncer,
+		logger:        logger,
 	}
 }
 
@@ -309,33 +309,33 @@ func (sc *embeddingStatusService) buildFilePathFailed(event *model.Event) error 
 		filePath = event.TargetFilePath
 	}
 	workspacePath := event.WorkspacePath
-	codebaseId := utils.GenerateCodebaseEmbeddingID(workspacePath)
-	codebaseEmbeddingConfig, err := sc.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseId)
+	embeddingId := utils.GenerateEmbeddingID(workspacePath)
+	embeddingConfig, err := sc.embeddingRepo.GetEmbeddingConfig(embeddingId)
 	if err != nil {
-		return fmt.Errorf("failed to get codebase embedding config for workspace %s: %w", event.WorkspacePath, err)
+		return fmt.Errorf("failed to get embedding config for workspace %s: %w", event.WorkspacePath, err)
 	}
-	if codebaseEmbeddingConfig.HashTree == nil {
-		codebaseEmbeddingConfig.HashTree = make(map[string]string)
+	if embeddingConfig.HashTree == nil {
+		embeddingConfig.HashTree = make(map[string]string)
 	}
-	if codebaseEmbeddingConfig.FailedFiles == nil {
-		codebaseEmbeddingConfig.FailedFiles = make(map[string]string)
+	if embeddingConfig.FailedFiles == nil {
+		embeddingConfig.FailedFiles = make(map[string]string)
 	}
-	if codebaseEmbeddingConfig.SyncFiles == nil {
-		codebaseEmbeddingConfig.SyncFiles = make(map[string]string)
+	if embeddingConfig.SyncFiles == nil {
+		embeddingConfig.SyncFiles = make(map[string]string)
 	}
-	delete(codebaseEmbeddingConfig.SyncFiles, filePath)
+	delete(embeddingConfig.SyncFiles, filePath)
 	if event.EventType == model.EventTypeRenameFile {
-		delete(codebaseEmbeddingConfig.SyncFiles, event.SourceFilePath)
+		delete(embeddingConfig.SyncFiles, event.SourceFilePath)
 	}
-	codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrFileEmbeddingFailed
-	// 保存 codebase embedding 配置
-	err = sc.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig)
+	embeddingConfig.FailedFiles[filePath] = errs.ErrFileEmbeddingFailed
+	// 保存 embedding 配置
+	err = sc.embeddingRepo.SaveEmbeddingConfig(embeddingConfig)
 	if err != nil {
-		sc.logger.Error("failed to save codebase embedding config for workspace %s: %v", event.WorkspacePath, err)
-		return fmt.Errorf("failed to save codebase embedding config: %w", err)
+		sc.logger.Error("failed to save embedding config for workspace %s: %v", event.WorkspacePath, err)
+		return fmt.Errorf("failed to save embedding config: %w", err)
 	}
 
-	return sc.updateWorkspaceEmbeddingInfo(workspacePath, codebaseEmbeddingConfig)
+	return sc.updateWorkspaceEmbeddingInfo(workspacePath, embeddingConfig)
 }
 
 // handleBuildCompletion 处理构建完成后的状态更新
@@ -376,40 +376,40 @@ func (sc *embeddingStatusService) handleBuildCompletion(workspacePath string, ev
 		return fmt.Errorf("failed to update event: %w", err)
 	}
 
-	// 获取 codebase embedding 配置
-	codebaseId := utils.GenerateCodebaseEmbeddingID(workspacePath)
-	codebaseEmbeddingConfig, err := sc.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseId)
+	// 获取 embedding 配置
+	embeddingId := utils.GenerateEmbeddingID(workspacePath)
+	embeddingConfig, err := sc.embeddingRepo.GetEmbeddingConfig(embeddingId)
 	if err != nil {
-		return fmt.Errorf("failed to get codebase embedding config for workspace %s: %w", workspacePath, err)
+		return fmt.Errorf("failed to get embedding config for workspace %s: %w", workspacePath, err)
 	}
-	if codebaseEmbeddingConfig.HashTree == nil {
-		codebaseEmbeddingConfig.HashTree = make(map[string]string)
+	if embeddingConfig.HashTree == nil {
+		embeddingConfig.HashTree = make(map[string]string)
 	}
-	if codebaseEmbeddingConfig.FailedFiles == nil {
-		codebaseEmbeddingConfig.FailedFiles = make(map[string]string)
+	if embeddingConfig.FailedFiles == nil {
+		embeddingConfig.FailedFiles = make(map[string]string)
 	}
-	if codebaseEmbeddingConfig.SyncFiles == nil {
-		codebaseEmbeddingConfig.SyncFiles = make(map[string]string)
+	if embeddingConfig.SyncFiles == nil {
+		embeddingConfig.SyncFiles = make(map[string]string)
 	}
 
 	if status == dto.EmbeddingFailed {
-		delete(codebaseEmbeddingConfig.SyncFiles, filePath)
-		codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrFileEmbeddingFailed
+		delete(embeddingConfig.SyncFiles, filePath)
+		embeddingConfig.FailedFiles[filePath] = errs.ErrFileEmbeddingFailed
 	} else {
-		delete(codebaseEmbeddingConfig.SyncFiles, filePath)
-		delete(codebaseEmbeddingConfig.FailedFiles, filePath)
+		delete(embeddingConfig.SyncFiles, filePath)
+		delete(embeddingConfig.FailedFiles, filePath)
 		if event.EventType != model.EventTypeDeleteFile {
-			codebaseEmbeddingConfig.HashTree[filePath] = event.FileHash
+			embeddingConfig.HashTree[filePath] = event.FileHash
 		}
 	}
-	// 保存 codebase embedding 配置
-	err = sc.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig)
+	// 保存 embedding 配置
+	err = sc.embeddingRepo.SaveEmbeddingConfig(embeddingConfig)
 	if err != nil {
-		sc.logger.Error("failed to save codebase embedding config for workspace %s: %v", workspacePath, err)
-		return fmt.Errorf("failed to save codebase embedding config: %w", err)
+		sc.logger.Error("failed to save embedding config for workspace %s: %v", workspacePath, err)
+		return fmt.Errorf("failed to save embedding config: %w", err)
 	}
 
-	return sc.updateWorkspaceEmbeddingInfo(workspacePath, codebaseEmbeddingConfig)
+	return sc.updateWorkspaceEmbeddingInfo(workspacePath, embeddingConfig)
 }
 
 // batchHandleBuildFailed 批量处理构建失败
@@ -418,21 +418,21 @@ func (sc *embeddingStatusService) batchHandleBuildFailed(workspacePath string, e
 		return nil
 	}
 
-	// 获取 codebase embedding 配置
-	codebaseId := utils.GenerateCodebaseEmbeddingID(workspacePath)
-	codebaseEmbeddingConfig, err := sc.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseId)
+	// 获取 embedding 配置
+	embeddingId := utils.GenerateEmbeddingID(workspacePath)
+	embeddingConfig, err := sc.embeddingRepo.GetEmbeddingConfig(embeddingId)
 	if err != nil {
-		return fmt.Errorf("failed to get codebase embedding config for workspace %s: %w", workspacePath, err)
+		return fmt.Errorf("failed to get embedding config for workspace %s: %w", workspacePath, err)
 	}
 
-	if codebaseEmbeddingConfig.HashTree == nil {
-		codebaseEmbeddingConfig.HashTree = make(map[string]string)
+	if embeddingConfig.HashTree == nil {
+		embeddingConfig.HashTree = make(map[string]string)
 	}
-	if codebaseEmbeddingConfig.FailedFiles == nil {
-		codebaseEmbeddingConfig.FailedFiles = make(map[string]string)
+	if embeddingConfig.FailedFiles == nil {
+		embeddingConfig.FailedFiles = make(map[string]string)
 	}
-	if codebaseEmbeddingConfig.SyncFiles == nil {
-		codebaseEmbeddingConfig.SyncFiles = make(map[string]string)
+	if embeddingConfig.SyncFiles == nil {
+		embeddingConfig.SyncFiles = make(map[string]string)
 	}
 
 	// 批量更新事件状态和处理文件路径
@@ -443,21 +443,21 @@ func (sc *embeddingStatusService) batchHandleBuildFailed(workspacePath string, e
 			filePath = event.TargetFilePath
 		}
 
-		delete(codebaseEmbeddingConfig.SyncFiles, filePath)
+		delete(embeddingConfig.SyncFiles, filePath)
 		if event.EventType == model.EventTypeRenameFile {
-			delete(codebaseEmbeddingConfig.SyncFiles, event.SourceFilePath)
+			delete(embeddingConfig.SyncFiles, event.SourceFilePath)
 		}
-		codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrFileEmbeddingFailed
+		embeddingConfig.FailedFiles[filePath] = errs.ErrFileEmbeddingFailed
 	}
 
-	// 保存 codebase embedding 配置
-	err = sc.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig)
+	// 保存 embedding 配置
+	err = sc.embeddingRepo.SaveEmbeddingConfig(embeddingConfig)
 	if err != nil {
-		return fmt.Errorf("failed to save codebase embedding config: %w", err)
+		return fmt.Errorf("failed to save embedding config: %w", err)
 	}
 
 	// 更新工作区信息
-	return sc.updateWorkspaceEmbeddingInfo(workspacePath, codebaseEmbeddingConfig)
+	return sc.updateWorkspaceEmbeddingInfo(workspacePath, embeddingConfig)
 }
 
 // batchHandleBuildCompletion 批量处理构建完成后的状态更新
@@ -466,21 +466,21 @@ func (sc *embeddingStatusService) batchHandleBuildCompletion(workspacePath strin
 		return nil
 	}
 
-	// 获取 codebase embedding 配置
-	codebaseId := utils.GenerateCodebaseEmbeddingID(workspacePath)
-	codebaseEmbeddingConfig, err := sc.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseId)
+	// 获取 embedding 配置
+	embeddingId := utils.GenerateEmbeddingID(workspacePath)
+	embeddingConfig, err := sc.embeddingRepo.GetEmbeddingConfig(embeddingId)
 	if err != nil {
-		return fmt.Errorf("failed to get codebase embedding config for workspace %s: %w", workspacePath, err)
+		return fmt.Errorf("failed to get embedding config for workspace %s: %w", workspacePath, err)
 	}
 
-	if codebaseEmbeddingConfig.HashTree == nil {
-		codebaseEmbeddingConfig.HashTree = make(map[string]string)
+	if embeddingConfig.HashTree == nil {
+		embeddingConfig.HashTree = make(map[string]string)
 	}
-	if codebaseEmbeddingConfig.FailedFiles == nil {
-		codebaseEmbeddingConfig.FailedFiles = make(map[string]string)
+	if embeddingConfig.FailedFiles == nil {
+		embeddingConfig.FailedFiles = make(map[string]string)
 	}
-	if codebaseEmbeddingConfig.SyncFiles == nil {
-		codebaseEmbeddingConfig.SyncFiles = make(map[string]string)
+	if embeddingConfig.SyncFiles == nil {
+		embeddingConfig.SyncFiles = make(map[string]string)
 	}
 
 	// 预处理文件状态列表，构建路径到状态的映射
@@ -528,33 +528,33 @@ func (sc *embeddingStatusService) batchHandleBuildCompletion(workspacePath strin
 
 		// 处理文件路径
 		if status == dto.EmbeddingFailed {
-			delete(codebaseEmbeddingConfig.SyncFiles, filePath)
-			codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrFileEmbeddingFailed
+			delete(embeddingConfig.SyncFiles, filePath)
+			embeddingConfig.FailedFiles[filePath] = errs.ErrFileEmbeddingFailed
 		} else {
-			delete(codebaseEmbeddingConfig.SyncFiles, filePath)
-			delete(codebaseEmbeddingConfig.FailedFiles, filePath)
+			delete(embeddingConfig.SyncFiles, filePath)
+			delete(embeddingConfig.FailedFiles, filePath)
 			if event.EventType != model.EventTypeDeleteFile {
-				codebaseEmbeddingConfig.HashTree[filePath] = event.FileHash
+				embeddingConfig.HashTree[filePath] = event.FileHash
 			}
 		}
 	}
 
-	// 保存 codebase embedding 配置
-	err = sc.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig)
+	// 保存 embedding 配置
+	err = sc.embeddingRepo.SaveEmbeddingConfig(embeddingConfig)
 	if err != nil {
-		return fmt.Errorf("failed to save codebase embedding config: %w", err)
+		return fmt.Errorf("failed to save embedding config: %w", err)
 	}
 
 	// 更新工作区信息
-	return sc.updateWorkspaceEmbeddingInfo(workspacePath, codebaseEmbeddingConfig)
+	return sc.updateWorkspaceEmbeddingInfo(workspacePath, embeddingConfig)
 }
 
 // updateWorkspaceEmbeddingInfo 更新工作区嵌入信息
-func (sc *embeddingStatusService) updateWorkspaceEmbeddingInfo(workspacePath string, codebaseEmbeddingConfig *config.CodebaseEmbeddingConfig) error {
-	embeddingFileNum := len(codebaseEmbeddingConfig.HashTree)
+func (sc *embeddingStatusService) updateWorkspaceEmbeddingInfo(workspacePath string, embeddingConfig *config.EmbeddingConfig) error {
+	embeddingFileNum := len(embeddingConfig.HashTree)
 	var embeddingFailedFilePaths string
 	var embeddingMessage string
-	embeddingFaildFiles := codebaseEmbeddingConfig.FailedFiles
+	embeddingFaildFiles := embeddingConfig.FailedFiles
 	failedKeys := make([]string, 0, len(embeddingFaildFiles))
 	for k, v := range embeddingFaildFiles {
 		failedKeys = append(failedKeys, k)
