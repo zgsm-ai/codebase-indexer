@@ -36,8 +36,8 @@ type CodebaseConfig struct {
 	RegisterTime time.Time         `json:"registerTime"`
 }
 
-// Codebase embedding config
-type CodebaseEmbeddingConfig struct {
+// Embedding config
+type EmbeddingConfig struct {
 	ClientID     string               `json:"clientId"`
 	CodebaseName string               `json:"codebaseName"`
 	CodebasePath string               `json:"codebasePath"`
@@ -46,6 +46,16 @@ type CodebaseEmbeddingConfig struct {
 	SyncFiles    map[string]string    `json:"syncFiles"`
 	SyncIds      map[string]time.Time `json:"syncIds"`
 	FailedFiles  map[string]string    `json:"failedFiles"`
+}
+
+// Deepwiki configuration
+type DeepwikiConfig struct {
+	ClientID     string            `json:"clientId"`
+	CodebaseName string            `json:"codebaseName"`
+	CodebasePath string            `json:"codebasePath"`
+	DeepwikiId   string            `json:"deepwikiId"`
+	HashTree     map[string]string `json:"hashTree"`
+	LastSync     time.Time         `json:"lastSync"`
 }
 
 // Ignore config

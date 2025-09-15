@@ -31,30 +31,30 @@ type EmbeddingProcessService interface {
 
 // embeddingProcessService 事件处理服务实现
 type embeddingProcessService struct {
-	workspaceRepo         repository.WorkspaceRepository
-	eventRepo             repository.EventRepository
-	codebaseEmbeddingRepo repository.EmbeddingFileRepository
-	uploadService         UploadService
-	syncer                repository.SyncInterface
-	logger                logger.Logger
+	workspaceRepo repository.WorkspaceRepository
+	eventRepo     repository.EventRepository
+	embeddingRepo repository.EmbeddingFileRepository
+	uploadService UploadService
+	syncer        repository.SyncInterface
+	logger        logger.Logger
 }
 
 // NewEmbeddingProcessService 创建事件处理服务
 func NewEmbeddingProcessService(
 	workspaceRepo repository.WorkspaceRepository,
 	eventRepo repository.EventRepository,
-	codebaseEmbeddingRepo repository.EmbeddingFileRepository,
+	embeddingRepo repository.EmbeddingFileRepository,
 	uploadService UploadService,
 	syncer repository.SyncInterface,
 	logger logger.Logger,
 ) EmbeddingProcessService {
 	return &embeddingProcessService{
-		workspaceRepo:         workspaceRepo,
-		eventRepo:             eventRepo,
-		codebaseEmbeddingRepo: codebaseEmbeddingRepo,
-		uploadService:         uploadService,
-		syncer:                syncer,
-		logger:                logger,
+		workspaceRepo: workspaceRepo,
+		eventRepo:     eventRepo,
+		embeddingRepo: embeddingRepo,
+		uploadService: uploadService,
+		syncer:        syncer,
+		logger:        logger,
 	}
 }
 
@@ -533,46 +533,46 @@ func (ep *embeddingProcessService) uploadFilePathFailed(event *model.Event, uplo
 	if event.EventType == model.EventTypeRenameFile {
 		filePath = event.TargetFilePath
 	}
-	codebaseId := utils.GenerateCodebaseEmbeddingID(event.WorkspacePath)
-	codebaseEmbeddingConfig, err := ep.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseId)
+	embeddingId := utils.GenerateEmbeddingID(event.WorkspacePath)
+	embeddingConfig, err := ep.embeddingRepo.GetEmbeddingConfig(embeddingId)
 	if err != nil {
-		return fmt.Errorf("failed to get codebase embedding config for workspace %s: %w", event.WorkspacePath, err)
+		return fmt.Errorf("failed to get embedding config for workspace %s: %w", event.WorkspacePath, err)
 	}
-	if codebaseEmbeddingConfig.HashTree == nil {
-		codebaseEmbeddingConfig.HashTree = make(map[string]string)
+	if embeddingConfig.HashTree == nil {
+		embeddingConfig.HashTree = make(map[string]string)
 	}
-	if codebaseEmbeddingConfig.FailedFiles == nil {
-		codebaseEmbeddingConfig.FailedFiles = make(map[string]string)
+	if embeddingConfig.FailedFiles == nil {
+		embeddingConfig.FailedFiles = make(map[string]string)
 	}
-	if codebaseEmbeddingConfig.SyncFiles == nil {
-		codebaseEmbeddingConfig.SyncFiles = make(map[string]string)
+	if embeddingConfig.SyncFiles == nil {
+		embeddingConfig.SyncFiles = make(map[string]string)
 	}
-	delete(codebaseEmbeddingConfig.HashTree, filePath)
-	delete(codebaseEmbeddingConfig.SyncFiles, filePath)
+	delete(embeddingConfig.HashTree, filePath)
+	delete(embeddingConfig.SyncFiles, filePath)
 	if event.EventType == model.EventTypeRenameFile {
-		delete(codebaseEmbeddingConfig.HashTree, event.SourceFilePath)
-		delete(codebaseEmbeddingConfig.SyncFiles, event.SourceFilePath)
+		delete(embeddingConfig.HashTree, event.SourceFilePath)
+		delete(embeddingConfig.SyncFiles, event.SourceFilePath)
 	}
 	if utils.IsUnauthorizedError(uploadErr) {
-		codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrAuthenticationFailed
+		embeddingConfig.FailedFiles[filePath] = errs.ErrAuthenticationFailed
 	} else if utils.IsTooManyRequestsError(uploadErr) {
-		codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrInternalServerError
+		embeddingConfig.FailedFiles[filePath] = errs.ErrInternalServerError
 	} else if utils.IsServiceUnavailableError(uploadErr) {
-		codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrInternalServerError
+		embeddingConfig.FailedFiles[filePath] = errs.ErrInternalServerError
 	} else {
-		codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrFileEmbeddingFailed
+		embeddingConfig.FailedFiles[filePath] = errs.ErrFileEmbeddingFailed
 	}
-	// 保存 codebase embedding 配置
-	err = ep.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig)
+	// 保存 embedding 配置
+	err = ep.embeddingRepo.SaveEmbeddingConfig(embeddingConfig)
 	if err != nil {
-		ep.logger.Error("failed to save codebase embedding config for workspace %s: %v", event.WorkspacePath, err)
-		return fmt.Errorf("failed to save codebase embedding config: %w", err)
+		ep.logger.Error("failed to save embedding config for workspace %s: %v", event.WorkspacePath, err)
+		return fmt.Errorf("failed to save embedding config: %w", err)
 	}
 
-	embeddingFileNum := len(codebaseEmbeddingConfig.HashTree)
+	embeddingFileNum := len(embeddingConfig.HashTree)
 	var embeddingFailedFilePaths string
 	var embeddingMessage string
-	embeddingFaildFiles := codebaseEmbeddingConfig.FailedFiles
+	embeddingFaildFiles := embeddingConfig.FailedFiles
 	failedKeys := make([]string, 0, len(embeddingFaildFiles))
 	for k, v := range embeddingFaildFiles {
 		failedKeys = append(failedKeys, k)
@@ -599,21 +599,21 @@ func (ep *embeddingProcessService) uploadFilePathFailed(event *model.Event, uplo
 
 // uploadFilePathsFailed 批量处理文件路径失败的情况
 func (ep *embeddingProcessService) uploadFilePathsFailed(workspacePath string, events []*model.Event, uploadErr error) {
-	codebaseId := utils.GenerateCodebaseEmbeddingID(workspacePath)
-	codebaseEmbeddingConfig, err := ep.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseId)
+	embeddingId := utils.GenerateEmbeddingID(workspacePath)
+	embeddingConfig, err := ep.embeddingRepo.GetEmbeddingConfig(embeddingId)
 	if err != nil {
-		ep.logger.Error("failed to get codebase embedding config for workspace %s: %v", workspacePath, err)
+		ep.logger.Error("failed to get embedding config for workspace %s: %v", workspacePath, err)
 		return
 	}
 
-	if codebaseEmbeddingConfig.HashTree == nil {
-		codebaseEmbeddingConfig.HashTree = make(map[string]string)
+	if embeddingConfig.HashTree == nil {
+		embeddingConfig.HashTree = make(map[string]string)
 	}
-	if codebaseEmbeddingConfig.FailedFiles == nil {
-		codebaseEmbeddingConfig.FailedFiles = make(map[string]string)
+	if embeddingConfig.FailedFiles == nil {
+		embeddingConfig.FailedFiles = make(map[string]string)
 	}
-	if codebaseEmbeddingConfig.SyncFiles == nil {
-		codebaseEmbeddingConfig.SyncFiles = make(map[string]string)
+	if embeddingConfig.SyncFiles == nil {
+		embeddingConfig.SyncFiles = make(map[string]string)
 	}
 
 	// 批量处理失败文件
@@ -623,36 +623,36 @@ func (ep *embeddingProcessService) uploadFilePathsFailed(workspacePath string, e
 			filePath = event.TargetFilePath
 		}
 
-		delete(codebaseEmbeddingConfig.HashTree, filePath)
-		delete(codebaseEmbeddingConfig.SyncFiles, filePath)
+		delete(embeddingConfig.HashTree, filePath)
+		delete(embeddingConfig.SyncFiles, filePath)
 		if event.EventType == model.EventTypeRenameFile {
-			delete(codebaseEmbeddingConfig.HashTree, event.SourceFilePath)
-			delete(codebaseEmbeddingConfig.SyncFiles, event.SourceFilePath)
+			delete(embeddingConfig.HashTree, event.SourceFilePath)
+			delete(embeddingConfig.SyncFiles, event.SourceFilePath)
 		}
 
 		if utils.IsUnauthorizedError(uploadErr) {
-			codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrAuthenticationFailed
+			embeddingConfig.FailedFiles[filePath] = errs.ErrAuthenticationFailed
 		} else if utils.IsTooManyRequestsError(uploadErr) {
-			codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrInternalServerError
+			embeddingConfig.FailedFiles[filePath] = errs.ErrInternalServerError
 		} else if utils.IsServiceUnavailableError(uploadErr) {
-			codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrInternalServerError
+			embeddingConfig.FailedFiles[filePath] = errs.ErrInternalServerError
 		} else {
-			codebaseEmbeddingConfig.FailedFiles[filePath] = errs.ErrFileEmbeddingFailed
+			embeddingConfig.FailedFiles[filePath] = errs.ErrFileEmbeddingFailed
 		}
 	}
 
-	// 保存 codebase embedding 配置
-	err = ep.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig)
+	// 保存 embedding 配置
+	err = ep.embeddingRepo.SaveEmbeddingConfig(embeddingConfig)
 	if err != nil {
-		ep.logger.Error("failed to save codebase embedding config for workspace %s: %v", workspacePath, err)
+		ep.logger.Error("failed to save embedding config for workspace %s: %v", workspacePath, err)
 		return
 	}
 
 	// 更新工作区信息
-	embeddingFileNum := len(codebaseEmbeddingConfig.HashTree)
+	embeddingFileNum := len(embeddingConfig.HashTree)
 	var embeddingFailedFilePaths string
 	var embeddingMessage string
-	embeddingFaildFiles := codebaseEmbeddingConfig.FailedFiles
+	embeddingFaildFiles := embeddingConfig.FailedFiles
 	failedKeys := make([]string, 0, len(embeddingFaildFiles))
 	for k, v := range embeddingFaildFiles {
 		failedKeys = append(failedKeys, k)
@@ -680,11 +680,11 @@ func (ep *embeddingProcessService) uploadFilePathsFailed(workspacePath string, e
 func (ep *embeddingProcessService) CleanWorkspaceFilePath(ctx context.Context, fileStatus *utils.FileStatus, event *model.Event) error {
 	ep.logger.Info("cleaning workspace filepath for event: %s, workspace: %s", event.SourceFilePath, event.WorkspacePath)
 
-	// 获取 codebase embedding 配置
-	codebaseEmbeddingId := utils.GenerateCodebaseEmbeddingID(event.WorkspacePath)
-	codebaseEmbeddingConfig, err := ep.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseEmbeddingId)
+	// 获取 embedding 配置
+	embeddingId := utils.GenerateEmbeddingID(event.WorkspacePath)
+	embeddingConfig, err := ep.embeddingRepo.GetEmbeddingConfig(embeddingId)
 	if err != nil {
-		return fmt.Errorf("failed to get codebase embedding config for workspace %s: %w", event.WorkspacePath, err)
+		return fmt.Errorf("failed to get embedding config for workspace %s: %w", event.WorkspacePath, err)
 	}
 
 	// 根据事件类型处理不同的文件路径
@@ -704,64 +704,64 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePath(ctx context.Context, f
 	// 从 HashTree 中删除对应的文件路径记录
 	// TODO: 判断是否为目录，是则删除目录下所有文件的记录
 	updated := false
-	if codebaseEmbeddingConfig.HashTree != nil {
+	if embeddingConfig.HashTree != nil {
 		for _, filePath := range filePaths {
-			if _, exists := codebaseEmbeddingConfig.HashTree[filePath]; exists {
-				delete(codebaseEmbeddingConfig.HashTree, filePath)
+			if _, exists := embeddingConfig.HashTree[filePath]; exists {
+				delete(embeddingConfig.HashTree, filePath)
 				updated = true
 				ep.logger.Debug("removed filepath from hash tree: %s", filePath)
 			}
 		}
 	} else {
-		codebaseEmbeddingConfig.HashTree = make(map[string]string)
+		embeddingConfig.HashTree = make(map[string]string)
 	}
 
 	// 删除FailedFiles中对应的文件路径
-	if codebaseEmbeddingConfig.FailedFiles != nil {
+	if embeddingConfig.FailedFiles != nil {
 		for _, filePath := range filePaths {
-			if _, exists := codebaseEmbeddingConfig.FailedFiles[filePath]; exists {
-				delete(codebaseEmbeddingConfig.FailedFiles, filePath)
+			if _, exists := embeddingConfig.FailedFiles[filePath]; exists {
+				delete(embeddingConfig.FailedFiles, filePath)
 				updated = true
 				ep.logger.Debug("removed filepath from failed files: %s", filePath)
 			}
 		}
 	} else {
-		codebaseEmbeddingConfig.FailedFiles = make(map[string]string)
+		embeddingConfig.FailedFiles = make(map[string]string)
 	}
 
 	// 从SyncFiles中添加对应的文件路径
-	if codebaseEmbeddingConfig.SyncFiles != nil {
-		if oldHash, exists := codebaseEmbeddingConfig.SyncFiles[filePath]; !exists || oldHash != fileStatus.Hash {
-			codebaseEmbeddingConfig.SyncFiles[filePath] = fileStatus.Hash
+	if embeddingConfig.SyncFiles != nil {
+		if oldHash, exists := embeddingConfig.SyncFiles[filePath]; !exists || oldHash != fileStatus.Hash {
+			embeddingConfig.SyncFiles[filePath] = fileStatus.Hash
 			updated = true
 		}
 	} else {
-		codebaseEmbeddingConfig.SyncFiles = make(map[string]string)
-		codebaseEmbeddingConfig.SyncFiles[filePath] = fileStatus.Hash
+		embeddingConfig.SyncFiles = make(map[string]string)
+		embeddingConfig.SyncFiles[filePath] = fileStatus.Hash
 		updated = true
 	}
 
 	// // 添加syncId到SyncIds中
-	// if codebaseEmbeddingConfig.SyncIds != nil {
-	// 	codebaseEmbeddingConfig.SyncIds[fileStatus.RequestId] = time.Now()
+	// if embeddingConfig.SyncIds != nil {
+	// 	embeddingConfig.SyncIds[fileStatus.RequestId] = time.Now()
 	// 	updated = true
 	// } else {
-	// 	codebaseEmbeddingConfig.SyncIds = make(map[string]time.Time)
-	// 	codebaseEmbeddingConfig.SyncIds[fileStatus.RequestId] = time.Now()
+	// 	embeddingConfig.SyncIds = make(map[string]time.Time)
+	// 	embeddingConfig.SyncIds[fileStatus.RequestId] = time.Now()
 	// 	updated = true
 	// }
 
 	// 如果有更新，保存配置
 	if updated {
-		if err := ep.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig); err != nil {
-			ep.logger.Error("failed to save codebase embedding config after cleaning filepath: %v", err)
-			return fmt.Errorf("failed to save codebase embedding config: %w", err)
+		if err := ep.embeddingRepo.SaveEmbeddingConfig(embeddingConfig); err != nil {
+			ep.logger.Error("failed to save embedding config after cleaning filepath: %v", err)
+			return fmt.Errorf("failed to save embedding config: %w", err)
 		}
 
-		embeddingFileNum := len(codebaseEmbeddingConfig.HashTree)
+		embeddingFileNum := len(embeddingConfig.HashTree)
 		var embeddingFailedFilePaths string
 		var embeddingMessage string
-		embeddingFaildFiles := codebaseEmbeddingConfig.FailedFiles
+		embeddingFaildFiles := embeddingConfig.FailedFiles
 		failedKeys := make([]string, 0, len(embeddingFaildFiles))
 		for k, v := range embeddingFaildFiles {
 			failedKeys = append(failedKeys, k)
@@ -794,21 +794,21 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePath(ctx context.Context, f
 
 // CleanWorkspaceFilePaths 批量删除 workspace 中指定文件的 filepath 记录
 func (ep *embeddingProcessService) CleanWorkspaceFilePaths(ctx context.Context, workspacePath string, events []*model.Event) error {
-	// 获取 codebase embedding 配置
-	codebaseEmbeddingId := utils.GenerateCodebaseEmbeddingID(workspacePath)
-	codebaseEmbeddingConfig, err := ep.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseEmbeddingId)
+	// 获取 embedding 配置
+	embeddingId := utils.GenerateEmbeddingID(workspacePath)
+	embeddingConfig, err := ep.embeddingRepo.GetEmbeddingConfig(embeddingId)
 	if err != nil {
-		return fmt.Errorf("failed to get codebase embedding config for workspace %s: %w", workspacePath, err)
+		return fmt.Errorf("failed to get embedding config for workspace %s: %w", workspacePath, err)
 	}
 
-	if codebaseEmbeddingConfig.HashTree == nil {
-		codebaseEmbeddingConfig.HashTree = make(map[string]string)
+	if embeddingConfig.HashTree == nil {
+		embeddingConfig.HashTree = make(map[string]string)
 	}
-	if codebaseEmbeddingConfig.FailedFiles == nil {
-		codebaseEmbeddingConfig.FailedFiles = make(map[string]string)
+	if embeddingConfig.FailedFiles == nil {
+		embeddingConfig.FailedFiles = make(map[string]string)
 	}
-	if codebaseEmbeddingConfig.SyncFiles == nil {
-		codebaseEmbeddingConfig.SyncFiles = make(map[string]string)
+	if embeddingConfig.SyncFiles == nil {
+		embeddingConfig.SyncFiles = make(map[string]string)
 	}
 
 	// 批量处理文件路径
@@ -818,27 +818,27 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePaths(ctx context.Context, 
 			filePath = event.TargetFilePath
 		}
 
-		delete(codebaseEmbeddingConfig.HashTree, filePath)
-		delete(codebaseEmbeddingConfig.FailedFiles, filePath)
+		delete(embeddingConfig.HashTree, filePath)
+		delete(embeddingConfig.FailedFiles, filePath)
 		if event.EventType == model.EventTypeRenameFile {
-			delete(codebaseEmbeddingConfig.HashTree, event.SourceFilePath)
-			delete(codebaseEmbeddingConfig.FailedFiles, event.SourceFilePath)
+			delete(embeddingConfig.HashTree, event.SourceFilePath)
+			delete(embeddingConfig.FailedFiles, event.SourceFilePath)
 		}
-		if oldHash, exists := codebaseEmbeddingConfig.SyncFiles[filePath]; !exists || oldHash != event.FileHash {
-			codebaseEmbeddingConfig.SyncFiles[filePath] = event.FileHash
+		if oldHash, exists := embeddingConfig.SyncFiles[filePath]; !exists || oldHash != event.FileHash {
+			embeddingConfig.SyncFiles[filePath] = event.FileHash
 		}
 	}
 
-	// 保存 codebase embedding 配置
-	if err := ep.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig); err != nil {
-		return fmt.Errorf("failed to save codebase embedding config: %w", err)
+	// 保存 embedding 配置
+	if err := ep.embeddingRepo.SaveEmbeddingConfig(embeddingConfig); err != nil {
+		return fmt.Errorf("failed to save embedding config: %w", err)
 	}
 
 	// 更新工作区信息
-	embeddingFileNum := len(codebaseEmbeddingConfig.HashTree)
+	embeddingFileNum := len(embeddingConfig.HashTree)
 	var embeddingFailedFilePaths string
 	var embeddingMessage string
-	embeddingFaildFiles := codebaseEmbeddingConfig.FailedFiles
+	embeddingFaildFiles := embeddingConfig.FailedFiles
 	failedKeys := make([]string, 0, len(embeddingFaildFiles))
 	for k, v := range embeddingFaildFiles {
 		failedKeys = append(failedKeys, k)

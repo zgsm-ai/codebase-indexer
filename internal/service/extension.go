@@ -62,34 +62,34 @@ func NewExtensionService(
 	fileScanner repository.ScannerInterface,
 	workspaceRepo repository.WorkspaceRepository,
 	eventRepo repository.EventRepository,
-	codebaseEmbeddingRepo repository.EmbeddingFileRepository,
+	embeddingRepo repository.EmbeddingFileRepository,
 	codebaseService CodebaseService,
 	scanService FileScanService,
 	logger logger.Logger,
 ) ExtensionService {
 	return &extensionService{
-		storage:               storage,
-		httpSync:              httpSync,
-		fileScanner:           fileScanner,
-		workspaceRepo:         workspaceRepo,
-		eventRepo:             eventRepo,
-		codebaseEmbeddingRepo: codebaseEmbeddingRepo,
-		codebaseService:       codebaseService,
-		scanService:           scanService,
-		logger:                logger,
+		storage:         storage,
+		httpSync:        httpSync,
+		fileScanner:     fileScanner,
+		workspaceRepo:   workspaceRepo,
+		eventRepo:       eventRepo,
+		embeddingRepo:   embeddingRepo,
+		codebaseService: codebaseService,
+		scanService:     scanService,
+		logger:          logger,
 	}
 }
 
 type extensionService struct {
-	storage               repository.StorageInterface
-	httpSync              repository.SyncInterface
-	fileScanner           repository.ScannerInterface
-	workspaceRepo         repository.WorkspaceRepository
-	eventRepo             repository.EventRepository
-	codebaseEmbeddingRepo repository.EmbeddingFileRepository
-	codebaseService       CodebaseService
-	scanService           FileScanService
-	logger                logger.Logger
+	storage         repository.StorageInterface
+	httpSync        repository.SyncInterface
+	fileScanner     repository.ScannerInterface
+	workspaceRepo   repository.WorkspaceRepository
+	eventRepo       repository.EventRepository
+	embeddingRepo   repository.EmbeddingFileRepository
+	codebaseService CodebaseService
+	scanService     FileScanService
+	logger          logger.Logger
 }
 
 // RegisterCodebase 注册代码库
@@ -393,8 +393,8 @@ func (s *extensionService) SwitchIndex(ctx context.Context, workspacePath, switc
 		updateWorkspace.FileNum = fileNum
 
 		// 创建代码库嵌入配置
-		if err := s.initCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
-			s.logger.Error("failed to init codebase embedding config: %v", err)
+		if err := s.initEmbeddingConfig(workspacePath, clientID); err != nil {
+			s.logger.Error("failed to init embedding config: %v", err)
 		}
 
 		if err := s.workspaceRepo.UpdateWorkspace(updateWorkspace); err != nil {
@@ -655,8 +655,8 @@ func (s *extensionService) handleOpenWorkspaceEvent(workspacePath, clientID stri
 	}
 
 	// 创建代码库嵌入配置
-	if err := s.createCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
-		s.logger.Error("failed to create codebase embedding config: %v", err)
+	if err := s.createEmbeddingConfig(workspacePath, clientID); err != nil {
+		s.logger.Error("failed to create embedding config: %v", err)
 	}
 
 	// 检查工作区是否已存在
@@ -776,20 +776,20 @@ func (s *extensionService) createCodebaseConfig(workspacePath, clientID string) 
 	return fileNum, nil
 }
 
-// createCodebaseEmbeddingConfig 创建代码库嵌入配置
-func (s *extensionService) createCodebaseEmbeddingConfig(workspacePath, clientID string) error {
+// createEmbeddingConfig 创建代码库嵌入配置
+func (s *extensionService) createEmbeddingConfig(workspacePath, clientID string) error {
 	workspaceName := filepath.Base(workspacePath)
-	codebaseEmbeddingID := utils.GenerateCodebaseEmbeddingID(workspacePath)
+	embeddingID := utils.GenerateEmbeddingID(workspacePath)
 
-	_, err := s.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseEmbeddingID)
+	_, err := s.embeddingRepo.GetEmbeddingConfig(embeddingID)
 	if err == nil {
-		s.logger.Info("codebase embedding config for %s already exists", codebaseEmbeddingID)
+		s.logger.Info("embedding config for %s already exists", embeddingID)
 		return nil
 	}
 
-	codebaseEmbeddingConfig := &config.CodebaseEmbeddingConfig{
+	embeddingConfig := &config.EmbeddingConfig{
 		ClientID:     clientID,
-		CodebaseId:   codebaseEmbeddingID,
+		CodebaseId:   embeddingID,
 		CodebaseName: workspaceName,
 		CodebasePath: workspacePath,
 		HashTree:     make(map[string]string),
@@ -799,22 +799,22 @@ func (s *extensionService) createCodebaseEmbeddingConfig(workspacePath, clientID
 	}
 
 	// 保存到存储
-	if err := s.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig); err != nil {
-		s.logger.Error("failed to save codebase embedding config for %s: %v", workspacePath, err)
-		return fmt.Errorf("failed to save codebase embedding config: %w", err)
+	if err := s.embeddingRepo.SaveEmbeddingConfig(embeddingConfig); err != nil {
+		s.logger.Error("failed to save embedding config for %s: %v", workspacePath, err)
+		return fmt.Errorf("failed to save embedding config: %w", err)
 	}
 
-	s.logger.Info("created codebase embedding config for %s (%s)", workspaceName, codebaseEmbeddingID)
+	s.logger.Info("created embedding config for %s (%s)", workspaceName, embeddingID)
 	return nil
 }
 
-// initCodebaseEmbeddingConfig 初始化代码库嵌入配置
-func (s *extensionService) initCodebaseEmbeddingConfig(workspacePath, clientID string) error {
+// initEmbeddingConfig 初始化代码库嵌入配置
+func (s *extensionService) initEmbeddingConfig(workspacePath, clientID string) error {
 	workspaceName := filepath.Base(workspacePath)
-	codebaseEmbeddingID := utils.GenerateCodebaseEmbeddingID(workspacePath)
-	codebaseEmbeddingConfig := &config.CodebaseEmbeddingConfig{
+	embeddingID := utils.GenerateEmbeddingID(workspacePath)
+	embeddingConfig := &config.EmbeddingConfig{
 		ClientID:     clientID,
-		CodebaseId:   codebaseEmbeddingID,
+		CodebaseId:   embeddingID,
 		CodebaseName: workspaceName,
 		CodebasePath: workspacePath,
 		HashTree:     make(map[string]string),
@@ -824,11 +824,11 @@ func (s *extensionService) initCodebaseEmbeddingConfig(workspacePath, clientID s
 	}
 
 	// 保存到存储
-	if err := s.codebaseEmbeddingRepo.SaveCodebaseEmbeddingConfig(codebaseEmbeddingConfig); err != nil {
-		return fmt.Errorf("failed to save codebase embedding config: %w", err)
+	if err := s.embeddingRepo.SaveEmbeddingConfig(embeddingConfig); err != nil {
+		return fmt.Errorf("failed to save embedding config: %w", err)
 	}
 
-	s.logger.Info("init codebase embedding config for %s (%s)", workspaceName, codebaseEmbeddingID)
+	s.logger.Info("init embedding config for %s (%s)", workspaceName, embeddingID)
 	return nil
 }
 
@@ -842,12 +842,12 @@ func (s *extensionService) TriggerIndex(ctx context.Context, workspacePath, inde
 
 	// 创建代码库嵌入配置
 	if indexType == dto.IndexTypeCodegraph {
-		if err := s.createCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
-			return fmt.Errorf("failed to create codebase embedding config: %w", err)
+		if err := s.createEmbeddingConfig(workspacePath, clientID); err != nil {
+			return fmt.Errorf("failed to create embedding config: %w", err)
 		}
 	} else {
-		if err := s.initCodebaseEmbeddingConfig(workspacePath, clientID); err != nil {
-			return fmt.Errorf("failed to init codebase embedding config: %w", err)
+		if err := s.initEmbeddingConfig(workspacePath, clientID); err != nil {
+			return fmt.Errorf("failed to init embedding config: %w", err)
 		}
 		if err := s.deleteRemoteEmbedding(clientID, workspacePath); err != nil {
 			s.logger.Warn("delete remote embedding failed: %v", err)

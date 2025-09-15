@@ -20,12 +20,12 @@ type FileScanService interface {
 
 // fileScanService 工作区扫描服务实现
 type fileScanService struct {
-	workspaceRepo         repository.WorkspaceRepository
-	eventRepo             repository.EventRepository
-	fileScanner           repository.ScannerInterface
-	storage               repository.StorageInterface
-	codebaseEmbeddingRepo repository.EmbeddingFileRepository
-	logger                logger.Logger
+	workspaceRepo repository.WorkspaceRepository
+	eventRepo     repository.EventRepository
+	fileScanner   repository.ScannerInterface
+	storage       repository.StorageInterface
+	embeddingRepo repository.EmbeddingFileRepository
+	logger        logger.Logger
 }
 
 // NewFileScanService 创建工作区扫描服务
@@ -34,16 +34,16 @@ func NewFileScanService(
 	eventRepo repository.EventRepository,
 	fileScanner repository.ScannerInterface,
 	storage repository.StorageInterface,
-	codebaseEmbeddingRepo repository.EmbeddingFileRepository,
+	embeddingRepo repository.EmbeddingFileRepository,
 	logger logger.Logger,
 ) FileScanService {
 	return &fileScanService{
-		workspaceRepo:         workspaceRepo,
-		eventRepo:             eventRepo,
-		fileScanner:           fileScanner,
-		storage:               storage,
-		codebaseEmbeddingRepo: codebaseEmbeddingRepo,
-		logger:                logger,
+		workspaceRepo: workspaceRepo,
+		eventRepo:     eventRepo,
+		fileScanner:   fileScanner,
+		storage:       storage,
+		embeddingRepo: embeddingRepo,
+		logger:        logger,
 	}
 }
 
@@ -90,14 +90,14 @@ func (ws *fileScanService) DetectFileChanges(workspacePath string) ([]*model.Eve
 		return nil, fmt.Errorf("failed to save codebase config: %w", err)
 	}
 
-	codebaseEmbeddingId := utils.GenerateCodebaseEmbeddingID(workspacePath)
-	codebaseEmbeddingConfig, err := ws.codebaseEmbeddingRepo.GetCodebaseEmbeddingConfig(codebaseEmbeddingId)
+	embeddingId := utils.GenerateEmbeddingID(workspacePath)
+	embeddingConfig, err := ws.embeddingRepo.GetEmbeddingConfig(embeddingId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get codebase embedding config: %w", err)
+		return nil, fmt.Errorf("failed to get embedding config: %w", err)
 	}
 
 	// 计算文件变更
-	changes := ws.fileScanner.CalculateFileChanges(currentHashTree, codebaseEmbeddingConfig.HashTree)
+	changes := utils.CalculateFileChanges(currentHashTree, embeddingConfig.HashTree)
 	if len(changes) == 0 {
 		// 查询 open_workspace 事件并更新状态为完成
 		ws.updateNonSuccessOpenOrRebuildEventStatus(workspacePath)

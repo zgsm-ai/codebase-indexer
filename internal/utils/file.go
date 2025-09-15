@@ -65,6 +65,69 @@ func CalculateFileHash(filePath string) (string, error) {
 	return hashValue, nil
 }
 
+// Calculate file differences
+func CalculateFileChanges(local, remote map[string]string) []*FileStatus {
+	var changes []*FileStatus
+
+	// Check for added or modified files
+	for path, localHash := range local {
+		if remoteHash, exists := remote[path]; !exists {
+			// New file
+			changes = append(changes, &FileStatus{
+				Path:   path,
+				Hash:   localHash,
+				Status: FILE_STATUS_ADDED,
+			})
+		} else if localHash != remoteHash {
+			// Modified file
+			changes = append(changes, &FileStatus{
+				Path:   path,
+				Hash:   localHash,
+				Status: FILE_STATUS_MODIFIED,
+			})
+		}
+	}
+
+	// Check for deleted files
+	for path := range remote {
+		if _, exists := local[path]; !exists {
+			changes = append(changes, &FileStatus{
+				Path:   path,
+				Hash:   "",
+				Status: FILE_STATUS_DELETED,
+			})
+		}
+	}
+
+	return changes
+}
+
+// CalculateFileChangesWithoutDelete compares local and remote files, only recording added and modified files
+func CalculateFileChangesWithoutDelete(local, remote map[string]string) []*FileStatus {
+	var changes []*FileStatus
+
+	// Check for added or modified files
+	for path, localHash := range local {
+		if remoteHash, exists := remote[path]; !exists {
+			// New file
+			changes = append(changes, &FileStatus{
+				Path:   path,
+				Hash:   localHash,
+				Status: FILE_STATUS_ADDED,
+			})
+		} else if localHash != remoteHash {
+			// Modified file
+			changes = append(changes, &FileStatus{
+				Path:   path,
+				Hash:   localHash,
+				Status: FILE_STATUS_MODIFIED,
+			})
+		}
+	}
+
+	return changes
+}
+
 // AddFileToZip adds a file to zip archive
 func AddFileToZip(zipWriter *zip.Writer, fileRelPath string, basePath string) error {
 	file, err := os.Open(filepath.Join(basePath, fileRelPath))

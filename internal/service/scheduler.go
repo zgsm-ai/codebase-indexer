@@ -238,7 +238,7 @@ func (s *Scheduler) performSyncForCodebase(config *config.CodebaseConfig) error 
 	}
 
 	// Compare hash trees to find changes
-	changes := s.fileScanner.CalculateFileChanges(localHashTree, serverHashTree)
+	changes := utils.CalculateFileChanges(localHashTree, serverHashTree)
 	totalChanges := len(changes)
 	if totalChanges == 0 {
 		s.logger.Info("no file changes detected, sync completed")
@@ -300,7 +300,7 @@ func (s *Scheduler) PerformSyncForCodebaseWithFilePaths(config *config.CodebaseC
 	}
 
 	// Compare hash trees to find changes
-	changes := s.fileScanner.CalculateFileChangesWithoutDelete(localHashTree, serverHashTree)
+	changes := utils.CalculateFileChangesWithoutDelete(localHashTree, serverHashTree)
 	totalChanges := len(changes)
 	if totalChanges == 0 {
 		s.logger.Info("no file changes detected, sync completed")

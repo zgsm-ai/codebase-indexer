@@ -2,7 +2,6 @@ package repository
 
 import (
 	"codebase-indexer/internal/config"
-	"codebase-indexer/internal/utils"
 	"codebase-indexer/test/mocks"
 	"os"
 	"path/filepath"
@@ -223,59 +222,4 @@ func BenchmarkScanCodebase_10000Files(b *testing.B) {
 	runtime.ReadMemStats(&m)
 	b.ReportMetric(float64(m.TotalAlloc)/1024/1024, "malloc_mb")
 	b.ReportMetric(float64(m.HeapInuse)/1024/1024, "heap_inuse_mb")
-}
-
-func TestCalculateFileChanges(t *testing.T) {
-	logger := &mocks.MockLogger{}
-	fs := NewFileScanner(logger)
-
-	t.Run("Detect file changes", func(t *testing.T) {
-		local := map[string]string{
-			"added.txt":    "hash1",
-			"modified.txt": "hash2", // Different from remote
-		}
-
-		remote := map[string]string{
-			"modified.txt": "hash1",
-			"deleted.txt":  "hash3",
-		}
-
-		changes := fs.CalculateFileChanges(local, remote)
-
-		// Verify changes
-		assert.Equal(t, 3, len(changes))
-
-		// Verify added file
-		var added *utils.FileStatus
-		for _, c := range changes {
-			if c.Path == "added.txt" {
-				added = c
-				break
-			}
-		}
-		require.NotNil(t, added)
-		assert.Equal(t, utils.FILE_STATUS_ADDED, added.Status)
-
-		// Verify modified file
-		var modified *utils.FileStatus
-		for _, c := range changes {
-			if c.Path == "modified.txt" {
-				modified = c
-				break
-			}
-		}
-		require.NotNil(t, modified)
-		assert.Equal(t, utils.FILE_STATUS_MODIFIED, modified.Status)
-
-		// Verify deleted file
-		var deleted *utils.FileStatus
-		for _, c := range changes {
-			if c.Path == "deleted.txt" {
-				deleted = c
-				break
-			}
-		}
-		require.NotNil(t, deleted)
-		assert.Equal(t, utils.FILE_STATUS_DELETED, deleted.Status)
-	})
 }

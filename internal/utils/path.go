@@ -19,6 +19,7 @@ var (
 	WorkspaceDir = "./.costrict/cache/codebase-indexer/workspace"
 	EmbeddingDir = "./.costrict/cache/codebase-indexer/embedding"
 	IndexDir     = "./.costrict/cache/codebase-indexer/index"
+	DeepwikiDir  = "./.costrict/cache/codebase-indexer/deepwiki"
 	AuthJsonFile = "./.costrict/share/auth.json"
 )
 
@@ -209,6 +210,23 @@ func GetCacheIndexDir(cachePath string) (string, error) {
 	IndexDir = indexPath
 
 	return indexPath, nil
+}
+
+func GetCacheDeepwikiDir(cachePath string) (string, error) {
+	if _, err := os.Stat(cachePath); os.IsNotExist(err) {
+		return "", fmt.Errorf("cache path %s does not exist", cachePath)
+	}
+
+	deepwikiPath := filepath.Join(cachePath, "deepwiki")
+
+	// Ensure config directory exists
+	if err := os.MkdirAll(deepwikiPath, 0755); err != nil {
+		return "", err
+	}
+
+	DeepwikiDir = deepwikiPath
+
+	return deepwikiPath, nil
 }
 
 func GetAuthJsonFile(rootPath string) (string, error) {

@@ -336,11 +336,18 @@ func initDir(appName string) error {
 	fmt.Printf("cache workspace directory: %s\n", cacheWorkspacePath)
 
 	// Initialize cache embedding directory
-	cacheWorkspaceEmbeddingPath, err := utils.GetCacheEmbeddingDir(cachePath)
+	cacheEmbeddingPath, err := utils.GetCacheEmbeddingDir(cachePath)
 	if err != nil {
 		return fmt.Errorf("failed to get cache embedding directory: %v", err)
 	}
-	fmt.Printf("cache embedding directory: %s\n", cacheWorkspaceEmbeddingPath)
+	fmt.Printf("cache embedding directory: %s\n", cacheEmbeddingPath)
+
+	// Initialize cache deepwiki directory
+	cacheDeepwikiPath, err := utils.GetCacheDeepwikiDir(cachePath)
+	if err != nil {
+		return fmt.Errorf("failed to get cache deepwiki directory: %v", err)
+	}
+	fmt.Printf("cache deepwiki directory: %s\n", cacheDeepwikiPath)
 
 	// Initialize share auth file
 	authFile, err := utils.GetAuthJsonFile(rootPath)

@@ -33,8 +33,6 @@ type ScannerInterface interface {
 	ScanFilePaths(codebasePath string, filePaths []string) (map[string]string, error)
 	ScanDirectory(codebasePath, dirPath string) (map[string]string, error)
 	ScanFile(codebasePath, filePath string) (string, error)
-	CalculateFileChanges(local, remote map[string]string) []*utils.FileStatus
-	CalculateFileChangesWithoutDelete(local, remote map[string]string) []*utils.FileStatus
 	LoadIgnoreConfig(codebasePath string) *config.IgnoreConfig
 	CheckIgnoreFile(ignoreConfig *config.IgnoreConfig, codebasePath string, fileInfo *types.FileInfo) (bool, error)
 }
@@ -126,6 +124,8 @@ func (s *FileScanner) CheckIgnoreFile(ignoreConfig *config.IgnoreConfig, codebas
 		if ignoreRules.MatchesPath(checkPath) {
 			s.logger.Debug("ignore file found: %s in codebase %s", checkPath, codebasePath)
 			return true, nil
+		} else {
+			return false, nil
 		}
 	}
 
@@ -560,67 +560,4 @@ func (s *FileScanner) ScanFile(codebasePath, filePath string) (string, error) {
 		time.Since(startTime))
 
 	return strconv.FormatInt(hash, 10), nil
-}
-
-// Calculate file differences
-func (s *FileScanner) CalculateFileChanges(local, remote map[string]string) []*utils.FileStatus {
-	var changes []*utils.FileStatus
-
-	// Check for added or modified files
-	for path, localHash := range local {
-		if remoteHash, exists := remote[path]; !exists {
-			// New file
-			changes = append(changes, &utils.FileStatus{
-				Path:   path,
-				Hash:   localHash,
-				Status: utils.FILE_STATUS_ADDED,
-			})
-		} else if localHash != remoteHash {
-			// Modified file
-			changes = append(changes, &utils.FileStatus{
-				Path:   path,
-				Hash:   localHash,
-				Status: utils.FILE_STATUS_MODIFIED,
-			})
-		}
-	}
-
-	// Check for deleted files
-	for path := range remote {
-		if _, exists := local[path]; !exists {
-			changes = append(changes, &utils.FileStatus{
-				Path:   path,
-				Hash:   "",
-				Status: utils.FILE_STATUS_DELETED,
-			})
-		}
-	}
-
-	return changes
-}
-
-// CalculateFileChangesWithoutDelete compares local and remote files, only recording added and modified files
-func (s *FileScanner) CalculateFileChangesWithoutDelete(local, remote map[string]string) []*utils.FileStatus {
-	var changes []*utils.FileStatus
-
-	// Check for added or modified files
-	for path, localHash := range local {
-		if remoteHash, exists := remote[path]; !exists {
-			// New file
-			changes = append(changes, &utils.FileStatus{
-				Path:   path,
-				Hash:   localHash,
-				Status: utils.FILE_STATUS_ADDED,
-			})
-		} else if localHash != remoteHash {
-			// Modified file
-			changes = append(changes, &utils.FileStatus{
-				Path:   path,
-				Hash:   localHash,
-				Status: utils.FILE_STATUS_MODIFIED,
-			})
-		}
-	}
-
-	return changes
 }
