@@ -30,6 +30,12 @@ type ConfigSync struct {
 	CodegraphSuccessPercent float32 `json:"codegraphSuccessPercent"`
 }
 
+type configDeepwiki struct {
+	BaseURL string `json:"baseURL"`
+	Model   string `json:"model"`
+	ApiKey  string `json:"apiKey"`
+}
+
 // Pprof configuration
 type ConfigPprof struct {
 	Enabled bool   `json:"enabled"`
@@ -38,10 +44,11 @@ type ConfigPprof struct {
 
 // Client configuration file structure
 type ClientConfig struct {
-	Server ConfigServer `json:"server"`
-	Scan   ConfigScan   `json:"scan"`
-	Sync   ConfigSync   `json:"sync"`
-	Pprof  ConfigPprof  `json:"pprof"`
+	Server   ConfigServer   `json:"server"`
+	Scan     ConfigScan     `json:"scan"`
+	Sync     ConfigSync     `json:"sync"`
+	Pprof    ConfigPprof    `json:"pprof"`
+	Deepwiki configDeepwiki `json:"deepwiki"`
 }
 
 var DefaultConfigServer = ConfigServer{

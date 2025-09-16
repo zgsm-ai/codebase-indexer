@@ -245,7 +245,10 @@ func configChanged(current, new config.ClientConfig) bool {
 		current.Scan.MaxFileCount != new.Scan.MaxFileCount ||
 		!equalIgnorePatterns(current.Scan.FolderIgnorePatterns, new.Scan.FolderIgnorePatterns) ||
 		!equalIgnorePatterns(current.Scan.FileIncludePatterns, new.Scan.FileIncludePatterns) ||
-		!equalIgnorePatterns(current.Scan.DeepwikiFolderIgnorePatterns, new.Scan.DeepwikiFolderIgnorePatterns)
+		!equalIgnorePatterns(current.Scan.DeepwikiFolderIgnorePatterns, new.Scan.DeepwikiFolderIgnorePatterns) ||
+		current.Deepwiki.BaseURL != new.Deepwiki.BaseURL ||
+		current.Deepwiki.Model != new.Deepwiki.Model ||
+		current.Deepwiki.ApiKey != new.Deepwiki.ApiKey
 }
 
 // equalIgnorePatterns compares whether ignore patterns are same
