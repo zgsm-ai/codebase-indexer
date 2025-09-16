@@ -16,6 +16,7 @@ type EventProcessorJob struct {
 	httpSync          repository.SyncInterface
 	embedding         service.EmbeddingProcessService
 	codegraph         service.CodegraphProcessService
+	wiki              service.WikiProcessService
 	storage           repository.StorageInterface
 	logger            logger.Logger
 	embeddingInterval time.Duration
@@ -29,6 +30,7 @@ func NewEventProcessorJob(
 	httpSync repository.SyncInterface,
 	embedding service.EmbeddingProcessService,
 	codegraph service.CodegraphProcessService,
+	wiki service.WikiProcessService,
 	embeddingInterval time.Duration,
 	storage repository.StorageInterface,
 ) *EventProcessorJob {
@@ -37,6 +39,7 @@ func NewEventProcessorJob(
 		httpSync:          httpSync,
 		embedding:         embedding,
 		codegraph:         codegraph,
+		wiki:              wiki,
 		storage:           storage,
 		logger:            logger,
 		embeddingInterval: embeddingInterval,
@@ -86,6 +89,7 @@ func (j *EventProcessorJob) Start(ctx context.Context) {
 		}
 	}()
 
+	// codegraph
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -104,6 +108,29 @@ func (j *EventProcessorJob) Start(ctx context.Context) {
 				}
 				// 短暂休眠避免CPU占用过高
 				time.Sleep(1 * time.Second)
+			}
+		}
+	}()
+
+	// wiki
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				j.logger.Error("recovered from panic in wiki processor: %v", r)
+			}
+		}()
+		for {
+			select {
+			case <-ctx.Done():
+				j.logger.Info("wiki processor task stopped")
+				return
+			default:
+				err := j.wikiProcessWorkSpaces(ctx)
+				if err != nil {
+					j.logger.Error("failed to process wiki events: %v", err)
+				}
+
+				time.Sleep(5 * time.Minute)
 			}
 		}
 	}()
@@ -210,4 +237,45 @@ func (j *EventProcessorJob) codegraphProcessWorkSpaces(ctx context.Context) erro
 	}
 
 	return j.codegraph.ProcessEvents(j.ctx, workspacesPaths)
+}
+
+func (j *EventProcessorJob) wikiProcessWorkSpaces(ctx context.Context) error {
+	// 检查上下文是否已取消
+	select {
+	case <-ctx.Done():
+		j.logger.Info("context cancelled, skipping wiki events processing")
+		return j.ctx.Err()
+	default:
+		// 继续执行
+	}
+
+	// 检查是否关闭codebase
+	codebaseEnv := j.storage.GetCodebaseEnv()
+	if codebaseEnv == nil {
+		codebaseEnv = &config.CodebaseEnv{
+			Switch: dto.SwitchOn,
+		}
+	}
+	if codebaseEnv.Switch == dto.SwitchOff {
+		j.logger.Info("codebase is disabled, skipping wiki process")
+		time.Sleep(time.Second * 10)
+		return nil
+	}
+
+	// 获取活跃工作区
+	workspaces, err := j.wiki.ProcessActiveWorkspaces(j.ctx)
+	if err != nil {
+		return err
+	}
+
+	if len(workspaces) == 0 {
+		j.logger.Debug("no active workspaces found")
+		return nil
+	}
+	workspacesPaths := make([]string, len(workspaces))
+	for i, workspace := range workspaces {
+		workspacesPaths[i] = workspace.WorkspacePath
+	}
+
+	return j.wiki.ProcessEvents(j.ctx, workspacesPaths)
 }

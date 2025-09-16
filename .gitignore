@@ -16,3 +16,4 @@ localhost
 tmp/codegraph/*.profile
 .costrict
 .coignore
+.wiki

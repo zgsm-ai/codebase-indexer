@@ -1,0 +1,175 @@
+Analyze this repository and create a comprehensive coding rules structure framework.
+
+Repository Information:
+<file_tree>
+{{.FileTree}}
+</file_tree>
+
+<readme>
+{{.ReadmeContent}}
+</readme>
+
+Based on the repository structure and README content, design a coding rules documentation structure that will guide AI code generation.
+
+## Analysis Requirements
+
+1. **Identify Key Technologies**: Determine the primary programming languages, frameworks, and tools used
+2. **Understand Project Structure**: Analyze how code is organized into modules, packages, or components  
+3. **Recognize Patterns**: Identify existing coding conventions and architectural patterns
+4. **Assess Quality Needs**: Determine what aspects need standardization (naming, formatting, testing, etc.)
+
+## Output Structure
+
+Create an XML framework with exactly {{.PageCount}} sections and {{.GuidelineCount}} guidelines that covers:
+
+- **General Principles**: Overarching coding philosophy and design principles
+- **Language Specifications**: Technology-specific syntax and usage patterns
+- **Code Style**: Formatting, naming conventions, and structure standards
+- **Architecture**: Module organization and component design patterns
+- **Quality Assurance**: Testing, error handling, and documentation requirements
+
+## XML Framework Template
+
+Generate a valid XML structure following this exact format:
+
+```xml
+<coding_rules>
+    <title>[Repository Name] Coding Standards</title>
+    <description>Comprehensive coding guidelines for maintaining consistency, quality, and best practices across the codebase</description>
+    <sections>
+        <section id="general-principles">
+            <title>General Principles</title>
+            <guidelines>
+                <guideline_ref>principle-1</guideline_ref>
+                <guideline_ref>principle-2</guideline_ref>
+            </guidelines>
+        </section>
+        <section id="language-framework">
+            <title>Language & Framework Specifications</title>
+            <guidelines>
+                <guideline_ref>lang-1</guideline_ref>
+                <guideline_ref>lang-2</guideline_ref>
+            </guidelines>
+        </section>
+        <section id="code-style">
+            <title>Code Style Guidelines</title>
+            <guidelines>
+                <guideline_ref>style-1</guideline_ref>
+                <guideline_ref>style-2</guideline_ref>
+            </guidelines>
+        </section>
+        <section id="module-organization">
+            <title>Module Organization</title>
+            <guidelines>
+                <guideline_ref>module-1</guideline_ref>
+                <guideline_ref>module-2</guideline_ref>
+            </guidelines>
+        </section>
+        <section id="implementation-patterns">
+            <title>Feature Implementation Patterns</title>
+            <guidelines>
+                <guideline_ref>pattern-1</guideline_ref>
+                <guideline_ref>pattern-2</guideline_ref>
+            </guidelines>
+        </section>
+        <section id="testing-standards">
+            <title>Testing Standards</title>
+            <guidelines>
+                <guideline_ref>testing-1</guideline_ref>
+                <guideline_ref>testing-2</guideline_ref>
+            </guidelines>
+        </section>
+        <section id="error-handling">
+            <title>Error Handling</title>
+            <guidelines>
+                <guideline_ref>error-1</guideline_ref>
+                <guideline_ref>error-2</guideline_ref>
+            </guidelines>
+        </section>
+        <section id="documentation">
+            <title>Documentation Requirements</title>
+            <guidelines>
+                <guideline_ref>docs-1</guideline_ref>
+                <guideline_ref>docs-2</guideline_ref>
+            </guidelines>
+        </section>
+    </sections>
+    <guidelines>
+        <!-- Generate exactly {{.GuidelineCount}} guidelines -->
+        <guideline id="principle-1">
+            <title>Follow SOLID Principles</title>
+            <description>Apply SOLID design principles to ensure maintainable and extensible code architecture</description>
+            <importance>high</importance>
+            <examples>
+                <good_example>// Single Responsibility Principle
+class UserService {
+    constructor(private userRepository: UserRepository) {}
+    
+    async createUser(userData: UserInput): Promise<User> {
+        return this.userRepository.save(userData);
+    }
+}</good_example>
+                <bad_example>// Violates SRP - handles validation, business logic, and data access
+class UserManager {
+    createUser(data: any) {
+        if (!data.email) throw new Error('Email required');
+        // ... validation logic
+        // ... business logic  
+        // ... database operations
+    }
+}</bad_example>
+            </examples>
+            <relevant_files>
+                <file_path>src/services/UserService.ts</file_path>
+                <file_path>src/repositories/UserRepository.ts</file_path>
+            </relevant_files>
+            <related_guidelines>
+                <related>module-1</related>
+            </related_guidelines>
+            <parent_section>general-principles</parent_section>
+        </guideline>
+        
+        <guideline id="lang-1">
+            <title>Use TypeScript Strict Mode</title>
+            <description>Enable and follow TypeScript strict mode conventions for type safety and better code quality</description>
+            <importance>high</importance>
+            <examples>
+                <good_example>// Strict type definitions
+interface User {
+    id: string;
+    email: string;
+    name?: string; // Optional field
+}
+
+function processUser(user: User): string {
+    return user.name?.toUpperCase() ?? 'ANONYMOUS';
+}</good_example>
+                <bad_example>// Avoid any types
+function processUser(user: any): any {
+    return user.name.toUpperCase();
+}</bad_example>
+            </examples>
+            <relevant_files>
+                <file_path>tsconfig.json</file_path>
+                <file_path>src/types/User.ts</file_path>
+            </relevant_files>
+            <related_guidelines>
+                <related>style-1</related>
+            </related_guidelines>
+            <parent_section>language-framework</parent_section>
+        </guideline>
+        
+        <!-- Add remaining guidelines based on repository analysis -->
+    </guidelines>
+</coding_rules>
+```
+
+## Critical Requirements
+
+1. **Technology Alignment**: All guidelines must match the repository's actual tech stack
+2. **File Path Accuracy**: Use real file paths from the provided file tree
+3. **Example Relevance**: Code examples should reflect actual patterns in the codebase
+4. **Comprehensive Coverage**: Address all major aspects of code quality and consistency
+5. **Clear Organization**: Logical section structure that follows software development best practices
+
+Generate the complete coding rules structure framework now. Return only the XML content.

@@ -2,6 +2,7 @@
 package main
 
 import (
+	"codebase-indexer/internal/wiki"
 	"codebase-indexer/pkg/codegraph/definition"
 	"codebase-indexer/pkg/codegraph/types"
 	"context"
@@ -163,12 +164,32 @@ func main() {
 		workspaceRepo, service.IndexerConfig{VisitPattern: workspace.DefaultVisitPattern}, appLogger)
 
 	codegraphProcessor := service.NewCodegraphProcessor(workspaceReader, indexer, workspaceRepo, eventRepo, appLogger)
+
+	apiKey := ""
+	baseUrl := ""
+	model := ""
+	if apiKey == types.EmptyString {
+		apiKey = os.Getenv("API_KEY")
+	}
+	if baseUrl == types.EmptyString {
+		apiKey = os.Getenv("BASE_URL")
+	}
+	if model == types.EmptyString {
+		model = os.Getenv("MODEL")
+	}
+	
+	wikiManager, err := wiki.NewWikiManager(apiKey, baseUrl, model, appLogger)
+	if err != nil {
+		panic(fmt.Errorf("init wiki_manager err:%w", err))
+	}
+
+	wikiProcessor := service.NewWikiProcessor(workspaceReader, wikiManager, workspaceRepo, eventRepo, appLogger)
 	codebaseService := service.NewCodebaseService(storageManager, appLogger, workspaceReader, workspaceRepo, definition.NewDefinitionParser(), indexer)
 	extensionService := service.NewExtensionService(storageManager, syncRepo, scanRepo, workspaceRepo, eventRepo, codebaseEmbeddingRepo, codebaseService, fileScanService, appLogger)
 
 	// Initialize job layer
 	fileScanJob := job.NewFileScanJob(fileScanService, storageManager, syncRepo, appLogger, 5*time.Minute)
-	eventProcessorJob := job.NewEventProcessorJob(appLogger, syncRepo, embeddingProcessService, codegraphProcessor, 10*time.Second, storageManager)
+	eventProcessorJob := job.NewEventProcessorJob(appLogger, syncRepo, embeddingProcessService, codegraphProcessor, wikiProcessor, 10*time.Second, storageManager)
 	statusCheckerJob := job.NewStatusCheckerJob(embeddingStatusService, storageManager, syncRepo, appLogger, 5*time.Second)
 	eventCleanerJob := job.NewEventCleanerJob(eventRepo, appLogger)
 	indexCleanJob := job.NewIndexCleanJob(appLogger, indexer, workspaceRepo)
