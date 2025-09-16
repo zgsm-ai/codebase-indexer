@@ -114,7 +114,11 @@ func (c *CodegraphProcessor) ProcessModifyFileEvent(ctx context.Context, event *
 		}
 		return nil
 	}
-
+	// 删除之前已经存在的索引
+	err = c.indexer.RemoveIndexes(ctx, event.WorkspacePath, []string{event.SourceFilePath})
+	if err != nil {
+		return fmt.Errorf("codegraph update modify event %d err: %w", event.ID, err)
+	}
 	// 使用索引器重新索引文件
 	err = c.indexer.IndexFiles(ctx, event.WorkspacePath, []string{event.SourceFilePath})
 	if err = c.updateEventStatusFinally(event, err); err != nil {

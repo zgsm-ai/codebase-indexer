@@ -1577,7 +1577,6 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 				if _, ok := visited[callers[idx].Key()]; ok {
 					continue
 				}
-
 				fileElementTable, err := i.getFileElementTableByPath(ctx, projectUuid, callers[idx].FilePath)
 				if err != nil {
 					i.logger.Error("failed to get file element table by path, err: %v", err)
@@ -1585,7 +1584,8 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 				}
 				imports := fileElementTable.Imports
 				// 计算匹配分数
-				score := i.analyzer.CalculateSymbolMatchScore(imports, callers[idx].FilePath, ln.callee.FilePath, ln.callee.SymbolName)
+				score := i.analyzer.CalculateSymbolMatchScore(imports, callers[idx].FilePath, ln.callee.FilePath, 
+					ln.callee.SymbolName,callers[idx].SymbolName)
 				callers[idx].Score = float64(score)
 			}
 
