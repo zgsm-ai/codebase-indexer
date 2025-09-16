@@ -22,14 +22,17 @@ type DatabaseManager interface {
 	BeginTransaction() (*sql.Tx, error)
 	// ClearTable 清理指定表数据并重置ID
 	ClearTable(tableName string) error
+	// ExecuteSQLFile 执行外部 SQL 文件
+	ExecuteSQLFile(filePath string) error
 }
 
 // SQLiteManager SQLite数据库管理器实现
 type SQLiteManager struct {
-	db     *sql.DB
-	config *config.DatabaseConfig
-	logger logger.Logger
-	mutex  sync.RWMutex
+	db       *sql.DB
+	config   *config.DatabaseConfig
+	logger   logger.Logger
+	mutex    sync.RWMutex
+	migrator *Migrator
 }
 
 // NewSQLiteManager 创建SQLite数据库管理器
@@ -71,8 +74,12 @@ func (m *SQLiteManager) Initialize() error {
 
 	m.db = db
 
-	// 创建表结构
-	if err := m.createTables(); err != nil {
+	// 初始化迁移器 - 使用相对于项目根目录的迁移文件路径
+	migrateDir := filepath.Join(dbPath, "migrations")
+	m.migrator = NewMigrator(m.db, m.logger, migrateDir)
+
+	// 使用迁移器自动执行数据库迁移
+	if err := m.migrator.AutoMigrate(); err != nil {
 		return err
 	}
 
@@ -225,74 +232,14 @@ func (m *SQLiteManager) ClearTableWithOptions(tableName string, options *ClearTa
 	return nil
 }
 
-// createTables 创建数据库表结构
-func (m *SQLiteManager) createTables() error {
-	tables := []string{
-		m.createWorkspacesTable(),
-		m.createEventsTable(),
+// ExecuteSQLFile 执行外部 SQL 文件
+func (m *SQLiteManager) ExecuteSQLFile(filePath string) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if m.migrator == nil {
+		return fmt.Errorf("migrator not initialized")
 	}
 
-	for _, tableSQL := range tables {
-		if _, err := m.db.Exec(tableSQL); err != nil {
-			m.logger.Error("Failed to create table: %v", err)
-			return err
-		}
-	}
-
-	return nil
-}
-
-// createWorkspacesTable 创建工作区表
-func (m *SQLiteManager) createWorkspacesTable() string {
-	return `
-    CREATE TABLE IF NOT EXISTS workspaces (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        workspace_name VARCHAR(255) NOT NULL,
-        workspace_path VARCHAR(500) UNIQUE NOT NULL,
-        active VARCHAR(10) NOT NULL DEFAULT 'true',
-        file_num INTEGER NOT NULL DEFAULT 0,
-        embedding_file_num INTEGER NOT NULL DEFAULT 0,
-        embedding_ts INTEGER NOT NULL DEFAULT 0,
-		embedding_message VARCHAR(255) NOT NULL DEFAULT '',
-		embedding_failed_file_paths TEXT NOT NULL DEFAULT '',
-        codegraph_file_num INTEGER NOT NULL DEFAULT 0,
-        codegraph_ts INTEGER NOT NULL DEFAULT 0,
-		codegraph_message VARCHAR(255) NOT NULL DEFAULT '',
-		codegraph_failed_file_paths TEXT NOT NULL DEFAULT '',
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-    
-    CREATE INDEX IF NOT EXISTS idx_workspaces_path ON workspaces(workspace_path);
-    CREATE INDEX IF NOT EXISTS idx_workspaces_embedding_ts ON workspaces(embedding_ts);
-    CREATE INDEX IF NOT EXISTS idx_workspaces_codegraph_ts ON workspaces(codegraph_ts);
-    CREATE INDEX IF NOT EXISTS idx_workspaces_created_at ON workspaces(created_at);
-	CREATE INDEX IF NOT EXISTS idx_workspaces_updated_at ON workspaces(updated_at);
-    `
-}
-
-// createEventsTable 创建事件表
-func (m *SQLiteManager) createEventsTable() string {
-	return `
-    CREATE TABLE IF NOT EXISTS events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        workspace_path VARCHAR(500) NOT NULL,
-        event_type VARCHAR(100) NOT NULL,
-        source_file_path VARCHAR(500) NOT NULL DEFAULT '',
-        target_file_path VARCHAR(500) NOT NULL DEFAULT '',
-		sync_id VARCHAR(100) NOT NULL DEFAULT '',
-		file_hash VARCHAR(100) NOT NULL DEFAULT '',
-		embedding_status TINYINT NOT NULL DEFAULT 1,
-		codegraph_status TINYINT NOT NULL DEFAULT 1,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-    
-    CREATE INDEX IF NOT EXISTS idx_events_workspace_path ON events(workspace_path);
-    CREATE INDEX IF NOT EXISTS idx_events_event_type ON events(event_type);
-	CREATE INDEX IF NOT EXISTS idx_events_sync_id ON events(sync_id);
-    CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
-	CREATE INDEX IF NOT EXISTS idx_events_updated_at ON events(updated_at);
-    CREATE INDEX IF NOT EXISTS idx_events_workspace_type ON events(workspace_path, event_type);
-    `
+	return m.migrator.ExecuteSQLFile(filePath)
 }
