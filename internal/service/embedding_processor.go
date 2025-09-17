@@ -284,7 +284,7 @@ func (ep *embeddingProcessService) processWorkspaceEvents(ctx context.Context, w
 	uploadToken := uploadTokenResp.Data.Token
 
 	config := config.GetClientConfig()
-	maxFileSizeKB := config.Sync.MaxFileSizeKB
+	maxFileSizeKB := config.Scan.MaxFileSizeKB
 
 	// 批量处理添加和修改事件
 	if len(addModifyEvents) > 0 {
@@ -781,7 +781,6 @@ func (ep *embeddingProcessService) CleanWorkspaceFilePath(ctx context.Context, f
 
 		err = ep.workspaceRepo.UpdateEmbeddingInfo(event.WorkspacePath, embeddingFileNum, time.Now().Unix(), embeddingMessage, embeddingFailedFilePaths)
 		if err != nil {
-			ep.logger.Error("failed to update workspace file num: %v", err)
 			return fmt.Errorf("failed to update workspace file num: %w", err)
 		}
 		ep.logger.Info("workspace filepath cleaned successfully for event: %s", event.SourceFilePath)

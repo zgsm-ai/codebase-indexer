@@ -2,6 +2,7 @@ package repository
 
 import (
 	"codebase-indexer/internal/config"
+	"codebase-indexer/pkg/codegraph/types"
 	"codebase-indexer/test/mocks"
 	"os"
 	"path/filepath"
@@ -18,23 +19,26 @@ var (
 	scannerConfig = &config.ScannerConfig{
 		// IgnorePatterns: []string{".git", ".idea", "node_modules/", "vendor/", "dist/", "build/"},
 		// FileIgnorePatterns:   []string{".*", "*.bak"},
-		FolderIgnorePatterns: []string{".*", "build/", "dist/", "node_modules/", "vendor/"},
-		FileIncludePatterns:  []string{".go"},
+		FolderIgnorePatterns:         []string{".*", "build/", "dist/", "node_modules/", "vendor/", "!.costrict/wiki/"},
+		FileIncludePatterns:          []string{".go"},
+		DeepwikiFolderIgnorePatterns: []string{".*", "build/", "dist/", "node_modules/", "vendor/"},
 		// MaxFileSizeMB:  10,
 		MaxFileSizeKB: 100,
+		MaxFileCount:  10000,
 	}
 )
 
 func TestLoadIgnoreRules(t *testing.T) {
 	logger := &mocks.MockLogger{}
-	logger.On("Warn", "Failed to read .gitignore file: %v", mock.Anything).Return()
-	logger.On("Warn", "Failed to read .coignore file: %v", mock.Anything).Return()
+	logger.On("Info", "no .gitignore file: %v", mock.Anything).Return()
+	logger.On("Info", "no .coignore file: %v", mock.Anything).Return()
 	fs := &FileScanner{scannerConfig: scannerConfig, logger: logger}
 
 	t.Run("Use default rules only", func(t *testing.T) {
 		tempDir := t.TempDir()
 		ignore := fs.LoadIgnoreRules(tempDir)
-		logger.AssertCalled(t, "Warn", "Failed to read .gitignore file: %v", mock.Anything)
+		logger.AssertCalled(t, "Info", "no .gitignore file: %v", mock.Anything)
+		logger.AssertCalled(t, "Info", "no .coignore file: %v", mock.Anything)
 		require.NotNil(t, ignore)
 
 		// Test default rules
@@ -58,6 +62,26 @@ func TestLoadIgnoreRules(t *testing.T) {
 		assert.True(t, ignore.MatchesPath("src/main.log"))      // .gitignore rule
 		assert.True(t, ignore.MatchesPath("node_modules/file")) // Default rule
 		assert.False(t, ignore.MatchesPath("src/main.go"))      // Should not match
+	})
+
+	t.Run("Test .costrict/wiki directory inclusion with ! pattern", func(t *testing.T) {
+		tempDir := t.TempDir()
+		fs := &FileScanner{scannerConfig: scannerConfig, logger: logger}
+
+		ignore := fs.LoadIgnoreRules(tempDir)
+		require.NotNil(t, ignore)
+
+		// Test that .costrict/wiki directory is NOT ignored due to ! pattern
+		assert.False(t, ignore.MatchesPath(".costrict/wiki/"), "should not ignore .costrict/wiki/ directory")
+		assert.False(t, ignore.MatchesPath(".costrict/wiki/file.md"), "should not ignore files inside .costrict/wiki/ directory")
+
+		// Test that other dot directories are still ignored
+		assert.True(t, ignore.MatchesPath(".git/"), "should ignore .git/ directory")
+		assert.True(t, ignore.MatchesPath(".idea/"), "should ignore .idea/ directory")
+
+		// Test that .costrict directory without wiki is still ignored
+		assert.True(t, ignore.MatchesPath(".costrict/other/"), "should ignore .costrict/other/ directory")
+		assert.True(t, ignore.MatchesPath(".costrict/config.json"), "should ignore .costrict/config.json file")
 	})
 }
 
@@ -94,12 +118,11 @@ func TestScanDirectory(t *testing.T) {
 
 	t.Run("Scan codebase and filter files", func(t *testing.T) {
 		logger := &mocks.MockLogger{}
-		logger.On("Warn", "Failed to read .gitignore file: %v", mock.Anything).Return()
-		logger.On("Warn", "Failed to read .coignore file: %v", mock.Anything).Return()
 		logger.On("Warn", "reached maximum file count limit: %d, stopping scan, time taken: %v", mock.Anything, mock.Anything).Return()
 		logger.On("Info", "starting codebase scan: %s", mock.Anything).Return()
 		logger.On("Debug", "skipping file excluded by ignore: %s", mock.Anything).Return()
 		logger.On("Debug", "skipping ignored directory: %s", mock.Anything).Return()
+		logger.On("Info", mock.Anything, mock.Anything).Return()
 		logger.On("Debug", mock.Anything, mock.Anything).Return()
 
 		codebasePath := setupTestDir(t)
@@ -134,7 +157,8 @@ func TestScanDirectory(t *testing.T) {
 			t.Logf("src/pkg/utils.go size: %d bytes", info.Size())
 		}
 
-		hashTree, err := fs.ScanCodebase(codebasePath)
+		ignoreConfig := fs.LoadIgnoreConfig(codebasePath)
+		hashTree, err := fs.ScanCodebase(ignoreConfig, codebasePath)
 		logger.AssertCalled(t, "Info", "starting codebase scan: %s", mock.Anything)
 		require.NoError(t, err)
 
@@ -163,17 +187,17 @@ func TestScanDirectory(t *testing.T) {
 			t.Skip("skip: only run on Windows system")
 		}
 		logger := &mocks.MockLogger{}
-		logger.On("Warn", "Failed to read .gitignore file: %v", mock.Anything).Return()
-		logger.On("Warn", "Failed to read .coignore file: %v", mock.Anything).Return()
 		logger.On("Warn", "reached maximum file count limit: %d, stopping scan, time taken: %v", mock.Anything, mock.Anything).Return()
 		logger.On("Info", "starting codebase scan: %s", mock.Anything).Return()
 		logger.On("Debug", "skipping file excluded by ignore: %s", mock.Anything).Return()
 		logger.On("Debug", "skipping ignored directory: %s", mock.Anything).Return()
+		logger.On("Info", mock.Anything, mock.Anything).Return()
 		logger.On("Debug", mock.Anything, mock.Anything).Return()
 
 		codebasePath := setupTestDir(t)
 		fs := &FileScanner{scannerConfig: scannerConfig, logger: logger}
-		hashTree, err := fs.ScanCodebase(codebasePath)
+		ignoreConfig := fs.LoadIgnoreConfig(codebasePath)
+		hashTree, err := fs.ScanCodebase(ignoreConfig, codebasePath)
 		require.NoError(t, err)
 
 		// Verify with Windows-style paths
@@ -214,7 +238,8 @@ func BenchmarkScanCodebase_10000Files(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := fs.ScanCodebase(tempDir)
+		ignoreConfig := fs.LoadIgnoreConfig(tempDir)
+		_, err := fs.ScanCodebase(ignoreConfig, tempDir)
 		require.NoError(b, err)
 	}
 
@@ -222,4 +247,153 @@ func BenchmarkScanCodebase_10000Files(b *testing.B) {
 	runtime.ReadMemStats(&m)
 	b.ReportMetric(float64(m.TotalAlloc)/1024/1024, "malloc_mb")
 	b.ReportMetric(float64(m.HeapInuse)/1024/1024, "heap_inuse_mb")
+}
+
+func TestLoadDeepwikiIgnoreConfig(t *testing.T) {
+	logger := &mocks.MockLogger{}
+	logger.On("Info", mock.Anything, mock.Anything).Return()
+	fs := &FileScanner{scannerConfig: scannerConfig, logger: logger}
+
+	t.Run("Load deepwiki ignore config", func(t *testing.T) {
+		tempDir := t.TempDir()
+		ignoreConfig := fs.LoadDeepwikiIgnoreConfig(tempDir)
+
+		require.NotNil(t, ignoreConfig)
+		assert.NotNil(t, ignoreConfig.IgnoreRules)
+		assert.NotNil(t, ignoreConfig.IncludeRules)
+		assert.Equal(t, scannerConfig.MaxFileCount, ignoreConfig.MaxFileCount)
+		assert.Equal(t, scannerConfig.MaxFileSizeKB, ignoreConfig.MaxFileSize)
+
+		// Test deepwiki specific include patterns
+		assert.NotContains(t, ignoreConfig.IncludeRules, ".md")
+		assert.NotContains(t, ignoreConfig.IncludeRules, ".json")
+		assert.NotContains(t, ignoreConfig.IncludeRules, ".yaml")
+
+		// Test ignore rules functionality
+		assert.True(t, ignoreConfig.IgnoreRules.MatchesPath("node_modules/file"))
+		assert.True(t, ignoreConfig.IgnoreRules.MatchesPath("build/main.go"))
+		assert.False(t, ignoreConfig.IgnoreRules.MatchesPath("src/main.md"))
+	})
+}
+
+func TestCheckDeepwikiIgnoreFile(t *testing.T) {
+	logger := &mocks.MockLogger{}
+	logger.On("Debug", mock.Anything, mock.Anything).Return()
+	logger.On("Info", mock.Anything, mock.Anything).Return()
+	fs := &FileScanner{scannerConfig: scannerConfig, logger: logger}
+
+	t.Run("Check deepwiki file ignore - directory", func(t *testing.T) {
+		tempDir := t.TempDir()
+		ignoreConfig := fs.LoadDeepwikiIgnoreConfig(tempDir)
+
+		// Test directory
+		dirInfo := &types.FileInfo{
+			Name:  "node_modules",
+			Path:  filepath.Join(tempDir, "node_modules"),
+			Size:  0,
+			IsDir: true,
+		}
+
+		shouldIgnore, err := fs.CheckIgnoreFile(ignoreConfig, tempDir, dirInfo)
+		require.NoError(t, err)
+		assert.True(t, shouldIgnore, "should ignore node_modules directory")
+	})
+
+	t.Run("Check deepwiki file ignore - included file", func(t *testing.T) {
+		tempDir := t.TempDir()
+		ignoreConfig := fs.LoadDeepwikiIgnoreConfig(tempDir)
+
+		// Test included file (.md)
+		mdInfo := &types.FileInfo{
+			Name:  "README.md",
+			Path:  filepath.Join(tempDir, "README.md"),
+			Size:  1024,
+			IsDir: false,
+		}
+
+		shouldIgnore, err := fs.CheckIgnoreFile(ignoreConfig, tempDir, mdInfo)
+		require.NoError(t, err)
+		assert.False(t, shouldIgnore, "should not include .md files")
+	})
+
+	t.Run("Check deepwiki file ignore - excluded file", func(t *testing.T) {
+		tempDir := t.TempDir()
+		ignoreConfig := fs.LoadDeepwikiIgnoreConfig(tempDir)
+
+		// Test excluded file (.exe)
+		exeInfo := &types.FileInfo{
+			Name:  "program.exe",
+			Path:  filepath.Join(tempDir, "build", "program.exe"),
+			Size:  1024,
+			IsDir: false,
+		}
+
+		shouldIgnore, err := fs.CheckIgnoreFile(ignoreConfig, tempDir, exeInfo)
+		require.NoError(t, err)
+		assert.True(t, shouldIgnore, "should ignore build files")
+	})
+
+	t.Run("Check deepwiki file ignore - file size exceeded", func(t *testing.T) {
+		tempDir := t.TempDir()
+		ignoreConfig := fs.LoadDeepwikiIgnoreConfig(tempDir)
+
+		// Test file with size exceeding limit
+		largeFileInfo := &types.FileInfo{
+			Name:  "large.md",
+			Path:  filepath.Join(tempDir, "large.md"),
+			Size:  int64(scannerConfig.MaxFileSizeKB*1024 + 1), // 1 byte over limit
+			IsDir: false,
+		}
+
+		shouldIgnore, err := fs.CheckIgnoreFile(ignoreConfig, tempDir, largeFileInfo)
+		require.NoError(t, err)
+		assert.True(t, shouldIgnore, "should ignore files exceeding size limit")
+	})
+
+	t.Run("Check deepwiki file ignore - invalid parameters", func(t *testing.T) {
+		tempDir := t.TempDir()
+		ignoreConfig := fs.LoadDeepwikiIgnoreConfig(tempDir)
+
+		fileInfo := &types.FileInfo{
+			Name:  "test.md",
+			Path:  filepath.Join(tempDir, "test.md"),
+			Size:  1024,
+			IsDir: false,
+		}
+
+		// Test with nil ignore config
+		shouldIgnore, err := fs.CheckIgnoreFile(nil, tempDir, fileInfo)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid ignore config")
+		assert.False(t, shouldIgnore)
+
+		// Test with empty codebase path
+		shouldIgnore, err = fs.CheckIgnoreFile(ignoreConfig, "", fileInfo)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "codebase path")
+		assert.False(t, shouldIgnore)
+
+		// Test with nil file info
+		shouldIgnore, err = fs.CheckIgnoreFile(ignoreConfig, tempDir, nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "file info")
+		assert.False(t, shouldIgnore)
+	})
+
+	t.Run("Check deepwiki file ignore - .costrict/wiki directory", func(t *testing.T) {
+		tempDir := t.TempDir()
+		ignoreConfig := fs.LoadDeepwikiIgnoreConfig(tempDir)
+
+		// Test .costrict/wiki directory
+		costrictWikiInfo := &types.FileInfo{
+			Name:  "wiki",
+			Path:  filepath.Join(tempDir, ".costrict", "wiki"),
+			Size:  0,
+			IsDir: true,
+		}
+
+		shouldIgnore, err := fs.CheckIgnoreFile(ignoreConfig, tempDir, costrictWikiInfo)
+		require.NoError(t, err)
+		assert.True(t, shouldIgnore, "should ignore .costrict/wiki directory")
+	})
 }

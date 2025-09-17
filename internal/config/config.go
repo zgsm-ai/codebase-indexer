@@ -14,16 +14,26 @@ type ConfigServer struct {
 	HashTreeExpireHours   int `json:"hashTreeExpireHours"`
 }
 
+type ConfigScan struct {
+	MaxFileSizeKB                int      `json:"maxFileSizeKB"`
+	MaxFileCount                 int      `json:"maxFileCount"`
+	FolderIgnorePatterns         []string `json:"folderIgnorePatterns"`
+	FileIncludePatterns          []string `json:"fileIncludePatterns"`
+	DeepwikiFolderIgnorePatterns []string `json:"deepwikiFolderIgnorePatterns"`
+}
+
 type ConfigSync struct {
-	IntervalMinutes         int      `json:"intervalMinutes"`
-	MaxFileSizeKB           int      `json:"maxFileSizeKB"`
-	MaxFileCount            int      `json:"maxFileCount"`
-	MaxRetries              int      `json:"maxRetries"`
-	RetryDelaySeconds       int      `json:"retryDelaySeconds"`
-	FolderIgnorePatterns    []string `json:"folderIgnorePatterns"`
-	FileIncludePatterns     []string `json:"fileIncludePatterns"`
-	EmbeddingSuccessPercent float32  `json:"embeddingSuccessPercent"`
-	CodegraphSuccessPercent float32  `json:"codegraphSuccessPercent"`
+	IntervalMinutes         int     `json:"intervalMinutes"`
+	MaxRetries              int     `json:"maxRetries"`
+	RetryDelaySeconds       int     `json:"retryDelaySeconds"`
+	EmbeddingSuccessPercent float32 `json:"embeddingSuccessPercent"`
+	CodegraphSuccessPercent float32 `json:"codegraphSuccessPercent"`
+}
+
+type configDeepwiki struct {
+	BaseURL string `json:"baseURL"`
+	Model   string `json:"model"`
+	ApiKey  string `json:"apiKey"`
 }
 
 // Pprof configuration
@@ -34,9 +44,11 @@ type ConfigPprof struct {
 
 // Client configuration file structure
 type ClientConfig struct {
-	Server ConfigServer `json:"server"`
-	Sync   ConfigSync   `json:"sync"`
-	Pprof  ConfigPprof  `json:"pprof"`
+	Server   ConfigServer   `json:"server"`
+	Scan     ConfigScan     `json:"scan"`
+	Sync     ConfigSync     `json:"sync"`
+	Pprof    ConfigPprof    `json:"pprof"`
+	Deepwiki configDeepwiki `json:"deepwiki"`
 }
 
 var DefaultConfigServer = ConfigServer{
@@ -84,6 +96,8 @@ var DefaultFolderIgnorePatterns = []string{
 	"logs/", "temp/", "tmp/", "node_modules/",
 	"bin/", "dist/", "build/", "out/",
 	"__pycache__/", "venv/", "target/", "vendor/",
+	// Keep specific directories starting with dot
+	"!.costrict/wiki/",
 }
 
 var DefaultFileIncludePatterns = []string{
@@ -91,14 +105,27 @@ var DefaultFileIncludePatterns = []string{
 	".json", ".yaml",
 }
 
+var DefaultDeepwikiFolderIgnorePatterns = []string{
+	// Filter all directories starting with dot
+	".*",
+	// Keep other specific directories not starting with dot
+	"logs/", "temp/", "tmp/", "node_modules/",
+	"bin/", "dist/", "build/", "out/",
+	"__pycache__/", "venv/", "target/", "vendor/",
+}
+
+var DefaultConfigScan = ConfigScan{
+	MaxFileSizeKB:                10240,                               // Default maximum file size in KB
+	MaxFileCount:                 100000,                              // Default maximum file count
+	FolderIgnorePatterns:         DefaultFolderIgnorePatterns,         // Default folder ignore patterns
+	FileIncludePatterns:          DefaultFileIncludePatterns,          // Default file include patterns
+	DeepwikiFolderIgnorePatterns: DefaultDeepwikiFolderIgnorePatterns, // Default deepwiki folder ignore patterns
+}
+
 var DefaultConfigSync = ConfigSync{
-	IntervalMinutes:         5,     // Default sync interval in minutes
-	MaxFileSizeKB:           10240, // Default maximum file size in KB
-	MaxFileCount:            10000,
-	MaxRetries:              3,                           // Default maximum retry count
-	RetryDelaySeconds:       3,                           // Default retry delay in seconds
-	FolderIgnorePatterns:    DefaultFolderIgnorePatterns, // Default folder ignore patterns
-	FileIncludePatterns:     DefaultFileIncludePatterns,
+	IntervalMinutes:         5,    // Default sync interval in minutes
+	MaxRetries:              3,    // Default maximum retry count
+	RetryDelaySeconds:       3,    // Default retry delay in seconds
 	EmbeddingSuccessPercent: 80.0, // Default embedding success percent
 	CodegraphSuccessPercent: 90.0, // Default codegraph success percent
 }
@@ -112,6 +139,7 @@ var DefaultConfigPprof = ConfigPprof{
 // Default client configuration
 var DefaultClientConfig = ClientConfig{
 	Server: DefaultConfigServer,
+	Scan:   DefaultConfigScan,
 	Sync:   DefaultConfigSync,
 	Pprof:  DefaultConfigPprof,
 }

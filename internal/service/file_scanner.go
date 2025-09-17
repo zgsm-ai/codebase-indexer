@@ -69,7 +69,8 @@ func (ws *fileScanService) DetectFileChanges(workspacePath string) ([]*model.Eve
 	ws.logger.Info("scanning workspace: %s", workspacePath)
 
 	// 获取当前文件哈希树
-	currentHashTree, err := ws.fileScanner.ScanCodebase(workspacePath)
+	ignoreConfig := ws.fileScanner.LoadIgnoreConfig(workspacePath)
+	currentHashTree, err := ws.fileScanner.ScanCodebase(ignoreConfig, workspacePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan codebase: %w", err)
 	}

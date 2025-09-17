@@ -17,6 +17,10 @@ type Workspace struct {
 	CodegraphTs              int64     `json:"codegraphTs" db:"codegraph_ts"`
 	CodegraphMessage         string    `json:"codegraphMessage" db:"codegraph_message"`
 	CodegraphFailedFilePaths string    `json:"codegraphFailedFilePaths" db:"codegraph_failed_file_paths"`
+	DeepwikiFileNum          int       `json:"deepwikiFileNum" db:"deepwiki_file_num"`
+	DeepwikiTs               int64     `json:"deepwikiTs" db:"deepwiki_ts"`
+	DeepwikiMessage          string    `json:"deepwikiMessage" db:"deepwiki_message"`
+	DeepwikiFailedFilePaths  string    `json:"deepwikiFailedFilePaths" db:"deepwiki_failed_file_paths"`
 	CreatedAt                time.Time `json:"createdAt" db:"created_at"`
 	UpdatedAt                time.Time `json:"updatedAt" db:"updated_at"`
 }

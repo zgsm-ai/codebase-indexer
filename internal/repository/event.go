@@ -94,14 +94,12 @@ func (r *eventRepository) CreateEvent(event *model.Event) error {
 		nowTime,
 	)
 	if err != nil {
-		r.logger.Error("Failed to create event: %v", err)
-		return fmt.Errorf("failed to create event: %w", err)
+		return fmt.Errorf("[DB] failed to create event: %w", err)
 	}
 
 	id, err := result.LastInsertId()
 	if err != nil {
-		r.logger.Error("Failed to get last insert ID: %v", err)
-		return fmt.Errorf("failed to get last insert ID: %w", err)
+		return fmt.Errorf("[DB] failed to get last insert ID: %w", err)
 	}
 
 	event.ID = id
@@ -138,10 +136,10 @@ func (r *eventRepository) GetEventByID(id int64) (*model.Event, error) {
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("event not found: %d", id)
+			r.logger.Warn("[DB] event not found, ID: %d", id)
+			return nil, nil
 		}
-		r.logger.Error("Failed to get event by ID: %v", err)
-		return nil, fmt.Errorf("failed to get event by ID: %w", err)
+		return nil, fmt.Errorf("[DB] failed to get event by ID: %w", err)
 	}
 
 	event.CreatedAt = createdAt
@@ -167,8 +165,7 @@ func (r *eventRepository) GetEventsByWorkspace(workspacePath string, limit int, 
 	}
 	rows, err := r.db.GetDB().Query(query, workspacePath, limit)
 	if err != nil {
-		r.logger.Error("Failed to get events by workspace: %v", err)
-		return nil, fmt.Errorf("failed to get events by workspace: %w", err)
+		return nil, fmt.Errorf("[DB] failed to get events by workspace: %w", err)
 	}
 	defer rows.Close()
 
@@ -192,8 +189,7 @@ func (r *eventRepository) GetEventsByWorkspace(workspacePath string, limit int, 
 		)
 
 		if err != nil {
-			r.logger.Error("Failed to scan event row: %v", err)
-			return nil, fmt.Errorf("failed to scan event row: %w", err)
+			return nil, fmt.Errorf("[DB] failed to scan event row: %w", err)
 		}
 
 		event.CreatedAt = createdAt
@@ -238,8 +234,7 @@ func (r *eventRepository) GetEventsByType(eventTypes []string, limit int, isDesc
 
 	rows, err := r.db.GetDB().Query(query, args...)
 	if err != nil {
-		r.logger.Error("Failed to get events by type: %v", err)
-		return nil, fmt.Errorf("failed to get events by type: %w", err)
+		return nil, fmt.Errorf("[DB] failed to get events by type: %w", err)
 	}
 	defer rows.Close()
 
@@ -263,8 +258,7 @@ func (r *eventRepository) GetEventsByType(eventTypes []string, limit int, isDesc
 		)
 
 		if err != nil {
-			r.logger.Error("Failed to scan event row: %v", err)
-			return nil, fmt.Errorf("failed to scan event row: %w", err)
+			return nil, fmt.Errorf("[DB] failed to scan event row: %w", err)
 		}
 
 		event.CreatedAt = createdAt
@@ -309,8 +303,7 @@ func (r *eventRepository) GetEventsByWorkspaceAndType(workspacePath string, even
 
 	rows, err := r.db.GetDB().Query(query, args...)
 	if err != nil {
-		r.logger.Error("Failed to get events by workspace and type: %v", err)
-		return nil, fmt.Errorf("failed to get events by workspace and type: %w", err)
+		return nil, fmt.Errorf("[DB] failed to get events by workspace and type: %w", err)
 	}
 	defer rows.Close()
 
@@ -334,8 +327,7 @@ func (r *eventRepository) GetEventsByWorkspaceAndType(workspacePath string, even
 		)
 
 		if err != nil {
-			r.logger.Error("Failed to scan event row: %v", err)
-			return nil, fmt.Errorf("failed to scan event row: %w", err)
+			return nil, fmt.Errorf("[DB] failed to scan event row: %w", err)
 		}
 
 		event.CreatedAt = createdAt
@@ -383,8 +375,7 @@ func (r *eventRepository) GetEventsByWorkspaceAndEmbeddingStatus(workspacePath s
 
 	rows, err := r.db.GetDB().Query(query, args...)
 	if err != nil {
-		r.logger.Error("Failed to get events by workspace and embedding status: %v", err)
-		return nil, fmt.Errorf("failed to get events by workspace and embedding status: %w", err)
+		return nil, fmt.Errorf("[DB] failed to get events by workspace and embedding status: %w", err)
 	}
 	defer rows.Close()
 
@@ -408,8 +399,7 @@ func (r *eventRepository) GetEventsByWorkspaceAndEmbeddingStatus(workspacePath s
 		)
 
 		if err != nil {
-			r.logger.Error("Failed to scan event row: %v", err)
-			return nil, fmt.Errorf("failed to scan event row: %w", err)
+			return nil, fmt.Errorf("[DB] failed to scan event row: %w", err)
 		}
 
 		event.CreatedAt = createdAt
@@ -477,8 +467,7 @@ func (r *eventRepository) GetEventsByTypeAndEmbeddingStatus(eventTypes []string,
 
 	rows, err := r.db.GetDB().Query(query, args...)
 	if err != nil {
-		r.logger.Error("Failed to get events by type and status: %v", err)
-		return nil, fmt.Errorf("failed to get events by type and status: %w", err)
+		return nil, fmt.Errorf("[DB] failed to get events by type and status: %w", err)
 	}
 	defer rows.Close()
 
@@ -502,8 +491,7 @@ func (r *eventRepository) GetEventsByTypeAndEmbeddingStatus(eventTypes []string,
 		)
 
 		if err != nil {
-			r.logger.Error("Failed to scan event row: %v", err)
-			return nil, fmt.Errorf("failed to scan event row: %w", err)
+			return nil, fmt.Errorf("[DB] failed to scan event row: %w", err)
 		}
 
 		event.CreatedAt = createdAt
@@ -609,8 +597,7 @@ func (r *eventRepository) GetEventsByTypeAndStatusAndWorkspaces(eventTypes []str
 
 	rows, err := r.db.GetDB().Query(query, args...)
 	if err != nil {
-		r.logger.Error("Failed to get events by type, status and workspaces: %v", err)
-		return nil, fmt.Errorf("failed to get events by type, status and workspaces: %w", err)
+		return nil, fmt.Errorf("[DB] failed to get events by type, status and workspaces: %w", err)
 	}
 	defer rows.Close()
 
@@ -634,8 +621,7 @@ func (r *eventRepository) GetEventsByTypeAndStatusAndWorkspaces(eventTypes []str
 		)
 
 		if err != nil {
-			r.logger.Error("Failed to scan event row: %v", err)
-			return nil, fmt.Errorf("failed to scan event row: %w", err)
+			return nil, fmt.Errorf("[DB] failed to scan event row: %w", err)
 		}
 
 		event.CreatedAt = createdAt
@@ -744,8 +730,7 @@ func (r *eventRepository) getAllEventsByTypeAndStatusAndWorkspaces(eventTypes []
 
 		rows, err := r.db.GetDB().Query(query, batchArgs...)
 		if err != nil {
-			r.logger.Error("Failed to query events batch (offset %d): %v", offset, err)
-			return nil, fmt.Errorf("failed to query events batch (offset %d): %w", offset, err)
+			return nil, fmt.Errorf("[DB] failed to query events batch (offset %d): %w", offset, err)
 		}
 
 		var batchEvents []*model.Event
@@ -768,8 +753,7 @@ func (r *eventRepository) getAllEventsByTypeAndStatusAndWorkspaces(eventTypes []
 			)
 			if err != nil {
 				rows.Close()
-				r.logger.Error("Failed to scan event row (offset %d): %v", offset, err)
-				return nil, fmt.Errorf("failed to scan event row (offset %d): %w", offset, err)
+				return nil, fmt.Errorf("[DB] failed to scan event row (offset %d): %w", offset, err)
 			}
 
 			event.CreatedAt = createdAt
@@ -791,7 +775,7 @@ func (r *eventRepository) getAllEventsByTypeAndStatusAndWorkspaces(eventTypes []
 		}
 	}
 
-	r.logger.Info("Retrieved %d events by type, status and workspaces", len(allEvents))
+	r.logger.Info("[DB] Retrieved %d events by type, status and workspaces", len(allEvents))
 	return allEvents, nil
 }
 
@@ -865,18 +849,16 @@ func (r *eventRepository) UpdateEvent(event *model.Event) error {
 
 	result, err := r.db.GetDB().Exec(query, args...)
 	if err != nil {
-		r.logger.Error("Failed to update event: %v", err)
-		return fmt.Errorf("failed to update event: %w", err)
+		return fmt.Errorf("[DB] failed to update event: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		r.logger.Error("Failed to get rows affected: %v", err)
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return fmt.Errorf("[DB] failed to get rows affected: %w", err)
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("event not found: %d", event.ID)
+		return fmt.Errorf("[DB] event not found: %d", event.ID)
 	}
 
 	return nil
@@ -929,18 +911,16 @@ func (r *eventRepository) UpdateEventByMap(id int64, updates map[string]interfac
 
 	result, err := r.db.GetDB().Exec(query, args...)
 	if err != nil {
-		r.logger.Error("Failed to update event by map: %v", err)
-		return fmt.Errorf("failed to update event by map: %w", err)
+		return fmt.Errorf("[DB] failed to update event by map: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		r.logger.Error("Failed to get rows affected: %v", err)
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return fmt.Errorf("[DB] failed to get rows affected: %w", err)
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("event not found: %d", id)
+		return fmt.Errorf("[DB] event not found: %d", id)
 	}
 
 	return nil
@@ -952,18 +932,17 @@ func (r *eventRepository) DeleteEvent(id int64) error {
 
 	result, err := r.db.GetDB().Exec(query, id)
 	if err != nil {
-		r.logger.Error("Failed to delete event: %v", err)
-		return fmt.Errorf("failed to delete event: %w", err)
+		return fmt.Errorf("[DB] failed to delete event: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		r.logger.Error("Failed to get rows affected: %v", err)
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return fmt.Errorf("[DB] failed to get rows affected: %w", err)
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("event not found: %d", id)
+		r.logger.Warn("[DB] event not found, rows affected: %d, event id: %d", rowsAffected, id)
+		return nil
 	}
 
 	return nil
@@ -982,8 +961,7 @@ func (r *eventRepository) GetRecentEvents(workspacePath string, limit int) ([]*m
 
 	rows, err := r.db.GetDB().Query(query, workspacePath, limit)
 	if err != nil {
-		r.logger.Error("Failed to get recent events: %v", err)
-		return nil, fmt.Errorf("failed to get recent events: %w", err)
+		return nil, fmt.Errorf("[DB] failed to get recent events: %w", err)
 	}
 	defer rows.Close()
 
@@ -1007,8 +985,7 @@ func (r *eventRepository) GetRecentEvents(workspacePath string, limit int) ([]*m
 		)
 
 		if err != nil {
-			r.logger.Error("Failed to scan event row: %v", err)
-			return nil, fmt.Errorf("failed to scan event row: %w", err)
+			return nil, fmt.Errorf("[DB] failed to scan event row: %w", err)
 		}
 
 		event.CreatedAt = createdAt
@@ -1036,8 +1013,7 @@ func (r *eventRepository) GetEventsByWorkspaceForDeduplication(workspacePath str
 
 		rows, err := r.db.GetDB().Query(query, workspacePath, batchSize, offset)
 		if err != nil {
-			r.logger.Error("Failed to query events batch for deduplication: %v", err)
-			return nil, fmt.Errorf("failed to query events batch: %w", err)
+			return nil, fmt.Errorf("[DB] failed to query events batch: %w", err)
 		}
 
 		var batchEvents []*model.Event
@@ -1060,8 +1036,7 @@ func (r *eventRepository) GetEventsByWorkspaceForDeduplication(workspacePath str
 			)
 			if err != nil {
 				rows.Close()
-				r.logger.Error("Failed to scan event row for deduplication: %v", err)
-				return nil, fmt.Errorf("failed to scan event row: %w", err)
+				return nil, fmt.Errorf("[DB] failed to scan event row: %w", err)
 			}
 
 			event.CreatedAt = createdAt
@@ -1083,7 +1058,7 @@ func (r *eventRepository) GetEventsByWorkspaceForDeduplication(workspacePath str
 		}
 	}
 
-	r.logger.Info("Retrieved %d events for deduplication in workspace: %s", len(allEvents), workspacePath)
+	r.logger.Info("[DB] Retrieved %d events for deduplication in workspace: %s", len(allEvents), workspacePath)
 	return allEvents, nil
 }
 
@@ -1115,10 +1090,10 @@ func (r *eventRepository) GetEventsCountByType(eventTypes []string) (int64, erro
 	err := r.db.GetDB().QueryRow(query, args...).Scan(&count)
 	if err != nil {
 		if err == sql.ErrNoRows {
+			r.logger.Warn("[DB] not found events, eventTypes: %v", eventTypes)
 			return 0, nil
 		}
-		r.logger.Error("Failed to get events count by types: %v", err)
-		return 0, fmt.Errorf("failed to get events count by types: %w", err)
+		return 0, fmt.Errorf("[DB] failed to get events count by types: %w", err)
 	}
 
 	return count, nil
@@ -1193,6 +1168,7 @@ func (r *eventRepository) GetEventsCountByWorkspaceAndStatus(workspacePaths []st
 	err := r.db.GetDB().QueryRow(query, args...).Scan(&count)
 	if err != nil {
 		if err == sql.ErrNoRows {
+			r.logger.Warn("[DB] event not found, workspacePaths: %v, embeddingStatuses: %v, codegraphStatuses: %v", workspacePaths, embeddingStatuses, codegraphStatuses)
 			return 0, nil
 		}
 		return 0, err
@@ -1232,7 +1208,10 @@ func (r *eventRepository) GetLatestEventByWorkspaceAndSourcePath(workspacePath, 
 	)
 
 	if err != nil {
-		r.logger.Error("Failed to get latest event by workspace and source path: %v", err)
+		if err == sql.ErrNoRows {
+			r.logger.Warn("[DB] event not found, workspace: %s, sourceFilePath: %s", workspacePath, sourceFilePath)
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -1283,21 +1262,18 @@ func (r *eventRepository) BatchCreateEvents(events []*model.Event) error {
 
 		result, err := r.db.GetDB().Exec(query, valueArgs...)
 		if err != nil {
-			r.logger.Error("Failed to batch create events (batch %d-%d): %v", i+1, end, err)
-			return fmt.Errorf("failed to batch create events (batch %d-%d): %w", i+1, end, err)
+			return fmt.Errorf("[DB] failed to batch create events (batch %d-%d): %w", i+1, end, err)
 		}
 
 		// 获取最后插入的ID，用于设置事件的ID
 		lastInsertID, err := result.LastInsertId()
 		if err != nil {
-			r.logger.Error("Failed to get last insert ID (batch %d-%d): %v", i+1, end, err)
-			return fmt.Errorf("failed to get last insert ID (batch %d-%d): %w", i+1, end, err)
+			return fmt.Errorf("[DB] failed to get last insert ID (batch %d-%d): %w", i+1, end, err)
 		}
 
 		rowsAffected, err := result.RowsAffected()
 		if err != nil {
-			r.logger.Error("Failed to get rows affected (batch %d-%d): %v", i+1, end, err)
-			return fmt.Errorf("failed to get rows affected (batch %d-%d): %w", i+1, end, err)
+			return fmt.Errorf("[DB] failed to get rows affected (batch %d-%d): %w", i+1, end, err)
 		}
 
 		totalCreated += rowsAffected
@@ -1307,10 +1283,10 @@ func (r *eventRepository) BatchCreateEvents(events []*model.Event) error {
 			event.ID = lastInsertID - int64(len(batch)-1-j)
 		}
 
-		r.logger.Info("Successfully created batch %d-%d: %d events", i+1, end, rowsAffected)
+		r.logger.Info("[DB] Successfully created batch %d-%d: %d events", i+1, end, rowsAffected)
 	}
 
-	r.logger.Info("Successfully created total %d events", totalCreated)
+	r.logger.Info("[DB] Successfully created total %d events", totalCreated)
 	return nil
 }
 
@@ -1345,21 +1321,19 @@ func (r *eventRepository) BatchDeleteEvents(ids []int64) error {
 
 		result, err := r.db.GetDB().Exec(query, args...)
 		if err != nil {
-			r.logger.Error("Failed to batch delete events (batch %d-%d): %v", i+1, end, err)
-			return fmt.Errorf("failed to batch delete events (batch %d-%d): %w", i+1, end, err)
+			return fmt.Errorf("[DB] failed to batch delete events (batch %d-%d): %w", i+1, end, err)
 		}
 
 		rowsAffected, err := result.RowsAffected()
 		if err != nil {
-			r.logger.Error("Failed to get rows affected (batch %d-%d): %v", i+1, end, err)
-			return fmt.Errorf("failed to get rows affected (batch %d-%d): %w", i+1, end, err)
+			return fmt.Errorf("[DB] failed to get rows affected (batch %d-%d): %w", i+1, end, err)
 		}
 
 		totalDeleted += rowsAffected
-		r.logger.Info("Successfully deleted batch %d-%d: %d events", i+1, end, rowsAffected)
+		r.logger.Info("[DB] Successfully deleted batch %d-%d: %d events", i+1, end, rowsAffected)
 	}
 
-	r.logger.Info("Successfully deleted total %d events", totalDeleted)
+	r.logger.Info("[DB] Successfully deleted total %d events", totalDeleted)
 	return nil
 }
 
@@ -1371,7 +1345,7 @@ func (r *eventRepository) UpdateEventsEmbedding(events []*model.Event) error {
 
 	tx, err := r.db.GetDB().Begin()
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return fmt.Errorf("[DB] failed to begin transaction: %w", err)
 	}
 	defer func() {
 		if err != nil {
@@ -1388,7 +1362,7 @@ func (r *eventRepository) UpdateEventsEmbedding(events []*model.Event) error {
 	nowTime := time.Now()
 	stmt, err := tx.Prepare(query)
 	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
+		return fmt.Errorf("[DB] failed to prepare statement: %w", err)
 	}
 	defer stmt.Close()
 
@@ -1401,16 +1375,15 @@ func (r *eventRepository) UpdateEventsEmbedding(events []*model.Event) error {
 			event.ID,
 		)
 		if err != nil {
-			r.logger.Error("Failed to update event %d: %v", event.ID, err)
-			return fmt.Errorf("failed to update event %d: %w", event.ID, err)
+			return fmt.Errorf("[DB] failed to update event %d: %w", event.ID, err)
 		}
 	}
 
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return fmt.Errorf("[DB] failed to commit transaction: %w", err)
 	}
 
-	r.logger.Info("Successfully updated %d events", len(events))
+	r.logger.Info("[DB] Successfully updated %d events", len(events))
 	return nil
 }
 
@@ -1422,7 +1395,7 @@ func (r *eventRepository) UpdateEventsEmbeddingStatus(eventIDs []int64, status i
 
 	tx, err := r.db.GetDB().Begin()
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return fmt.Errorf("[DB] failed to begin transaction: %w", err)
 	}
 	defer func() {
 		if err != nil {
@@ -1439,23 +1412,22 @@ func (r *eventRepository) UpdateEventsEmbeddingStatus(eventIDs []int64, status i
 	nowTime := time.Now()
 	stmt, err := tx.Prepare(query)
 	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
+		return fmt.Errorf("[DB] failed to prepare statement: %w", err)
 	}
 	defer stmt.Close()
 
 	for _, id := range eventIDs {
 		_, err = stmt.Exec(status, nowTime, id)
 		if err != nil {
-			r.logger.Error("Failed to update event status for ID %d: %v", id, err)
-			return fmt.Errorf("failed to update event status for ID %d: %w", id, err)
+			return fmt.Errorf("[DB] failed to update event status for ID %d: %w", id, err)
 		}
 	}
 
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return fmt.Errorf("[DB] failed to commit transaction: %w", err)
 	}
 
-	r.logger.Info("Successfully updated status for %d events", len(eventIDs))
+	r.logger.Info("[DB] Successfully updated status for %d events", len(eventIDs))
 	return nil
 }
 
@@ -1470,8 +1442,7 @@ func (r *eventRepository) GetExpiredEventIDs(cutoffTime time.Time) ([]int64, err
 
 	rows, err := r.db.GetDB().Query(query, cutoffTime)
 	if err != nil {
-		r.logger.Error("Failed to get expired event IDs: %v", err)
-		return nil, fmt.Errorf("failed to get expired event IDs: %w", err)
+		return nil, fmt.Errorf("[DB] failed to get expired event IDs: %w", err)
 	}
 	defer rows.Close()
 
@@ -1479,18 +1450,16 @@ func (r *eventRepository) GetExpiredEventIDs(cutoffTime time.Time) ([]int64, err
 	for rows.Next() {
 		var id int64
 		if err := rows.Scan(&id); err != nil {
-			r.logger.Error("Failed to scan event ID: %v", err)
-			return nil, fmt.Errorf("failed to scan event ID: %w", err)
+			return nil, fmt.Errorf("[DB] failed to scan event ID: %w", err)
 		}
 		eventIDs = append(eventIDs, id)
 	}
 
 	if err := rows.Err(); err != nil {
-		r.logger.Error("Error iterating expired event IDs: %v", err)
-		return nil, fmt.Errorf("error iterating expired event IDs: %w", err)
+		return nil, fmt.Errorf("[DB] error iterating expired event IDs: %w", err)
 	}
 
-	r.logger.Info("Found %d expired events before %s", len(eventIDs), cutoffTime.Format(time.RFC3339))
+	r.logger.Info("[DB] found %d expired events before %s", len(eventIDs), cutoffTime.Format(time.RFC3339))
 	return eventIDs, nil
 }
 
