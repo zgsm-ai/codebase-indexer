@@ -164,15 +164,15 @@ func main() {
 		workspaceRepo, service.IndexerConfig{VisitPattern: workspace.DefaultVisitPattern}, appLogger)
 
 	codegraphProcessor := service.NewCodegraphProcessor(workspaceReader, indexer, workspaceRepo, eventRepo, appLogger)
-
-	apiKey := ""
-	baseUrl := ""
-	model := ""
+	//TODO get from config
+	apiKey := config.GetClientConfig().Deepwiki.ApiKey
+	baseUrl := config.GetClientConfig().Deepwiki.BaseURL
+	model := config.GetClientConfig().Deepwiki.Model
 	if apiKey == types.EmptyString {
 		apiKey = os.Getenv("API_KEY")
 	}
 	if baseUrl == types.EmptyString {
-		apiKey = os.Getenv("BASE_URL")
+		baseUrl = os.Getenv("BASE_URL")
 	}
 	if model == types.EmptyString {
 		model = os.Getenv("MODEL")
