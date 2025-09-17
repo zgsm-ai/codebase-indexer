@@ -1393,13 +1393,13 @@ func (i *indexer) QueryCallGraph(ctx context.Context, opts *types.QueryCallGraph
 	// 根据查询类型处理
 	if opts.SymbolName != "" {
 		// 查询组合1：文件路径+符号名(类、函数)
-		results, err = i.queryCallGraphBySymbol(ctx, projectUuid, opts.FilePath, opts.SymbolName, opts.MaxLayer)
+		results, err = i.queryCallGraphBySymbol(ctx, projectUuid, opts.Workspace, opts.FilePath, opts.SymbolName, opts.MaxLayer)
 		return results, err
 	}
 
 	if opts.StartLine > 0 && opts.EndLine > 0 && opts.EndLine >= opts.StartLine {
 		// 查询组合2：文件路径+行范围
-		results, err = i.queryCallGraphByLineRange(ctx, projectUuid, opts.FilePath, startLine, endLine, opts.MaxLayer)
+		results, err = i.queryCallGraphByLineRange(ctx, projectUuid, opts.Workspace, opts.FilePath, startLine, endLine, opts.MaxLayer)
 		return results, err
 	}
 
@@ -1407,7 +1407,7 @@ func (i *indexer) QueryCallGraph(ctx context.Context, opts *types.QueryCallGraph
 }
 
 // queryCallGraphBySymbol 根据符号名查询调用链
-func (i *indexer) queryCallGraphBySymbol(ctx context.Context, projectUuid string, filePath, symbolName string, maxLayer int) ([]*types.RelationNode, error) {
+func (i *indexer) queryCallGraphBySymbol(ctx context.Context, projectUuid string, workspace, filePath, symbolName string, maxLayer int) ([]*types.RelationNode, error) {
 	// 查找符号定义
 	fileTable, err := i.getFileElementTableByPath(ctx, projectUuid, filePath)
 	if err != nil {
@@ -1434,6 +1434,15 @@ func (i *indexer) queryCallGraphBySymbol(ctx context.Context, projectUuid string
 			i.logger.Error("failed to get parameters from extra data, err: %v", err)
 			continue
 		}
+		isVariadic := false
+		paramCount := len(params)
+		if len(params) > 0 {
+			lastParam := params[paramCount-1]
+			if strings.Contains(lastParam.Name, varVariadic) {
+				isVariadic = true
+				paramCount = paramCount - 1
+			}
+		}
 		position := types.ToPosition(symbol.Range)
 		node := &types.RelationNode{
 			SymbolName: symbol.Name,
@@ -1445,19 +1454,20 @@ func (i *indexer) queryCallGraphBySymbol(ctx context.Context, projectUuid string
 		callee := &CalleeInfo{
 			SymbolName: symbol.Name,
 			FilePath:   filePath,
-			ParamCount: len(params),
+			ParamCount: paramCount,
+			IsVariadic: isVariadic,
 			Position:   types.ToPosition(symbol.Range),
 		}
 		definitions = append(definitions, node)
 		calleeElements = append(calleeElements, callee)
 	}
 	visited := make(map[string]struct{})
-	i.buildCallGraphBFS(ctx, projectUuid, definitions, calleeElements, maxLayer, visited)
+	i.buildCallGraphBFS(ctx, projectUuid, workspace, definitions, calleeElements, maxLayer, visited)
 	return definitions, nil
 }
 
 // queryCallGraphByLineRange 根据行范围查询调用链
-func (i *indexer) queryCallGraphByLineRange(ctx context.Context, projectUuid string, filePath string, startLine, endLine, maxLayer int) ([]*types.RelationNode, error) {
+func (i *indexer) queryCallGraphByLineRange(ctx context.Context, projectUuid string, workspace string, filePath string, startLine, endLine, maxLayer int) ([]*types.RelationNode, error) {
 	// 获取文件元素表
 	fileTable, err := i.getFileElementTableByPath(ctx, projectUuid, filePath)
 	if err != nil {
@@ -1486,6 +1496,15 @@ func (i *indexer) queryCallGraphByLineRange(ctx context.Context, projectUuid str
 			i.logger.Error("failed to get parameters from extra data, err: %v", err)
 			continue
 		}
+		isVariadic := false
+		paramCount := len(params)
+		if len(params) > 0 {
+			lastParam := params[paramCount-1]
+			if strings.Contains(lastParam.Name, varVariadic) {
+				isVariadic = true
+				paramCount = paramCount - 1
+			}
+		}
 		position := types.ToPosition(symbol.Range)
 		node := &types.RelationNode{
 			SymbolName: symbol.Name,
@@ -1497,14 +1516,15 @@ func (i *indexer) queryCallGraphByLineRange(ctx context.Context, projectUuid str
 		callee := &CalleeInfo{
 			SymbolName: symbol.Name,
 			FilePath:   filePath,
-			ParamCount: len(params),
+			ParamCount: paramCount,
+			IsVariadic: isVariadic,
 			Position:   types.ToPosition(symbol.Range),
 		}
 		definitions = append(definitions, node)
 		calleeElements = append(calleeElements, callee)
 	}
 	visited := make(map[string]struct{})
-	i.buildCallGraphBFS(ctx, projectUuid, definitions, calleeElements, maxLayer, visited)
+	i.buildCallGraphBFS(ctx, projectUuid, workspace, definitions, calleeElements, maxLayer, visited)
 
 	return definitions, nil
 }
@@ -1512,7 +1532,7 @@ func (i *indexer) queryCallGraphByLineRange(ctx context.Context, projectUuid str
 const MaxCalleeMapCacheCapacity = 1600
 
 // buildCallGraphBFS 使用BFS层次遍历构建调用链
-func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, rootNodes []*types.RelationNode, calleeInfos []*CalleeInfo, maxLayer int, visited map[string]struct{}) {
+func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, workspace string, rootNodes []*types.RelationNode, calleeInfos []*CalleeInfo, maxLayer int, visited map[string]struct{}) {
 	if len(rootNodes) == 0 || maxLayer <= 0 {
 		return
 	}
@@ -1544,7 +1564,7 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 		i.logger.Error("failed to build callee map for write, err: %v", err)
 		return
 	}
-	calleeMap, err := lru.New[CalledSymbol, []CallerInfo](MaxCalleeMapCacheCapacity / 2)
+	calleeMap, err := lru.New[string, []CallerInfo](MaxCalleeMapCacheCapacity / 2)
 	if err != nil {
 		i.logger.Error("failed to create callee map cache, err: %v", err)
 		return
@@ -1555,7 +1575,7 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 		// 使用反向索引直接查找调用者
 		for _, ln := range currentLayerNodes {
 			// 构建callee的key
-			calleeKey := CalledSymbol{SymbolName: ln.callee.SymbolName, ParamCount: ln.callee.ParamCount}
+			calleeKey := ln.callee.SymbolName
 
 			// 从反向索引中获取调用者列表
 			callers, exists := calleeMap.Get(calleeKey)
@@ -1570,13 +1590,23 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 				// 更新缓存
 				calleeMap.Add(calleeKey, callers)
 			}
-
+			realCallers := make([]CallerInfo, 0, len(callers))
 			for idx := range len(callers) {
-				// 可以保留递归情况的层次信息，但是不继续遍历下去
-				// 防止循环引用
-				if _, ok := visited[callers[idx].Key()]; ok {
+				// 根据可变参数，过滤掉不符合条件的调用者
+				if ln.callee.IsVariadic && callers[idx].CalleeKey.ParamCount < ln.callee.ParamCount {
+					// 调用者传入的参数少于被调用者的固定参数个数（可变参数）
 					continue
 				}
+				if !ln.callee.IsVariadic && callers[idx].CalleeKey.ParamCount != ln.callee.ParamCount {
+					// 调用者传入的参数不等于被调用者的固定参数个数（固定参数）
+					continue
+				}
+				// 可以保留递归情况的层次信息，但是不继续遍历下去
+				if _, ok := visited[callers[idx].Key()]; ok {
+					// 防止循环引用
+					continue
+				}
+			
 				fileElementTable, err := i.getFileElementTableByPath(ctx, projectUuid, callers[idx].FilePath)
 				if err != nil {
 					i.logger.Error("failed to get file element table by path, err: %v", err)
@@ -1584,26 +1614,28 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 				}
 				imports := fileElementTable.Imports
 				// 计算匹配分数
-				score := i.analyzer.CalculateSymbolMatchScore(imports, callers[idx].FilePath, ln.callee.FilePath, 
-					ln.callee.SymbolName,callers[idx].SymbolName)
+				score := i.analyzer.CalculateSymbolMatchScore(workspace, imports, callers[idx].FilePath, ln.callee.FilePath,
+					ln.callee.SymbolName, callers[idx].SymbolName)
 				callers[idx].Score = float64(score)
+				realCallers = append(realCallers, callers[idx])
 			}
 
-			sort.Slice(callers, func(i, j int) bool {
-				return callers[i].Score > callers[j].Score
+			sort.Slice(realCallers, func(i, j int) bool {
+				return realCallers[i].Score > realCallers[j].Score
 			})
 			// 第一层不限制，其他层限制
-			if layer != 0 && len(callers) > defaultTopN {
-				callers = callers[:defaultTopN]
+			if layer != 0 && len(realCallers) > defaultTopN {
+				realCallers = realCallers[:defaultTopN]
 			}
 
-			for idx := range len(callers) {
+			for idx := range len(realCallers) {
 				// 创建对应的被调用元素
 				calleeInfo := &CalleeInfo{
 					FilePath:   callers[idx].FilePath,
 					SymbolName: callers[idx].SymbolName,
 					ParamCount: callers[idx].ParamCount,
 					Position:   callers[idx].Position,
+					IsVariadic: callers[idx].IsVariadic,
 				}
 				// 创建调用者节点
 				callerNode := &types.RelationNode{
@@ -1636,8 +1668,8 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, roo
 	}
 }
 
-// CalledSymbol 表示被调用的符号信息
-type CalledSymbol struct {
+// CalleeKey 表示被调用的符号信息
+type CalleeKey struct {
 	SymbolName string
 	ParamCount int
 }
@@ -1647,6 +1679,7 @@ type CalleeInfo struct {
 	Position   types.Position `json:"range,omitempty"`
 	SymbolName string         `json:"symbolName,omitempty"`
 	ParamCount int            `json:"paramCount,omitempty"`
+	IsVariadic bool           `json:"isVariadic,omitempty"`
 }
 
 func (c *CalleeInfo) Key() string {
@@ -1666,7 +1699,9 @@ type CallerInfo struct {
 	FilePath   string
 	Position   types.Position
 	ParamCount int
-	Score      float64 // TODO 起到排序的作用
+	IsVariadic bool
+	CalleeKey  CalleeKey
+	Score      float64 // 起到排序的作用
 }
 
 func (c *CallerInfo) Key() string {
@@ -1686,7 +1721,7 @@ type MapBatcher struct {
 	projectUuid string
 
 	batchSize int // 批量写入的大小限制
-	calleeMap map[CalledSymbol][]CallerInfo
+	calleeMap map[string][]CallerInfo
 }
 
 func NewMapBatcher(storage store.GraphStorage, logger logger.Logger, projectUuid string, batchSize int) *MapBatcher {
@@ -1695,13 +1730,13 @@ func NewMapBatcher(storage store.GraphStorage, logger logger.Logger, projectUuid
 		logger:      logger,
 		projectUuid: projectUuid,
 		batchSize:   batchSize,
-		calleeMap:   make(map[CalledSymbol][]CallerInfo),
+		calleeMap:   make(map[string][]CallerInfo),
 	}
 	return mb
 }
 
 // 对外 Add 接口
-func (mb *MapBatcher) Add(key CalledSymbol, val []CallerInfo, merge bool) {
+func (mb *MapBatcher) Add(key string, val []CallerInfo, merge bool) {
 	if merge {
 		mb.calleeMap[key] = append(mb.calleeMap[key], val...)
 	} else {
@@ -1710,22 +1745,21 @@ func (mb *MapBatcher) Add(key CalledSymbol, val []CallerInfo, merge bool) {
 	// 达到批次立即推送
 	if len(mb.calleeMap) >= mb.batchSize {
 		tempCalleeMap := mb.calleeMap
-		mb.calleeMap = make(map[CalledSymbol][]CallerInfo)
+		mb.calleeMap = make(map[string][]CallerInfo)
 		mb.flush(tempCalleeMap)
 	}
 }
 
 // 先合并老数据，然后批量写入数据库
-func (mb *MapBatcher) flush(tempCalleeMap map[CalledSymbol][]CallerInfo) {
+func (mb *MapBatcher) flush(tempCalleeMap map[string][]CallerInfo) {
 	if len(tempCalleeMap) == 0 {
 		return
 	}
 	items := make([]*codegraphpb.CalleeMapItem, 0, len(tempCalleeMap))
 
-	for callee, callers := range tempCalleeMap {
+	for calleeName, callers := range tempCalleeMap {
 		item := &codegraphpb.CalleeMapItem{
-			CalleeName: callee.SymbolName,
-			ParamCount: int32(callee.ParamCount),
+			CalleeName: calleeName,
 			Callers:    make([]*codegraphpb.CallerInfo, 0, len(callers)),
 		}
 		for _, c := range callers {
@@ -1739,13 +1773,18 @@ func (mb *MapBatcher) flush(tempCalleeMap map[CalledSymbol][]CallerInfo) {
 					EndColumn:   int32(c.Position.EndColumn),
 				},
 				ParamCount: int32(c.ParamCount),
+				CalleeKey: &codegraphpb.CalleeKey{
+					SymbolName: c.CalleeKey.SymbolName,
+					ParamCount: int32(c.CalleeKey.ParamCount),
+				},
+				IsVariadic: c.IsVariadic,
 				Score:      c.Score,
 			})
 		}
 
 		// 合并旧数据
 		old, _ := mb.storage.Get(context.Background(), mb.projectUuid,
-			store.CalleeMapKey{SymbolName: callee.SymbolName, ParamCount: callee.ParamCount})
+			store.CalleeMapKey{SymbolName: calleeName})
 		if old != nil {
 			var oldItem codegraphpb.CalleeMapItem
 			if err := store.UnmarshalValue(old, &oldItem); err == nil {
@@ -1766,17 +1805,20 @@ func (mb *MapBatcher) Flush() {
 	mb.flush(mb.calleeMap)
 }
 
+const varVariadic = "..."
+
 // buildCalleeMap 构建反向索引映射：callee -> []caller
 func (i *indexer) buildCalleeMap(ctx context.Context, projectUuid string) error {
 	// 创建batcher实例
 	batcher := NewMapBatcher(i.storage, i.logger, projectUuid, defaultMapBatchSize)
-	calleeMap, err := lru.NewWithEvict(MaxCalleeMapCacheCapacity, func(key CalledSymbol, value []CallerInfo) {
-		batcher.Add(key, value, true)
-	})
 	defer batcher.Flush()
 
+	// 用name作为key
+	calleeMap, err := lru.NewWithEvict(MaxCalleeMapCacheCapacity, func(key string, value []CallerInfo) {
+		batcher.Add(key, value, true)
+	})
 	if err != nil {
-		return fmt.Errorf("failed to create callee map cache, err: %v", err)
+		return fmt.Errorf("failed to create variadic map cache, err: %v", err)
 	}
 	iter := i.storage.Iter(ctx, projectUuid)
 	defer iter.Close()
@@ -1801,31 +1843,39 @@ func (i *indexer) buildCalleeMap(ctx context.Context, projectUuid string) error 
 				continue
 			}
 
-			// 获取调用者参数个数
+			// 获取调用者（函数/方法）参数个数
 			callerParams, err := proto.GetParametersFromExtraData(element.ExtraData)
 			if err != nil {
 				i.logger.Debug("parse caller parameters from extra data, err: %v", err)
 				continue
 			}
 			callerParamCount := len(callerParams)
-
+			isVariadic := false
+			if callerParamCount > 0 {
+				lastParam := callerParams[callerParamCount-1]
+				if strings.Contains(lastParam.Name, varVariadic) {
+					callerParamCount = callerParamCount - 1
+					isVariadic = true
+				}
+			}
 			// 查找该函数内部的所有调用
-			calledSymbols := i.extractCalledSymbols(&elementTable, element.Range[0], element.Range[2])
+			calleeKeys := i.extractCalleeSymbols(&elementTable, element.Range[0], element.Range[2])
 
 			// 为每个被调用的符号添加调用者信息
-			for _, calledSymbol := range calledSymbols {
-				// TODO	 判断可达性
+			for _, calleeKey := range calleeKeys {
 				callerInfo := CallerInfo{
 					SymbolName: element.Name,
 					FilePath:   elementTable.Path,
 					Position:   types.ToPosition(element.Range),
 					ParamCount: callerParamCount,
-					Score:      0, // 稍后计算
+					IsVariadic: isVariadic,
+					CalleeKey:  calleeKey,
 				}
-				if val, ok := calleeMap.Get(calledSymbol); ok {
-					calleeMap.Add(calledSymbol, append(val, callerInfo))
+				// 添加到缓存
+				if val, ok := calleeMap.Get(calleeKey.SymbolName); ok {
+					calleeMap.Add(calleeKey.SymbolName, append(val, callerInfo))
 				} else {
-					calleeMap.Add(calledSymbol, []CallerInfo{callerInfo})
+					calleeMap.Add(calleeKey.SymbolName, []CallerInfo{callerInfo})
 				}
 			}
 		}
@@ -1837,8 +1887,8 @@ func (i *indexer) buildCalleeMap(ctx context.Context, projectUuid string) error 
 }
 
 // extractCalledSymbols 提取函数定义范围内的所有被调用符号
-func (i *indexer) extractCalledSymbols(fileTable *codegraphpb.FileElementTable, startLine, endLine int32) []CalledSymbol {
-	var calledSymbols []CalledSymbol
+func (i *indexer) extractCalleeSymbols(fileTable *codegraphpb.FileElementTable, startLine, endLine int32) []CalleeKey {
+	var calleeKeys []CalleeKey
 
 	// 直接遍历元素，避免调用 findSymbolInDocByLineRange
 	for _, element := range fileTable.Elements {
@@ -1861,13 +1911,13 @@ func (i *indexer) extractCalledSymbols(fileTable *codegraphpb.FileElementTable, 
 			continue
 		}
 		// 被调用的符号
-		calledSymbols = append(calledSymbols, CalledSymbol{
+		calleeKeys = append(calleeKeys, CalleeKey{
 			SymbolName: element.Name,
 			ParamCount: len(params),
 		})
 	}
 
-	return calledSymbols
+	return calleeKeys
 }
 
 func (i *indexer) searchSymbolNames(ctx context.Context, projectUuid string, language lang.Language, names []string, imports []*codegraphpb.Import) (
@@ -2537,11 +2587,10 @@ func (i *indexer) getFileElementTable(ctx context.Context, projectUuid string, l
 }
 
 // queryCallersFromDB 从数据库查询指定符号的调用者列表
-func (i *indexer) queryCallersFromDB(ctx context.Context, projectUuid string, calleeKey CalledSymbol) ([]CallerInfo, error) {
+func (i *indexer) queryCallersFromDB(ctx context.Context, projectUuid string, calleeName string) ([]CallerInfo, error) {
 	var item codegraphpb.CalleeMapItem
 	result, err := i.storage.Get(ctx, projectUuid, store.CalleeMapKey{
-		SymbolName: calleeKey.SymbolName,
-		ParamCount: calleeKey.ParamCount,
+		SymbolName: calleeName,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("storage query failed: %w", err)
@@ -2563,6 +2612,7 @@ func (i *indexer) queryCallersFromDB(ctx context.Context, projectUuid string, ca
 				EndColumn:   int(c.Position.EndColumn),
 			},
 			ParamCount: int(c.ParamCount),
+			CalleeKey:  CalleeKey{SymbolName: c.CalleeKey.SymbolName, ParamCount: int(c.CalleeKey.ParamCount)},
 			Score:      c.Score,
 		})
 	}

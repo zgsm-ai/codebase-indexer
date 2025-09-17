@@ -10,14 +10,15 @@ message CallerInfo {
   string file_path = 2;      // 文件路径
   Position position = 3;     // 位置信息
   int32 param_count = 4;     // 参数数量
-  double score = 5;          // 评分
+  CalleeKey callee_key = 5;  // 被调用者的信息
+  bool is_variadic = 6;      // 调用者是否为可变参数
+  double score = 7;          // 评分
 }
 
 // CalleeMapItem 被调用者映射项
 message CalleeMapItem {
-  string callee_name = 1;    // 被调用者名称
-  int32 param_count = 2;     // 参数数量
-  repeated CallerInfo callers = 3;  // 调用者列表（数组）
+  string callee_name = 1;           // 被调用者名称，用于计算key
+  repeated CallerInfo callers = 2;  // 调用者列表（数组）
 }
 
 // Position 位置信息
@@ -26,4 +27,10 @@ message Position {
   int32 start_column = 2;    // 开始列（从1开始）
   int32 end_line = 3;        // 结束行（从1开始）
   int32 end_column = 4;      // 结束列（从1开始）
+}
+
+// CalleeKey 被调用者的信息
+message CalleeKey {
+  string symbol_name = 1;    // 符号名称
+  int32 param_count = 2;     // 参数数量
 }

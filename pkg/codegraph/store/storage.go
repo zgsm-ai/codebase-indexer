@@ -89,11 +89,10 @@ func (s SymbolNameKey) Get() (string, error) {
 
 type CalleeMapKey struct {
 	SymbolName string
-	ParamCount int
 }
 
 func (c CalleeMapKey) Get() (string, error) {
-	return fmt.Sprintf("%s:%s:%d", CalleeMapKeySystemPrefix, c.SymbolName, c.ParamCount), nil
+	return fmt.Sprintf("%s:%s", CalleeMapKeySystemPrefix, c.SymbolName), nil
 }
 
 func IsSymbolNameKey(key string) bool {

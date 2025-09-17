@@ -97,6 +97,10 @@ func (da *DependencyAnalyzer) normalizeImportPath(path string) string {
 
 // IsFilePathInImportPackage 判断文件路径是否属于导入包的范围
 func IsFilePathInImportPackage(filePath string, imp *codegraphpb.Import) bool {
+	if imp == nil {
+		// 防止panic
+		return false
+	}
 	// imp是文件A的导入路径，filePath是文件B的路径
 	// 目的是判断文件A是否可导入文件B里面的符号，如果可以，则返回true
 	// 转换为.分隔格式（替换所有系统分隔符）

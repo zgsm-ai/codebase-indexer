@@ -219,7 +219,7 @@ func (da *DependencyAnalyzer) FilterByImports(filePath string, imports []*codegr
 	return found
 }
 
-func (da *DependencyAnalyzer) CalculateSymbolMatchScore(callerImports []*codegraphpb.Import, callerFilePath string, calleeFilePath string, calleeSymbolName string, callerSymbolName string) int {
+func (da *DependencyAnalyzer) CalculateSymbolMatchScore(workspace string, callerImports []*codegraphpb.Import, callerFilePath string, calleeFilePath string, calleeSymbolName string, callerSymbolName string) int {
 	// 1、同文件
 	if callerFilePath == calleeFilePath {
 		return 100
@@ -255,15 +255,19 @@ func (da *DependencyAnalyzer) CalculateSymbolMatchScore(callerImports []*codegra
 	score += int(similarity * 10)
 
 	// 6、文件路径最长公共前缀
-	packageLevel := calculatePackageLevel(callerFilePath, calleeFilePath)
+
+	packageLevel := calculatePackageLevel(workspace, callerFilePath, calleeFilePath)
 	score += packageLevel
 	return score
 }
-func calculatePackageLevel(callerPath string, calleePath string) int {
+func calculatePackageLevel(workspace string, callerPath string, calleePath string) int {
+	// 剔除workspace的路径
+	callerPath = strings.ReplaceAll(callerPath, workspace, types.EmptyString)
 	callerPath = strings.ReplaceAll(callerPath, types.WindowsSeparator, types.Dot)
 	callerPath = strings.ReplaceAll(callerPath, types.UnixSeparator, types.Dot)
 	callerDir := filepath.Dir(callerPath)
 
+	calleePath = strings.ReplaceAll(calleePath, workspace, types.EmptyString)
 	calleePath = strings.ReplaceAll(calleePath, types.WindowsSeparator, types.Dot)
 	calleePath = strings.ReplaceAll(calleePath, types.UnixSeparator, types.Dot)
 	calleeDir := filepath.Dir(calleePath)
