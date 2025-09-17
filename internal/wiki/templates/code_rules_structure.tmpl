@@ -1,175 +1,115 @@
-Analyze this repository and create a comprehensive coding rules structure framework.
+分析此仓库并为其创建编码规则文档结构。
 
-Repository Information:
+1. 项目的完整文件树：
 <file_tree>
 {{.FileTree}}
 </file_tree>
 
+2. 项目的README文件：
 <readme>
 {{.ReadmeContent}}
 </readme>
 
-Based on the repository structure and README content, design a coding rules documentation structure that will guide AI code generation.
+我想为这个仓库创建编码规则文档。根据仓库的实际目录结构和代码内容，识别项目特有的技术约束和实现模式。
 
-## Analysis Requirements
+重要：编码规则内容将使用{{.OutputLanguage}}语言生成。
 
-1. **Identify Key Technologies**: Determine the primary programming languages, frameworks, and tools used
-2. **Understand Project Structure**: Analyze how code is organized into modules, packages, or components  
-3. **Recognize Patterns**: Identify existing coding conventions and architectural patterns
-4. **Assess Quality Needs**: Determine what aspects need standardization (naming, formatting, testing, etc.)
+## 模板协作关系说明
+本模板（code_rules_structure.tmpl）负责生成编码规则文档的整体结构，定义规范类别和页面组织。具体的编码规则内容将由code_rules_page.tmpl模板基于实际代码文件内容生成。
 
-## Output Structure
+## 项目特有技术细节识别目标
 
-Create an XML framework with exactly {{.PageCount}} sections and {{.GuidelineCount}} guidelines that covers:
+不是列举通用最佳实践，而是挖掘这个项目独有的技术约束和实现模式：
 
-- **General Principles**: Overarching coding philosophy and design principles
-- **Language Specifications**: Technology-specific syntax and usage patterns
-- **Code Style**: Formatting, naming conventions, and structure standards
-- **Architecture**: Module organization and component design patterns
-- **Quality Assurance**: Testing, error handling, and documentation requirements
+### 核心技术栈识别
+1. **特定中间件使用**：识别项目使用的特殊数据库中间件、消息队列、缓存方案
+2. **自定义框架组件**：发现项目自研的ORM、RPC框架、配置中心等
+3. **特殊协议实现**：识别项目特有的通信协议、数据格式、接口规范
 
-## XML Framework Template
+### 业务约束挖掘
+1. **分库分表规则**：如"分库分表要在请求头指定库"这类特殊要求
+2. **权限模型特色**：项目特有的权限校验、角色管理、资源访问控制
+3. **数据一致性要求**：项目特殊的分布式事务、数据同步、缓存一致性策略
 
-Generate a valid XML structure following this exact format:
+### 架构决策痕迹
+1. **性能优化妥协**：为性能做的特殊设计，如冗余字段、异步处理、批处理
+2. **兼容性处理**：为兼容旧系统或第三方做的特殊适配
+3. **技术债务标记**：代码中TODO、FIXME、HACK等特殊注释指示的问题
 
-```xml
-<coding_rules>
-    <title>[Repository Name] Coding Standards</title>
-    <description>Comprehensive coding guidelines for maintaining consistency, quality, and best practices across the codebase</description>
-    <sections>
-        <section id="general-principles">
-            <title>General Principles</title>
-            <guidelines>
-                <guideline_ref>principle-1</guideline_ref>
-                <guideline_ref>principle-2</guideline_ref>
-            </guidelines>
-        </section>
-        <section id="language-framework">
-            <title>Language & Framework Specifications</title>
-            <guidelines>
-                <guideline_ref>lang-1</guideline_ref>
-                <guideline_ref>lang-2</guideline_ref>
-            </guidelines>
-        </section>
-        <section id="code-style">
-            <title>Code Style Guidelines</title>
-            <guidelines>
-                <guideline_ref>style-1</guideline_ref>
-                <guideline_ref>style-2</guideline_ref>
-            </guidelines>
-        </section>
-        <section id="module-organization">
-            <title>Module Organization</title>
-            <guidelines>
-                <guideline_ref>module-1</guideline_ref>
-                <guideline_ref>module-2</guideline_ref>
-            </guidelines>
-        </section>
-        <section id="implementation-patterns">
-            <title>Feature Implementation Patterns</title>
-            <guidelines>
-                <guideline_ref>pattern-1</guideline_ref>
-                <guideline_ref>pattern-2</guideline_ref>
-            </guidelines>
-        </section>
-        <section id="testing-standards">
-            <title>Testing Standards</title>
-            <guidelines>
-                <guideline_ref>testing-1</guideline_ref>
-                <guideline_ref>testing-2</guideline_ref>
-            </guidelines>
-        </section>
-        <section id="error-handling">
-            <title>Error Handling</title>
-            <guidelines>
-                <guideline_ref>error-1</guideline_ref>
-                <guideline_ref>error-2</guideline_ref>
-            </guidelines>
-        </section>
-        <section id="documentation">
-            <title>Documentation Requirements</title>
-            <guidelines>
-                <guideline_ref>docs-1</guideline_ref>
-                <guideline_ref>docs-2</guideline_ref>
-            </guidelines>
-        </section>
-    </sections>
-    <guidelines>
-        <!-- Generate exactly {{.GuidelineCount}} guidelines -->
-        <guideline id="principle-1">
-            <title>Follow SOLID Principles</title>
-            <description>Apply SOLID design principles to ensure maintainable and extensible code architecture</description>
-            <importance>high</importance>
-            <examples>
-                <good_example>// Single Responsibility Principle
-class UserService {
-    constructor(private userRepository: UserRepository) {}
-    
-    async createUser(userData: UserInput): Promise<User> {
-        return this.userRepository.save(userData);
-    }
-}</good_example>
-                <bad_example>// Violates SRP - handles validation, business logic, and data access
-class UserManager {
-    createUser(data: any) {
-        if (!data.email) throw new Error('Email required');
-        // ... validation logic
-        // ... business logic  
-        // ... database operations
-    }
-}</bad_example>
-            </examples>
-            <relevant_files>
-                <file_path>src/services/UserService.ts</file_path>
-                <file_path>src/repositories/UserRepository.ts</file_path>
-            </relevant_files>
-            <related_guidelines>
-                <related>module-1</related>
-            </related_guidelines>
-            <parent_section>general-principles</parent_section>
-        </guideline>
-        
-        <guideline id="lang-1">
-            <title>Use TypeScript Strict Mode</title>
-            <description>Enable and follow TypeScript strict mode conventions for type safety and better code quality</description>
-            <importance>high</importance>
-            <examples>
-                <good_example>// Strict type definitions
-interface User {
-    id: string;
-    email: string;
-    name?: string; // Optional field
-}
+### 实现模式提取
+1. **项目特有设计模式**：不是通用的工厂、单例，而是项目内反复出现的特殊模式
+2. **错误处理特色**：项目特有的错误码体系、错误传递方式、降级策略
+3. **测试策略特点**：项目特殊的测试数据准备、mock方式、集成测试策略
 
-function processUser(user: User): string {
-    return user.name?.toUpperCase() ?? 'ANONYMOUS';
-}</good_example>
-                <bad_example>// Avoid any types
-function processUser(user: any): any {
-    return user.name.toUpperCase();
-}</bad_example>
-            </examples>
-            <relevant_files>
-                <file_path>tsconfig.json</file_path>
-                <file_path>src/types/User.ts</file_path>
-            </relevant_files>
-            <related_guidelines>
-                <related>style-1</related>
-            </related_guidelines>
-            <parent_section>language-framework</parent_section>
-        </guideline>
-        
-        <!-- Add remaining guidelines based on repository analysis -->
-    </guidelines>
-</coding_rules>
-```
+## 基于实际文件树的深度分析
 
-## Critical Requirements
+基于提供的文件树，按以下优先级识别项目特有技术：
 
-1. **Technology Alignment**: All guidelines must match the repository's actual tech stack
-2. **File Path Accuracy**: Use real file paths from the provided file tree
-3. **Example Relevance**: Code examples should reflect actual patterns in the codebase
-4. **Comprehensive Coverage**: Address all major aspects of code quality and consistency
-5. **Clear Organization**: Logical section structure that follows software development best practices
+### 1. 技术选型独特性分析
+- 检查go.mod中的特殊依赖：识别项目使用的非标准库、自研组件
+- 分析配置文件：发现特殊的数据库、缓存、消息队列配置
+- 识别自定义工具：查找项目自研的代码生成器、部署工具、监控组件
 
-Generate the complete coding rules structure framework now. Return only the XML content.
+### 2. 核心业务逻辑特色
+- 分析主要业务文件：识别项目核心业务的特殊处理方式
+- 检查数据模型：发现项目特有的数据结构设计思路
+- 识别关键算法：提取项目特殊的业务算法、计算逻辑
+
+### 3. 架构约束和妥协
+- 查找分布式相关代码：识别分库分表、分布式锁、分布式事务实现
+- 分析性能优化代码：发现缓存策略、异步处理、批处理优化
+- 检查兼容性代码：识别为兼容旧系统或第三方做的特殊处理
+
+### 4. 项目特有实现模式
+- 识别重复出现的代码模式：不是通用设计模式，而是项目内特有的实现方式
+- 分析错误处理特色：项目特有的错误定义、传递、处理方式
+- 检查特殊注释：识别TODO、FIXME、HACK等标记的技术债务和特殊处理
+
+基于实际文件树分析，创建{{.PageCount}}个编码规范页面，每个页面专注于项目特有的技术约束和实现模式，避免泛泛的业界最佳实践。
+
+每个规范类别应包含相关文件。例如，"项目结构规范"可能包括"main.go入口规范"、"service层组织规范"、"repository模式规范"等具体页面。
+
+使用以下XML格式返回您的分析：
+
+<code_rules_structure>
+  <title>[项目名] 编码规范</title>
+  <description>[基于实际代码结构的编码规则描述]</description>
+  <categories>
+    <category id="category-1">
+      <name>[规范类别名称]</name>
+      <description>[基于实际目录结构分析得出的具体描述]</description>
+    </category>
+    <!-- 根据需要添加更多类别 -->
+  </categories>
+  <pages>
+    <page id="page-1">
+      <title>[页面标题]</title>
+      <description>[此页面将涵盖内容的具体描述]</description>
+      <importance>critical|high|medium|low</importance>
+      <relevant_files>
+        <file_path>[基于实际分析的相关文件路径]</file_path>
+        <!-- 根据需要添加更多文件路径 -->
+      </relevant_files>
+      <related_pages>
+        <related>page-2</related>
+        <!-- 根据需要添加更多相关页面ID -->
+      </related_pages>
+      <parent_category>category-1</parent_category>
+    </page>
+    <!-- 根据需要添加更多页面 -->
+  </pages>
+</code_rules_structure>
+
+重要格式说明：
+- 只返回上面指定的有效XML结构
+- 不要将XML包装在markdown代码块中
+- 不要在XML之前或之后包含任何解释文本
+- 确保XML格式正确且有效
+- 直接以<code_rules_structure>开始，以</code_rules_structure>结束
+
+重要：
+1. 创建{{.PageCount}}个页面，为这个仓库制作编码规则文档
+2. 每个页面应专注于代码库的特定技术方面（例如，项目结构、错误处理、API设计）
+3. relevant_files必须是仓库中实际存在的文件，基于目录结构分析选择
+4. 基于真实目录结构分析，不要预设文件路径
+5. 只返回具有上述结构的有效XML，不包含markdown代码块分隔符

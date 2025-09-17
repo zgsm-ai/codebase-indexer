@@ -88,21 +88,36 @@ type GenerateWikiStructPromptData struct {
 	WikiType       string
 }
 
-// GenerateCodeRulesStructPromptData 包含生成代码规则结构所需的数据
+// GenerateCodeRulesStructPromptData 包含生成代码规则结构所需的数据 - 简化版
 type GenerateCodeRulesStructPromptData struct {
 	FileTree       string
 	ReadmeContent  string
 	OutputLanguage string
 	PageCount      string
-	GuidelineCount string
+	// 简化的项目信息
+	ProjectName    string              // 项目名称
+	KeyDirectories map[string][]string // 关键目录结构
 }
 
-// GenerateCodeRulesPromptData 包含生成代码规则页面所需的数据
+// GenerateCodeRulesPromptData 包含生成代码规则页面所需的数据 - 超增强版
 type GenerateCodeRulesPromptData struct {
 	PageTitle      string
 	FileLinks      string
 	OutputLanguage string
 	GuidelineCount string
+	FileTree       string
+	ReadmeContent  string
+	FileContents   string // 相关文件的实际内容
+	// 超丰富的分析维度
+	BusinessContext    string   // 业务上下文
+	RelatedFiles       []string // 相关文件列表
+	CodePatterns       []string // 代码模式
+	ConfigurationFiles []string // 配置文件
+	TestFiles          []string // 测试文件
+	RuntimePatterns    []string // 运行时行为模式
+	BusinessSemantics  []string // 业务语义模式
+	CodeTemplates      []string // 代码模板模式
+	DependencyNetwork  []string // 依赖网络关系
 }
 
 // ProgressCallback 进度回调函数类型

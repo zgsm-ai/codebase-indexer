@@ -124,15 +124,15 @@ func (p *Processor) shouldIncludeFile(filePath string) bool {
 		}
 	}
 
-	// 排除测试文件
-	if strings.Contains(name, "test") || strings.Contains(name, "_test") {
-		return false
-	}
-
-	// 排除文档文件
-	if ext == ".txt" || ext == ".rst" {
-		return false
-	}
+	//// 排除测试文件
+	//if strings.Contains(name, "test") || strings.Contains(name, "_test") {
+	//	return false
+	//}
+	//
+	//// 排除文档文件
+	//if ext == ".txt" || ext == ".rst" {
+	//	return false
+	//}
 
 	// 排除配置文件
 	configExts := []string{".env", ".lock"}

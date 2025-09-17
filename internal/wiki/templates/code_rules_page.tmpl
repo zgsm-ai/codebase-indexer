@@ -1,144 +1,156 @@
-You are a senior software architect tasked with generating comprehensive coding rules documentation for a software repository. Your goal is to create detailed, actionable coding guidelines that will help AI coding assistants generate code that perfectly matches the project's existing patterns and standards.
+您是一位专业的软件架构师和代码规范专家。
+您的任务是为给定软件项目中的特定编码规范类别生成全面准确的技术规则文档，使用 Markdown 格式。
 
-## Context Information
-You will receive:
-1. Project file tree showing the complete repository structure
-2. README content describing the project's purpose and technology stack
+您将获得：
+1. 您需要创建的编码规范页面的"[PAGE_TITLE]"（页面标题）。
+2. 项目中的"[RELEVANT_SOURCE_FILES]"（相关源文件）列表，您必须将其作为内容的唯一基础。您可以访问这些文件的完整内容。您必须使用至少5个相关源文件以确保全面覆盖 - 如果提供的文件较少，请在代码库中搜索其他相关文件。
 
-## Your Task
-Generate a complete coding rules document in XML format that includes:
-- Project-specific coding standards and conventions
-- Language and framework-specific guidelines
-- Code organization principles
-- Testing requirements
-- Error handling patterns
-- Documentation standards
+关键起始指令：
+分析必须直接基于提供的源代码内容，从代码中提取具体的编码模式、命名规范、错误处理风格等。
 
-## Output Requirements
-Create a valid XML document with this exact structure:
+## 分析基础
+以下代码文件将作为生成编码规则的唯一依据：
+{{.FileContents}}
 
-```xml
-<coding_rules>
-    <title>[Project Name] Coding Rules</title>
-    <description>Brief description of the coding standards purpose and scope</description>
-    <sections>
-        <section id="general-principles">
-            <title>General Principles</title>
-            <guidelines>
-                <guideline_ref>guideline-1</guideline_ref>
-                <guideline_ref>guideline-2</guideline_ref>
-            </guidelines>
-        </section>
-        <section id="language-specs">
-            <title>Language & Framework Specifications</title>
-            <guidelines>
-                <guideline_ref>guideline-3</guideline_ref>
-            </guidelines>
-        </section>
-        <section id="code-style">
-            <title>Code Style Guidelines</title>
-            <guidelines>
-                <guideline_ref>guideline-4</guideline_ref>
-            </guidelines>
-        </section>
-        <section id="module-org">
-            <title>Module Organization</title>
-            <guidelines>
-                <guideline_ref>guideline-5</guideline_ref>
-            </guidelines>
-        </section>
-        <section id="testing">
-            <title>Testing Standards</title>
-            <guidelines>
-                <guideline_ref>guideline-6</guideline_ref>
-            </guidelines>
-        </section>
-        <section id="error-handling">
-            <title>Error Handling</title>
-            <guidelines>
-                <guideline_ref>guideline-7</guideline_ref>
-            </guidelines>
-        </section>
-        <section id="documentation">
-            <title>Documentation Requirements</title>
-            <guidelines>
-                <guideline_ref>guideline-8</guideline_ref>
-            </guidelines>
-        </section>
-    </sections>
-    <guidelines>
-        <guideline id="guideline-1">
-            <title>Specific Guideline Title</title>
-            <description>Detailed explanation of what this guideline enforces and why it's important</description>
-            <importance>high|medium|low</importance>
-            <examples>
-                <good_example>// Correct implementation example
-function getUserName(userId) {
-    return userCache.get(userId)?.name || 'Anonymous';
-}</good_example>
-                <bad_example>// Incorrect implementation example
-function getUserName(userId) {
-    var name = userCache.get(userId).name;
-    if (name == null) {
-        name = 'Anonymous';
-    }
-    return name;
-}</bad_example>
-            </examples>
-            <relevant_files>
-                <file_path>src/utils/userHelper.js</file_path>
-                <file_path>src/models/User.js</file_path>
-            </relevant_files>
-            <related_guidelines>
-                <related>guideline-4</related>
-            </related_guidelines>
-            <parent_section>general-principles</parent_section>
-        </guideline>
-        <!-- Generate exactly {{.GuidelineCount}} guidelines total -->
-    </guidelines>
-</coding_rules>
+## 项目特有技术细节挖掘要求
+
+为"{{.PageTitle}}"生成基于真实代码的项目特有编码规则，重点挖掘其他项目可能没有的技术细节和约束条件。
+
+### 分析目标
+不是列举通用最佳实践，而是识别这个项目独有的技术实现模式和约束条件。
+
+```markdown
+# {{.PageTitle}}
+
+**重要性**: critical|high|medium|low
+
+## 项目概述
+[基于真实代码分析得出的项目特有实现模式，描述该项目独有的技术约束和架构决策]
+
+## 项目特有的技术实现分析
+
+### 独特技术栈
+- **自定义中间件**: [项目自研或特殊使用的中介軟件，如分库分表中间件、自定义ORM等]
+- **专用库**: [非标准的特殊库使用，如自研的RPC框架、配置中心等]
+- **协议实现**: [项目特有的通信协议、数据格式、接口规范实现]
+
+### 业务约束
+- **分库分表规则**: [分库分表具体规则，如"请求头必须指定数据库分片"]
+- **权限模型**: [项目特有的权限校验逻辑、角色体系、资源访问控制]
+- **数据一致性**: [特殊的分布式事务、数据同步、缓存一致性策略]
+
+### 架构妥协
+- **性能优化**: [为性能做的特殊设计，如冗余字段、异步处理、批处理优化]
+- **兼容性处理**: [为兼容旧系统或第三方做的特殊适配和妥协]
+- **技术债务**: [TODO、FIXME、HACK注释标记的特殊处理和临时方案]
+
+## 项目特有的实现模式
+
+### 重复代码模式
+[项目内反复出现的特殊代码模式，不是通用设计模式]
+
+### 错误处理特色
+- **自定义错误码**: [项目特有的错误码体系和错误传递方式]
+- **降级策略**: [项目特有的降级策略和错误恢复机制]
+- **错误传播**: [特殊的错误传播和处理链路]
+
+### 测试特点
+- **测试数据准备**: [项目特殊的测试数据准备方式]
+- **Mock策略**: [项目特有的mock实现策略]
+- **集成测试**: [特殊的集成测试方法和环境要求]
+
+## 项目特有的代码模板
+
+### 强制代码结构
+[项目强制要求的代码结构和组织方式]
+
+### 特殊初始化模式
+[项目特有的初始化顺序和依赖注入模式]
+
+### 自定义方法签名
+[项目特有的方法签名和参数传递模式]
+
+### 独特返回模式
+[项目特有的返回值处理模式]
+
+## 项目强制的特殊规则
+
+### 必须遵循的模式
+[必须遵循的项目特有模式，每条都要具体到代码实现]
+
+### 禁止的实现方式
+[项目中明确禁止的实现方式]
+
+### 关键兼容点
+[关键的兼容性要求，如API版本管理、数据格式兼容等]
+
+## 新功能开发必须注意的特殊点
+
+### 数据库影响
+[新功能对数据库的特殊影响，如分库分表路由、索引要求]
+
+### 性能影响区域
+[可能影响性能的关键区域和监控点]
+
+### 集成复杂性
+[与现有系统集成的复杂性和特殊要求]
+
+### 测试特殊要求
+[新功能测试的特殊要求和环境依赖]
+
+## 项目特有的技术债务和坑
+
+### 已知问题
+[项目已知的特殊问题和限制]
+
+### 调试挑战
+[项目特有的调试难点和技巧]
+
+### 部署复杂性
+[部署时的特殊注意事项和依赖]
+
+### 运维关注点
+[运维时的特殊监控和告警要求]
+
+## 具体代码示例
+
+### 正确实现示例
+```go
+[项目认可的正确实现方式，包含完整代码]
 ```
 
-## Critical Instructions
+### 错误实现示例
+```go
+[项目中出现的错误实现示例，说明问题]
+```
 
-1. **Analyze the Repository**: Carefully examine the file tree and README to understand:
-   - Primary programming languages used
-   - Framework and libraries
-   - Project structure and organization
-   - Testing approach
-   - Build and deployment patterns
+### 边界条件处理
+[项目特有的边界条件处理方式]
 
-2. **Generate Specific Guidelines**: Create exactly {{.GuidelineCount}} detailed guidelines that:
-   - Address real patterns found in the codebase
-   - Include concrete code examples
-   - Reference actual files from the repository
-   - Cover all major coding aspects
+## 相关文件和特殊依赖
 
-3. **Language and Technology Focus**: Tailor all guidelines to the specific tech stack:
-   - Use appropriate syntax and conventions for the primary language
-   - Reference relevant frameworks and tools
-   - Follow project-specific patterns
+### 核心业务文件
+- [核心业务实现文件，基于实际分析]
 
-4. **Example Requirements**:
-   - Good examples must show correct implementation
-   - Bad examples must demonstrate common mistakes
-   - Examples should be concise (2-6 lines maximum)
-   - Use actual coding patterns from the project
+### 配置模板
+- [特殊的配置模板和示例]
 
-5. **File References**: Include 1-3 actual file paths from the repository that exemplify each guideline
+### 迁移脚本
+- [数据库迁移或数据转换脚本]
 
-6. **Importance Levels**:
-   - **High**: Critical for functionality, security, or performance
-   - **Medium**: Important for maintainability and readability  
-   - **Low**: Style preferences and minor conventions
+### 部署配置
+- [特殊的部署配置和脚本]
 
-## Input Data
-<file_tree>
-{{.FileTree}}
-</file_tree>
+---
 
-<readme>
-{{.ReadmeContent}}
-</readme>
+**源文件引用**: 
+{{.FileLinks}}
+```
 
-Generate the complete coding rules XML document now. Return only the XML content, with no additional explanation or markdown formatting.
+重要：使用{{.OutputLanguage}}语言生成内容，专注项目特有的技术实现细节。
+
+请记住：
+- 只描述这个项目独有的技术约束和实现模式
+- 每个技术点都要有具体的代码示例和文件引用
+- 避免提及任何通用的编程最佳实践或设计原则
+- 专注提升AI编程助理在该项目上的代码实现精准性

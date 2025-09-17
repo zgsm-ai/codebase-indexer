@@ -177,13 +177,13 @@ func main() {
 	if model == types.EmptyString {
 		model = os.Getenv("MODEL")
 	}
-	
-	wikiManager, err := wiki.NewWikiManager(apiKey, baseUrl, model, appLogger)
+
+	documentManager, err := wiki.NewDocumentManager(apiKey, baseUrl, model, appLogger)
 	if err != nil {
 		panic(fmt.Errorf("init wiki_manager err:%w", err))
 	}
 
-	wikiProcessor := service.NewWikiProcessor(workspaceReader, wikiManager, workspaceRepo, eventRepo, appLogger)
+	wikiProcessor := service.NewWikiProcessor(workspaceReader, documentManager, workspaceRepo, eventRepo, appLogger)
 	codebaseService := service.NewCodebaseService(storageManager, appLogger, workspaceReader, workspaceRepo, definition.NewDefinitionParser(), indexer)
 	extensionService := service.NewExtensionService(storageManager, syncRepo, scanRepo, workspaceRepo, eventRepo, codebaseEmbeddingRepo, codebaseService, fileScanService, appLogger)
 

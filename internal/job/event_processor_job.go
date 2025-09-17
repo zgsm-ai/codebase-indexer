@@ -130,7 +130,7 @@ func (j *EventProcessorJob) Start(ctx context.Context) {
 					j.logger.Error("failed to process wiki events: %v", err)
 				}
 
-				time.Sleep(5 * time.Minute)
+				time.Sleep(1 * time.Minute)
 			}
 		}
 	}()

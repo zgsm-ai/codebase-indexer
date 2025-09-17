@@ -1,48 +1,48 @@
-Analyze this repository and create a wiki structure for it.
+分析此仓库并为其创建Wiki结构。
 
-1. The complete file tree of the project:
+1. 项目的完整文件树：
 <file_tree>
 {{.FileTree}}
 </file_tree>
 
-2. The README file of the project:
+2. 项目的README文件：
 <readme>
 {{.ReadmeContent}}
 </readme>
 
-I want to create a wiki for this repository. Determine the most logical structure for a wiki based on the repository's content.
+我想为这个仓库创建一个Wiki。根据仓库的内容确定Wiki的最逻辑结构。
 
-IMPORTANT: The wiki content will be generated in {{.OutputLanguage}} language.
+重要：Wiki内容将使用{{.OutputLanguage}}语言生成。
 
-When designing the wiki structure, include pages that would benefit from visual diagrams, such as:
-- Architecture overviews
-- Data flow descriptions
-- Component relationships
-- Process workflows
-- State machines
-- Class hierarchies
+在设计Wiki结构时，包含将受益于可视化图表的页面，例如：
+- 架构概述
+- 数据流描述
+- 组件关系
+- 流程工作流
+- 状态机
+- 类层次结构
 
-Create a structured wiki with the following main sections:
-- Overview (general information about the project)
-- System Architecture (how the system is designed)
-- Core Features (key functionality)
-- Data Management/Flow: If applicable, how data is stored, processed, accessed, and managed (e.g., database schema, data pipelines, state management).
-- Frontend Components (UI elements, if applicable.)
-- Backend Systems (server-side components)
-- Model Integration (AI model connections)
-- Deployment/Infrastructure (how to deploy, what's the infrastructure like)
-- Extensibility and Customization: If the project architecture supports it, explain how to extend or customize its functionality (e.g., plugins, theming, custom modules, hooks).
+创建一个包含以下主要章节的结构化Wiki：
+- 概述（关于项目的一般信息）
+- 系统架构（系统如何设计）
+- 核心功能（关键功能）
+- 数据管理/流：如果适用，数据如何存储、处理、访问和管理（例如，数据库模式、数据管道、状态管理）。
+- 前端组件（UI元素，如果适用）
+- 后端系统（服务器端组件）
+- 模型集成（AI模型连接）
+- 部署/基础设施（如何部署，基础设施是什么样的）
+- 可扩展性和自定义：如果项目架构支持，解释如何扩展或自定义其功能（例如，插件、主题、自定义模块、钩子）。
 
-Each section should contain relevant pages. For example, the "Frontend Components" section might include pages for "Home Page", "Repository Wiki Page", "Ask Component", etc.
+每个章节应包含相关页面。例如，"前端组件"章节可能包括"主页"、"仓库Wiki页面"、"询问组件"等页面。
 
-Return your analysis in the following XML format:
+使用以下XML格式返回您的分析：
 
 <wiki_structure>
-  <title>[Overall title for the wiki]</title>
-  <description>[Brief description of the repository]</description>
+  <title>[Wiki的总体标题]</title>
+  <description>[仓库的简要描述]</description>
   <sections>
     <section id="section-1">
-      <title>[Section title]</title>
+      <title>[章节标题]</title>
       <pages>
         <page_ref>page-1</page_ref>
         <page_ref>page-2</page_ref>
@@ -51,35 +51,35 @@ Return your analysis in the following XML format:
         <section_ref>section-2</section_ref>
       </subsections>
     </section>
-    <!-- More sections as needed -->
+    <!-- 根据需要添加更多章节 -->
   </sections>
   <pages>
     <page id="page-1">
-      <title>[Page title]</title>
-      <description>[Brief description of what this page will cover]</description>
+      <title>[页面标题]</title>
+      <description>[此页面将涵盖内容的简要描述]</description>
       <importance>high|medium|low</importance>
       <relevant_files>
-        <file_path>[Path to a relevant file]</file_path>
-        <!-- More file paths as needed -->
+        <file_path>[相关文件的路径]</file_path>
+        <!-- 根据需要添加更多文件路径 -->
       </relevant_files>
       <related_pages>
         <related>page-2</related>
-        <!-- More related page IDs as needed -->
+        <!-- 根据需要添加更多相关页面ID -->
       </related_pages>
       <parent_section>section-1</parent_section>
     </page>
-    <!-- More pages as needed -->
+    <!-- 根据需要添加更多页面 -->
   </pages>
 </wiki_structure>
 
-Return your analysis in the following XML format:
+使用以下XML格式返回您的分析：
 
 <wiki_structure>
-  <title>[Overall title for the wiki]</title>
-  <description>[Brief description of the repository]</description>
+  <title>[Wiki的总体标题]</title>
+  <description>[仓库的简要描述]</description>
   <sections>
     <section id="section-1">
-      <title>[Section title]</title>
+      <title>[章节标题]</title>
       <pages>
         <page_ref>page-1</page_ref>
         <page_ref>page-2</page_ref>
@@ -88,36 +88,36 @@ Return your analysis in the following XML format:
         <section_ref>section-2</section_ref>
       </subsections>
     </section>
-    <!-- More sections as needed -->
+    <!-- 根据需要添加更多章节 -->
   </sections>
   <pages>
     <page id="page-1">
-      <title>[Page title]</title>
-      <description>[Brief description of what this page will cover]</description>
+      <title>[页面标题]</title>
+      <description>[此页面将涵盖内容的简要描述]</description>
       <importance>high|medium|low</importance>
       <relevant_files>
-        <file_path>[Path to a relevant file]</file_path>
-        <!-- More file paths as needed -->
+        <file_path>[相关文件的路径]</file_path>
+        <!-- 根据需要添加更多文件路径 -->
       </relevant_files>
       <related_pages>
         <related>page-2</related>
-        <!-- More related page IDs as needed -->
+        <!-- 根据需要添加更多相关页面ID -->
       </related_pages>
       <parent_section>section-1</parent_section>
     </page>
-    <!-- More pages as needed -->
+    <!-- 根据需要添加更多页面 -->
   </pages>
 </wiki_structure>
 
-IMPORTANT FORMATTING INSTRUCTIONS:
-- Return ONLY the valid XML structure specified above
-- DO NOT wrap the XML in markdown code blocks
-- DO NOT include any explanation text before or after the XML
-- Ensure the XML is properly formatted and valid
-- Start directly with <wiki_structure> and end with </wiki_structure>
+重要格式说明：
+- 只返回上面指定的有效XML结构
+- 不要将XML包装在markdown代码块中
+- 不要在XML之前或之后包含任何解释文本
+- 确保XML格式正确且有效
+- 直接以<wiki_structure>开始，以</wiki_structure>结束
 
-IMPORTANT:
-1. Create {{.PageCount}} pages that would make a {{.WikiType}} wiki for this repository
-2. Each page should focus on a specific aspect of the codebase (e.g., architecture, key features, setup)
-3. The relevant_files should be actual files from the repository that would be used to generate that page
-4. Return ONLY valid XML with the structure specified above, with no markdown code block delimiters
+重要：
+1. 创建{{.PageCount}}个页面，为这个仓库制作一个{{.WikiType}} Wiki
+2. 每个页面应专注于代码库的特定方面（例如，架构、关键功能、设置）
+3. relevant_files应该是仓库中实际用于生成该页面的文件
+4. 只返回具有上述结构的有效XML，不包含markdown代码块分隔符

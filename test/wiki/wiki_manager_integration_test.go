@@ -98,28 +98,28 @@ func TestWikiManagerExportWikiIntegration(t *testing.T) {
 
 	// 测试单文件Markdown导出
 	t.Log("Testing single file markdown export")
-	err = manager.ExportWiki(repoPath, outputDir, "markdown", "single")
+	err = manager.ExportWiki(repoPath, outputDir, "markdown", "single", "")
 	if err != nil {
 		t.Fatalf("Failed to export single Markdown: %v", err)
 	}
 
 	// 测试多文件Markdown导出
 	t.Log("Testing multi file markdown export")
-	err = manager.ExportWiki(repoPath, multiOutputDir, "markdown", "multi")
+	err = manager.ExportWiki(repoPath, multiOutputDir, "markdown", "multi", "")
 	if err != nil {
 		t.Fatalf("Failed to export multi Markdown: %v", err)
 	}
 
 	// 测试JSON导出
 	t.Log("Testing JSON export")
-	err = manager.ExportWiki(repoPath, outputDir, "json")
+	err = manager.ExportWiki(repoPath, outputDir, "json", "single", "")
 	if err != nil {
 		t.Fatalf("Failed to export JSON: %v", err)
 	}
 
 	// 测试不支持的格式
 	t.Log("Testing unsupported format")
-	err = manager.ExportWiki(repoPath, outputDir, "unsupported")
+	err = manager.ExportWiki(repoPath, outputDir, "json", "single", "")
 	if err == nil {
 		t.Error("Should return unsupported format error")
 	}
@@ -139,7 +139,7 @@ func TestWikiManagerDeleteWikiIntegration(t *testing.T) {
 	apiKey := "test-key" // 使用测试密钥
 	baseURL := "https://api.openai.com/v1"
 	model := "gpt-3.5-turbo"
-	manager, err := wiki.NewWikiManager(apiKey, baseURL, model, newLogger)
+	manager, err := wiki.NewDocumentManager(apiKey, baseURL, model, newLogger)
 	if err != nil {
 		t.Fatalf("Failed to create Wiki manager: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestWikiManagerDeleteWikiIntegration(t *testing.T) {
 // TestWikiManagerFullWorkflowIntegration 测试WikiManager的完整工作流程集成测试
 func TestWikiManagerFullWorkflowIntegration(t *testing.T) {
 	// 获取项目根目录路径
-	repoPath, err := filepath.Abs("../")
+	repoPath, err := filepath.Abs("./")
 	if err != nil {
 		t.Fatalf("Failed to get project root path: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestWikiManagerFullWorkflowIntegration(t *testing.T) {
 	apiKey := "test-key" // 使用测试密钥
 	baseURL := "https://api.openai.com/v1"
 	model := "gpt-3.5-turbo"
-	manager, err := wiki.NewWikiManager(apiKey, baseURL, model, newLogger)
+	manager, err := wiki.NewDocumentManager(apiKey, baseURL, model, newLogger)
 	if err != nil {
 		t.Fatalf("Failed to create Wiki manager: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestWikiManagerFullWorkflowIntegration(t *testing.T) {
 
 	// 2. 导出Wiki为Markdown格式
 	t.Log("Step 2: Export Wiki as Markdown format")
-	err = manager.ExportWiki(repoPath, outputDir, "markdown")
+	err = manager.ExportWiki(repoPath, outputDir, "markdown", "single", "")
 	if err != nil {
 		t.Fatalf("Failed to export Markdown: %v", err)
 	}
@@ -212,7 +212,7 @@ func TestWikiManagerFullWorkflowIntegration(t *testing.T) {
 
 	// 3. 导出Wiki为JSON格式
 	t.Log("Step 3: Export Wiki as JSON format")
-	err = manager.ExportWiki(repoPath, outputDir, "json")
+	err = manager.ExportWiki(repoPath, outputDir, "json", "single", "")
 	if err != nil {
 		t.Fatalf("Failed to export JSON: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestWikiManagerFullWorkflowIntegration(t *testing.T) {
 // TestWikiManagerWithConfigIntegration 测试使用配置创建WikiManager的集成测试
 func TestWikiManagerWithConfigIntegration(t *testing.T) {
 	// 获取项目根目录路径
-	repoPath, err := filepath.Abs("../")
+	repoPath, err := filepath.Abs("./")
 	if err != nil {
 		t.Fatalf("Failed to get project root path: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestWikiManagerWithConfigIntegration(t *testing.T) {
 	config.Temperature = 0.7
 
 	// 使用配置创建Wiki管理器
-	manager, err := wiki.NewWikiManagerWithConfig(config, newLogger)
+	manager, err := wiki.NewDocumentManagerWithConfig(config, newLogger)
 	if err != nil {
 		t.Fatalf("Failed to create Wiki manager with config: %v", err)
 	}
@@ -293,7 +293,7 @@ func TestWikiManagerErrorHandlingIntegration(t *testing.T) {
 	apiKey := "test-key" // 使用测试密钥
 	baseURL := "https://api.openai.com/v1"
 	model := "gpt-3.5-turbo"
-	manager, err := wiki.NewWikiManager(apiKey, baseURL, model, newLogger)
+	manager, err := wiki.NewDocumentManager(apiKey, baseURL, model, newLogger)
 	if err != nil {
 		t.Fatalf("Failed to create Wiki manager: %v", err)
 	}

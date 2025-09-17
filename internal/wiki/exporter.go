@@ -20,16 +20,17 @@ func NewExporter() *Exporter {
 // ExportMarkdown 导出为Markdown格式，支持两种模式：
 // mode: "single" - 单个文件模式（默认）
 // mode: "multi" - 多文件/目录模式，使用 index.md 进行路径引用
-func (e *Exporter) ExportMarkdown(wikiStructure *WikiStructure, outputPath string, mode string) error {
+// customFilename: 自定义文件名（可选，仅对single模式有效）
+func (e *Exporter) ExportMarkdown(wikiStructure *WikiStructure, outputPath string, mode string, customFilename string) error {
 	if mode == "multi" {
 		return e.exportMarkdownMulti(wikiStructure, outputPath)
 	}
 	// 默认使用单文件模式
-	return e.exportMarkdownSingle(wikiStructure, outputPath)
+	return e.exportMarkdownSingle(wikiStructure, outputPath, customFilename)
 }
 
 // exportMarkdownSingle 单文件模式导出
-func (e *Exporter) exportMarkdownSingle(wikiStructure *WikiStructure, outputPath string) error {
+func (e *Exporter) exportMarkdownSingle(wikiStructure *WikiStructure, outputPath string, customFilename string) error {
 	// 确保输出目录存在
 	if err := os.MkdirAll(outputPath, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
@@ -38,18 +39,29 @@ func (e *Exporter) exportMarkdownSingle(wikiStructure *WikiStructure, outputPath
 	// 生成markdown内容
 	content := e.generateMarkdownExport(wikiStructure)
 
-	// 生成文件名，与 store 中的文件名保持一致
-	repoName := "wiki"
-	if wikiStructure.Title != "" {
-		repoName = strings.ToLower(strings.ReplaceAll(wikiStructure.Title, " ", "_"))
-		repoName = strings.ReplaceAll(repoName, "/", "_")
-		repoName = strings.ReplaceAll(repoName, "-", "_")
-		// 如果标题已经包含 "wiki"，就不再添加
-		if !strings.Contains(repoName, "wiki") {
-			repoName = repoName + "_wiki"
+	// 确定文件名
+	var filename string
+	if len(customFilename) > 0 && customFilename != "" {
+		// 使用自定义文件名
+		filename = customFilename
+		// 确保有.md扩展名
+		if !strings.HasSuffix(filename, ".md") {
+			filename = filename + ".md"
 		}
+	} else {
+		// 生成默认文件名，与 store 中的文件名保持一致
+		repoName := "wiki"
+		if wikiStructure.Title != "" {
+			repoName = strings.ToLower(strings.ReplaceAll(wikiStructure.Title, " ", "_"))
+			repoName = strings.ReplaceAll(repoName, "/", "_")
+			repoName = strings.ReplaceAll(repoName, "-", "_")
+			// 如果标题已经包含 "wiki"，就不再添加
+			if !strings.Contains(repoName, "wiki") {
+				repoName = repoName + "_wiki"
+			}
+		}
+		filename = fmt.Sprintf("%s.md", repoName)
 	}
-	filename := fmt.Sprintf("%s.md", repoName)
 
 	// 写入文件
 	outputPath = filepath.Join(outputPath, filename)
@@ -96,7 +108,7 @@ func (e *Exporter) generateMarkdownExport(wikiStructure *WikiStructure) string {
 	var builder strings.Builder
 
 	// 开始与api/api.py保持一致的markdown导出
-	builder.WriteString(fmt.Sprintf("# Wiki Documentation for %s\n\n", wikiStructure.Title))
+	builder.WriteString(fmt.Sprintf("# %s\n\n", wikiStructure.Title))
 	builder.WriteString(fmt.Sprintf("Generated on: %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
 
 	// 添加目录
@@ -109,7 +121,17 @@ func (e *Exporter) generateMarkdownExport(wikiStructure *WikiStructure) string {
 	// 添加每个页面
 	for _, page := range wikiStructure.Pages {
 		builder.WriteString(fmt.Sprintf("<a id='%s'></a>\n\n", page.ID))
-		builder.WriteString(fmt.Sprintf("## %s\n\n", page.Title))
+
+		// 检查页面内容是否已经包含标题，避免重复
+		pageContent := page.Content
+		if strings.HasPrefix(strings.TrimSpace(pageContent), "#") {
+			// 如果内容已经以标题开始，不再添加额外的标题
+			builder.WriteString(fmt.Sprintf("%s\n\n", pageContent))
+		} else {
+			// 如果内容没有标题，添加一个
+			builder.WriteString(fmt.Sprintf("## %s\n\n", page.Title))
+			builder.WriteString(fmt.Sprintf("%s\n\n", pageContent))
+		}
 
 		// 添加相关页面
 		if len(page.RelatedPages) > 0 {
@@ -129,8 +151,6 @@ func (e *Exporter) generateMarkdownExport(wikiStructure *WikiStructure) string {
 			}
 		}
 
-		// 添加页面内容
-		builder.WriteString(fmt.Sprintf("%s\n\n", page.Content))
 		builder.WriteString("---\n\n")
 	}
 
@@ -141,8 +161,14 @@ func (e *Exporter) generateMarkdownExport(wikiStructure *WikiStructure) string {
 func (e *Exporter) generateIndexMarkdown(wikiStructure *WikiStructure) string {
 	var builder strings.Builder
 
-	// 标题和基本信息
-	builder.WriteString(fmt.Sprintf("# %s - Wiki 文档\n\n", wikiStructure.Title))
+	// 标题和基本信息 - 避免重复添加"Wiki 文档"后缀
+	cleanTitle := wikiStructure.Title
+	if strings.HasSuffix(cleanTitle, " Wiki") || strings.HasSuffix(cleanTitle, " 文档") {
+		cleanTitle = strings.TrimSuffix(cleanTitle, " Wiki")
+		cleanTitle = strings.TrimSuffix(cleanTitle, " 文档")
+	}
+
+	builder.WriteString(fmt.Sprintf("# %s\n\n", cleanTitle))
 	builder.WriteString(fmt.Sprintf("生成时间: %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
 	builder.WriteString(fmt.Sprintf("总页面数: %d\n\n", len(wikiStructure.Pages)))
 
@@ -161,8 +187,18 @@ func (e *Exporter) generateIndexMarkdown(wikiStructure *WikiStructure) string {
 func (e *Exporter) generatePageMarkdown(page *WikiPage, wikiStructure *WikiStructure) string {
 	var builder strings.Builder
 
-	// 页面标题
-	builder.WriteString(fmt.Sprintf("# %s\n\n", page.Title))
+	// 检查页面内容是否已经包含标题，避免重复
+	pageContent := strings.TrimSpace(page.Content)
+	if strings.HasPrefix(pageContent, "#") {
+		// 如果内容已经以标题开始，直接使用内容
+		builder.WriteString(pageContent)
+		builder.WriteString("\n")
+	} else {
+		// 如果内容没有标题，添加标题
+		builder.WriteString(fmt.Sprintf("# %s\n\n", page.Title))
+		builder.WriteString(pageContent)
+		builder.WriteString("\n")
+	}
 
 	// 相关页面链接
 	if len(page.RelatedPages) > 0 {
@@ -182,11 +218,6 @@ func (e *Exporter) generatePageMarkdown(page *WikiPage, wikiStructure *WikiStruc
 
 	// 返回主页面的链接
 	builder.WriteString("[← 返回主索引](index.md)\n\n")
-
-	// 页面内容
-	builder.WriteString("## 内容\n\n")
-	builder.WriteString(page.Content)
-	builder.WriteString("\n")
 
 	return builder.String()
 }

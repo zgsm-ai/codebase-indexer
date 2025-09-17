@@ -61,7 +61,6 @@ type OpenAIClient struct {
 	apiKey  string
 	baseURL string
 	model   string
-	client  *http.Client
 	config  *SimpleConfig
 	logger  logger.Logger
 }
@@ -87,16 +86,10 @@ func NewLLMClientWithConfig(apiKey, baseURL, model string, config *SimpleConfig,
 		return nil, fmt.Errorf("config cannot be empty")
 	}
 
-	// 创建带有超时设置的HTTP客户端
-	client := &http.Client{
-		Timeout: config.RequestTimeout,
-	}
-
 	return &OpenAIClient{
 		apiKey:  apiKey,
 		baseURL: baseURL,
 		model:   model,
-		client:  client,
 		config:  config,
 		logger:  logger,
 	}, nil
@@ -104,7 +97,7 @@ func NewLLMClientWithConfig(apiKey, baseURL, model string, config *SimpleConfig,
 
 // GenerateContent 生成内容
 func (c *OpenAIClient) GenerateContent(ctx context.Context, prompt string, maxTokens int, temperature float64) (string, error) {
-	return c.GenerateContentWithRetry(ctx, prompt, maxTokens, temperature, 3, 2*time.Second)
+	return c.GenerateContentWithRetry(ctx, prompt, maxTokens, temperature, 10, 2*time.Second)
 }
 
 // GenerateContentWithRetry 带重试机制的内容生成
@@ -143,13 +136,13 @@ func (c *OpenAIClient) GenerateContentWithRetry(ctx context.Context, prompt stri
 		// 记录本次失败的调用
 		c.logger.Debug("LLM request attempt %d failed after %v: %v", attempt+1, duration, err)
 
-		// 如果是网络错误或服务器错误，则重试
-		if isRetryableErrorInLLM(err) {
-			continue
-		}
-
-		// 非重试错误直接返回
-		break
+		//// 如果是网络错误或服务器错误，则重试
+		//if isRetryableErrorInLLM(err) {
+		//	continue
+		//}
+		//
+		//// 非重试错误直接返回
+		//break
 	}
 
 	c.logger.Debug("LLM request failed after %d attempts, total duration: %v", maxRetries+1, totalDuration)
@@ -192,9 +185,14 @@ func (c *OpenAIClient) doGenerateContent(ctx context.Context, prompt string, max
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
 
+	// 创建带有超时设置的HTTP客户端
+	client := &http.Client{
+		Timeout: c.config.RequestTimeout,
+	}
+
 	// HTTP请求阶段计时
 	// 发送请求
-	resp, err := c.client.Do(httpReq)
+	resp, err := client.Do(httpReq)
 	if err != nil {
 		c.logger.Debug("LLM request failed - error: %v", err)
 		return "", fmt.Errorf("failed to send request: %w", err)

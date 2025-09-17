@@ -25,7 +25,7 @@ type WikiProcessService interface {
 }
 
 type WikiProcessor struct {
-	wiki            *wiki.WikiManager
+	wiki            *wiki.DocumentManager
 	workspaceReader workspace.WorkspaceReader
 	workspaceRepo   repository.WorkspaceRepository
 	eventRepo       repository.EventRepository
@@ -34,7 +34,7 @@ type WikiProcessor struct {
 
 func NewWikiProcessor(
 	workspaceReader workspace.WorkspaceReader,
-	wiki *wiki.WikiManager,
+	wiki *wiki.DocumentManager,
 	workspaceRepo repository.WorkspaceRepository,
 	eventRepo repository.EventRepository,
 	logger logger.Logger,
@@ -91,6 +91,7 @@ func (c *WikiProcessor) ProcessRebuildWorkspaceEvent(ctx context.Context, event 
 }
 
 func (c *WikiProcessor) ProcessOpenWorkspaceEvent(ctx context.Context, event *model.Event) error {
+	var errs []error
 	fileInfo, err := c.workspaceReader.Stat(event.WorkspacePath)
 	if errors.Is(err, workspace.ErrPathNotExists) {
 		c.logger.Error("wiki failed to process open_workspace event event, workspace %s not exists",
@@ -122,29 +123,46 @@ func (c *WikiProcessor) ProcessOpenWorkspaceEvent(ctx context.Context, event *mo
 	//}
 
 	// rules 存在则跳过
-
-	// wiki 存在则跳过
-	if exists, _ := c.workspaceReader.Exists(ctx, filepath.Join(event.WorkspacePath, ".roo", "code_rules")); !exists {
-		c.logger.Info("wiki open_workspace event, %s code rules not exists, generate.", event.WorkspacePath)
-		
+	if exists, err := c.workspaceReader.Exists(ctx, filepath.Join(event.WorkspacePath, ".roo", "rules-code", "generated-rules.md")); !exists {
+		c.logger.Info("wiki open_workspace event, %s code rules not exists, generate it. err:%v", event.WorkspacePath, err)
+		if _, err := c.wiki.GenerateCodeRules(ctx, event.WorkspacePath); err != nil {
+			c.logger.Error("failed to generate code rules for wiki: %v", err)
+			errs = append(errs, err)
+		} else {
+			c.logger.Info("wiki open_workspace event, %s code rules generated successfully, start to export.",
+				event.WorkspacePath)
+			if err := c.wiki.ExportCodeRules(event.WorkspacePath, filepath.Join(event.WorkspacePath, ".roo", "rules-code"), "markdown", "single", "generated-rules.md"); err != nil {
+				c.logger.Error("failed to export code rules for wiki: %v", err)
+				errs = append(errs, err)
+			} else {
+				c.logger.Info("wiki open_workspace event, %s code rules export successfully",
+					event.WorkspacePath)
+			}
+		}
+	} else {
+		c.logger.Info("wiki open_workspace event, %s code rules exists, skip.", event.WorkspacePath)
 	}
 
-	if !c.wiki.ExistsWiki(ctx, event.WorkspacePath) {
-		c.logger.Info("wiki open_workspace event, %s wiki not exists, generate.",
-			event.WorkspacePath)
+	// wiki 存在则跳过
+	if exists, err := c.workspaceReader.Exists(ctx, filepath.Join(event.WorkspacePath, ".costrict", "wiki", "index.md")); !exists {
+		c.logger.Info("wiki open_workspace event, %s wiki not exists, generate. err:%v", event.WorkspacePath, err)
 		if _, err = c.wiki.GenerateWiki(ctx, event.WorkspacePath); err != nil {
-			return fmt.Errorf("wiki %s generate err: %w", event.WorkspacePath, err)
+			c.logger.Error("wiki %s generate err: %w", event.WorkspacePath, err)
+			errs = append(errs, err)
+		} else {
+			// 导出到workspace的输出目录
+			if err = c.wiki.ExportWiki(event.WorkspacePath, filepath.Join(".costrict", "wiki"), "markdown", "multi", ""); err != nil {
+				c.logger.Error("export wiki for workspace %s err:%w", event.WorkspacePath, err)
+				errs = append(errs, err)
+			}
 		}
-		// 导出到workspace的输出目录
-		if err = c.wiki.ExportWiki(event.WorkspacePath, filepath.Join(".costrict", "wiki"), "markdown", "single"); err != nil {
-			return fmt.Errorf("export wiki for workspace %s err:%w", event.WorkspacePath, err)
-		}
+
 	} else {
 		c.logger.Info("wiki open_workspace event, %s wiki exists, skip.",
 			event.WorkspacePath)
 	}
 
-	return err
+	return errors.Join(errs...)
 }
 
 // ProcessEvents 处理事件记录
