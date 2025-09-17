@@ -590,7 +590,7 @@ func (s *extensionService) processEvents(workspacePath, clientID string, events 
 func (s *extensionService) tryUpdateExistingEvent(workspacePath string, event dto.WorkspaceEvent) bool {
 	existingEvent, err := s.eventRepo.GetLatestEventByWorkspaceAndSourcePath(workspacePath, event.SourcePath)
 	if err != nil {
-		s.logger.Error("failed to get existing events: %v", err)
+		s.logger.Warn("failed to get existing events: %v", err)
 		return false
 	}
 
@@ -614,7 +614,7 @@ func (s *extensionService) tryUpdateExistingEvent(workspacePath string, event dt
 
 	// 更新事件记录
 	if err := s.eventRepo.UpdateEvent(updateEvent); err != nil {
-		s.logger.Error("failed to update event: %v", err)
+		s.logger.Warn("failed to update event: %v", err)
 		return false
 	}
 
