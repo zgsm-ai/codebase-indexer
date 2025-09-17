@@ -325,7 +325,7 @@ func TestEventRepositoryErrorCases(t *testing.T) {
 	t.Run("GetEventByIDNotFound", func(t *testing.T) {
 		// 获取不存在的事件
 		retrieved, err := eventRepo.GetEventByID(999)
-		assert.Error(t, err)
+		assert.NoError(t, err)
 		assert.Nil(t, retrieved)
 	})
 

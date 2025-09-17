@@ -52,9 +52,10 @@ func NewWorkspaceRepository(db database.DatabaseManager, logger logger.Logger) W
 // CreateWorkspace 创建工作区
 func (r *workspaceRepository) CreateWorkspace(workspace *model.Workspace) error {
 	query := `
-		INSERT INTO workspaces (workspace_name, workspace_path, active, file_num, 
-			embedding_file_num, embedding_ts, codegraph_file_num, codegraph_ts)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO workspaces (workspace_name, workspace_path, active, file_num,
+			embedding_file_num, embedding_ts, codegraph_file_num, codegraph_ts,
+			deepwiki_file_num, deepwiki_ts, deepwiki_message, deepwiki_failed_file_paths)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.GetDB().Exec(query,
@@ -66,16 +67,18 @@ func (r *workspaceRepository) CreateWorkspace(workspace *model.Workspace) error 
 		workspace.EmbeddingTs,
 		workspace.CodegraphFileNum,
 		workspace.CodegraphTs,
+		workspace.DeepwikiFileNum,
+		workspace.DeepwikiTs,
+		workspace.DeepwikiMessage,
+		workspace.DeepwikiFailedFilePaths,
 	)
 	if err != nil {
-		r.logger.Error("Failed to create workspace: %v", err)
-		return fmt.Errorf("failed to create workspace: %w", err)
+		return fmt.Errorf("[DB] failed to create workspace: %w", err)
 	}
 
 	id, err := result.LastInsertId()
 	if err != nil {
-		r.logger.Error("Failed to get last insert ID: %v", err)
-		return fmt.Errorf("failed to get last insert ID: %w", err)
+		return fmt.Errorf("[DB] failed to get last insert ID: %w", err)
 	}
 
 	workspace.ID = id
@@ -85,11 +88,12 @@ func (r *workspaceRepository) CreateWorkspace(workspace *model.Workspace) error 
 // GetWorkspaceByPath 根据路径获取工作区
 func (r *workspaceRepository) GetWorkspaceByPath(path string) (*model.Workspace, error) {
 	query := `
-		SELECT id, workspace_name, workspace_path, active, file_num, 
+		SELECT id, workspace_name, workspace_path, active, file_num,
 			embedding_file_num, embedding_ts, embedding_message, embedding_failed_file_paths,
 			codegraph_file_num, codegraph_ts, codegraph_message, codegraph_failed_file_paths,
+			deepwiki_file_num, deepwiki_ts, deepwiki_message, deepwiki_failed_file_paths,
 			created_at, updated_at
-		FROM workspaces 
+		FROM workspaces
 		WHERE workspace_path = ?
 	`
 
@@ -112,16 +116,19 @@ func (r *workspaceRepository) GetWorkspaceByPath(path string) (*model.Workspace,
 		&workspace.CodegraphTs,
 		&workspace.CodegraphMessage,
 		&workspace.CodegraphFailedFilePaths,
+		&workspace.DeepwikiFileNum,
+		&workspace.DeepwikiTs,
+		&workspace.DeepwikiMessage,
+		&workspace.DeepwikiFailedFilePaths,
 		&createdAt,
 		&updatedAt,
 	)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("workspace not found: %s", path)
+			return nil, fmt.Errorf("[DB] workspace not found: %s", path)
 		}
-		r.logger.Error("Failed to get workspace by path: %v", err)
-		return nil, fmt.Errorf("failed to get workspace by path: %w", err)
+		return nil, fmt.Errorf("[DB] failed to get workspace by path: %w", err)
 	}
 
 	workspace.CreatedAt = createdAt
@@ -133,11 +140,12 @@ func (r *workspaceRepository) GetWorkspaceByPath(path string) (*model.Workspace,
 // GetWorkspaceByID 根据ID获取工作区
 func (r *workspaceRepository) GetWorkspaceByID(id int64) (*model.Workspace, error) {
 	query := `
-		SELECT id, workspace_name, workspace_path, active, file_num, 
+		SELECT id, workspace_name, workspace_path, active, file_num,
 			embedding_file_num, embedding_ts, embedding_message, embedding_failed_file_paths,
 			codegraph_file_num, codegraph_ts, codegraph_message, codegraph_failed_file_paths,
+			deepwiki_file_num, deepwiki_ts, deepwiki_message, deepwiki_failed_file_paths,
 			created_at, updated_at
-		FROM workspaces 
+		FROM workspaces
 		WHERE id = ?
 	`
 
@@ -160,16 +168,19 @@ func (r *workspaceRepository) GetWorkspaceByID(id int64) (*model.Workspace, erro
 		&workspace.CodegraphTs,
 		&workspace.CodegraphMessage,
 		&workspace.CodegraphFailedFilePaths,
+		&workspace.DeepwikiFileNum,
+		&workspace.DeepwikiTs,
+		&workspace.DeepwikiMessage,
+		&workspace.DeepwikiFailedFilePaths,
 		&createdAt,
 		&updatedAt,
 	)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("workspace not found: %d", id)
+			return nil, fmt.Errorf("[DB] workspace not found: %d", id)
 		}
-		r.logger.Error("Failed to get workspace by ID: %v", err)
-		return nil, fmt.Errorf("failed to get workspace by ID: %w", err)
+		return nil, fmt.Errorf("[DB] failed to get workspace by ID: %w", err)
 	}
 
 	workspace.CreatedAt = createdAt
@@ -250,6 +261,30 @@ func (r *workspaceRepository) UpdateWorkspace(workspace *model.Workspace) error 
 		args = append(args, workspace.CodegraphFailedFilePaths)
 	}
 
+	// 检查deepwiki_file_num是否为非默认值
+	if workspace.DeepwikiFileNum != 0 {
+		setClauses = append(setClauses, "deepwiki_file_num = ?")
+		args = append(args, workspace.DeepwikiFileNum)
+	}
+
+	// 检查deepwiki_ts是否为非默认值
+	if workspace.DeepwikiTs != 0 {
+		setClauses = append(setClauses, "deepwiki_ts = ?")
+		args = append(args, workspace.DeepwikiTs)
+	}
+
+	// 检查deepwiki_message是否为非默认值
+	if workspace.DeepwikiMessage != "" {
+		setClauses = append(setClauses, "deepwiki_message = ?")
+		args = append(args, workspace.DeepwikiMessage)
+	}
+
+	// 检查deepwiki_failed_file_paths是否为非默认值
+	if workspace.DeepwikiFailedFilePaths != "" {
+		setClauses = append(setClauses, "deepwiki_failed_file_paths = ?")
+		args = append(args, workspace.DeepwikiFailedFilePaths)
+	}
+
 	// 如果没有需要更新的字段，直接返回
 	if len(setClauses) == 0 {
 		return nil
@@ -265,18 +300,16 @@ func (r *workspaceRepository) UpdateWorkspace(workspace *model.Workspace) error 
 
 	result, err := r.db.GetDB().Exec(query, args...)
 	if err != nil {
-		r.logger.Error("Failed to update workspace: %v", err)
-		return fmt.Errorf("failed to update workspace: %w", err)
+		return fmt.Errorf("[DB] failed to update workspace: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		r.logger.Error("Failed to get rows affected: %v", err)
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return fmt.Errorf("[DB] failed to get rows affected: %w", err)
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("workspace not found: %s", workspace.WorkspacePath)
+		return fmt.Errorf("[DB] workspace not found: %s", workspace.WorkspacePath)
 	}
 
 	return nil
@@ -306,6 +339,10 @@ func (r *workspaceRepository) UpdateWorkspaceByMap(path string, updates map[stri
 		"codegraph_ts":                "codegraph_ts",
 		"codegraph_message":           "codegraph_message",
 		"codegraph_failed_file_paths": "codegraph_failed_file_paths",
+		"deepwiki_file_num":           "deepwiki_file_num",
+		"deepwiki_ts":                 "deepwiki_ts",
+		"deepwiki_message":            "deepwiki_message",
+		"deepwiki_failed_file_paths":  "deepwiki_failed_file_paths",
 	}
 
 	// 遍历updates map，构建SET子句
@@ -332,18 +369,16 @@ func (r *workspaceRepository) UpdateWorkspaceByMap(path string, updates map[stri
 
 	result, err := r.db.GetDB().Exec(query, args...)
 	if err != nil {
-		r.logger.Error("Failed to update workspace by map: %v", err)
-		return fmt.Errorf("failed to update workspace by map: %w", err)
+		return fmt.Errorf("[DB] failed to update workspace by map: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		r.logger.Error("Failed to get rows affected: %v", err)
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return fmt.Errorf("[DB] failed to get rows affected: %w", err)
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("workspace not found: %s", path)
+		return fmt.Errorf("[DB] workspace not found: %s", path)
 	}
 
 	return nil
@@ -355,18 +390,17 @@ func (r *workspaceRepository) DeleteWorkspace(path string) error {
 
 	result, err := r.db.GetDB().Exec(query, path)
 	if err != nil {
-		r.logger.Error("Failed to delete workspace: %v", err)
-		return fmt.Errorf("failed to delete workspace: %w", err)
+		return fmt.Errorf("[DB] failed to delete workspace: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		r.logger.Error("Failed to get rows affected: %v", err)
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return fmt.Errorf("[DB] failed to get rows affected: %w", err)
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("workspace not found: %s", path)
+		r.logger.Warn("[DB] workspace not found, path: %s", path)
+		return nil
 	}
 
 	return nil
@@ -378,6 +412,7 @@ func (r *workspaceRepository) ListWorkspaces() ([]*model.Workspace, error) {
 		SELECT id, workspace_name, workspace_path, active, file_num, 
 			embedding_file_num, embedding_ts, embedding_message, embedding_failed_file_paths,
 			codegraph_file_num, codegraph_ts, codegraph_message, codegraph_failed_file_paths,
+			deepwiki_file_num, deepwiki_ts, deepwiki_message, deepwiki_failed_file_paths,
 			created_at, updated_at
 		FROM workspaces 
 		ORDER BY created_at DESC
@@ -385,8 +420,7 @@ func (r *workspaceRepository) ListWorkspaces() ([]*model.Workspace, error) {
 
 	rows, err := r.db.GetDB().Query(query)
 	if err != nil {
-		r.logger.Error("Failed to list workspaces: %v", err)
-		return nil, fmt.Errorf("failed to list workspaces: %w", err)
+		return nil, fmt.Errorf("[DB] failed to list workspaces: %w", err)
 	}
 	defer rows.Close()
 
@@ -409,13 +443,16 @@ func (r *workspaceRepository) ListWorkspaces() ([]*model.Workspace, error) {
 			&workspace.CodegraphTs,
 			&workspace.CodegraphMessage,
 			&workspace.CodegraphFailedFilePaths,
+			&workspace.DeepwikiFileNum,
+			&workspace.DeepwikiTs,
+			&workspace.DeepwikiMessage,
+			&workspace.DeepwikiFailedFilePaths,
 			&createdAt,
 			&updatedAt,
 		)
 
 		if err != nil {
-			r.logger.Error("[DB]Failed to scan workspaces table row: %v", err)
-			return nil, err
+			return nil, fmt.Errorf("[DB] failed to scan workspaces table row: %w", err)
 		}
 
 		workspace.CreatedAt = createdAt
@@ -429,19 +466,19 @@ func (r *workspaceRepository) ListWorkspaces() ([]*model.Workspace, error) {
 // GetActiveWorkspaces 获取活跃的工作区
 func (r *workspaceRepository) GetActiveWorkspaces() ([]*model.Workspace, error) {
 	query := `
-		SELECT id, workspace_name, workspace_path, active, file_num, 
+		SELECT id, workspace_name, workspace_path, active, file_num,
 			embedding_file_num, embedding_ts, embedding_message, embedding_failed_file_paths,
 			codegraph_file_num, codegraph_ts, codegraph_message, codegraph_failed_file_paths,
+			deepwiki_file_num, deepwiki_ts, deepwiki_message, deepwiki_failed_file_paths,
 			created_at, updated_at
-		FROM workspaces 
+		FROM workspaces
 		WHERE active = "true"
 		ORDER BY created_at DESC
 	`
 
 	rows, err := r.db.GetDB().Query(query)
 	if err != nil {
-		r.logger.Error("Failed to get active workspaces: %v", err)
-		return nil, fmt.Errorf("failed to get active workspaces: %w", err)
+		return nil, fmt.Errorf("[DB] failed to get active workspaces: %w", err)
 	}
 	defer rows.Close()
 
@@ -464,13 +501,16 @@ func (r *workspaceRepository) GetActiveWorkspaces() ([]*model.Workspace, error) 
 			&workspace.CodegraphTs,
 			&workspace.CodegraphMessage,
 			&workspace.CodegraphFailedFilePaths,
+			&workspace.DeepwikiFileNum,
+			&workspace.DeepwikiTs,
+			&workspace.DeepwikiMessage,
+			&workspace.DeepwikiFailedFilePaths,
 			&createdAt,
 			&updatedAt,
 		)
 
 		if err != nil {
-			r.logger.Error("[DB]Failed to scan workspaces table row: %v", err)
-			return nil, err
+			return nil, fmt.Errorf("[DB] failed to scan workspaces table row: %w", err)
 		}
 
 		workspace.CreatedAt = createdAt
@@ -491,18 +531,16 @@ func (r *workspaceRepository) UpdateEmbeddingInfo(path string, fileNum int, time
 
 	result, err := r.db.GetDB().Exec(query, fileNum, timestamp, message, failedFilePaths, time.Now(), path)
 	if err != nil {
-		r.logger.Error("Failed to update embedding info: %v", err)
-		return fmt.Errorf("failed to update embedding info: %w", err)
+		return fmt.Errorf("[DB] failed to update embedding info: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		r.logger.Error("Failed to get rows affected: %v", err)
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return fmt.Errorf("[DB] failed to get rows affected: %w", err)
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("workspace not found: %s", path)
+		return fmt.Errorf("[DB] workspace not found: %s", path)
 	}
 
 	return nil
@@ -518,18 +556,16 @@ func (r *workspaceRepository) UpdateCodegraphInfo(path string, fileNum int, time
 
 	result, err := r.db.GetDB().Exec(query, fileNum, timestamp, time.Now(), path)
 	if err != nil {
-		r.logger.Error("Failed to update codegraph info: %v", err)
-		return fmt.Errorf("failed to update codegraph info: %w", err)
+		return fmt.Errorf("[DB] failed to update codegraph info: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		r.logger.Error("Failed to get rows affected: %v", err)
-		return fmt.Errorf("failed to get rows affected: %w", err)
+		return fmt.Errorf("[DB] failed to get rows affected: %w", err)
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("workspace not found: %s", path)
+		return fmt.Errorf("[DB] workspace not found: %s", path)
 	}
 
 	return nil
