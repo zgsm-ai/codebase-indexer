@@ -168,31 +168,43 @@ func (c *WikiProcessor) ProcessOpenWorkspaceEvent(ctx context.Context, event *mo
 // ProcessEvents 处理事件记录
 func (c *WikiProcessor) ProcessEvents(ctx context.Context, workspacePaths []string) error {
 
-	codegraphStatuses := []int{
-		model.CodegraphStatusInit,
-		model.CodegraphStatusSuccess,
-		model.CodegraphStatusFailed,
-	}
+	//codegraphStatuses := []int{
+	//	model.CodegraphStatusInit,
+	//	model.CodegraphStatusSuccess,
+	//	model.CodegraphStatusFailed,
+	//}
 
 	// 打开工作区事件
-	openEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeOpenWorkspace}, workspacePaths, 10,
-		false, nil, codegraphStatuses)
+	//openEvents, err := c.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeOpenWorkspace}, workspacePaths, 10,
+	//	false, nil, codegraphStatuses)
+	//
+	//if err != nil {
+	//	c.logger.Error("failed to get open_workspace events: %v", err)
+	//	return fmt.Errorf("failed to get open_workspace events: %w", err)
+	//}
 
-	if err != nil {
-		c.logger.Error("failed to get open_workspace events: %v", err)
-		return fmt.Errorf("failed to get open_workspace events: %w", err)
-	}
-
-	// 处理打开工作区事件
-	for _, event := range openEvents {
-		c.convertWorkspaceFilePathToAbs(event)
-		c.logger.Info("wiki start to process open_workspace event: %s", event.WorkspacePath)
-		err = c.ProcessOpenWorkspaceEvent(ctx, event)
+	// TODO 处理打开工作区事件
+	//for _, event := range openEvents {
+	//	c.convertWorkspaceFilePathToAbs(event)
+	//	c.logger.Info("wiki start to process open_workspace event: %s", event.WorkspacePath)
+	//	err = c.ProcessOpenWorkspaceEvent(ctx, event)
+	//	if err != nil {
+	//		c.logger.Error("failed to process open_workspace event for codegraph: %v", err)
+	//		continue
+	//	}
+	//	c.logger.Info("wiki process open_workspace event successfully: %s", event.WorkspacePath)
+	//}
+	// TODO
+	for _, workspacePath := range workspacePaths {
+		c.logger.Info("wiki start to process open_workspace event: %s", workspacePath)
+		err := c.ProcessOpenWorkspaceEvent(ctx, &model.Event{
+			WorkspacePath: workspacePath,
+		})
 		if err != nil {
 			c.logger.Error("failed to process open_workspace event for codegraph: %v", err)
 			continue
 		}
-		c.logger.Info("wiki process open_workspace event successfully: %s", event.WorkspacePath)
+		c.logger.Info("wiki process open_workspace event successfully: %s", workspacePath)
 	}
 
 	return nil
