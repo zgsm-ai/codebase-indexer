@@ -355,16 +355,14 @@ func (s *extensionService) SwitchIndex(ctx context.Context, workspacePath, switc
 			Switch: dto.SwitchOn,
 		}
 	}
+	if codebaseEnv.Switch == switchStatus {
+		s.logger.Info("codebase is already %s, skipping switch", switchStatus)
+		return nil
+	}
 	codebaseEnv.Switch = switchStatus
 	err := s.storage.SaveCodebaseEnv(codebaseEnv)
 	if err != nil {
 		return fmt.Errorf("failed to save codebase env: %v", err)
-	}
-
-	// 检查工作空间是否存在
-	workspace, err := s.workspaceRepo.GetWorkspaceByPath(workspacePath)
-	if err != nil {
-		return fmt.Errorf("failed to get workspace: %w", err)
 	}
 
 	// 更新工作空间的索引开关状态
@@ -373,61 +371,61 @@ func (s *extensionService) SwitchIndex(ctx context.Context, workspacePath, switc
 		active = "true"
 	}
 
-	if workspace.Active == active {
-		s.logger.Info("workspace %s is already %s", workspacePath, switchStatus)
-		return nil
-	}
-
-	// 更新工作空间状态
-	updateWorkspace := &model.Workspace{
-		WorkspacePath: workspace.WorkspacePath,
-		Active:        active,
-	}
-
 	if active == "true" {
 		// 创建代码库配置
 		fileNum, err := s.createCodebaseConfig(workspacePath, clientID)
 		if err != nil {
 			s.logger.Error("failed to create codebase config: %v", err)
 		}
-		updateWorkspace.FileNum = fileNum
 
 		// 创建代码库嵌入配置
 		if err := s.initEmbeddingConfig(workspacePath, clientID); err != nil {
 			s.logger.Error("failed to init embedding config: %v", err)
 		}
 
-		if err := s.workspaceRepo.UpdateWorkspace(updateWorkspace); err != nil {
-			return fmt.Errorf("failed to update workspace: %w", err)
+		// 检查工作区是否已存在
+		_, err = s.workspaceRepo.GetWorkspaceByPath(workspacePath)
+		if err != nil {
+			// 工作区不存在，创建新的工作区
+			s.createAndActivateWorkspace(workspacePath, "true", fileNum)
+		} else {
+			// 激活工作区
+			s.activateWorkspace(workspacePath, fileNum)
 		}
 
-		// 事务处理新增open_worksapce事件，删除其余非进行中状态事件
+		// 删除所有非进行中状态的事件
 		s.deleteNonProcessingEvents(workspacePath)
 
 		// 创建新的open_workspace事件
-		newOpenWorkspaceEvent := &model.Event{
-			WorkspacePath:   workspacePath,
-			EventType:       model.EventTypeOpenWorkspace,
-			SourceFilePath:  "",
-			TargetFilePath:  "",
-			SyncId:          "",
-			EmbeddingStatus: model.EmbeddingStatusInit,
-			CodegraphStatus: model.CodegraphStatusInit,
+		openWorkspaceEvent := dto.WorkspaceEvent{
+			EventType:  model.EventTypeOpenWorkspace,
+			SourcePath: "",
+			TargetPath: "",
+		}
+		// 尝试更新现有事件
+		if updated := s.tryUpdateExistingEvent(workspacePath, openWorkspaceEvent); !updated {
+			// 创建新事件
+			s.createNewEvent(workspacePath, openWorkspaceEvent)
 		}
 
-		if err := s.eventRepo.CreateEvent(newOpenWorkspaceEvent); err != nil {
-			s.logger.Error("failed to create open workspace event: %v", err)
-		} else {
-			s.logger.Info("switch on, created new open workspace event for workspace: %s", workspacePath)
-		}
 		// switch on, 触发文件扫描
-		go s.scanService.DetectFileChanges(workspace.WorkspacePath)
+		go s.scanService.DetectFileChanges(workspacePath)
 	} else {
-		if err := s.workspaceRepo.UpdateWorkspace(updateWorkspace); err != nil {
-			return fmt.Errorf("failed to update workspace: %w", err)
+		_, err = s.workspaceRepo.GetWorkspaceByPath(workspacePath)
+		if err != nil {
+			s.logger.Warn("failed to get workspace: %v", err)
+		} else {
+			// 更新工作空间状态
+			updateWorkspace := &model.Workspace{
+				WorkspacePath: workspacePath,
+				Active:        active,
+			}
+			if err := s.workspaceRepo.UpdateWorkspace(updateWorkspace); err != nil {
+				s.logger.Error("failed to update switch off workspace: %w", err)
+			}
+			// 删除非进行中状态事件
+			s.deleteNonProcessingEvents(workspacePath)
 		}
-		// 删除非进行中状态事件
-		s.deleteNonProcessingEvents(workspacePath)
 	}
 
 	s.logger.Info("index switch for workspace %s set to %s", workspacePath, switchStatus)
