@@ -171,7 +171,7 @@ func main() {
 	eventProcessorJob := job.NewEventProcessorJob(appLogger, syncRepo, embeddingProcessService, codegraphProcessor, 10*time.Second, storageManager)
 	statusCheckerJob := job.NewStatusCheckerJob(embeddingStatusService, storageManager, syncRepo, appLogger, 5*time.Second)
 	eventCleanerJob := job.NewEventCleanerJob(eventRepo, appLogger)
-	indexCleanJob := job.NewIndexCleanJob(appLogger, indexer, workspaceRepo)
+	indexCleanJob := job.NewIndexCleanJob(appLogger, indexer, workspaceRepo, storageManager, codebaseEmbeddingRepo, syncRepo, eventRepo)
 	// Initialize handler layer
 	// grpcHandler := handler.NewGRPCHandler(syncRepo, scanRepo, storageManager, schedulerService, appLogger)
 	extensionHandler := handler.NewExtensionHandler(extensionService, appLogger)
