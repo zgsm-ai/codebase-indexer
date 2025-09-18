@@ -28,7 +28,9 @@ type CallerInfo struct {
 	FilePath      string                 `protobuf:"bytes,2,opt,name=file_path,json=filePath,proto3" json:"file_path,omitempty"`        // 文件路径
 	Position      *Position              `protobuf:"bytes,3,opt,name=position,proto3" json:"position,omitempty"`                        // 位置信息
 	ParamCount    int32                  `protobuf:"varint,4,opt,name=param_count,json=paramCount,proto3" json:"param_count,omitempty"` // 参数数量
-	Score         float64                `protobuf:"fixed64,5,opt,name=score,proto3" json:"score,omitempty"`                            // 评分
+	CalleeKey     *CalleeKey             `protobuf:"bytes,5,opt,name=callee_key,json=calleeKey,proto3" json:"callee_key,omitempty"`     // 被调用者的信息
+	IsVariadic    bool                   `protobuf:"varint,6,opt,name=is_variadic,json=isVariadic,proto3" json:"is_variadic,omitempty"` // 调用者是否为可变参数
+	Score         float64                `protobuf:"fixed64,7,opt,name=score,proto3" json:"score,omitempty"`                            // 评分
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -91,6 +93,20 @@ func (x *CallerInfo) GetParamCount() int32 {
 	return 0
 }
 
+func (x *CallerInfo) GetCalleeKey() *CalleeKey {
+	if x != nil {
+		return x.CalleeKey
+	}
+	return nil
+}
+
+func (x *CallerInfo) GetIsVariadic() bool {
+	if x != nil {
+		return x.IsVariadic
+	}
+	return false
+}
+
 func (x *CallerInfo) GetScore() float64 {
 	if x != nil {
 		return x.Score
@@ -101,9 +117,8 @@ func (x *CallerInfo) GetScore() float64 {
 // CalleeMapItem 被调用者映射项
 type CalleeMapItem struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	CalleeName    string                 `protobuf:"bytes,1,opt,name=callee_name,json=calleeName,proto3" json:"callee_name,omitempty"`  // 被调用者名称
-	ParamCount    int32                  `protobuf:"varint,2,opt,name=param_count,json=paramCount,proto3" json:"param_count,omitempty"` // 参数数量
-	Callers       []*CallerInfo          `protobuf:"bytes,3,rep,name=callers,proto3" json:"callers,omitempty"`                          // 调用者列表（数组）
+	CalleeName    string                 `protobuf:"bytes,1,opt,name=callee_name,json=calleeName,proto3" json:"callee_name,omitempty"` // 被调用者名称，用于计算key
+	Callers       []*CallerInfo          `protobuf:"bytes,2,rep,name=callers,proto3" json:"callers,omitempty"`                         // 调用者列表（数组）
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -143,13 +158,6 @@ func (x *CalleeMapItem) GetCalleeName() string {
 		return x.CalleeName
 	}
 	return ""
-}
-
-func (x *CalleeMapItem) GetParamCount() int32 {
-	if x != nil {
-		return x.ParamCount
-	}
-	return 0
 }
 
 func (x *CalleeMapItem) GetCallers() []*CallerInfo {
@@ -228,11 +236,64 @@ func (x *Position) GetEndColumn() int32 {
 	return 0
 }
 
+// CalleeKey 被调用者的信息
+type CalleeKey struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SymbolName    string                 `protobuf:"bytes,1,opt,name=symbol_name,json=symbolName,proto3" json:"symbol_name,omitempty"`  // 符号名称
+	ParamCount    int32                  `protobuf:"varint,2,opt,name=param_count,json=paramCount,proto3" json:"param_count,omitempty"` // 参数数量
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CalleeKey) Reset() {
+	*x = CalleeKey{}
+	mi := &file_pkg_codegraph_proto_caller_info_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CalleeKey) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CalleeKey) ProtoMessage() {}
+
+func (x *CalleeKey) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_codegraph_proto_caller_info_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CalleeKey.ProtoReflect.Descriptor instead.
+func (*CalleeKey) Descriptor() ([]byte, []int) {
+	return file_pkg_codegraph_proto_caller_info_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *CalleeKey) GetSymbolName() string {
+	if x != nil {
+		return x.SymbolName
+	}
+	return ""
+}
+
+func (x *CalleeKey) GetParamCount() int32 {
+	if x != nil {
+		return x.ParamCount
+	}
+	return 0
+}
+
 var File_pkg_codegraph_proto_caller_info_proto protoreflect.FileDescriptor
 
 const file_pkg_codegraph_proto_caller_info_proto_rawDesc = "" +
 	"\n" +
-	"%pkg/codegraph/proto/caller_info.proto\x12\vcodegraphpb\"\xb4\x01\n" +
+	"%pkg/codegraph/proto/caller_info.proto\x12\vcodegraphpb\"\x8c\x02\n" +
 	"\n" +
 	"CallerInfo\x12\x1f\n" +
 	"\vsymbol_name\x18\x01 \x01(\tR\n" +
@@ -240,21 +301,28 @@ const file_pkg_codegraph_proto_caller_info_proto_rawDesc = "" +
 	"\tfile_path\x18\x02 \x01(\tR\bfilePath\x121\n" +
 	"\bposition\x18\x03 \x01(\v2\x15.codegraphpb.PositionR\bposition\x12\x1f\n" +
 	"\vparam_count\x18\x04 \x01(\x05R\n" +
-	"paramCount\x12\x14\n" +
-	"\x05score\x18\x05 \x01(\x01R\x05score\"\x84\x01\n" +
+	"paramCount\x125\n" +
+	"\n" +
+	"callee_key\x18\x05 \x01(\v2\x16.codegraphpb.CalleeKeyR\tcalleeKey\x12\x1f\n" +
+	"\vis_variadic\x18\x06 \x01(\bR\n" +
+	"isVariadic\x12\x14\n" +
+	"\x05score\x18\a \x01(\x01R\x05score\"c\n" +
 	"\rCalleeMapItem\x12\x1f\n" +
 	"\vcallee_name\x18\x01 \x01(\tR\n" +
-	"calleeName\x12\x1f\n" +
-	"\vparam_count\x18\x02 \x01(\x05R\n" +
-	"paramCount\x121\n" +
-	"\acallers\x18\x03 \x03(\v2\x17.codegraphpb.CallerInfoR\acallers\"\x86\x01\n" +
+	"calleeName\x121\n" +
+	"\acallers\x18\x02 \x03(\v2\x17.codegraphpb.CallerInfoR\acallers\"\x86\x01\n" +
 	"\bPosition\x12\x1d\n" +
 	"\n" +
 	"start_line\x18\x01 \x01(\x05R\tstartLine\x12!\n" +
 	"\fstart_column\x18\x02 \x01(\x05R\vstartColumn\x12\x19\n" +
 	"\bend_line\x18\x03 \x01(\x05R\aendLine\x12\x1d\n" +
 	"\n" +
-	"end_column\x18\x04 \x01(\x05R\tendColumnB-Z+pkg/codegraph/proto/codegraphpb;codegraphpbb\x06proto3"
+	"end_column\x18\x04 \x01(\x05R\tendColumn\"M\n" +
+	"\tCalleeKey\x12\x1f\n" +
+	"\vsymbol_name\x18\x01 \x01(\tR\n" +
+	"symbolName\x12\x1f\n" +
+	"\vparam_count\x18\x02 \x01(\x05R\n" +
+	"paramCountB-Z+pkg/codegraph/proto/codegraphpb;codegraphpbb\x06proto3"
 
 var (
 	file_pkg_codegraph_proto_caller_info_proto_rawDescOnce sync.Once
@@ -268,20 +336,22 @@ func file_pkg_codegraph_proto_caller_info_proto_rawDescGZIP() []byte {
 	return file_pkg_codegraph_proto_caller_info_proto_rawDescData
 }
 
-var file_pkg_codegraph_proto_caller_info_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_pkg_codegraph_proto_caller_info_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_pkg_codegraph_proto_caller_info_proto_goTypes = []any{
 	(*CallerInfo)(nil),    // 0: codegraphpb.CallerInfo
 	(*CalleeMapItem)(nil), // 1: codegraphpb.CalleeMapItem
 	(*Position)(nil),      // 2: codegraphpb.Position
+	(*CalleeKey)(nil),     // 3: codegraphpb.CalleeKey
 }
 var file_pkg_codegraph_proto_caller_info_proto_depIdxs = []int32{
 	2, // 0: codegraphpb.CallerInfo.position:type_name -> codegraphpb.Position
-	0, // 1: codegraphpb.CalleeMapItem.callers:type_name -> codegraphpb.CallerInfo
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	3, // 1: codegraphpb.CallerInfo.callee_key:type_name -> codegraphpb.CalleeKey
+	0, // 2: codegraphpb.CalleeMapItem.callers:type_name -> codegraphpb.CallerInfo
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_pkg_codegraph_proto_caller_info_proto_init() }
@@ -295,7 +365,7 @@ func file_pkg_codegraph_proto_caller_info_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_codegraph_proto_caller_info_proto_rawDesc), len(file_pkg_codegraph_proto_caller_info_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

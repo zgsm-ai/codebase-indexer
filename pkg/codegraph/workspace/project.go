@@ -87,5 +87,5 @@ func (l CalleeMapItems) Value(i int) proto.Message {
 	return l[i]
 }
 func (l CalleeMapItems) Key(i int) store.Key {
-	return store.CalleeMapKey{SymbolName: l[i].CalleeName, ParamCount: int(l[i].ParamCount)}
+	return store.CalleeMapKey{SymbolName: l[i].CalleeName}
 }

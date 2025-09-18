@@ -768,6 +768,26 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 		// 	IncludeExts:  []string{".go"},
 		// },
 		// {
+		// 	name:         "ProcessAddFileEvent方法调用链",
+		// 	filePath:     "internal/service/codegraph_processor.go",
+		// 	symbolName:   "ProcessAddFileEvent",
+		// 	maxLayer:     20,
+		// 	desc:         "查询ProcessAddFileEvent方法的调用链",
+		// 	project:      "codebase-indexer",
+		// 	workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+		// 	IncludeExts:  []string{".go"},
+		// },
+		{
+			name:         "buildCallGraphBFS方法调用链",
+			filePath:     "internal/service/indexer_test.go",
+			symbolName:   "buildCallGraphBFS",
+			maxLayer:     20,
+			desc:         "查询buildCallGraphBFS方法的调用链",
+			project:      "codebase-indexer",
+			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			IncludeExts:  []string{".go"},
+		},
+		// {
 		// 	name:         "测试递归",
 		// 	filePath:     "internal/service/codebase.go",
 		// 	symbolName:   "fillContent",
@@ -857,16 +877,16 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 		// 	workspaceDir: "/home/kcx/codeWorkspace/testProjects/typescript/vue-next",
 		// 	IncludeExts:  []string{".ts", ".tsx"},
 		// },
-		{
-			name:         "rewriteDefaultAST",
-			filePath:     "packages/compiler-sfc/src/rewriteDefault.ts",
-			symbolName:   "rewriteDefaultAST",
-			maxLayer:     20,
-			desc:         "查询rewriteDefaultAST函数的调用链",
-			project:      "vue-next",
-			workspaceDir: "/home/kcx/codeWorkspace/testProjects/typescript/vue-next",
-			IncludeExts:  []string{".ts", ".tsx"},
-		},
+		// {
+		// 	name:         "rewriteDefaultAST",
+		// 	filePath:     "packages/compiler-sfc/src/rewriteDefault.ts",
+		// 	symbolName:   "rewriteDefaultAST",
+		// 	maxLayer:     20,
+		// 	desc:         "查询rewriteDefaultAST函数的调用链",
+		// 	project:      "vue-next",
+		// 	workspaceDir: "/home/kcx/codeWorkspace/testProjects/typescript/vue-next",
+		// 	IncludeExts:  []string{".ts", ".tsx"},
+		// },
 	}
 
 	for _, tc := range testCases {

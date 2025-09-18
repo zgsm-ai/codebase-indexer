@@ -15,9 +15,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/antlabs/strsim"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
+
+	"github.com/antlabs/strsim"
 )
 
 type DependencyAnalyzer struct {
@@ -216,26 +219,73 @@ func (da *DependencyAnalyzer) FilterByImports(filePath string, imports []*codegr
 	return found
 }
 
-func (da *DependencyAnalyzer) CalculateSymbolMatchScore(callerImports []*codegraphpb.Import, callerFilePath string, calleeFilePath string, calleeSymbolName string) int {
+func (da *DependencyAnalyzer) CalculateSymbolMatchScore(workspace string, callerImports []*codegraphpb.Import, callerFilePath string, calleeFilePath string, calleeSymbolName string, callerSymbolName string) int {
 	// 1、同文件
 	if callerFilePath == calleeFilePath {
-		return 10
+		return 100
 	}
 
 	// 2、同包(同父路径)
 	if utils.IsSameParentDir(callerFilePath, calleeFilePath) {
-		return 10
+		return 75
 	}
 
 	// 3、根据import判断，def的文件路径是否在imp的范围内
 	for _, imp := range callerImports {
 		if IsFilePathInImportPackage(calleeFilePath, imp) {
-			return 10
+			return 50
 		}
 	}
 
-	// 4、路径相似性匹配
-	similarity := strsim.Compare(callerFilePath, calleeFilePath, strsim.Cosine())
-	score := int(5*similarity) * 0
+	score := 0
+	// 4、函数名可能有一定的关系
+	similarity := strsim.Compare(calleeSymbolName, calleeSymbolName, strsim.JaroWinkler())
+	score += int(similarity * 15)
+
+	// 5、文件名理论上都有一定的关系（相似度）
+	// 获取callee的文件名
+	calleeFilePath = filepath.Base(calleeFilePath)
+	calleeFileName := strings.TrimSuffix(calleeFilePath, filepath.Ext(calleeFilePath))
+
+	// 获取caller的文件名
+	callerFilePath = filepath.Base(callerFilePath)
+	callerFileName := strings.TrimSuffix(callerFilePath, filepath.Ext(callerFilePath))
+
+	similarity = strsim.Compare(calleeFileName, callerFileName, strsim.DiceCoefficient())
+	score += int(similarity * 10)
+
+	// 6、文件路径最长公共前缀
+
+	packageLevel := calculatePackageLevel(workspace, callerFilePath, calleeFilePath)
+	score += packageLevel
 	return score
+}
+func calculatePackageLevel(workspace string, callerPath string, calleePath string) int {
+	// 剔除workspace的路径
+	callerPath = strings.ReplaceAll(callerPath, workspace, types.EmptyString)
+	callerPath = strings.ReplaceAll(callerPath, types.WindowsSeparator, types.Dot)
+	callerPath = strings.ReplaceAll(callerPath, types.UnixSeparator, types.Dot)
+	callerDir := filepath.Dir(callerPath)
+
+	calleePath = strings.ReplaceAll(calleePath, workspace, types.EmptyString)
+	calleePath = strings.ReplaceAll(calleePath, types.WindowsSeparator, types.Dot)
+	calleePath = strings.ReplaceAll(calleePath, types.UnixSeparator, types.Dot)
+	calleeDir := filepath.Dir(calleePath)
+
+	// 计算共同前缀长度
+	commonPrefix := 0
+	callerParts := strings.Split(callerDir, types.UnixSeparator)
+	calleeParts := strings.Split(calleeDir, types.UnixSeparator)
+
+	minLen := min(len(callerParts), len(calleeParts))
+	for i := 0; i < minLen; i++ {
+		if callerParts[i] == calleeParts[i] {
+			commonPrefix++
+		} else {
+			break
+		}
+	}
+
+	// 层级越近，分数越高
+	return commonPrefix
 }
