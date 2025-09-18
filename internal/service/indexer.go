@@ -1190,12 +1190,10 @@ func (i *indexer) QueryDefinitions(ctx context.Context, opts *types.QueryDefinit
 	case len(opts.CodeSnippet) > 0:
 		return i.queryFuncDefinitionsBySnippet(ctx, project, language, opts.FilePath, opts.CodeSnippet)
 	case opts.StartLine > 0 && opts.EndLine > 0:
-		if opts.EndLine < opts.StartLine {
-			opts.EndLine = opts.StartLine
-		}
+		opts.StartLine, opts.EndLine = NormalizeLineRange(opts.StartLine, opts.EndLine, maxQueryLineLimit)
 		return i.queryFuncDefinitionsByLineRange(ctx, projectUuid, language, opts)
 	default:
-		return nil, fmt.Errorf("invalid query definition options: at least one of CodeSnippet, line range, or SymbolName must be provided")
+		return nil, fmt.Errorf("invalid query definition options: at least one of CodeSnippet or line range must be provided")
 	}
 }
 
@@ -1378,7 +1376,6 @@ func (i *indexer) QueryCallGraph(ctx context.Context, opts *types.QueryCallGraph
 	if opts.MaxLayer <= 0 {
 		opts.MaxLayer = defaultMaxLayer // 默认最大层数
 	}
-	startLine, endLine := NormalizeLineRange(opts.StartLine, opts.EndLine, 1000)
 
 	project, err := i.GetProjectByFilePath(ctx, opts.Workspace, opts.FilePath)
 	if err != nil {
@@ -1399,11 +1396,12 @@ func (i *indexer) QueryCallGraph(ctx context.Context, opts *types.QueryCallGraph
 
 	if opts.StartLine > 0 && opts.EndLine > 0 && opts.EndLine >= opts.StartLine {
 		// 查询组合2：文件路径+行范围
+		startLine, endLine := NormalizeLineRange(opts.StartLine, opts.EndLine, 1000)
 		results, err = i.queryCallGraphByLineRange(ctx, projectUuid, opts.Workspace, opts.FilePath, startLine, endLine, opts.MaxLayer)
 		return results, err
 	}
 
-	return nil, fmt.Errorf("invalid query callgraph options")
+	return nil, fmt.Errorf("invalid query callgraph options: missing symbol name or invalid line number")
 }
 
 // queryCallGraphBySymbol 根据符号名查询调用链
@@ -1606,7 +1604,7 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, wor
 					// 防止循环引用
 					continue
 				}
-			
+
 				fileElementTable, err := i.getFileElementTableByPath(ctx, projectUuid, callers[idx].FilePath)
 				if err != nil {
 					i.logger.Error("failed to get file element table by path, err: %v", err)

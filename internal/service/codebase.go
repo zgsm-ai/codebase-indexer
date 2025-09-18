@@ -388,20 +388,7 @@ func (l *codebaseService) QueryDefinition(ctx context.Context, req *dto.SearchDe
 		return nil, errs.ErrIndexDisabled
 	}
 
-	if req.StartLine <= 0 {
-		req.StartLine = 1
-	}
-
-	if req.EndLine <= 0 {
-		req.EndLine = 1
-	}
-	if req.EndLine < req.StartLine {
-		req.EndLine = req.StartLine
-	}
-
-	if req.EndLine-req.StartLine > maxLineLimit {
-		req.EndLine = req.StartLine + maxLineLimit
-	}
+	
 	// codebasePath不能为空
 	if req.CodebasePath == types.EmptyString {
 		return nil, fmt.Errorf("missing param: codebasePath")
@@ -524,16 +511,7 @@ func (l *codebaseService) QueryCallGraph(ctx context.Context, req *dto.SearchCal
 	if req.MaxLayer <= 0 || req.MaxLayer > defaultMaxLayer {
 		req.MaxLayer = defaultMaxLayer
 	}
-	if req.StartLine <= 0 {
-		req.StartLine = 1
-	}
-	if req.EndLine <= 0 || req.EndLine < req.StartLine {
-		// 如果 EndLine 非法（小于等于0 或小于 StartLine），则将 EndLine 设置为 StartLine
-		req.EndLine = req.StartLine
-	}
-	if delta := req.EndLine - req.StartLine; delta > maxLineLimit {
-		req.EndLine = req.StartLine + maxLineLimit
-	}
+	
 	// 保证同一时间只有一个查询调用，避免内存过高
 	l.mu.Lock()
 	defer l.mu.Unlock()
