@@ -28,7 +28,7 @@ func NewWikiGenerator(config *SimpleConfig, logger logger.Logger) (DocumentGener
 
 // GenerateDocument 生成Wiki文档
 func (g *WikiGenerator) GenerateDocument(ctx context.Context, repoPath string) (*DocumentStructure, error) {
-	docStructure, err := g.BaseGenerator.GenerateDocument(ctx, repoPath, DocTypeWiki)
+	docStructure, err := g.BaseGenerator.GenerateDocument(ctx, repoPath, DocTypeWiki, "6-15")
 	if err != nil {
 		return nil, err
 	}

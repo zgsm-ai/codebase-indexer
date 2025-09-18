@@ -24,5 +24,5 @@ func NewCodeRulesGenerator(config *SimpleConfig, logger logger.Logger) (Document
 
 // GenerateDocument 生成代码规则文档
 func (g *CodeRulesGenerator) GenerateDocument(ctx context.Context, repoPath string) (*DocumentStructure, error) {
-	return g.BaseGenerator.GenerateDocument(ctx, repoPath, DocTypeCodeRules)
+	return g.BaseGenerator.GenerateDocument(ctx, repoPath, DocTypeCodeRules, "3-8") // TODO 根据项目规模推断
 }

@@ -78,7 +78,7 @@ func (g *BaseGenerator) Close() error {
 }
 
 // GenerateDocument 生成代码规则文档
-func (g *BaseGenerator) GenerateDocument(ctx context.Context, repoPath string, documentType DocumentType) (*DocumentStructure, error) {
+func (g *BaseGenerator) GenerateDocument(ctx context.Context, repoPath string, documentType DocumentType, pageCount string) (*DocumentStructure, error) {
 	// 预生成验证 - 检查模板一致性
 	if err := g.validateTemplateConsistency(); err != nil {
 		return nil, fmt.Errorf("template validation failed: %w", err)
@@ -95,7 +95,7 @@ func (g *BaseGenerator) GenerateDocument(ctx context.Context, repoPath string, d
 
 	g.startStage()
 
-	docStructure, err := g.generateStructure(ctx, repoInfo, DocTypeCodeRules, "1-6") // TODO 根据项目规模推断
+	docStructure, err := g.generateStructure(ctx, repoInfo, documentType, pageCount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate %s structure: %w", string(g.documentType), err)
 	}
