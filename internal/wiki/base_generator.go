@@ -241,6 +241,7 @@ func (g *BaseGenerator) collectRepoInfo(ctx context.Context, repoPath string) (*
 	g.startStage()
 	repoInfo.ReadmeContent = g.loadReadmeContent(ctx, repoPath, files)
 	repoInfo.FileTree = g.buildFileTree(files)
+	repoInfo.FileMeta = files
 	return repoInfo, nil
 }
 
