@@ -181,7 +181,7 @@ func main() {
 		}
 
 		if i < maxRetries-1 {
-			appLogger.Error("failed to fetch client config (attempt %d/%d): %v, retrying in %v...", i+1, maxRetries, remoteClientConfigErr, retryDelay)
+			appLogger.Warn("failed to fetch client config (attempt %d/%d): %v, retrying in %v...", i+1, maxRetries, remoteClientConfigErr, retryDelay)
 			time.Sleep(retryDelay)
 		} else {
 			appLogger.Error("failed to fetch client config after %d attempts: %v, continuing with default config", maxRetries, remoteClientConfigErr)
