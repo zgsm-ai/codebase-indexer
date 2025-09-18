@@ -1,6 +1,7 @@
 package wiki
 
 import (
+	"codebase-indexer/internal/utils"
 	"codebase-indexer/pkg/logger"
 	"fmt"
 	"time"
@@ -153,8 +154,7 @@ func DefaultSimpleConfig() *SimpleConfig {
 		MaxFiles:       1000,
 		MaxFileSize:    10 * 1024 * 1024, // 10MB
 		OutputDir:      "./output",
-		StoreBasePath:  "",
-		PromptTemplate: "comprehensive", // 默认模板模式
+		StoreBasePath:  utils.DeepwikiDir,
 	}
 }
 
@@ -268,11 +268,6 @@ func (ls *LLMCallStats) String() string {
 		ls.StructureDuration,
 		ls.ContentCalls,
 		ls.ContentDuration)
-}
-
-// NewProgressStats 创建新的进度统计
-func NewProgressStats() *ProgressStats {
-	return &ProgressStats{}
 }
 
 // NewPerformanceStats 创建新的性能统计

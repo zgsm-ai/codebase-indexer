@@ -129,14 +129,15 @@ func (c *WikiProcessor) ProcessOpenWorkspaceEvent(ctx context.Context, event *mo
 			c.logger.Error("failed to generate code rules for wiki: %v", err)
 			errs = append(errs, err)
 		} else {
-			c.logger.Info("wiki open_workspace event, %s code rules generated successfully, start to export.",
-				event.WorkspacePath)
-			if err := c.wiki.ExportCodeRules(event.WorkspacePath, filepath.Join(event.WorkspacePath, ".roo", "rules-code"), "markdown", "single", "generated-rules.md"); err != nil {
+			codeRulesPath := filepath.Join(event.WorkspacePath, ".roo", "rules-code")
+			c.logger.Info("wiki open_workspace event, %s code rules generated successfully, start to export to %s",
+				event.WorkspacePath, codeRulesPath)
+			if err := c.wiki.ExportCodeRules(event.WorkspacePath, codeRulesPath, "markdown", "single", "generated-rules.md"); err != nil {
 				c.logger.Error("failed to export code rules for wiki: %v", err)
 				errs = append(errs, err)
 			} else {
-				c.logger.Info("wiki open_workspace event, %s code rules export successfully",
-					event.WorkspacePath)
+				c.logger.Info("wiki %s code rules export successfully to path %s",
+					event.WorkspacePath, codeRulesPath)
 			}
 		}
 	} else {
@@ -150,10 +151,14 @@ func (c *WikiProcessor) ProcessOpenWorkspaceEvent(ctx context.Context, event *mo
 			c.logger.Error("wiki %s generate err: %w", event.WorkspacePath, err)
 			errs = append(errs, err)
 		} else {
+			wikiPath := filepath.Join(".costrict", "wiki")
+			c.logger.Info("wiki %s generate successfully, start to export to path %s", event.WorkspacePath, wikiPath)
 			// 导出到workspace的输出目录
-			if err = c.wiki.ExportWiki(event.WorkspacePath, filepath.Join(".costrict", "wiki"), "markdown", "multi", ""); err != nil {
+			if err = c.wiki.ExportWiki(event.WorkspacePath, wikiPath, "markdown", "multi", ""); err != nil {
 				c.logger.Error("export wiki for workspace %s err:%w", event.WorkspacePath, err)
 				errs = append(errs, err)
+			} else {
+				c.logger.Info("wiki %s export successfully to path %s ", event.WorkspacePath, wikiPath)
 			}
 		}
 

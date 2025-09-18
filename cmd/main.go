@@ -164,6 +164,7 @@ func main() {
 		workspaceRepo, service.IndexerConfig{VisitPattern: workspace.DefaultVisitPattern}, appLogger)
 
 	codegraphProcessor := service.NewCodegraphProcessor(workspaceReader, indexer, workspaceRepo, eventRepo, appLogger)
+
 	//TODO get from config
 	apiKey := config.GetClientConfig().Deepwiki.ApiKey
 	baseUrl := config.GetClientConfig().Deepwiki.BaseURL
