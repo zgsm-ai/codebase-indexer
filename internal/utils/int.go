@@ -1,5 +1,7 @@
 package utils
 
+import "math/rand"
+
 // UniqueIntSlice 删除重复的整数
 func UniqueIntSlice(slice []int) []int {
 	uniqueSlice := make([]int, 0, len(slice))
@@ -24,4 +26,12 @@ func UniqueInt64Slice(slice []int64) []int64 {
 		}
 	}
 	return uniqueSlice
+}
+
+// RandomInt 生成指定范围内的随机整数 [min, max)
+func RandomInt(min, max int) int {
+	if min >= max {
+		return min
+	}
+	return min + rand.Intn(max-min)
 }
