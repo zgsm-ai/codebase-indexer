@@ -166,9 +166,31 @@ func main() {
 	codegraphProcessor := service.NewCodegraphProcessor(workspaceReader, indexer, workspaceRepo, eventRepo, appLogger)
 
 	//TODO get from config
-	apiKey := config.GetClientConfig().Deepwiki.ApiKey
-	baseUrl := config.GetClientConfig().Deepwiki.BaseURL
-	model := config.GetClientConfig().Deepwiki.Model
+	// 同步加载一次远程客户端配置， 最大重试 5 次，间隔1s， 假设一定能成功，失败打印error 然后继续。
+	maxRetries := 5
+	retryDelay := time.Second
+
+	var remoteClientConfig config.ClientConfig
+	var remoteClientConfigErr error
+
+	for i := 0; i < maxRetries; i++ {
+		remoteClientConfig, remoteClientConfigErr = syncRepo.GetClientConfig()
+		if remoteClientConfigErr == nil {
+			config.SetClientConfig(remoteClientConfig)
+			break
+		}
+
+		if i < maxRetries-1 {
+			appLogger.Error("failed to fetch client config (attempt %d/%d): %v, retrying in %v...", i+1, maxRetries, remoteClientConfigErr, retryDelay)
+			time.Sleep(retryDelay)
+		} else {
+			appLogger.Error("failed to fetch client config after %d attempts: %v, continuing with default config", maxRetries, remoteClientConfigErr)
+		}
+	}
+	deepwikiConfig := config.GetClientConfig().Deepwiki
+	apiKey := deepwikiConfig.ApiKey
+	baseUrl := deepwikiConfig.BaseURL
+	model := deepwikiConfig.Model
 	if apiKey == types.EmptyString {
 		apiKey = os.Getenv("API_KEY")
 	}
