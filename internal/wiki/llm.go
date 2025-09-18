@@ -11,6 +11,9 @@ import (
 	"time"
 )
 
+const defaultMaxRetries = 10
+const defaultRetryInterval = 2 * time.Second
+
 // ChatCompletionRequest 聊天完成请求
 type ChatCompletionRequest struct {
 	Model       string    `json:"model"`
@@ -97,7 +100,7 @@ func NewLLMClientWithConfig(apiKey, baseURL, model string, config *SimpleConfig,
 
 // GenerateContent 生成内容
 func (c *OpenAIClient) GenerateContent(ctx context.Context, prompt string, maxTokens int, temperature float64) (string, error) {
-	return c.GenerateContentWithRetry(ctx, prompt, maxTokens, temperature, 10, 2*time.Second)
+	return c.GenerateContentWithRetry(ctx, prompt, maxTokens, temperature, defaultMaxRetries, defaultRetryInterval)
 }
 
 // GenerateContentWithRetry 带重试机制的内容生成

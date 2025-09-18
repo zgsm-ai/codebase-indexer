@@ -151,7 +151,7 @@ func (c *WikiProcessor) ProcessOpenWorkspaceEvent(ctx context.Context, event *mo
 			c.logger.Error("wiki %s generate err: %w", event.WorkspacePath, err)
 			errs = append(errs, err)
 		} else {
-			wikiPath := filepath.Join(".costrict", "wiki")
+			wikiPath := filepath.Join(event.WorkspacePath, ".costrict", "wiki")
 			c.logger.Info("wiki %s generate successfully, start to export to path %s", event.WorkspacePath, wikiPath)
 			// 导出到workspace的输出目录
 			if err = c.wiki.ExportWiki(event.WorkspacePath, wikiPath, "markdown", "multi", ""); err != nil {
@@ -206,7 +206,7 @@ func (c *WikiProcessor) ProcessEvents(ctx context.Context, workspacePaths []stri
 			WorkspacePath: workspacePath,
 		})
 		if err != nil {
-			c.logger.Error("failed to process open_workspace event for codegraph: %v", err)
+			c.logger.Error("failed to process open_workspace event for wiki: %v", err)
 			continue
 		}
 		c.logger.Info("wiki process open_workspace event successfully: %s", workspacePath)

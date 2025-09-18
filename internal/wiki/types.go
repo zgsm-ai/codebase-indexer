@@ -96,8 +96,7 @@ type GenerateCodeRulesStructPromptData struct {
 	OutputLanguage string
 	PageCount      string
 	// 简化的项目信息
-	ProjectName    string              // 项目名称
-	KeyDirectories map[string][]string // 关键目录结构
+	ProjectName string // 项目名称
 }
 
 // GenerateCodeRulesPromptData 包含生成代码规则页面所需的数据 - 超增强版
