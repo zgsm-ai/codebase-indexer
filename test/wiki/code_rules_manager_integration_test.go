@@ -70,28 +70,32 @@ func TestCodeRulesManagerExportCodeRulesIntegration(t *testing.T) {
 
 	// 测试单文件Markdown导出
 	t.Log("Testing single file markdown export")
-	err = manager.ExportCodeRules(repoPath, outputDir, "markdown", "single", "")
+
+	err = manager.ExportCodeRules(repoPath, wiki.ExportOptions{OutputPath: outputDir, Format: "markdown", MarkdownMode: "single"})
 	if err != nil {
 		t.Fatalf("Failed to export single Markdown: %v", err)
 	}
 
 	// 测试多文件Markdown导出
 	t.Log("Testing multi file markdown export")
-	err = manager.ExportCodeRules(repoPath, multiOutputDir, "markdown", "multi", "")
+
+	err = manager.ExportCodeRules(repoPath, wiki.ExportOptions{OutputPath: multiOutputDir, Format: "markdown", MarkdownMode: "multi"})
 	if err != nil {
 		t.Fatalf("Failed to export multi Markdown: %v", err)
 	}
 
 	// 测试JSON导出
 	t.Log("Testing JSON export")
-	err = manager.ExportCodeRules(repoPath, outputDir, "json", "single", "")
+
+	err = manager.ExportCodeRules(repoPath, wiki.ExportOptions{OutputPath: outputDir, Format: "json", MarkdownMode: "single"})
 	if err != nil {
 		t.Fatalf("Failed to export JSON: %v", err)
 	}
 
 	// 测试不支持的格式
 	t.Log("Testing unsupported format")
-	err = manager.ExportCodeRules(repoPath, outputDir, "unsupported", "", "")
+
+	err = manager.ExportCodeRules(repoPath, wiki.ExportOptions{OutputPath: outputDir, Format: "unsupported", MarkdownMode: ""})
 	if err == nil {
 		t.Error("Should return unsupported format error")
 	}

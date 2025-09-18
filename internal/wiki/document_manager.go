@@ -36,7 +36,7 @@ func NewDocumentManagerWithConfig(config *SimpleConfig, logger logger.Logger) (*
 	return &DocumentManager{
 		factory:  factory,
 		exporter: NewExporter(),
-		store:    NewEnhancedFileStore(config.StoreBasePath),
+		store:    NewFileStore(config.StoreBasePath),
 		logger:   logger,
 		config:   config,
 	}, nil
@@ -84,7 +84,7 @@ func (dm *DocumentManager) GenerateDocument(ctx context.Context, docType Documen
 	return docStructure, nil
 }
 
-// GenerateWiki 生成Wiki文档（兼容旧接口）
+// GenerateWiki 生成Wiki文档
 // repoPath: 本地仓库路径
 // 返回: WikiStructure和错误信息
 func (dm *DocumentManager) GenerateWiki(ctx context.Context, repoPath string) (*WikiStructure, error) {
@@ -110,9 +110,9 @@ func (dm *DocumentManager) GenerateCodeRules(ctx context.Context, repoPath strin
 // outputPath: 输出路径
 // format: 导出格式 ("markdown" 或 "json")
 // docType: 文档类型
-// mode: 导出模式，仅对 markdown 格式有效 ("single" 或 "multi")
+// ExportMode: 导出模式，仅对 markdown 格式有效 ("single" 或 "multi")
 // 返回: 错误信息
-func (dm *DocumentManager) ExportDocument(repoPath, outputPath, format string, docType DocumentType, mode string, customFilename string) error {
+func (dm *DocumentManager) ExportDocument(repoPath string, docType DocumentType, options ExportOptions) error {
 	// 从 store 中加载文档结构
 	if dm.store == nil {
 		return fmt.Errorf("store is not initialized")
@@ -130,18 +130,18 @@ func (dm *DocumentManager) ExportDocument(repoPath, outputPath, format string, d
 	dm.logger.Info("Exporting %s document for repository: %s - %d pages", docType, repoPath, len(docStructure.Pages))
 
 	// 确定 markdown 导出模式，默认为 single
-	markdownMode := "single"
-	if len(mode) > 0 && mode != "" {
-		markdownMode = mode
+	markdownMode := options.MarkdownMode
+	if markdownMode != "" {
+		markdownMode = SingleMode
 	}
 
-	switch format {
-	case "markdown":
-		return dm.exporter.ExportMarkdown(dm.convertToWikiStructure(docStructure), outputPath, markdownMode, customFilename)
-	case "json":
-		return dm.exporter.ExportJSON(dm.convertToWikiStructure(docStructure), outputPath)
+	switch options.Format {
+	case MarkdownFormat:
+		return dm.exporter.ExportMarkdown(dm.convertToWikiStructure(docStructure), options)
+	case JSONFormat:
+		return dm.exporter.ExportJSON(dm.convertToWikiStructure(docStructure), options)
 	default:
-		return fmt.Errorf("unsupported export format: %s", format)
+		return fmt.Errorf("unsupported export format: %s", options.Format)
 	}
 }
 
@@ -149,20 +149,20 @@ func (dm *DocumentManager) ExportDocument(repoPath, outputPath, format string, d
 // repoPath: 本地仓库路径
 // outputPath: 输出路径
 // format: 导出格式 ("markdown" 或 "json")
-// mode: 导出模式，仅对 markdown 格式有效 ("single" 或 "multi")
+// ExportMode: 导出模式，仅对 markdown 格式有效 ("single" 或 "multi")
 // 返回: 错误信息
-func (dm *DocumentManager) ExportWiki(repoPath, outputPath, format string, mode string, customFileName string) error {
-	return dm.ExportDocument(repoPath, outputPath, format, DocTypeWiki, mode, customFileName)
+func (dm *DocumentManager) ExportWiki(repoPath string, options ExportOptions) error {
+	return dm.ExportDocument(repoPath, DocTypeWiki, options)
 }
 
 // ExportCodeRules 导出代码规则文档
 // repoPath: 本地仓库路径
 // outputPath: 输出路径
 // format: 导出格式 ("markdown" 或 "json")
-// mode: 导出模式，仅对 markdown 格式有效 ("single" 或 "multi")
+// ExportMode: 导出模式，仅对 markdown 格式有效 ("single" 或 "multi")
 // 返回: 错误信息
-func (dm *DocumentManager) ExportCodeRules(repoPath, outputPath, format string, mode string, customFilename string) error {
-	return dm.ExportDocument(repoPath, outputPath, format, DocTypeCodeRules, mode, customFilename)
+func (dm *DocumentManager) ExportCodeRules(repoPath string, options ExportOptions) error {
+	return dm.ExportDocument(repoPath, DocTypeCodeRules, options)
 }
 
 // DeleteDocument 删除文档缓存

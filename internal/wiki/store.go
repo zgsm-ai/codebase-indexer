@@ -21,18 +21,6 @@ type DocumentStore interface {
 
 	// DocumentExists 检查文档文件是否存在
 	DocumentExists(repoPath string, docType string) bool
-
-	// SaveWiki 保存Wiki到文件（兼容旧接口）
-	SaveWiki(repoPath string, wikiStructure *WikiStructure) error
-
-	// LoadWiki 从文件加载Wiki（兼容旧接口）
-	LoadWiki(repoPath string) (*WikiStructure, error)
-
-	// DeleteWiki 删除Wiki文件（兼容旧接口）
-	DeleteWiki(repoPath string) error
-
-	// WikiExists 检查Wiki文件是否存在（兼容旧接口）
-	WikiExists(repoPath string) bool
 }
 
 // localFileStore 增强的文件存储实现，支持多种文档类型
@@ -40,8 +28,8 @@ type localFileStore struct {
 	basePath string // 基础路径，用于存储文档文件
 }
 
-// NewEnhancedFileStore 创建增强的文件存储管理器
-func NewEnhancedFileStore(basePath string) DocumentStore {
+// NewFileStore 创建增强的文件存储管理器
+func NewFileStore(basePath string) DocumentStore {
 	if basePath == "" {
 		// 默认使用当前目录下的 .documents 文件夹
 		basePath = ".documents"
@@ -138,118 +126,4 @@ func (s *localFileStore) DocumentExists(repoPath string, docType string) bool {
 	// 检查文件是否存在
 	_, err := os.Stat(filePath)
 	return err == nil
-}
-
-// SaveWiki 保存Wiki到JSON文件（兼容旧接口）
-func (s *localFileStore) SaveWiki(repoPath string, wikiStructure *WikiStructure) error {
-	// 转换为DocumentStructure
-	docStructure := s.convertWikiToDocument(wikiStructure)
-	return s.SaveDocument(repoPath, docStructure, "wiki")
-}
-
-// LoadWiki 从JSON文件加载Wiki（兼容旧接口）
-func (s *localFileStore) LoadWiki(repoPath string) (*WikiStructure, error) {
-	docStructure, err := s.LoadDocument(repoPath, "wiki")
-	if err != nil {
-		return nil, err
-	}
-	if docStructure == nil {
-		return nil, nil
-	}
-	return s.convertDocumentToWiki(docStructure), nil
-}
-
-// DeleteWiki 删除Wiki文件（兼容旧接口）
-func (s *localFileStore) DeleteWiki(repoPath string) error {
-	return s.DeleteDocument(repoPath, "wiki")
-}
-
-// WikiExists 检查Wiki文件是否存在（兼容旧接口）
-func (s *localFileStore) WikiExists(repoPath string) bool {
-	return s.DocumentExists(repoPath, "wiki")
-}
-
-// convertWikiToDocument 将WikiStructure转换为DocumentStructure
-func (s *localFileStore) convertWikiToDocument(wikiStructure *WikiStructure) *DocumentStructure {
-	if wikiStructure == nil {
-		return nil
-	}
-
-	// 转换页面
-	docPages := make([]DocumentPage, len(wikiStructure.Pages))
-	for i, page := range wikiStructure.Pages {
-		docPages[i] = DocumentPage{
-			ID:           page.ID,
-			Title:        page.Title,
-			Content:      page.Content,
-			FilePaths:    page.FilePaths,
-			Importance:   page.Importance,
-			RelatedPages: page.RelatedPages,
-			ParentID:     page.ParentID,
-			Metadata:     make(map[string]interface{}),
-		}
-	}
-
-	// 转换章节
-	docSections := make([]DocumentSection, len(wikiStructure.Sections))
-	for i, section := range wikiStructure.Sections {
-		docSections[i] = DocumentSection{
-			ID:          section.ID,
-			Title:       section.Title,
-			Pages:       section.Pages,
-			Subsections: section.Subsections,
-			Metadata:    make(map[string]interface{}),
-		}
-	}
-
-	return &DocumentStructure{
-		ID:           wikiStructure.ID,
-		Title:        wikiStructure.Title,
-		Description:  wikiStructure.Description,
-		Pages:        docPages,
-		Sections:     docSections,
-		RootSections: wikiStructure.RootSections,
-		Metadata:     make(map[string]interface{}),
-	}
-}
-
-// convertDocumentToWiki 将DocumentStructure转换为WikiStructure
-func (s *localFileStore) convertDocumentToWiki(docStructure *DocumentStructure) *WikiStructure {
-	if docStructure == nil {
-		return nil
-	}
-
-	// 转换页面
-	wikiPages := make([]WikiPage, len(docStructure.Pages))
-	for i, page := range docStructure.Pages {
-		wikiPages[i] = WikiPage{
-			ID:           page.ID,
-			Title:        page.Title,
-			Content:      page.Content,
-			FilePaths:    page.FilePaths,
-			Importance:   page.Importance,
-			RelatedPages: page.RelatedPages,
-			ParentID:     page.ParentID,
-		}
-	}
-
-	// 转换章节
-	wikiSections := make([]WikiSection, len(docStructure.Sections))
-	for i, section := range docStructure.Sections {
-		wikiSections[i] = WikiSection{
-			ID:          section.ID,
-			Title:       section.Title,
-			Pages:       section.Pages,
-			Subsections: section.Subsections,
-		}
-	}
-
-	return &WikiStructure{
-		ID:           docStructure.ID,
-		Title:        docStructure.Title,
-		Description:  docStructure.Description,
-		Pages:        wikiPages,
-		Sections:     wikiSections,
-		RootSections: docStructure.RootSections,
-	}
 }

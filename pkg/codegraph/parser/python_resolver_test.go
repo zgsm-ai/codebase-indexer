@@ -265,7 +265,7 @@ func TestPythonResolver_ResolveClass(t *testing.T) {
 				{"User", []string{"Dict", "str", "User"}},      // metaclass=Dict[str, User]，不是继承
 				{"Product", []string{"List", "Product"}},       // metaclass=List[Product]
 				{"Order", []string{"Union", "TypeA", "TypeB"}}, // metaclass=Union[TypeA, TypeB]
-				{"Model", []string{"Model"}},                   // metaclass=django.db.models.Model
+				{"MarkdownMode", []string{"MarkdownMode"}},     // metaclass=django.db.models.MarkdownMode
 				{"Atest", []string{"Foo", "Foo1"}},             // metaclass=mylib.utils.Foo[mylib.utils.Foo1]
 				{"Btest", []string{"Foo", "Foo1", "User"}},
 				{"Ctest", []string{"Foo", "User"}},

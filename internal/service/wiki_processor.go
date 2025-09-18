@@ -132,7 +132,11 @@ func (c *WikiProcessor) ProcessOpenWorkspaceEvent(ctx context.Context, event *mo
 			codeRulesPath := filepath.Join(event.WorkspacePath, ".roo", "rules-code")
 			c.logger.Info("wiki open_workspace event, %s code rules generated successfully, start to export to %s",
 				event.WorkspacePath, codeRulesPath)
-			if err := c.wiki.ExportCodeRules(event.WorkspacePath, codeRulesPath, "markdown", "single", "generated-rules.md"); err != nil {
+
+			if err := c.wiki.ExportCodeRules(event.WorkspacePath, wiki.ExportOptions{OutputPath: codeRulesPath,
+				Format: wiki.MarkdownFormat, MarkdownMode: wiki.SingleMode, SkipTableOfContents: true,
+				CustomFileName: "generated-rules.md",
+			}); err != nil {
 				c.logger.Error("failed to export code rules for wiki: %v", err)
 				errs = append(errs, err)
 			} else {
@@ -154,7 +158,8 @@ func (c *WikiProcessor) ProcessOpenWorkspaceEvent(ctx context.Context, event *mo
 			wikiPath := filepath.Join(event.WorkspacePath, ".costrict", "wiki")
 			c.logger.Info("wiki %s generate successfully, start to export to path %s", event.WorkspacePath, wikiPath)
 			// 导出到workspace的输出目录
-			if err = c.wiki.ExportWiki(event.WorkspacePath, wikiPath, "markdown", "multi", ""); err != nil {
+			if err = c.wiki.ExportWiki(event.WorkspacePath, wiki.ExportOptions{OutputPath: wikiPath,
+				Format: wiki.MarkdownFormat, MarkdownMode: wiki.MultiMode}); err != nil {
 				c.logger.Error("export wiki for workspace %s err:%w", event.WorkspacePath, err)
 				errs = append(errs, err)
 			} else {

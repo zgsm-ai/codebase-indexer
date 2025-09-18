@@ -166,58 +166,6 @@ func (p *Processor) shouldIncludeFile(filePath string) bool {
 	return true
 }
 
-// readFileContent 读取文件内容
-func (p *Processor) readFileContent(filePath string) (*FileContent, error) {
-	// 获取文件信息
-	info, err := os.Stat(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get file info: %w", err)
-	}
-
-	// 检查文件大小 - 使用配置中的限制
-	if info.Size() > p.config.MaxFileSize {
-		return nil, fmt.Errorf("file size %d exceeds maximum limit %d", info.Size(), p.config.MaxFileSize)
-	}
-
-	// 读取文件内容
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	// 检测是否为二进制文件
-	isBinary := p.isBinaryFile(data)
-
-	var content string
-	var encoding string
-
-	if isBinary {
-		content = "[Binary file content not displayed]"
-		encoding = "binary"
-	} else {
-		content = string(data)
-		encoding = "utf-8"
-	}
-
-	// 创建文件信息
-	fileInfo := &FileInfo{
-		Path:      filePath,
-		Name:      info.Name(),
-		Size:      info.Size(),
-		Extension: strings.TrimPrefix(filepath.Ext(info.Name()), "."),
-		Language:  p.detectLanguage(filePath),
-		IsBinary:  isBinary,
-		Metadata:  make(map[string]string),
-	}
-
-	return &FileContent{
-		Info:     fileInfo,
-		Content:  content,
-		Encoding: encoding,
-		Size:     int64(len(content)),
-	}, nil
-}
-
 // isBinaryFile 检测是否为二进制文件
 func (p *Processor) isBinaryFile(data []byte) bool {
 	// 简单的二进制文件检测：检查是否包含null字节
@@ -365,6 +313,9 @@ func (p *Processor) readFileContentFromPath(filePath string) (*FileContent, erro
 	info, err := os.Stat(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get file info: %w", err)
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("file is a directory")
 	}
 
 	// 检查文件大小 - 使用配置中的限制

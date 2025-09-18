@@ -512,7 +512,7 @@ func TestIsServiceUnavailableError(t *testing.T) {
 
 // 	// 创建multipart表单数据
 // 	formData := &MultipartFormData{
-// 		Files: map[string]*MultipartFile{
+// 		FileMeta: map[string]*MultipartFile{
 // 			"file1": {
 // 				FileName: "test.txt",
 // 				Reader:   strings.NewReader("test file content"),

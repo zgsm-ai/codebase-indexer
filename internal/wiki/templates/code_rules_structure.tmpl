@@ -71,7 +71,7 @@
 
 使用以下XML格式返回您的分析：
 
-<code_rules_structure>
+<document_structure>
   <title>[项目名] 编码规范</title>
   <description>[基于实际代码结构的编码规则描述]</description>
   <categories>
@@ -98,14 +98,14 @@
     </page>
     <!-- 根据需要添加更多页面 -->
   </pages>
-</code_rules_structure>
+</document_structure>
 
 重要格式说明：
 - 只返回上面指定的有效XML结构
 - 不要将XML包装在markdown代码块中
 - 不要在XML之前或之后包含任何解释文本
 - 确保XML格式正确且有效
-- 直接以<code_rules_structure>开始，以</code_rules_structure>结束
+- 直接以<document_structure>开始，以</document_structure>结束
 
 重要：
 1. 创建{{.PageCount}}个页面，为这个仓库制作编码规则文档

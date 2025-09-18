@@ -11,6 +11,16 @@ import (
 //go:embed templates/*.tmpl
 var promptTemplateFS embed.FS
 
+// TemplateType 模板类型
+type TemplateType string
+
+const (
+	TemplateTypeCodeRulesPage      TemplateType = "code_rules_page"
+	TemplateTypeCodeRulesStructure TemplateType = "code_rules_structure"
+	TemplateTypeWikiPage           TemplateType = "wiki_page"
+	TemplateTypeWikiStructure      TemplateType = "wiki_structure"
+)
+
 // languageMap 定义语言代码到显示名称的映射
 var languageMap = map[string]string{
 	"en":    "English",
@@ -51,8 +61,8 @@ func (pm *PromptManager) loadTemplate(name string) (string, error) {
 	return string(file), err
 }
 
-// GetPrompt 获取Wiki生成提示词，支持模式选择
-func (pm *PromptManager) GetPrompt(data any, promptName string) (string, error) {
+// getPrompt 获取Wiki生成提示词，支持模式选择
+func (pm *PromptManager) getPrompt(data any, promptName string) (string, error) {
 	// 如果未指定模式或模式不存在，使用默认模式
 	templateContent, err := pm.loadTemplate(promptName)
 	if err != nil {
@@ -61,6 +71,33 @@ func (pm *PromptManager) GetPrompt(data any, promptName string) (string, error) 
 
 	// 解析并执行模板
 	return pm.executeTemplate(data, promptName, templateContent)
+}
+
+func (pm *PromptManager) getStructurePrompt(data any, documentType DocumentType) (string, error) {
+	var templateName string
+	switch documentType {
+	case DocTypeWiki:
+		templateName = string(TemplateTypeWikiStructure)
+	case DocTypeCodeRules:
+		templateName = string(TemplateTypeCodeRulesStructure)
+	default:
+		return "", fmt.Errorf("unknown document type: %s", documentType)
+	}
+	return pm.getPrompt(data, templateName)
+}
+
+func (pm *PromptManager) getPagePrompt(data any, documentType DocumentType) (string, error) {
+	var templateName string
+	switch documentType {
+	case DocTypeWiki:
+		templateName = string(TemplateTypeWikiPage)
+	case DocTypeCodeRules:
+		templateName = string(TemplateTypeCodeRulesPage)
+	default:
+		return "", fmt.Errorf("unknown document type: %s", documentType)
+	}
+
+	return pm.getPrompt(data, templateName)
 }
 
 // executeTemplate 执行模板并返回结果

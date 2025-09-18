@@ -7,6 +7,41 @@ import (
 	"time"
 )
 
+type ProgressCallBack func(logger logger.Logger, progress float64, stage, message string)
+
+// DocumentStructure 通用文档结构
+type DocumentStructure struct {
+	ID           string
+	Title        string
+	Description  string
+	Pages        []DocumentPage
+	Sections     []DocumentSection
+	RootSections []string
+	Metadata     map[string]interface{} // 扩展元数据
+}
+
+// DocumentPage 文档页面
+type DocumentPage struct {
+	ID           string
+	Title        string
+	Content      string
+	FilePaths    []string
+	Importance   string
+	RelatedPages []string
+	ParentID     string
+	Metadata     map[string]interface{} // 扩展元数据
+	Description  string
+}
+
+// DocumentSection 文档章节
+type DocumentSection struct {
+	ID          string
+	Title       string
+	Pages       []string
+	Subsections []string
+	Metadata    map[string]interface{} // 扩展元数据
+}
+
 // WikiSection Wiki章节 - 与参考实现保持一致
 type WikiSection struct {
 	ID          string   `json:"id"`
@@ -68,29 +103,16 @@ type FileContent struct {
 	Size     int64     `json:"size"`
 }
 
-// RepoInfo 仓库信息 - 简化版本
+// RepoInfo 仓库信息
 type RepoInfo struct {
-	LocalPath string `json:"local_path"`
+	Path          string
+	FileMeta      []*FileMeta
+	FileTree      string
+	ReadmeContent string
 }
 
-// GenerateWikiPromptData 包含生成Wiki提示词所需的数据
-type GenerateWikiPromptData struct {
-	PageTitle      string
-	FileLinks      string
-	OutputLanguage string
-}
-
-// GenerateWikiStructPromptData 包含生成Wiki结构所需的数据
-type GenerateWikiStructPromptData struct {
-	FileTree       string
-	ReadmeContent  string
-	OutputLanguage string
-	PageCount      string
-	WikiType       string
-}
-
-// GenerateCodeRulesStructPromptData 包含生成代码规则结构所需的数据 - 简化版
-type GenerateCodeRulesStructPromptData struct {
+// StructPromptData 包含生成代码规则结构所需的数据 - 简化版
+type StructPromptData struct {
 	FileTree       string
 	ReadmeContent  string
 	OutputLanguage string
@@ -99,29 +121,17 @@ type GenerateCodeRulesStructPromptData struct {
 	ProjectName string // 项目名称
 }
 
-// GenerateCodeRulesPromptData 包含生成代码规则页面所需的数据 - 超增强版
-type GenerateCodeRulesPromptData struct {
+// PagePromptData 包含生成代码规则页面所需的数据 - 超增强版
+type PagePromptData struct {
 	PageTitle      string
 	FileLinks      string
 	OutputLanguage string
 	GuidelineCount string
 	FileTree       string
 	ReadmeContent  string
-	FileContents   string // 相关文件的实际内容
-	// 超丰富的分析维度
-	BusinessContext    string   // 业务上下文
-	RelatedFiles       []string // 相关文件列表
-	CodePatterns       []string // 代码模式
-	ConfigurationFiles []string // 配置文件
-	TestFiles          []string // 测试文件
-	RuntimePatterns    []string // 运行时行为模式
-	BusinessSemantics  []string // 业务语义模式
-	CodeTemplates      []string // 代码模板模式
-	DependencyNetwork  []string // 依赖网络关系
+	FileContents   string   // 相关文件的实际内容
+	RelatedFiles   []string // 相关文件列表
 }
-
-// ProgressCallback 进度回调函数类型
-type ProgressCallback func(logger logger.Logger, progress float64, stage, message string)
 
 // SimpleConfig 简化的配置结构
 type SimpleConfig struct {
@@ -319,8 +329,8 @@ func (ps *PerformanceStats) String() string {
 		ps.StageCount)
 }
 
-// LogProgressCallback 默认的日志进度回调函数
-func LogProgressCallback(logger logger.Logger, progress float64, stage, message string) {
+// logProgress 默认的日志进度回调函数
+func logProgress(logger logger.Logger, progress float64, stage, message string) {
 	switch stage {
 	case "file_processing":
 		logger.Info("File processing progress: %.1f%% - %s", progress*100, message)
@@ -333,7 +343,7 @@ func LogProgressCallback(logger logger.Logger, progress float64, stage, message 
 	case "content_generation":
 		logger.Info("Content generation progress: %.1f%% - %s", progress*100, message)
 	case "complete":
-		logger.Info("Wiki generation completed: %.1f%% - %s", progress*100, message)
+		logger.Info("document generation completed: %.1f%% - %s", progress*100, message)
 	case "performance_stats":
 		logger.Info("=== Performance Statistics Report ===")
 		logger.Info("%s", message)

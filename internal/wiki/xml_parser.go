@@ -1,21 +1,12 @@
 package wiki
 
 import (
+	"codebase-indexer/pkg/codegraph/types"
 	"fmt"
 	"regexp"
 	"strings"
 
 	"codebase-indexer/pkg/logger"
-)
-
-// TemplateType 模板类型
-type TemplateType string
-
-const (
-	TemplateTypeCodeRulesPage      TemplateType = "code_rules_page"
-	TemplateTypeCodeRulesStructure TemplateType = "code_rules_structure"
-	TemplateTypeWikiPage           TemplateType = "wiki_page"
-	TemplateTypeWikiStructure      TemplateType = "wiki_structure"
 )
 
 // XMLParser XML解析器 - 简化版本，只处理结构模板
@@ -38,51 +29,17 @@ func (p *XMLParser) ExtractXMLContent(content string) string {
 	return strings.TrimSpace(content)
 }
 
-// ParseCodeRulesStructure 解析代码规则结构XML
-func (p *XMLParser) ParseCodeRulesStructure(xmlText string) (*DocumentStructure, error) {
+// ParseDocumentStructure 解析Wiki结构XML
+func (p *XMLParser) ParseDocumentStructure(xmlText string) (*DocumentStructure, error) {
 	cleanedXML := p.ExtractXMLContent(xmlText)
 
 	// 提取根元素
-	xmlMatch := regexp.MustCompile(`<code_rules_structure>[\s\S]*?</code_rules_structure>`).FindString(cleanedXML)
+	xmlMatch := regexp.MustCompile(`<document_structure>[\s\S]*?</document_structure>`).FindString(cleanedXML)
 	if xmlMatch == "" {
-		return nil, fmt.Errorf("no valid code_rules_structure XML found")
+		return nil, fmt.Errorf("no valid document_structure XML found")
 	}
 
 	docStructure := &DocumentStructure{
-		ID:       "code_rules",
-		Metadata: make(map[string]interface{}),
-		Pages:    []DocumentPage{},
-		Sections: []DocumentSection{},
-	}
-
-	// 提取基本信息
-	docStructure.Title = p.extractField(xmlMatch, "title")
-	docStructure.Description = p.extractField(xmlMatch, "description")
-
-	// 解析页面
-	pageMatches := regexp.MustCompile(`<page[^>]*>[\s\S]*?</page>`).FindAllString(xmlMatch, -1)
-	for _, pageMatch := range pageMatches {
-		page := p.parsePageXML(pageMatch)
-		if page != nil {
-			docStructure.Pages = append(docStructure.Pages, *page)
-		}
-	}
-
-	return docStructure, nil
-}
-
-// ParseWikiStructure 解析Wiki结构XML
-func (p *XMLParser) ParseWikiStructure(xmlText string) (*DocumentStructure, error) {
-	cleanedXML := p.ExtractXMLContent(xmlText)
-
-	// 提取根元素
-	xmlMatch := regexp.MustCompile(`<wiki_structure>[\s\S]*?</wiki_structure>`).FindString(cleanedXML)
-	if xmlMatch == "" {
-		return nil, fmt.Errorf("no valid wiki_structure XML found")
-	}
-
-	docStructure := &DocumentStructure{
-		ID:           "wiki",
 		Pages:        []DocumentPage{},
 		Sections:     []DocumentSection{},
 		RootSections: []string{},
@@ -189,17 +146,5 @@ func (p *XMLParser) extractAttribute(xmlText, tagName, attrName string) string {
 	if match := regexp.MustCompile(pattern).FindStringSubmatch(xmlText); len(match) > 1 {
 		return strings.TrimSpace(match[1])
 	}
-	return ""
-}
-
-// GetTemplateTypeFromDocumentType 根据文档类型获取模板类型
-func GetTemplateTypeFromDocumentType(docType DocumentType) TemplateType {
-	switch docType {
-	case DocTypeCodeRules:
-		return TemplateTypeCodeRulesStructure
-	case DocTypeWiki:
-		return TemplateTypeWikiStructure
-	default:
-		return TemplateTypeCodeRulesStructure
-	}
+	return types.EmptyString
 }

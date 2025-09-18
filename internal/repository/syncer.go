@@ -59,12 +59,12 @@ func (hs *HTTPSync) calculateTimeout(fileSize int64) time.Duration {
 	fileSizeMB := float64(fileSize) / (1024 * 1024)
 	baseTimeout := utils.BaseWriteTimeoutSeconds * time.Second
 
-	// Files ≤5MB use fixed 60s timeout
+	// FileMeta ≤5MB use fixed 60s timeout
 	if fileSizeMB <= 5 {
 		return baseTimeout
 	}
 
-	// Files >5MB: 60s + (file size MB - 5)*5s
+	// FileMeta >5MB: 60s + (file size MB - 5)*5s
 	totalTimeout := baseTimeout + time.Duration(fileSizeMB-5)*5*time.Second
 
 	// Maximum does not exceed 10 minutes

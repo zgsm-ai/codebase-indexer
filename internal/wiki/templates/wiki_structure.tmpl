@@ -37,24 +37,24 @@
 
 使用以下XML格式返回您的分析：
 
-<wiki_structure>
+<document_structure>
   <title>[Wiki的总体标题]</title>
   <description>[仓库的简要描述]</description>
   <sections>
-    <section id="section-1">
+    <section id="[section-id]">
       <title>[章节标题]</title>
       <pages>
-        <page_ref>page-1</page_ref>
-        <page_ref>page-2</page_ref>
+        <page_ref>[page-id]</page_ref>
+        <page_ref>[page-id]</page_ref>
       </pages>
       <subsections>
-        <section_ref>section-2</section_ref>
+        <section_ref>[section-id]</section_ref>
       </subsections>
     </section>
     <!-- 根据需要添加更多章节 -->
   </sections>
   <pages>
-    <page id="page-1">
+    <page id="[page-id]">
       <title>[页面标题]</title>
       <description>[此页面将涵盖内容的简要描述]</description>
       <importance>high|medium|low</importance>
@@ -63,10 +63,10 @@
         <!-- 根据需要添加更多文件路径 -->
       </relevant_files>
       <related_pages>
-        <related>page-2</related>
+        <related>[page-id]</related>
         <!-- 根据需要添加更多相关页面ID -->
       </related_pages>
-      <parent_section>section-1</parent_section>
+      <parent_section>[section-id]</parent_section>
     </page>
     <!-- 根据需要添加更多页面 -->
   </pages>
@@ -78,20 +78,20 @@
   <title>[Wiki的总体标题]</title>
   <description>[仓库的简要描述]</description>
   <sections>
-    <section id="section-1">
+    <section id="[section-id]">
       <title>[章节标题]</title>
       <pages>
-        <page_ref>page-1</page_ref>
-        <page_ref>page-2</page_ref>
+        <page_ref>[page-id1]</page_ref>
+        <page_ref>[page-id2]</page_ref>
       </pages>
       <subsections>
-        <section_ref>section-2</section_ref>
+        <section_ref>[section-2]</section_ref>
       </subsections>
     </section>
     <!-- 根据需要添加更多章节 -->
   </sections>
   <pages>
-    <page id="page-1">
+    <page id="[page-id]">
       <title>[页面标题]</title>
       <description>[此页面将涵盖内容的简要描述]</description>
       <importance>high|medium|low</importance>
@@ -100,24 +100,24 @@
         <!-- 根据需要添加更多文件路径 -->
       </relevant_files>
       <related_pages>
-        <related>page-2</related>
+        <related>[page-id]</related>
         <!-- 根据需要添加更多相关页面ID -->
       </related_pages>
-      <parent_section>section-1</parent_section>
+      <parent_section>[section-id]</parent_section>
     </page>
     <!-- 根据需要添加更多页面 -->
   </pages>
-</wiki_structure>
+</document_structure>
 
 重要格式说明：
 - 只返回上面指定的有效XML结构
 - 不要将XML包装在markdown代码块中
 - 不要在XML之前或之后包含任何解释文本
 - 确保XML格式正确且有效
-- 直接以<wiki_structure>开始，以</wiki_structure>结束
+- 直接以<document_structure>开始，以</document_structure>结束
 
 重要：
-1. 创建{{.PageCount}}个页面，为这个仓库制作一个{{.WikiType}} Wiki
+1. 创建{{.PageCount}}个页面，为这个仓库制作一个综合的Wiki文档
 2. 每个页面应专注于代码库的特定方面（例如，架构、关键功能、设置）
 3. relevant_files应该是仓库中实际用于生成该页面的文件
 4. 只返回具有上述结构的有效XML，不包含markdown代码块分隔符

@@ -17,27 +17,51 @@ func NewExporter() *Exporter {
 	return &Exporter{}
 }
 
+type ExportMode string
+
+const (
+	SingleMode ExportMode = "single"
+	MultiMode  ExportMode = "multi"
+)
+
+type ExportFormat string
+
+const (
+	MarkdownFormat ExportFormat = "markdown"
+	JSONFormat     ExportFormat = "json"
+)
+
+type ExportOptions struct {
+	OutputPath          string
+	MarkdownMode        ExportMode
+	Format              ExportFormat
+	CustomFileName      string
+	SkipTableOfContents bool
+}
+
 // ExportMarkdown 导出为Markdown格式，支持两种模式：
-// mode: "single" - 单个文件模式（默认）
-// mode: "multi" - 多文件/目录模式，使用 index.md 进行路径引用
+// ExportMode: "single" - 单个文件模式（默认）
+// ExportMode: "multi" - 多文件/目录模式，使用 index.md 进行路径引用
 // customFilename: 自定义文件名（可选，仅对single模式有效）
-func (e *Exporter) ExportMarkdown(wikiStructure *WikiStructure, outputPath string, mode string, customFilename string) error {
-	if mode == "multi" {
-		return e.exportMarkdownMulti(wikiStructure, outputPath)
+func (e *Exporter) ExportMarkdown(wikiStructure *WikiStructure, options ExportOptions) error {
+	if options.MarkdownMode == MultiMode {
+		return e.exportMarkdownMulti(wikiStructure, options)
 	}
 	// 默认使用单文件模式
-	return e.exportMarkdownSingle(wikiStructure, outputPath, customFilename)
+	return e.exportMarkdownSingle(wikiStructure, options)
 }
 
 // exportMarkdownSingle 单文件模式导出
-func (e *Exporter) exportMarkdownSingle(wikiStructure *WikiStructure, outputPath string, customFilename string) error {
+func (e *Exporter) exportMarkdownSingle(wikiStructure *WikiStructure, options ExportOptions) error {
+	customFilename := options.CustomFileName
+	outputPath := options.OutputPath
 	// 确保输出目录存在
 	if err := os.MkdirAll(outputPath, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	// 生成markdown内容
-	content := e.generateMarkdownExport(wikiStructure)
+	content := e.generateMarkdownExport(wikiStructure, options)
 
 	// 确定文件名
 	var filename string
@@ -73,7 +97,8 @@ func (e *Exporter) exportMarkdownSingle(wikiStructure *WikiStructure, outputPath
 }
 
 // exportMarkdownMulti 多文件/目录模式导出
-func (e *Exporter) exportMarkdownMulti(wikiStructure *WikiStructure, outputPath string) error {
+func (e *Exporter) exportMarkdownMulti(wikiStructure *WikiStructure, options ExportOptions) error {
+	outputPath := options.OutputPath
 	// 创建主目录
 	if err := os.MkdirAll(outputPath, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
@@ -92,7 +117,7 @@ func (e *Exporter) exportMarkdownMulti(wikiStructure *WikiStructure, outputPath 
 		pageContent := e.generatePageMarkdown(page, wikiStructure)
 
 		// 使用页面ID作为文件名，确保唯一性
-		pageFilename := fmt.Sprintf("%s.md", page.ID)
+		pageFilename := fmt.Sprintf("%d、%s.md", i+1, page.Title)
 		pagePath := filepath.Join(outputPath, pageFilename)
 
 		if err := os.WriteFile(pagePath, []byte(pageContent), 0644); err != nil {
@@ -104,19 +129,21 @@ func (e *Exporter) exportMarkdownMulti(wikiStructure *WikiStructure, outputPath 
 }
 
 // generateMarkdownExport 生成Markdown导出 - 与api/api.py保持一致
-func (e *Exporter) generateMarkdownExport(wikiStructure *WikiStructure) string {
+func (e *Exporter) generateMarkdownExport(wikiStructure *WikiStructure, options ExportOptions) string {
 	var builder strings.Builder
 
 	// 开始与api/api.py保持一致的markdown导出
 	builder.WriteString(fmt.Sprintf("# %s\n\n", wikiStructure.Title))
 	builder.WriteString(fmt.Sprintf("Generated on: %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
 
-	// 添加目录
-	builder.WriteString("## Table of Contents\n\n")
-	for _, page := range wikiStructure.Pages {
-		builder.WriteString(fmt.Sprintf("- [%s](#%s)\n", page.Title, page.ID))
+	if !options.SkipTableOfContents {
+		// 添加目录
+		builder.WriteString("## Table of Contents\n\n")
+		for _, page := range wikiStructure.Pages {
+			builder.WriteString(fmt.Sprintf("- [%s](#%s)\n", page.Title, page.ID))
+		}
+		builder.WriteString("\n")
 	}
-	builder.WriteString("\n")
 
 	// 添加每个页面
 	for _, page := range wikiStructure.Pages {
@@ -174,9 +201,9 @@ func (e *Exporter) generateIndexMarkdown(wikiStructure *WikiStructure) string {
 
 	// 页面索引
 	builder.WriteString("## 页面索引\n\n")
-	for _, page := range wikiStructure.Pages {
+	for i, page := range wikiStructure.Pages {
 		// 创建指向单独页面文件的链接
-		pageFile := fmt.Sprintf("%s.md", page.ID)
+		pageFile := fmt.Sprintf("%d、%s.md", i+1, page.Title)
 		builder.WriteString(fmt.Sprintf("- [%s](%s)\n", page.Title, pageFile))
 	}
 
@@ -239,7 +266,8 @@ func (e *Exporter) generateAnchor(title string) string {
 }
 
 // ExportJSON 导出为JSON格式 - 与api/api.py保持一致
-func (e *Exporter) ExportJSON(wikiStructure *WikiStructure, outputPath string) error {
+func (e *Exporter) ExportJSON(wikiStructure *WikiStructure, options ExportOptions) error {
+	outputPath := options.OutputPath
 	// 确保输出目录存在
 	if err := os.MkdirAll(outputPath, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)

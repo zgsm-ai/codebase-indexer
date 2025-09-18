@@ -163,7 +163,7 @@ func TestScanDirectory(t *testing.T) {
 		require.NoError(t, err)
 
 		// Debug: print all files in hashTree
-		t.Logf("Files in hashTree:")
+		t.Logf("FileMeta in hashTree:")
 		for path := range hashTree {
 			t.Logf("  %s", path)
 		}

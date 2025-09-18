@@ -157,7 +157,7 @@ func (c *OpenAIClient) doGenerateContent(ctx context.Context, prompt string, max
 	startTime := time.Now()
 
 	// 添加调试日志：开始请求（单行包含所有关键参数）
-	c.logger.Debug("LLM request started - BaseURL: %s, Model: %s, MaxTokens: %d, Temperature: %.2f",
+	c.logger.Debug("LLM request started - BaseURL: %s, MarkdownMode: %s, MaxTokens: %d, Temperature: %.2f",
 		c.baseURL, c.model, maxTokens, temperature)
 
 	req := &ChatCompletionRequest{
