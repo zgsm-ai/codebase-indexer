@@ -526,24 +526,25 @@ func (h *ExtensionHandler) SwitchIndex(c *gin.Context) {
 		return
 	}
 
-	if query.Workspace == "" || query.Switch == "" {
-		h.logger.Error("invalid query parameters: %v", query)
-		c.JSON(http.StatusBadRequest, dto.IndexSwitchResponse{
-			Code:    errs.ErrBadRequest,
-			Success: false,
-			Message: "invalid query parameters",
-			Data:    false,
-		})
-		return
-	}
-
 	if query.Switch != dto.SwitchOn && query.Switch != dto.SwitchOff {
 		h.logger.Error("invalid switch status: %s", query.Switch)
 		c.JSON(http.StatusBadRequest, dto.IndexSwitchResponse{
 			Code:    errs.ErrBadRequest,
 			Success: false,
-			Message: "invalid switch status",
+			Message: fmt.Sprintf("invalid switch status: %s", query.Switch),
 			Data:    false,
+		})
+		return
+	}
+
+	// 检查workspace路径文件是否存在
+	if _, err := os.Stat(query.Workspace); os.IsNotExist(err) {
+		h.logger.Error("workspace path does not exist: %s", query.Workspace)
+		c.JSON(http.StatusBadRequest, dto.TriggerIndexResponse{
+			Code:    errs.ErrBadRequest,
+			Success: false,
+			Message: fmt.Sprintf("workspace path does not exist: %s", query.Workspace),
+			Data:    0,
 		})
 		return
 	}

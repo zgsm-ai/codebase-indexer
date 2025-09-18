@@ -181,7 +181,7 @@ func main() {
 		}
 
 		if i < maxRetries-1 {
-			appLogger.Error("failed to fetch client config (attempt %d/%d): %v, retrying in %v...", i+1, maxRetries, remoteClientConfigErr, retryDelay)
+			appLogger.Warn("failed to fetch client config (attempt %d/%d): %v, retrying in %v...", i+1, maxRetries, remoteClientConfigErr, retryDelay)
 			time.Sleep(retryDelay)
 		} else {
 			appLogger.Error("failed to fetch client config after %d attempts: %v, continuing with default config", maxRetries, remoteClientConfigErr)
@@ -215,7 +215,7 @@ func main() {
 	eventProcessorJob := job.NewEventProcessorJob(appLogger, syncRepo, embeddingProcessService, codegraphProcessor, wikiProcessor, 10*time.Second, storageManager)
 	statusCheckerJob := job.NewStatusCheckerJob(embeddingStatusService, storageManager, syncRepo, appLogger, 5*time.Second)
 	eventCleanerJob := job.NewEventCleanerJob(eventRepo, appLogger)
-	indexCleanJob := job.NewIndexCleanJob(appLogger, indexer, workspaceRepo)
+	indexCleanJob := job.NewIndexCleanJob(appLogger, indexer, workspaceRepo, storageManager, codebaseEmbeddingRepo, syncRepo, eventRepo)
 	// Initialize handler layer
 	// grpcHandler := handler.NewGRPCHandler(syncRepo, scanRepo, storageManager, schedulerService, appLogger)
 	extensionHandler := handler.NewExtensionHandler(extensionService, appLogger)
