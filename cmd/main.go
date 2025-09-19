@@ -212,8 +212,8 @@ func main() {
 
 	// Initialize job layer
 	fileScanJob := job.NewFileScanJob(fileScanService, storageManager, syncRepo, appLogger, 5*time.Minute)
-	eventProcessorJob := job.NewEventProcessorJob(appLogger, syncRepo, embeddingProcessService, codegraphProcessor, wikiProcessor, 10*time.Second, storageManager)
-	statusCheckerJob := job.NewStatusCheckerJob(embeddingStatusService, storageManager, syncRepo, appLogger, 5*time.Second)
+	eventProcessorJob := job.NewEventProcessorJob(appLogger, syncRepo, embeddingProcessService, codegraphProcessor, wikiProcessor, 15*time.Second, storageManager)
+	statusCheckerJob := job.NewStatusCheckerJob(embeddingStatusService, storageManager, syncRepo, appLogger, 10*time.Second)
 	eventCleanerJob := job.NewEventCleanerJob(eventRepo, appLogger)
 	indexCleanJob := job.NewIndexCleanJob(appLogger, indexer, workspaceRepo, storageManager, codebaseEmbeddingRepo, syncRepo, eventRepo)
 	// Initialize handler layer

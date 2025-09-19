@@ -251,13 +251,13 @@ func (ep *embeddingProcessService) processWorkspaceEvents(ctx context.Context, w
 	}
 
 	// 获取待处理的添加和修改文件事件（合并处理）
-	addModifyEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeAddFile, model.EventTypeModifyFile}, []string{workspacePath}, 100, false, targetStatuses, nil)
+	addModifyEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeAddFile, model.EventTypeModifyFile}, []string{workspacePath}, 150, false, targetStatuses, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get add/modify file events: %w", err)
 	}
 
 	// 获取待处理的重命名和删除文件事件（合并处理）
-	renameDeleteEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeRenameFile, model.EventTypeDeleteFile}, []string{workspacePath}, 100, false, targetStatuses, nil)
+	renameDeleteEvents, err := ep.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{model.EventTypeRenameFile, model.EventTypeDeleteFile}, []string{workspacePath}, 150, false, targetStatuses, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get rename/delete file events: %w", err)
 	}
