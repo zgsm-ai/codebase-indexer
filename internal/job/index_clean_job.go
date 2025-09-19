@@ -109,9 +109,11 @@ func (j *IndexCleanJob) Start(ctx context.Context) {
 		j.logger.Info("starting embedding clean job")
 		// 立即执行一次清理
 		j.cleanupInactiveWorkspaceEmbeddings(ctx)
+		// 获取随机分钟数
+		randMinute := utils.RandomInt(0, 30)
 
 		for {
-			nextRun := j.getNextRunTime()
+			nextRun := j.getNextRunTime(randMinute)
 			if nextRun.IsZero() {
 				j.logger.Error("failed to calculate next run time for embedding clean job")
 				return
@@ -278,12 +280,12 @@ func (j *IndexCleanJob) cleanupWorkspaceEvents(workspacePath string) error {
 	return nil
 }
 
-// getNextRunTime 计算下一个23:00的运行时间
-func (j *IndexCleanJob) getNextRunTime() time.Time {
+// getNextRunTime 计算下一个23:00后的随机分钟数的运行时间
+func (j *IndexCleanJob) getNextRunTime(randMinute int) time.Time {
 	now := time.Now()
 
-	// 获取今天的23:00
-	nextRun := time.Date(now.Year(), now.Month(), now.Day(), 23, 0, 0, 0, now.Location())
+	// 获取今天的23:00 加上随机分钟数
+	nextRun := time.Date(now.Year(), now.Month(), now.Day(), 23, randMinute, 0, 0, now.Location())
 
 	// 如果今天的23:00已经过了，计算明天的23:00
 	if now.After(nextRun) {

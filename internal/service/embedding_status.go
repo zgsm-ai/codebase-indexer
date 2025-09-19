@@ -190,7 +190,7 @@ func (sc *embeddingStatusService) checkWorkspaceUploadingStates(workspacePath st
 // getBuildingEventsForWorkspace 获取指定工作区的building状态events
 func (sc *embeddingStatusService) getBuildingEventsForWorkspace(workspacePath string) ([]*model.Event, error) {
 	buildingStatuses := []int{model.EmbeddingStatusBuilding}
-	events, err := sc.eventRepo.GetEventsByWorkspaceAndEmbeddingStatus(workspacePath, 50, false, buildingStatuses)
+	events, err := sc.eventRepo.GetEventsByWorkspaceAndEmbeddingStatus(workspacePath, 100, false, buildingStatuses)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get building events: %w", err)
 	}
@@ -200,7 +200,7 @@ func (sc *embeddingStatusService) getBuildingEventsForWorkspace(workspacePath st
 // getUploadingEventsForWorkspace 获取指定工作区的uploading状态events
 func (sc *embeddingStatusService) getUploadingEventsForWorkspace(workspacePath string) ([]*model.Event, error) {
 	uploadingStatuses := []int{model.EmbeddingStatusUploading}
-	events, err := sc.eventRepo.GetEventsByWorkspaceAndEmbeddingStatus(workspacePath, 50, false, uploadingStatuses)
+	events, err := sc.eventRepo.GetEventsByWorkspaceAndEmbeddingStatus(workspacePath, 500, false, uploadingStatuses)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get uploading events: %w", err)
 	}

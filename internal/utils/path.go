@@ -141,6 +141,8 @@ func GetCacheUploadTmpDir(cachePath string) (string, error) {
 	}
 
 	UploadTmpDir = tmpPath
+	// Clean up old zip files
+	CleanUploadTmpZipDir()
 
 	return tmpPath, nil
 }
@@ -243,6 +245,11 @@ func GetAuthJsonFile(rootPath string) (string, error) {
 // CleanUploadTmpDir cleans temporary upload directory
 func CleanUploadTmpDir() error {
 	return os.RemoveAll(UploadTmpDir)
+}
+
+func CleanUploadTmpZipDir() error {
+	zipDir := filepath.Join(UploadTmpDir, "zip")
+	return os.RemoveAll(zipDir)
 }
 
 // Convert Windows path to Unix path

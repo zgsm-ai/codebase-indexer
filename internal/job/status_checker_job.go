@@ -89,7 +89,8 @@ func (j *StatusCheckerJob) Start(ctx context.Context) {
 				j.logger.Error("recovered from panic in check uploading: %v", r)
 			}
 		}()
-		ticker := time.NewTicker(j.interval)
+		j.logger.Info("starting check uploading task with interval: %v", 1*time.Minute)
+		ticker := time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()
 
 		for {
