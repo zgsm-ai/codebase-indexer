@@ -108,6 +108,27 @@ func (j *StatusCheckerJob) Start(ctx context.Context) {
 			}
 		}
 	}()
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				j.logger.Error("recovered from panic in check codegraph: %v", r)
+			}
+		}()
+		j.logger.Info("starting check codegraph task with interval: %v", 1*time.Minute)
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				j.logger.Info("check codegraph task stopped")
+				return
+			case <-ticker.C:
+				j.checkCodegraphStates(ctx)
+			}
+		}
+	}()
 }
 
 // Stop 停止状态检查任务
@@ -225,5 +246,60 @@ func (j *StatusCheckerJob) checkUploadingStates(ctx context.Context) {
 	err = j.checker.CheckAllUploadingStatues(workspacePaths)
 	if err != nil {
 		j.logger.Error("failed to check uploading states: %v", err)
+	}
+}
+
+// checkCodegraphStates 检查所有codegraph状态
+func (j *StatusCheckerJob) checkCodegraphStates(ctx context.Context) {
+	// 检查上下文是否已取消
+	select {
+	case <-ctx.Done():
+		j.logger.Info("context cancelled, skipping status check")
+		return
+	default:
+		// 继续执行
+	}
+
+	// 检查是否关闭codebase
+	codebaseEnv := j.storage.GetCodebaseEnv()
+	if codebaseEnv == nil {
+		codebaseEnv = &config.CodebaseEnv{
+			Switch: dto.SwitchOn,
+		}
+	}
+	if codebaseEnv.Switch == dto.SwitchOff {
+		j.logger.Info("codebase is disabled, skipping status check")
+		return
+	}
+
+	// 获取活跃工作区
+	workspaces, err := j.checker.CheckActiveWorkspaces()
+	if err != nil {
+		j.logger.Error("failed to check active workspaces: %v", err)
+		return
+	}
+
+	if len(workspaces) == 0 {
+		j.logger.Debug("no active workspaces found")
+		return
+	}
+
+	workspacePaths := make([]string, len(workspaces))
+	for i, workspace := range workspaces {
+		workspacePaths[i] = workspace.WorkspacePath
+	}
+
+	// 检查上下文是否已取消
+	select {
+	case <-ctx.Done():
+		j.logger.Info("context cancelled, skipping codegraph process")
+		return
+	default:
+		// 继续执行
+	}
+
+	err = j.checker.CheckAllCodegraphStates(workspacePaths)
+	if err != nil {
+		j.logger.Error("failed to check codegraph states: %v", err)
 	}
 }

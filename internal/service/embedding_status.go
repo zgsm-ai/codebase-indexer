@@ -21,6 +21,7 @@ type EmbeddingStatusService interface {
 	CheckActiveWorkspaces() ([]*model.Workspace, error)
 	CheckAllBuildingStates(workspacePaths []string) error
 	CheckAllUploadingStatues(workspacePaths []string) error
+	CheckAllCodegraphStates(workspacePaths []string) error
 }
 
 // embeddingStatusService 状态检查服务实现
@@ -89,6 +90,60 @@ func (sc *embeddingStatusService) CheckAllBuildingStates(workspacePaths []string
 		}
 	}
 	return nil
+}
+
+// CheckAllCodegraphStates 检查所有codegraph状态
+func (sc *embeddingStatusService) CheckAllCodegraphStates(workspacePaths []string) error {
+	// 遍历每个工作区
+	for _, workspacePath := range workspacePaths {
+		err := sc.checkWorkspaceCodegraphStates(workspacePath)
+		if err != nil {
+			sc.logger.Error("failed to check codegraph states for workspace %s: %v", workspacePath, err)
+			continue
+		}
+	}
+	return nil
+}
+
+// checkWorkspaceCodegraphStates 检查指定工作区的codegraph状态
+func (sc *embeddingStatusService) checkWorkspaceCodegraphStates(workspacePath string) error {
+	// 获取指定工作区的codegraph状态events
+	events, err := sc.getCodegraphEventsForWorkspace(workspacePath)
+	if err != nil {
+		return fmt.Errorf("failed to get codegraph events: %w", err)
+	}
+
+	if len(events) == 0 {
+		sc.logger.Debug("no codegraph events for workspace: %s", workspacePath)
+		return nil
+	}
+
+	sc.logger.Info("found %d building codegraph events for workspace: %s", len(events), workspacePath)
+
+	// 检查每个event的构建状态
+	nowTime := time.Now()
+	for _, event := range events {
+		if nowTime.Sub(event.UpdatedAt) < time.Minute*30 {
+			continue
+		}
+		updateEvent := &model.Event{ID: event.ID, CodegraphStatus: model.CodegraphStatusFailed}
+		err := sc.eventRepo.UpdateEvent(updateEvent)
+		if err != nil {
+			sc.logger.Error("failed to update event status: %v", err)
+		}
+	}
+
+	return nil
+}
+
+// getCodegraphEventsForWorkspace 获取指定工作区的codegraph状态events
+func (sc *embeddingStatusService) getCodegraphEventsForWorkspace(workspacePath string) ([]*model.Event, error) {
+	codegraphStatuses := []int{model.CodegraphStatusBuilding}
+	events, err := sc.eventRepo.GetEventsByTypeAndStatusAndWorkspaces([]string{}, []string{workspacePath}, 500, false, []int{}, codegraphStatuses)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get codegraph events: %w", err)
+	}
+	return events, nil
 }
 
 // checkWorkspaceBuildingStates 检查指定工作区的building状态
