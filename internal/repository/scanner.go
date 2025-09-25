@@ -26,7 +26,6 @@ type ScannerInterface interface {
 	SetScannerConfig(config *config.ScannerConfig)
 	GetScannerConfig() *config.ScannerConfig
 	LoadIgnoreRules(codebasePath string) *gitignore.GitIgnore
-	LoadDeepwikiIgnoreRules(codebasePath string) *gitignore.GitIgnore
 	LoadFileIgnoreRules(codebasePath string) *gitignore.GitIgnore
 	LoadFolderIgnoreRules(codebasePath string) *gitignore.GitIgnore
 	LoadIncludeFiles() []string
@@ -35,7 +34,6 @@ type ScannerInterface interface {
 	ScanDirectory(codebasePath, dirPath string) (map[string]string, error)
 	ScanFile(codebasePath, filePath string) (string, error)
 	LoadIgnoreConfig(codebasePath string) *config.IgnoreConfig
-	LoadDeepwikiIgnoreConfig(codebasePath string) *config.IgnoreConfig
 	CheckIgnoreFile(ignoreConfig *config.IgnoreConfig, codebasePath string, fileInfo *types.FileInfo) (bool, error)
 }
 
@@ -55,11 +53,10 @@ func NewFileScanner(logger logger.Logger) ScannerInterface {
 // defaultScannerConfig returns default scanner configuration
 func defaultScannerConfig() *config.ScannerConfig {
 	return &config.ScannerConfig{
-		FolderIgnorePatterns:         config.DefaultConfigScan.FolderIgnorePatterns,
-		FileIncludePatterns:          config.DefaultConfigScan.FileIncludePatterns,
-		DeepwikiFolderIgnorePatterns: config.DefaultConfigScan.DeepwikiFolderIgnorePatterns,
-		MaxFileSizeKB:                config.DefaultConfigScan.MaxFileSizeKB,
-		MaxFileCount:                 config.DefaultConfigScan.MaxFileCount,
+		FolderIgnorePatterns: config.DefaultConfigScan.FolderIgnorePatterns,
+		FileIncludePatterns:  config.DefaultConfigScan.FileIncludePatterns,
+		MaxFileSizeKB:        config.DefaultConfigScan.MaxFileSizeKB,
+		MaxFileCount:         config.DefaultConfigScan.MaxFileCount,
 	}
 }
 
@@ -75,9 +72,6 @@ func (s *FileScanner) SetScannerConfig(config *config.ScannerConfig) {
 	}
 	if len(config.FileIncludePatterns) > 0 {
 		s.scannerConfig.FileIncludePatterns = config.FileIncludePatterns
-	}
-	if len(config.DeepwikiFolderIgnorePatterns) > 0 {
-		s.scannerConfig.DeepwikiFolderIgnorePatterns = config.DeepwikiFolderIgnorePatterns
 	}
 	if config.MaxFileSizeKB > 10 && config.MaxFileSizeKB <= 20480 {
 		s.scannerConfig.MaxFileSizeKB = config.MaxFileSizeKB
@@ -99,16 +93,6 @@ func (s *FileScanner) LoadIgnoreConfig(codebasePath string) *config.IgnoreConfig
 	return &config.IgnoreConfig{
 		IgnoreRules:  s.LoadIgnoreRules(codebasePath),
 		IncludeRules: s.LoadIncludeFiles(),
-		MaxFileCount: s.scannerConfig.MaxFileCount,
-		MaxFileSize:  s.scannerConfig.MaxFileSizeKB,
-	}
-}
-
-// LoadDeepwikiIgnoreConfig 加载 deepwiki 的忽略配置
-func (s *FileScanner) LoadDeepwikiIgnoreConfig(codebasePath string) *config.IgnoreConfig {
-	return &config.IgnoreConfig{
-		IgnoreRules:  s.LoadDeepwikiIgnoreRules(codebasePath),
-		IncludeRules: []string{},
 		MaxFileCount: s.scannerConfig.MaxFileCount,
 		MaxFileSize:  s.scannerConfig.MaxFileSizeKB,
 	}
@@ -175,36 +159,6 @@ func (s *FileScanner) LoadIgnoreRules(codebasePath string) *gitignore.GitIgnore 
 	// First create ignore object with default rules
 	// fileIngoreRules := s.scannerConfig.FileIgnorePatterns
 	currentIgnoreRules := s.scannerConfig.FolderIgnorePatterns
-
-	// Read and merge .gitignore file
-	gitignoreRules := s.loadGitignore(codebasePath)
-	if len(gitignoreRules) > 0 {
-		currentIgnoreRules = append(currentIgnoreRules, gitignoreRules...)
-	}
-
-	// Read and merge .coignore file
-	coignoreRules := s.loadCoignore(codebasePath)
-	if len(coignoreRules) > 0 {
-		currentIgnoreRules = append(currentIgnoreRules, coignoreRules...)
-	}
-
-	// Remove duplicate rules
-	uniqueRules := utils.UniqueStringSlice(currentIgnoreRules)
-	// 转义
-	for i, rule := range uniqueRules {
-		// 处理 $
-		uniqueRules[i] = strings.ReplaceAll(rule, "$", `\$`)
-	}
-
-	compiledIgnore := gitignore.CompileIgnoreLines(uniqueRules...)
-
-	return compiledIgnore
-}
-
-// LoadDeepwikiIgnoreRules Load and combine default ignore rules with .gitignore rules
-func (s *FileScanner) LoadDeepwikiIgnoreRules(codebasePath string) *gitignore.GitIgnore {
-	// First create ignore object with default rules
-	currentIgnoreRules := s.scannerConfig.DeepwikiFolderIgnorePatterns
 
 	// Read and merge .gitignore file
 	gitignoreRules := s.loadGitignore(codebasePath)

@@ -177,11 +177,10 @@ func (d *Daemon) updateConfig() {
 	})
 	// Update file scanner configuration
 	d.fileScanner.SetScannerConfig(&config.ScannerConfig{
-		FolderIgnorePatterns:         newConfig.Scan.FolderIgnorePatterns,
-		FileIncludePatterns:          newConfig.Scan.FileIncludePatterns,
-		DeepwikiFolderIgnorePatterns: newConfig.Scan.DeepwikiFolderIgnorePatterns,
-		MaxFileSizeKB:                newConfig.Scan.MaxFileSizeKB,
-		MaxFileCount:                 newConfig.Scan.MaxFileCount,
+		FolderIgnorePatterns: newConfig.Scan.FolderIgnorePatterns,
+		FileIncludePatterns:  newConfig.Scan.FileIncludePatterns,
+		MaxFileSizeKB:        newConfig.Scan.MaxFileSizeKB,
+		MaxFileCount:         newConfig.Scan.MaxFileCount,
 	})
 
 	d.logger.Info("client config updated")
@@ -244,11 +243,7 @@ func configChanged(current, new config.ClientConfig) bool {
 		current.Scan.MaxFileSizeKB != new.Scan.MaxFileSizeKB ||
 		current.Scan.MaxFileCount != new.Scan.MaxFileCount ||
 		!equalIgnorePatterns(current.Scan.FolderIgnorePatterns, new.Scan.FolderIgnorePatterns) ||
-		!equalIgnorePatterns(current.Scan.FileIncludePatterns, new.Scan.FileIncludePatterns) ||
-		!equalIgnorePatterns(current.Scan.DeepwikiFolderIgnorePatterns, new.Scan.DeepwikiFolderIgnorePatterns) ||
-		current.Deepwiki.BaseURL != new.Deepwiki.BaseURL ||
-		current.Deepwiki.Model != new.Deepwiki.Model ||
-		current.Deepwiki.ApiKey != new.Deepwiki.ApiKey
+		!equalIgnorePatterns(current.Scan.FileIncludePatterns, new.Scan.FileIncludePatterns)
 }
 
 // equalIgnorePatterns compares whether ignore patterns are same

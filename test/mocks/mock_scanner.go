@@ -37,11 +37,6 @@ func (m *MockScanner) LoadFolderIgnoreRules(codebasePath string) *gitignore.GitI
 	return args.Get(0).(*gitignore.GitIgnore)
 }
 
-func (m *MockScanner) LoadDeepwikiIgnoreRules(codebasePath string) *gitignore.GitIgnore {
-	args := m.Called(codebasePath)
-	return args.Get(0).(*gitignore.GitIgnore)
-}
-
 func (m *MockScanner) LoadIncludeFiles() []string {
 	args := m.Called()
 	return args.Get(0).([]string)
@@ -98,14 +93,6 @@ func (m *MockScanner) CalculateFileChangesWithoutDelete(local, remote map[string
 }
 
 func (m *MockScanner) LoadIgnoreConfig(codebasePath string) *config.IgnoreConfig {
-	args := m.Called(codebasePath)
-	if args.Get(0) != nil {
-		return args.Get(0).(*config.IgnoreConfig)
-	}
-	return nil
-}
-
-func (m *MockScanner) LoadDeepwikiIgnoreConfig(codebasePath string) *config.IgnoreConfig {
 	args := m.Called(codebasePath)
 	if args.Get(0) != nil {
 		return args.Get(0).(*config.IgnoreConfig)

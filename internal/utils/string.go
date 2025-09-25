@@ -20,13 +20,6 @@ func GenerateEmbeddingID(path string) string {
 	return fmt.Sprintf("%s_%x_embedding", name, md5.Sum([]byte(path)))
 }
 
-// GenerateDeepwikiID 生成代码库Deepwiki唯一ID
-func GenerateDeepwikiID(path string) string {
-	name := filepath.Base(path)
-	// 使用MD5哈希生成唯一ID，结合名称和路径
-	return fmt.Sprintf("%s_%x_deepwiki", name, md5.Sum([]byte(path)))
-}
-
 // UniqueStringSlice 删除重复的字符串
 func UniqueStringSlice(slice []string) []string {
 	uniqueSlice := make([]string, 0, len(slice))

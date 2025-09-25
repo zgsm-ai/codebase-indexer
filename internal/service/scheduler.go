@@ -135,11 +135,10 @@ func (s *Scheduler) LoadConfig(ctx context.Context) {
 
 	// Update scanner configuration
 	scannerConfig := &config.ScannerConfig{
-		FolderIgnorePatterns:         clientConfig.Scan.FolderIgnorePatterns,
-		FileIncludePatterns:          clientConfig.Scan.FileIncludePatterns,
-		DeepwikiFolderIgnorePatterns: clientConfig.Scan.DeepwikiFolderIgnorePatterns,
-		MaxFileSizeKB:                clientConfig.Scan.MaxFileSizeKB,
-		MaxFileCount:                 clientConfig.Scan.MaxFileCount,
+		FolderIgnorePatterns: clientConfig.Scan.FolderIgnorePatterns,
+		FileIncludePatterns:  clientConfig.Scan.FileIncludePatterns,
+		MaxFileSizeKB:        clientConfig.Scan.MaxFileSizeKB,
+		MaxFileCount:         clientConfig.Scan.MaxFileCount,
 	}
 	s.fileScanner.SetScannerConfig(scannerConfig)
 }

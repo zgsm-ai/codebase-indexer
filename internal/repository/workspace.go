@@ -53,9 +53,8 @@ func NewWorkspaceRepository(db database.DatabaseManager, logger logger.Logger) W
 func (r *workspaceRepository) CreateWorkspace(workspace *model.Workspace) error {
 	query := `
 		INSERT INTO workspaces (workspace_name, workspace_path, active, file_num,
-			embedding_file_num, embedding_ts, codegraph_file_num, codegraph_ts,
-			deepwiki_file_num, deepwiki_ts, deepwiki_message, deepwiki_failed_file_paths)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			embedding_file_num, embedding_ts, codegraph_file_num, codegraph_ts)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.GetDB().Exec(query,
@@ -67,10 +66,6 @@ func (r *workspaceRepository) CreateWorkspace(workspace *model.Workspace) error 
 		workspace.EmbeddingTs,
 		workspace.CodegraphFileNum,
 		workspace.CodegraphTs,
-		workspace.DeepwikiFileNum,
-		workspace.DeepwikiTs,
-		workspace.DeepwikiMessage,
-		workspace.DeepwikiFailedFilePaths,
 	)
 	if err != nil {
 		return fmt.Errorf("[DB] failed to create workspace: %w", err)
@@ -91,7 +86,6 @@ func (r *workspaceRepository) GetWorkspaceByPath(path string) (*model.Workspace,
 		SELECT id, workspace_name, workspace_path, active, file_num,
 			embedding_file_num, embedding_ts, embedding_message, embedding_failed_file_paths,
 			codegraph_file_num, codegraph_ts, codegraph_message, codegraph_failed_file_paths,
-			deepwiki_file_num, deepwiki_ts, deepwiki_message, deepwiki_failed_file_paths,
 			created_at, updated_at
 		FROM workspaces
 		WHERE workspace_path = ?
@@ -116,10 +110,6 @@ func (r *workspaceRepository) GetWorkspaceByPath(path string) (*model.Workspace,
 		&workspace.CodegraphTs,
 		&workspace.CodegraphMessage,
 		&workspace.CodegraphFailedFilePaths,
-		&workspace.DeepwikiFileNum,
-		&workspace.DeepwikiTs,
-		&workspace.DeepwikiMessage,
-		&workspace.DeepwikiFailedFilePaths,
 		&createdAt,
 		&updatedAt,
 	)
@@ -143,7 +133,6 @@ func (r *workspaceRepository) GetWorkspaceByID(id int64) (*model.Workspace, erro
 		SELECT id, workspace_name, workspace_path, active, file_num,
 			embedding_file_num, embedding_ts, embedding_message, embedding_failed_file_paths,
 			codegraph_file_num, codegraph_ts, codegraph_message, codegraph_failed_file_paths,
-			deepwiki_file_num, deepwiki_ts, deepwiki_message, deepwiki_failed_file_paths,
 			created_at, updated_at
 		FROM workspaces
 		WHERE id = ?
@@ -168,10 +157,6 @@ func (r *workspaceRepository) GetWorkspaceByID(id int64) (*model.Workspace, erro
 		&workspace.CodegraphTs,
 		&workspace.CodegraphMessage,
 		&workspace.CodegraphFailedFilePaths,
-		&workspace.DeepwikiFileNum,
-		&workspace.DeepwikiTs,
-		&workspace.DeepwikiMessage,
-		&workspace.DeepwikiFailedFilePaths,
 		&createdAt,
 		&updatedAt,
 	)
@@ -261,30 +246,6 @@ func (r *workspaceRepository) UpdateWorkspace(workspace *model.Workspace) error 
 		args = append(args, workspace.CodegraphFailedFilePaths)
 	}
 
-	// 检查deepwiki_file_num是否为非默认值
-	if workspace.DeepwikiFileNum != 0 {
-		setClauses = append(setClauses, "deepwiki_file_num = ?")
-		args = append(args, workspace.DeepwikiFileNum)
-	}
-
-	// 检查deepwiki_ts是否为非默认值
-	if workspace.DeepwikiTs != 0 {
-		setClauses = append(setClauses, "deepwiki_ts = ?")
-		args = append(args, workspace.DeepwikiTs)
-	}
-
-	// 检查deepwiki_message是否为非默认值
-	if workspace.DeepwikiMessage != "" {
-		setClauses = append(setClauses, "deepwiki_message = ?")
-		args = append(args, workspace.DeepwikiMessage)
-	}
-
-	// 检查deepwiki_failed_file_paths是否为非默认值
-	if workspace.DeepwikiFailedFilePaths != "" {
-		setClauses = append(setClauses, "deepwiki_failed_file_paths = ?")
-		args = append(args, workspace.DeepwikiFailedFilePaths)
-	}
-
 	// 如果没有需要更新的字段，直接返回
 	if len(setClauses) == 0 {
 		return nil
@@ -339,10 +300,6 @@ func (r *workspaceRepository) UpdateWorkspaceByMap(path string, updates map[stri
 		"codegraph_ts":                "codegraph_ts",
 		"codegraph_message":           "codegraph_message",
 		"codegraph_failed_file_paths": "codegraph_failed_file_paths",
-		"deepwiki_file_num":           "deepwiki_file_num",
-		"deepwiki_ts":                 "deepwiki_ts",
-		"deepwiki_message":            "deepwiki_message",
-		"deepwiki_failed_file_paths":  "deepwiki_failed_file_paths",
 	}
 
 	// 遍历updates map，构建SET子句
@@ -409,12 +366,11 @@ func (r *workspaceRepository) DeleteWorkspace(path string) error {
 // ListWorkspaces 列出所有工作区
 func (r *workspaceRepository) ListWorkspaces() ([]*model.Workspace, error) {
 	query := `
-		SELECT id, workspace_name, workspace_path, active, file_num, 
+		SELECT id, workspace_name, workspace_path, active, file_num,
 			embedding_file_num, embedding_ts, embedding_message, embedding_failed_file_paths,
 			codegraph_file_num, codegraph_ts, codegraph_message, codegraph_failed_file_paths,
-			deepwiki_file_num, deepwiki_ts, deepwiki_message, deepwiki_failed_file_paths,
 			created_at, updated_at
-		FROM workspaces 
+		FROM workspaces
 		ORDER BY created_at DESC
 	`
 
@@ -443,10 +399,6 @@ func (r *workspaceRepository) ListWorkspaces() ([]*model.Workspace, error) {
 			&workspace.CodegraphTs,
 			&workspace.CodegraphMessage,
 			&workspace.CodegraphFailedFilePaths,
-			&workspace.DeepwikiFileNum,
-			&workspace.DeepwikiTs,
-			&workspace.DeepwikiMessage,
-			&workspace.DeepwikiFailedFilePaths,
 			&createdAt,
 			&updatedAt,
 		)
@@ -469,7 +421,6 @@ func (r *workspaceRepository) GetActiveWorkspaces() ([]*model.Workspace, error) 
 		SELECT id, workspace_name, workspace_path, active, file_num,
 			embedding_file_num, embedding_ts, embedding_message, embedding_failed_file_paths,
 			codegraph_file_num, codegraph_ts, codegraph_message, codegraph_failed_file_paths,
-			deepwiki_file_num, deepwiki_ts, deepwiki_message, deepwiki_failed_file_paths,
 			created_at, updated_at
 		FROM workspaces
 		WHERE active = "true"
@@ -501,10 +452,6 @@ func (r *workspaceRepository) GetActiveWorkspaces() ([]*model.Workspace, error) 
 			&workspace.CodegraphTs,
 			&workspace.CodegraphMessage,
 			&workspace.CodegraphFailedFilePaths,
-			&workspace.DeepwikiFileNum,
-			&workspace.DeepwikiTs,
-			&workspace.DeepwikiMessage,
-			&workspace.DeepwikiFailedFilePaths,
 			&createdAt,
 			&updatedAt,
 		)

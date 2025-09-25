@@ -8,11 +8,10 @@ import (
 
 // ScannerConfig holds the configuration for file scanning
 type ScannerConfig struct {
-	FolderIgnorePatterns         []string
-	FileIncludePatterns          []string
-	DeepwikiFolderIgnorePatterns []string
-	MaxFileSizeKB                int // File size limit in KB
-	MaxFileCount                 int
+	FolderIgnorePatterns []string
+	FileIncludePatterns  []string
+	MaxFileSizeKB        int // File size limit in KB
+	MaxFileCount         int
 }
 
 // SyncConfig holds the sync configuration
@@ -47,16 +46,6 @@ type EmbeddingConfig struct {
 	SyncFiles    map[string]string    `json:"syncFiles"`
 	SyncIds      map[string]time.Time `json:"syncIds"`
 	FailedFiles  map[string]string    `json:"failedFiles"`
-}
-
-// Deepwiki configuration
-type DeepwikiConfig struct {
-	ClientID     string            `json:"clientId"`
-	CodebaseName string            `json:"codebaseName"`
-	CodebasePath string            `json:"codebasePath"`
-	DeepwikiId   string            `json:"deepwikiId"`
-	HashTree     map[string]string `json:"hashTree"`
-	LastSync     time.Time         `json:"lastSync"`
 }
 
 // Ignore config
