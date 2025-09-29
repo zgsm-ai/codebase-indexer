@@ -52,7 +52,7 @@ func (j *EventProcessorJob) Start(ctx context.Context) {
 			j.logger.Error("recovered from panic in event processor job: %v", r)
 		}
 	}()
-	j.logger.Info("starting event processor job")
+	j.logger.Info("starting embedding event processor job with interval: %v", j.embeddingInterval)
 
 	// 立即执行一次事件处理
 	authInfo := config.GetAuthInfo()

@@ -138,10 +138,20 @@ func (j *IndexCleanJob) cleanupExpiredWorkspaceIndexes(ctx context.Context) {
 			j.logger.Error("recovered from panic in index clean job: %v", r)
 		}
 	}()
-	j.logger.Info("start to clean up expired workspace indexes with expiry period %.0f hours", j.expiryPeriod.Hours())
+
+	// 获取 codebase 开关状态
+	codebaseEnv := j.storageRepo.GetCodebaseEnv()
+	if codebaseEnv == nil {
+		j.logger.Warn("failed to get codebase env")
+		return
+	}
+
+	j.logger.Info("start to clean up expired workspace indexes with expiry period %.0f hours, codebase switch: %s",
+		j.expiryPeriod.Hours(), codebaseEnv.Switch)
+
 	workspaces, err := j.workspaceRepo.ListWorkspaces()
 	if err != nil {
-		j.logger.Error("list workspaces failed with %v", err)
+		j.logger.Warn("list workspaces failed with %v", err)
 		return
 	}
 
@@ -151,13 +161,23 @@ func (j *IndexCleanJob) cleanupExpiredWorkspaceIndexes(ctx context.Context) {
 	}
 
 	for _, workspace := range workspaces {
-		// 活跃中 更新时间小于过期间隔 索引数量为0 跳过
-		if workspace.Active == dto.True || time.Since(workspace.UpdatedAt) < j.expiryPeriod ||
-			workspace.CodegraphFileNum == 0 {
-			continue
+		// 如果 codebase 开关为 on，则使用原来的逻辑
+		if codebaseEnv.Switch == dto.SwitchOn {
+			// 活跃中 更新时间小于过期间隔 索引数量为0 跳过
+			if workspace.Active == dto.True || time.Since(workspace.UpdatedAt) < j.expiryPeriod ||
+				workspace.CodegraphFileNum == 0 {
+				continue
+			}
+		} else {
+			// 如果 codebase 开关为 off，则检查是否过期一天
+			if time.Since(workspace.UpdatedAt) < 24*time.Hour ||
+				workspace.CodegraphFileNum == 0 {
+				continue
+			}
 		}
-		j.logger.Info("workspace %s updated_at %s exceeds expiry period %.0f hours, start to cleanup.",
-			workspace.WorkspacePath, workspace.UpdatedAt.Format("2006-01-02 15:04:05"), j.expiryPeriod.Hours())
+
+		j.logger.Info("workspace %s updated_at %s exceeds expiry period, start to cleanup.",
+			workspace.WorkspacePath, workspace.UpdatedAt.Format("2006-01-02 15:04:05"))
 		// 清理索引 （有更新数据库为0的逻辑）
 		if err = j.indexer.RemoveAllIndexes(ctx, workspace.WorkspacePath); err != nil {
 			j.logger.Error("remove indexes failed with %v", err)
@@ -177,9 +197,16 @@ func (j *IndexCleanJob) cleanupInactiveWorkspaceEmbeddings(ctx context.Context) 
 		}
 	}()
 
+	// 获取 codebase 开关状态
+	codebaseEnv := j.storageRepo.GetCodebaseEnv()
+	if codebaseEnv == nil {
+		j.logger.Warn("failed to get codebase env")
+		return
+	}
+
 	workspaces, err := j.workspaceRepo.ListWorkspaces()
 	if err != nil {
-		j.logger.Error("list workspaces failed with %v", err)
+		j.logger.Warn("list workspaces failed with %v", err)
 		return
 	}
 
@@ -192,10 +219,75 @@ func (j *IndexCleanJob) cleanupInactiveWorkspaceEmbeddings(ctx context.Context) 
 	authInfo := config.GetAuthInfo()
 	clientId := authInfo.ClientId
 	for _, workspace := range workspaces {
-		// 只处理 active 为 false, embedding_file_num 不为 0, 且更新时间超过过期间隔的工作区
-		if workspace.Active == dto.True || time.Since(workspace.UpdatedAt) < j.embeddingExpiryPeriod ||
-			workspace.EmbeddingFileNum == 0 {
+		if workspace.EmbeddingFileNum == 0 {
 			continue
+		}
+		// 调用 FetchCombinedSummary 方法获取结果
+		summaryReq := dto.CombinedSummaryReq{
+			ClientId:     clientId,
+			CodebasePath: workspace.WorkspacePath,
+		}
+
+		summaryResp, err := j.syncRepo.FetchCombinedSummary(summaryReq)
+		if err != nil {
+			j.logger.Warn("failed to fetch combined summary for workspace %s: %v", workspace.WorkspacePath, err)
+			continue
+		}
+
+		// 判断状态，若为 failed 则复用下面的更新 workspace、删除 event、删除 codebaseConfig 和 embeddingConfig 逻辑
+		if summaryResp.Data.Embedding.TotalChunks == 0 {
+			j.logger.Info("workspace %s embedding total chunks is 0, start to cleanup.",
+				workspace.WorkspacePath)
+
+			// 更新 workspace
+			updateWorkspace := map[string]interface{}{
+				"file_num":                    0,
+				"embedding_file_num":          0,
+				"embedding_ts":                0,
+				"embedding_message":           "",
+				"embedding_failed_file_paths": "",
+			}
+			if err := j.workspaceRepo.UpdateWorkspaceByMap(workspace.WorkspacePath, updateWorkspace); err != nil {
+				j.logger.Error("update workspace failed with %v", err)
+				continue
+			}
+
+			// 1. 删除这个 workspace 的所有 event 表记录
+			if err := j.cleanupWorkspaceEvents(workspace.WorkspacePath); err != nil {
+				j.logger.Error("failed to cleanup events for workspace %s: %v", workspace.WorkspacePath, err)
+				continue
+			}
+
+			// 2. 删除 codebaseConfig
+			codebaseId := utils.GenerateCodebaseID(workspace.WorkspacePath)
+			if err := j.storageRepo.DeleteCodebaseConfig(codebaseId); err != nil {
+				j.logger.Error("failed to delete codebase config for workspace %s: %v", workspace.WorkspacePath, err)
+				continue
+			}
+
+			// 3. 删除 embeddingConfig
+			embeddingId := utils.GenerateEmbeddingID(workspace.WorkspacePath)
+			if err := j.embeddingRepo.DeleteEmbeddingConfig(embeddingId); err != nil {
+				j.logger.Error("failed to delete embedding config for workspace %s: %v", workspace.WorkspacePath, err)
+				continue
+			}
+
+			j.logger.Info("workspace %s embeddings cleaned up successfully.", workspace.WorkspacePath)
+			cleanedCount++
+			continue
+		}
+
+		// 如果 codebase 开关为 on，则使用原来的逻辑
+		if codebaseEnv.Switch == dto.SwitchOn {
+			// 只处理 active 为 false, 且更新时间超过过期间隔的工作区
+			if workspace.Active == dto.True || time.Since(workspace.UpdatedAt) < j.embeddingExpiryPeriod {
+				continue
+			}
+		} else {
+			// 如果 codebase 开关为 off，则检查是否过期一天
+			if time.Since(workspace.UpdatedAt) < 24*time.Hour {
+				continue
+			}
 		}
 
 		j.logger.Info("workspace %s is inactive and exceeds expiry period, start to cleanup embeddings.",

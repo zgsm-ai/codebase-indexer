@@ -166,17 +166,31 @@ func (sc *embeddingStatusService) checkWorkspaceBuildingStates(workspacePath str
 
 	// 首先处理超时的事件
 	var validEvents []*model.Event
+	var timeoutEvents []*model.Event
 	for _, event := range events {
 		if nowTime.Sub(event.UpdatedAt) > time.Minute*3 {
-			updateEvent := &model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusBuildFailed}
-			err := sc.eventRepo.UpdateEvent(updateEvent)
-			if err != nil {
-				sc.logger.Error("failed to update event status: %v", err)
-			}
-			sc.buildFilePathFailed(event)
+			timeoutEvents = append(timeoutEvents, event)
 			continue
 		}
 		validEvents = append(validEvents, event)
+	}
+
+	// 批量处理超时事件
+	if len(timeoutEvents) > 0 {
+		// 构建超时，批量更新事件状态为构建失败
+		eventIDs := make([]int64, 0, len(timeoutEvents))
+		for _, event := range timeoutEvents {
+			eventIDs = append(eventIDs, event.ID)
+		}
+		updateErr := sc.eventRepo.UpdateEventsEmbeddingStatus(eventIDs, model.EmbeddingStatusBuildFailed)
+		if updateErr != nil {
+			sc.logger.Error("failed to update events status to buildFailed: %v", updateErr)
+		}
+		// 批量处理构建失败事件
+		err := sc.batchHandleBuildFailed(workspacePath, timeoutEvents)
+		if err != nil {
+			sc.logger.Error("failed to batch handle build failed: %v", err)
+		}
 	}
 
 	// 按syncId分组有效事件
@@ -227,16 +241,30 @@ func (sc *embeddingStatusService) checkWorkspaceUploadingStates(workspacePath st
 
 	// 检查每个event的上传状态
 	nowTime := time.Now()
+	var timeoutEvents []*model.Event
 	for _, event := range events {
 		if nowTime.Sub(event.UpdatedAt) < time.Minute*3 {
 			continue
 		}
-		updateEvent := &model.Event{ID: event.ID, EmbeddingStatus: model.EmbeddingStatusUploadFailed}
-		err := sc.eventRepo.UpdateEvent(updateEvent)
-		if err != nil {
-			sc.logger.Error("failed to update event status: %v", err)
+		timeoutEvents = append(timeoutEvents, event)
+	}
+
+	// 批量处理超时事件
+	if len(timeoutEvents) > 0 {
+		// 构建超时，批量更新事件状态为上传失败
+		eventIDs := make([]int64, 0, len(timeoutEvents))
+		for _, event := range timeoutEvents {
+			eventIDs = append(eventIDs, event.ID)
 		}
-		sc.buildFilePathFailed(event)
+		updateErr := sc.eventRepo.UpdateEventsEmbeddingStatus(eventIDs, model.EmbeddingStatusUploadFailed)
+		if updateErr != nil {
+			sc.logger.Error("failed to update events status to uploadFailed: %v", updateErr)
+		}
+		// 批量处理上传失败事件
+		err := sc.batchHandleBuildFailed(workspacePath, timeoutEvents)
+		if err != nil {
+			sc.logger.Error("failed to batch handle build failed: %v", err)
+		}
 	}
 
 	return nil

@@ -92,3 +92,29 @@ type DeleteEmbeddingResp struct {
 	Success bool        `json:"success"`
 	Data    interface{} `json:"data"`
 }
+
+// CombinedSummaryReq 获取组合摘要请求
+type CombinedSummaryReq struct {
+	ClientId     string `form:"clientId" binding:"required"`
+	CodebasePath string `form:"codebasePath" binding:"required"`
+}
+
+// CombinedSummaryResp 获取组合摘要响应
+type CombinedSummaryResp struct {
+	Code    int                 `json:"code"`
+	Message string              `json:"message"`
+	Success bool                `json:"success"`
+	Data    CombinedSummaryData `json:"data"`
+}
+
+type CombinedSummaryData struct {
+	TotalFiles int
+	Embedding  EmbeddingSummary `json:"embedding"`
+}
+
+type EmbeddingSummary struct {
+	Status      string `json:"status"`
+	UpdatedAt   string `json:"updatedAt"`
+	TotalFiles  int    `json:"totalFiles"`
+	TotalChunks int    `json:"totalChunks"`
+}

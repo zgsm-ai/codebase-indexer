@@ -21,11 +21,12 @@ import (
 
 // Server API paths
 const (
-	API_UPLOAD_TOKEN      = "/codebase-embedder/api/v1/files/token"
-	API_UPLOAD_FILE       = "/codebase-embedder/api/v1/files/upload"
-	API_FILE_STATUS       = "/codebase-embedder/api/v1/files/status"
-	API_GET_CODEBASE_HASH = "/codebase-embedder/api/v1/codebases/hash"
-	API_DELETE_EMBEDDING  = "/codebase-embedder/api/v1/embeddings"
+	API_UPLOAD_TOKEN         = "/codebase-embedder/api/v1/files/token"
+	API_UPLOAD_FILE          = "/codebase-embedder/api/v1/files/upload"
+	API_FILE_STATUS          = "/codebase-embedder/api/v1/files/status"
+	API_GET_CODEBASE_HASH    = "/codebase-embedder/api/v1/codebases/hash"
+	API_DELETE_EMBEDDING     = "/codebase-embedder/api/v1/embeddings"
+	API_GET_COMBINED_SUMMARY = "/codebase-embedder/api/v1/combined/summary"
 )
 
 type SyncInterface interface {
@@ -37,6 +38,7 @@ type SyncInterface interface {
 	FetchUploadToken(req dto.UploadTokenReq) (*dto.UploadTokenResp, error)
 	FetchFileStatus(req dto.FileStatusReq) (*dto.FileStatusResp, error)
 	DeleteEmbedding(req dto.DeleteEmbeddingReq) (*dto.DeleteEmbeddingResp, error)
+	FetchCombinedSummary(req dto.CombinedSummaryReq) (*dto.CombinedSummaryResp, error)
 }
 
 type HTTPSync struct {
@@ -426,5 +428,37 @@ func (hs *HTTPSync) DeleteEmbedding(req dto.DeleteEmbeddingReq) (*dto.DeleteEmbe
 	}
 
 	hs.logger.Info("HTTP %s %s completed in %v, status: %d", "DELETE", url, duration, responseData.Code)
+	return &responseData, nil
+}
+
+// FetchCombinedSummary fetches combined summary from server
+func (hs *HTTPSync) FetchCombinedSummary(req dto.CombinedSummaryReq) (*dto.CombinedSummaryResp, error) {
+	hs.logger.Info("fetching combined summary from server")
+
+	// 验证配置
+	authInfo := config.GetAuthInfo()
+	if err := hs.ValidateSyncConfig(authInfo); err != nil {
+		return nil, err
+	}
+
+	// 构建请求URL
+	url := fmt.Sprintf("%s%s", authInfo.ServerURL, API_GET_COMBINED_SUMMARY)
+
+	// 构建查询参数
+	queryParams := map[string]string{
+		"clientId":     req.ClientId,
+		"codebasePath": req.CodebasePath,
+	}
+
+	// 执行请求
+	var responseData dto.CombinedSummaryResp
+	hs.logger.Info("sending HTTP %s request to: %s", "GET", url)
+	startTime := time.Now()
+	if err := hs.httpClient.DoGetRequest(url, queryParams, authInfo.Token, &responseData); err != nil {
+		return nil, err
+	}
+	duration := time.Since(startTime)
+	hs.logger.Info("HTTP %s %s completed in %v, status: %d", "GET", url, duration, responseData.Code)
+
 	return &responseData, nil
 }

@@ -49,3 +49,8 @@ func (m *MockHTTPSync) DeleteEmbedding(req dto.DeleteEmbeddingReq) (*dto.DeleteE
 	args := m.Called(req)
 	return args.Get(0).(*dto.DeleteEmbeddingResp), args.Error(1)
 }
+
+func (m *MockHTTPSync) FetchCombinedSummary(req dto.CombinedSummaryReq) (*dto.CombinedSummaryResp, error) {
+	args := m.Called(req)
+	return args.Get(0).(*dto.CombinedSummaryResp), args.Error(1)
+}

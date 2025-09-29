@@ -127,16 +127,13 @@ func (h *BackendHandler) SearchCallGraph(c *gin.Context) {
 	}
 	h.logger.Info("search callgraph request: ClientId=%s, Workspace=%s, FilePath=%s", req.ClientId, req.CodebasePath, req.FilePath)
 	callGraph, err := h.codebaseService.QueryCallGraph(c, &req)
-	if  err != nil{
+	if err != nil {
 		h.logger.Error("search callgraph err:%v", err)
 		response.Error(c, http.StatusBadRequest, err)
 		return
 	}
-	response.OkJson(c,callGraph)
+	response.OkJson(c, callGraph)
 }
-
-
-
 
 // GetFileContent 获取源文件内容接口
 // @Summary 获取文件内容
