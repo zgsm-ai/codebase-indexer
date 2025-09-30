@@ -90,13 +90,10 @@ var DefaultFolderIgnorePatterns = []string{
 	"__pycache__/", "venv/", "target/", "vendor/",
 }
 
-var DefaultFileIncludePatterns = []string{
-	".md", ".mdx",
-	".json", ".yaml",
-}
+var DefaultFileIncludePatterns = []string{}
 
 var DefaultConfigScan = ConfigScan{
-	MaxFileSizeKB:        10240,                       // Default maximum file size in KB
+	MaxFileSizeKB:        2048,                        // Default maximum file size in KB
 	MaxFileCount:         10000,                       // Default maximum file count
 	FolderIgnorePatterns: DefaultFolderIgnorePatterns, // Default folder ignore patterns
 	FileIncludePatterns:  DefaultFileIncludePatterns,  // Default file include patterns
