@@ -650,18 +650,17 @@ func (s *Scheduler) CreateFilesZip(config *config.CodebaseConfig, fileStatus []*
 		Timestamp:    time.Now().Unix(),
 	}
 
-	if runtime.GOOS == "windows" {
-		for _, f := range fileStatus {
+	// 给FileList设置值，在Windows系统下需要转换路径格式
+	for _, f := range fileStatus {
+		if runtime.GOOS == "windows" {
 			f.Path = filepath.ToSlash(f.Path)
 			if f.Status == utils.FILE_STATUS_RENAME {
 				f.TargetPath = filepath.ToSlash(f.TargetPath)
 			}
-			metadata.FileList = append(metadata.FileList, *f)
 		}
-	}
+		metadata.FileList = append(metadata.FileList, *f)
 
-	// 只添加新增和修改的文件到ZIP
-	for _, f := range fileStatus {
+		// 只添加新增和修改的文件到ZIP
 		if f.Status == utils.FILE_STATUS_ADDED || f.Status == utils.FILE_STATUS_MODIFIED {
 			if err := utils.AddFileToZip(zipWriter, f.Path, config.CodebasePath); err != nil {
 				// Continue trying to add other files but log error
