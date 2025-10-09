@@ -11,7 +11,8 @@ import (
 	"codebase-indexer/internal/config"
 	"codebase-indexer/pkg/logger"
 
-	_ "github.com/mattn/go-sqlite3" // SQLite3驱动
+	// _ "github.com/mattn/go-sqlite3" // SQLite3驱动
+	_ "modernc.org/sqlite" // SQLite驱动
 )
 
 // DatabaseManager 数据库管理器接口
@@ -57,7 +58,8 @@ func (m *SQLiteManager) Initialize() error {
 	}
 
 	// 打开数据库连接
-	db, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=on&_journal_mode=WAL")
+	// db, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=on&_journal_mode=WAL")
+	db, err := sql.Open("sqlite", dbPath+"?_foreign_keys=on&_journal_mode=WAL")
 	if err != nil {
 		return err
 	}

@@ -72,7 +72,7 @@ case "$TARGET_OS" in
         STATIC_BUILD_TAGS="netgo osusergo static_build"
         ;;
       "arm64")
-        export CC=musl-gcc
+        export CC=aarch64-linux-gnu-gcc
         export CGO_CFLAGS="-O2 -g"
         STATIC_BUILD_FLAGS="-linkmode external -extldflags \"-static\""
         STATIC_BUILD_TAGS="netgo osusergo static_build"

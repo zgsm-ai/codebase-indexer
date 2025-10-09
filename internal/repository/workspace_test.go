@@ -10,10 +10,11 @@ import (
 	"codebase-indexer/internal/model"
 	"codebase-indexer/test/mocks"
 
-	_ "github.com/mattn/go-sqlite3" // SQLite3驱动
+	// _ "github.com/mattn/go-sqlite3" // SQLite3驱动
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	_ "modernc.org/sqlite" // SQLite驱动
 )
 
 func setupTestWorkspaceDB(t *testing.T) (database.DatabaseManager, func()) {
