@@ -59,7 +59,7 @@ func (m *SQLiteManager) Initialize() error {
 
 	// 打开数据库连接
 	// db, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=on&_journal_mode=WAL")
-	db, err := sql.Open("sqlite", dbPath+"?_foreign_keys=on&_journal_mode=WAL")
+	db, err := sql.Open("sqlite", dbPath+"?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000&_synchronous=NORMAL")
 	if err != nil {
 		return err
 	}
@@ -68,6 +68,7 @@ func (m *SQLiteManager) Initialize() error {
 	db.SetMaxOpenConns(m.config.MaxOpenConns)
 	db.SetMaxIdleConns(m.config.MaxIdleConns)
 	db.SetConnMaxLifetime(m.config.ConnMaxLifetime)
+	db.SetConnMaxIdleTime(m.config.ConnMaxIdleTime)
 
 	// 测试连接
 	if err := db.Ping(); err != nil {
