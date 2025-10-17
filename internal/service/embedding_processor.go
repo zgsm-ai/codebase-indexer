@@ -324,6 +324,9 @@ func (ep *embeddingProcessService) processBatchAddModifyEvents(ctx context.Conte
 			// 继续处理下一批，不因单批失败而中断整个处理
 			continue
 		}
+
+		// 添加延迟控制请求频率
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	return nil

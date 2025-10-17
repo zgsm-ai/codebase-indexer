@@ -158,6 +158,10 @@ func (j *FileScanJob) scanWorkspace(workspace *model.Workspace) error {
 	if err != nil {
 		return fmt.Errorf("failed to detect file changes: %w", err)
 	}
+	if len(events) == 0 {
+		j.logger.Debug("no file changes detected in workspace: %s", workspace.WorkspacePath)
+		return nil
+	}
 
 	j.logger.Info("detected %d file changes in workspace: %s", len(events), workspace.WorkspacePath)
 

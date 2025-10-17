@@ -219,6 +219,9 @@ func (sc *embeddingStatusService) checkWorkspaceBuildingStates(workspacePath str
 		if err := sc.processEventsWithFileStatus(workspacePath, syncIdEvents, fileStatusResp); err != nil {
 			sc.logger.Error("failed to process events with file status for syncId %s: %v", syncId, err)
 		}
+
+		// 添加延迟控制请求频率
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	return nil
