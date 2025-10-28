@@ -221,9 +221,6 @@ func (ws *fileScanService) UpdateWorkspaceStats(workspace *model.Workspace) erro
 		return fmt.Errorf("failed to get codebase config: %w", err)
 	}
 	fileNum := len(codebaseConfig.HashTree)
-	if fileNum == workspace.FileNum {
-		return nil
-	}
 
 	// 更新工作区文件数量
 	updateWorkspace := model.Workspace{
