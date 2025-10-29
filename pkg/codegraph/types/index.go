@@ -44,7 +44,7 @@ type QueryDefinitionOptions struct {
 	EndLine     int
 	Workspace   string
 	FilePath    string
-	SymbolName  string
+	SymbolNames string
 	CodeSnippet []byte
 }
 
@@ -59,8 +59,7 @@ type QueryReferenceOptions struct {
 type QueryCallGraphOptions struct {
 	Workspace  string
 	FilePath   string
-	StartLine  int
-	EndLine    int
+	LineRange  string
 	SymbolName string
 	MaxLayer   int
 }

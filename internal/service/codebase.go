@@ -68,7 +68,8 @@ type CodebaseService interface {
 
 const maxReadLine = 5000
 const maxLineLimit = 500
-const definitionFillContentNodeLimit = 100
+const definitionFillContentNodeLimit = 20
+const definitionFillContentLineLimit = 200
 const DefaultMaxCodeSnippetLines = 500
 const DefaultMaxCodeSnippets = 200
 
@@ -379,7 +380,7 @@ func (l *codebaseService) QueryDefinition(ctx context.Context, req *dto.SearchDe
 	// 参数验证
 	// 支持三种检索方式：（FilePaths 必传）
 	// 查询优先顺序：
-	// 1. 根据符号名 (SymbolName) 查询
+	// 1. 根据符号名 (SymbolNames) 批量查询
 	// 2. 根据代码片段 (CodeSnippet) 模糊检索（解析出其中的符号）
 	// 3. 根据行号范围查询
 
@@ -388,12 +389,10 @@ func (l *codebaseService) QueryDefinition(ctx context.Context, req *dto.SearchDe
 		return nil, errs.ErrIndexDisabled
 	}
 
-	
 	// codebasePath不能为空
 	if req.CodebasePath == types.EmptyString {
 		return nil, fmt.Errorf("missing param: codebasePath")
 	}
-	
 
 	nodes, err := l.indexer.QueryDefinitions(ctx, &types.QueryDefinitionOptions{
 		Workspace:   req.CodebasePath,
@@ -401,14 +400,14 @@ func (l *codebaseService) QueryDefinition(ctx context.Context, req *dto.SearchDe
 		EndLine:     req.EndLine,
 		FilePath:    req.FilePath,
 		CodeSnippet: []byte(req.CodeSnippet),
-		SymbolName:  req.SymbolName,
+		SymbolNames: req.SymbolNames,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	// 填充content，控制层数和节点数
-	definitions, err := l.convert2DefinitionInfo(ctx, nodes, definitionFillContentNodeLimit)
+	definitions, err := l.convert2DefinitionInfo(ctx, nodes, definitionFillContentNodeLimit, definitionFillContentLineLimit)
 	if err != nil {
 		l.logger.Error("fill definition query contents err:%v", err)
 	}
@@ -416,23 +415,22 @@ func (l *codebaseService) QueryDefinition(ctx context.Context, req *dto.SearchDe
 	return &dto.DefinitionData{List: definitions}, nil
 }
 
-func (l *codebaseService) convert2DefinitionInfo(ctx context.Context, nodes []*types.Definition, nodeLimit int) ([]*dto.DefinitionInfo, error) {
+func (l *codebaseService) convert2DefinitionInfo(ctx context.Context, nodes []*types.Definition, nodeLimit int, lineLimit int) ([]*dto.DefinitionInfo, error) {
 	if len(nodes) == 0 {
 		return nil, nil
 	}
 	definitions := make([]*dto.DefinitionInfo, 0, len(nodes))
-	// 处理当前层的节点
-	for i, node := range nodes {
-		// 如果超过节点限制，跳过剩余节点
-		if i >= nodeLimit {
-			break
-		}
+	defNodeCountMap := make(map[string]int)
+	defNodeCapMap := make(map[string]int)
+	// 每个符号根据实际数量占比情况，(外部限制了一个batch查询的符号数量)
+	for _, node := range nodes {
+		defNodeCountMap[node.Name]++
+	}
+	for key, val := range defNodeCountMap {
+		defNodeCapMap[key] = int(float64(val)/float64(len(nodes))*float64(nodeLimit) + 0.5) // 四舍五入
+	}
+	for _, node := range nodes {
 		position := dto.ToPosition(node.Range)
-		// 读取文件内容
-		content, err := l.workspaceReader.ReadFile(ctx, node.Path, types.ReadOptions{
-			StartLine: position.StartLine,
-			EndLine:   position.EndLine,
-		})
 		def := &dto.DefinitionInfo{
 			FilePath: node.Path,
 			Name:     node.Name,
@@ -440,11 +438,22 @@ func (l *codebaseService) convert2DefinitionInfo(ctx context.Context, nodes []*t
 			Position: position,
 		}
 		definitions = append(definitions, def)
-
+		startLine := position.StartLine
+		endLine := position.EndLine
+		// 通过定义个数和行数限制填充内容
+		if defNodeCapMap[node.Name] <= 0 || endLine-startLine > lineLimit {
+			continue
+		}
+		// 读取文件内容
+		content, err := l.workspaceReader.ReadFile(ctx, node.Path, types.ReadOptions{
+			StartLine: startLine,
+			EndLine:   endLine,
+		})
 		if err != nil {
 			l.logger.Error("read file content failed: %v", err)
 			continue
 		}
+		defNodeCapMap[node.Name]--
 		// 设置节点内容
 		def.Content = string(content)
 	}
@@ -479,23 +488,25 @@ func (l *codebaseService) QueryReference(ctx context.Context, req *dto.SearchRef
 	if req.FilePath == types.EmptyString && req.SymbolName != types.EmptyString {
 		if len(nodes) == 0 {
 			return &dto.ReferenceData{List: nodes}, nil
-		}	
+		}
 		// 填充content，控制层数和节点数，只填充子节点内容，不填充根节点内容
-		if err = l.fillContent(ctx, nodes[0].Children, relationFillContentLayerLimit, relationFillContentLayerNodeLimit); err != nil {
+		if err = l.fillContent(ctx, nodes[0].Children, relationFillContentLayerLimit, relationFillContentLayerNodeLimit, defaultLineLimit); err != nil {
 			l.logger.Error("fill graph query contents err:%v", err)
 		}
 		return &dto.ReferenceData{List: nodes}, nil
 	}
 	// 如果filePath不为空，则根据filePath查询引用
 	// 填充content，控制层数和节点数
-	if err = l.fillContent(ctx, nodes, relationFillContentLayerLimit, relationFillContentLayerNodeLimit); err != nil {
+	if err = l.fillContent(ctx, nodes, relationFillContentLayerLimit, relationFillContentLayerNodeLimit, defaultLineLimit); err != nil {
 		l.logger.Error("fill graph query contents err:%v", err)
 	}
 	return &dto.ReferenceData{List: nodes}, nil
 }
 
-const defaultMaxLayer = 10
+const defaultMaxLayerLimit = 10
+const defaultMaxLayer = 5
 const maxLayerNodeLimit = 8
+const defaultLineLimit = 200
 
 func (l *codebaseService) QueryCallGraph(ctx context.Context, req *dto.SearchCallGraphRequest) (resp *dto.CallGraphData, err error) {
 	// 二次校验
@@ -505,21 +516,19 @@ func (l *codebaseService) QueryCallGraph(ctx context.Context, req *dto.SearchCal
 	if req.FilePath == types.EmptyString {
 		return nil, errs.NewMissingParamError("filePath")
 	}
-	if !filepath.IsAbs(req.FilePath) {
-		return nil, fmt.Errorf("param filePath must be absolute path")
-	}
-	if req.MaxLayer <= 0 || req.MaxLayer > defaultMaxLayer {
+	if req.MaxLayer <= 0 {
 		req.MaxLayer = defaultMaxLayer
 	}
-	
+	if req.MaxLayer > defaultMaxLayerLimit {
+		req.MaxLayer = defaultMaxLayerLimit
+	}
 	// 保证同一时间只有一个查询调用，避免内存过高
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	nodes, err := l.indexer.QueryCallGraph(ctx, &types.QueryCallGraphOptions{
 		Workspace:  req.CodebasePath,
 		FilePath:   req.FilePath,
-		StartLine:  req.StartLine,
-		EndLine:    req.EndLine,
+		LineRange:  req.LineRange,
 		SymbolName: req.SymbolName,
 		MaxLayer:   req.MaxLayer,
 	})
@@ -527,7 +536,7 @@ func (l *codebaseService) QueryCallGraph(ctx context.Context, req *dto.SearchCal
 		return nil, err
 	}
 	// 填充content，控制层数和节点数
-	if err = l.fillContent(ctx, nodes, req.MaxLayer, maxLayerNodeLimit); err != nil {
+	if err = l.fillContent(ctx, nodes, req.MaxLayer, maxLayerNodeLimit, defaultLineLimit); err != nil {
 		l.logger.Error("fill graph query contents err:%v", err)
 	}
 	return &dto.CallGraphData{
@@ -535,7 +544,7 @@ func (l *codebaseService) QueryCallGraph(ctx context.Context, req *dto.SearchCal
 	}, nil
 }
 
-func (l *codebaseService) fillContent(ctx context.Context, nodes []*types.RelationNode, layerLimit, layerNodeLimit int) error {
+func (l *codebaseService) fillContent(ctx context.Context, nodes []*types.RelationNode, layerLimit, layerNodeLimit, lineLimit int) error {
 	if len(nodes) == 0 {
 		return nil
 	}
@@ -545,24 +554,25 @@ func (l *codebaseService) fillContent(ctx context.Context, nodes []*types.Relati
 		if i >= layerNodeLimit {
 			break
 		}
+		if node.Position.EndLine-node.Position.StartLine <= lineLimit {
+			// 读取文件内容
+			content, err := l.workspaceReader.ReadFile(ctx, node.FilePath, types.ReadOptions{
+				StartLine: node.Position.StartLine,
+				EndLine:   node.Position.EndLine,
+			})
 
-		// 读取文件内容
-		content, err := l.workspaceReader.ReadFile(ctx, node.FilePath, types.ReadOptions{
-			StartLine: node.Position.StartLine,
-			EndLine:   node.Position.EndLine,
-		})
+			if err != nil {
+				l.logger.Error("read file content failed: %v", err)
+				continue
+			}
 
-		if err != nil {
-			l.logger.Error("read file content failed: %v", err)
-			continue
+			// 设置节点内容
+			node.Content = string(content)
 		}
-
-		// 设置节点内容
-		node.Content = string(content)
 
 		// 如果还没有达到层级限制且有子节点，递归处理子节点
 		if layerLimit > 1 && len(node.Children) > 0 {
-			if err := l.fillContent(ctx, node.Children, layerLimit-1, layerNodeLimit); err != nil {
+			if err := l.fillContent(ctx, node.Children, layerLimit-1, layerNodeLimit, lineLimit); err != nil {
 				l.logger.Error("fill children content failed: %v", err)
 			}
 		}

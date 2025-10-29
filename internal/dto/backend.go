@@ -39,7 +39,7 @@ type SearchDefinitionRequest struct {
 	ClientId     string `form:"clientId" binding:"required"`
 	CodebasePath string `form:"codebasePath" binding:"required"`
 	FilePath     string `form:"filePath"`
-	SymbolName   string `form:"symbolName,omitempty"`
+	SymbolNames  string `form:"symbolNames"`
 	StartLine    int    `form:"startLine,omitempty"`
 	EndLine      int    `form:"endLine,omitempty"`
 	CodeSnippet  string `form:"codeSnippet,omitempty"`
@@ -55,8 +55,7 @@ type SearchCallGraphRequest struct {
 	ClientId     string `form:"clientId" binding:"required"`
 	CodebasePath string `form:"codebasePath" binding:"required"`
 	FilePath     string `form:"filePath" binding:"required"`
-	StartLine    int    `form:"startLine,omitempty"`
-	EndLine      int    `form:"endLine,omitempty"`
+	LineRange    string `form:"lineRange,omitempty"`
 	SymbolName   string `form:"symbolName,omitempty"`
 	MaxLayer     int    `form:"maxLayer,omitempty"`
 }

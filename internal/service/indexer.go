@@ -148,13 +148,14 @@ type ProgressInfo struct {
 }
 
 const (
-	defaultConcurrency   = 1
-	defaultBatchSize     = 50
-	defaultMapBatchSize  = 5
-	defaultMaxFiles      = 10000
-	defaultMaxProjects   = 3
-	defaultCacheCapacity = 10_0000 // 假定单个文件平均10个元素,1万个文件
-	defaultTopN          = 10
+	defaultConcurrency             = 1
+	defaultBatchSize               = 50
+	defaultMapBatchSize            = 5
+	defaultMaxFiles                = 10000
+	defaultMaxProjects             = 3
+	defaultCacheCapacity           = 10_0000 // 假定单个文件平均10个元素,1万个文件
+	defaultTopN                    = 10
+	defaultMaxBatchSymbolDefsLimit = 8
 )
 
 // NewCodeIndexer 创建新的代码索引器
@@ -1150,8 +1151,21 @@ func (i *indexer) QueryDefinitions(ctx context.Context, opts *types.QueryDefinit
 	}
 	if opts.FilePath == "" {
 		// 查询符号可以不用文件路径
-		if opts.SymbolName != "" {
-			return i.queryFuncDefinitionsBySymbolName(ctx, opts.Workspace, opts.SymbolName)
+		// 不能超过默认最大批量查询符号定义数量，避免查询性能问题
+		if opts.SymbolNames == "" {
+			return nil, fmt.Errorf("file path cannot be empty")
+		}
+		symbolNames := make([]string, 0)
+		for s := range strings.SplitSeq(opts.SymbolNames, ",") {
+			if t := strings.TrimSpace(s); t != "" {
+				symbolNames = append(symbolNames, t)
+			}
+		}
+		if len(symbolNames) > defaultMaxBatchSymbolDefsLimit {
+			return nil, fmt.Errorf("the number of symbol definitions in a single batch query cannot exceed %d", defaultMaxBatchSymbolDefsLimit)
+		}
+		if len(symbolNames) > 0 {
+			return i.queryFuncDefinitionsBySymbolNames(ctx, opts.Workspace, symbolNames)
 		}
 		return nil, fmt.Errorf("file path cannot be empty")
 	}
@@ -1335,39 +1349,48 @@ func (i *indexer) queryFuncDefinitionsByLineRange(ctx context.Context, projectUu
 }
 
 // queryFuncDefinitionsBySymbolName 通过符号名查询函数定义
-func (i *indexer) queryFuncDefinitionsBySymbolName(ctx context.Context, workspacePath string, symbolName string) ([]*types.Definition, error) {
+func (i *indexer) queryFuncDefinitionsBySymbolNames(ctx context.Context, workspacePath string, symbolNames []string) ([]*types.Definition, error) {
 	// 遍历所有的语言，查询该符号的Occurrence
 	var results []*types.Definition
 	languages := lang.GetAllSupportedLanguages()
 	projects := i.workspaceReader.FindProjects(ctx, workspacePath, true, workspace.DefaultVisitPattern)
 	if len(projects) == 0 {
-		return nil, fmt.Errorf("query definitions by symbol name [%s] failed, no project found in workspace %s", symbolName, workspacePath)
+		return nil, fmt.Errorf("query definitions by symbol names [%v] failed, no project found in workspace %s", symbolNames, workspacePath)
 	}
 	for _, project := range projects {
 		for _, language := range languages {
-			bytes, err := i.storage.Get(ctx, project.Uuid, store.SymbolNameKey{Name: symbolName,
-				Language: language})
-			if err != nil {
-				continue
-			}
-			var exist codegraphpb.SymbolOccurrence
-			if err = store.UnmarshalValue(bytes, &exist); err != nil {
-				return nil, err
-			}
-			// 根据Occurrence信息封装为定义
-			for _, o := range exist.Occurrences {
-				results = append(results, &types.Definition{
-					Path:  o.Path,
-					Name:  symbolName,
-					Range: o.Range,
-					Type:  string(proto.ToDefinitionElementType(proto.ElementTypeFromProto(o.ElementType))),
-				})
+			for _, symbolName := range symbolNames {
+				bytes, err := i.storage.Get(ctx, project.Uuid, store.SymbolNameKey{Name: symbolName,
+					Language: language})
+				if err != nil {
+					continue
+				}
+				var exist codegraphpb.SymbolOccurrence
+				if err = store.UnmarshalValue(bytes, &exist); err != nil {
+					return nil, err
+				}
+				// 根据Occurrence信息封装为定义
+				for _, o := range exist.Occurrences {
+					results = append(results, &types.Definition{
+						Path:  o.Path,
+						Name:  symbolName,
+						Range: o.Range,
+						Type:  string(proto.ToDefinitionElementType(proto.ElementTypeFromProto(o.ElementType))),
+					})
+				}
 			}
 		}
 	}
 	return results, nil
 }
-
+func safeFilePath(workspace, relativeFilePath string) (string, error) {
+	root, err := os.OpenInRoot(workspace, relativeFilePath)
+	if err != nil {
+		return "", err
+	}
+	defer root.Close()
+	return filepath.Join(workspace, relativeFilePath), nil
+}
 // 获取符号定义代码块里面的调用图
 func (i *indexer) QueryCallGraph(ctx context.Context, opts *types.QueryCallGraphOptions) ([]*types.RelationNode, error) {
 	startTime := time.Now()
@@ -1375,6 +1398,14 @@ func (i *indexer) QueryCallGraph(ctx context.Context, opts *types.QueryCallGraph
 	// 参数验证
 	if opts.MaxLayer <= 0 {
 		opts.MaxLayer = defaultMaxLayer // 默认最大层数
+	}
+	// 支持相对路径，防止目录遍历攻击
+	if !filepath.IsAbs(opts.FilePath) {
+		absFilePath, err := safeFilePath(opts.Workspace, opts.FilePath)
+		if err != nil {
+			return nil, fmt.Errorf("file path %s is not in workspace %s: %w", opts.FilePath, opts.Workspace, err)
+		}
+		opts.FilePath = absFilePath
 	}
 
 	project, err := i.GetProjectByFilePath(ctx, opts.Workspace, opts.FilePath)
@@ -1387,21 +1418,35 @@ func (i *indexer) QueryCallGraph(ctx context.Context, opts *types.QueryCallGraph
 	}()
 
 	var results []*types.RelationNode
+
+	if opts.LineRange != "" {
+		// 解析行范围
+		lineRange := strings.Split(opts.LineRange, "-")
+		if len(lineRange) != 2 {
+			return nil, fmt.Errorf("line range format error: %s", opts.LineRange)
+		}
+		startLine, err := strconv.Atoi(strings.TrimSpace(lineRange[0]))
+		if err != nil {
+			return nil, fmt.Errorf("line number format error: %s", opts.LineRange)
+		}
+		endLine, err := strconv.Atoi(strings.TrimSpace(lineRange[1]))
+		if err != nil {
+			return nil, fmt.Errorf("line number format error: %s", opts.LineRange)
+		}
+		// 查询组合1：文件路径+行范围
+		startLine, endLine = NormalizeLineRange(startLine, endLine, 1000)
+		fmt.Println(startLine,endLine)
+		results, err = i.queryCallGraphByLineRange(ctx, projectUuid, opts.Workspace, opts.FilePath, startLine, endLine, opts.MaxLayer)
+		return results, err
+	}
 	// 根据查询类型处理
 	if opts.SymbolName != "" {
-		// 查询组合1：文件路径+符号名(类、函数)
+		// 查询组合2：文件路径+符号名(类、函数)
 		results, err = i.queryCallGraphBySymbol(ctx, projectUuid, opts.Workspace, opts.FilePath, opts.SymbolName, opts.MaxLayer)
 		return results, err
 	}
 
-	if opts.StartLine > 0 && opts.EndLine > 0 && opts.EndLine >= opts.StartLine {
-		// 查询组合2：文件路径+行范围
-		startLine, endLine := NormalizeLineRange(opts.StartLine, opts.EndLine, 1000)
-		results, err = i.queryCallGraphByLineRange(ctx, projectUuid, opts.Workspace, opts.FilePath, startLine, endLine, opts.MaxLayer)
-		return results, err
-	}
-
-	return nil, fmt.Errorf("invalid query callgraph options: missing symbol name or invalid line number")
+	return nil, fmt.Errorf("invalid query callgraph options: missing symbol name or invalid line range")
 }
 
 // queryCallGraphBySymbol 根据符号名查询调用链

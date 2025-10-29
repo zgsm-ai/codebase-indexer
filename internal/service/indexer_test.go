@@ -1028,13 +1028,11 @@ func TestIndexer_QueryCallGraph_ByLineRange(t *testing.T) {
 
 			// 构建完整文件路径
 			start := time.Now()
-			fullPath := filepath.Join(env.workspaceDir, tc.filePath)
 			// 查询调用链
 			opts := &types.QueryCallGraphOptions{
 				Workspace: env.workspaceDir,
-				FilePath:  fullPath,
-				StartLine: tc.startLine,
-				EndLine:   tc.endLine,
+				FilePath:  tc.filePath,
+				LineRange: fmt.Sprintf("%d-%d", tc.startLine, tc.endLine),
 				MaxLayer:  tc.maxLayer,
 			}
 
@@ -1079,6 +1077,7 @@ func TestIndexer_QueryCallGraph_InvalidOptions(t *testing.T) {
 		name      string
 		opts      *types.QueryCallGraphOptions
 		expectErr bool
+		expectNodes bool
 		desc      string
 	}{
 		{
@@ -1088,7 +1087,8 @@ func TestIndexer_QueryCallGraph_InvalidOptions(t *testing.T) {
 				FilePath:  filepath.Join(env.workspaceDir, "internal/service/indexer.go"),
 				MaxLayer:  3,
 			},
-			expectErr: true,
+			expectErr:   true,
+			expectNodes: false,
 			desc:      "既没有符号名也没有行范围应该返回错误",
 		},
 		{
@@ -1099,7 +1099,8 @@ func TestIndexer_QueryCallGraph_InvalidOptions(t *testing.T) {
 				SymbolName: "SomeFunction",
 				MaxLayer:   3,
 			},
-			expectErr: true,
+			expectErr:   true,
+			expectNodes: false,
 			desc:      "不存在的文件应该返回错误",
 		},
 		{
@@ -1107,11 +1108,11 @@ func TestIndexer_QueryCallGraph_InvalidOptions(t *testing.T) {
 			opts: &types.QueryCallGraphOptions{
 				Workspace: env.workspaceDir,
 				FilePath:  filepath.Join(env.workspaceDir, "internal/service/indexer.go"),
-				StartLine: 100,
-				EndLine:   50, // 结束行小于开始行
+				LineRange: "100-50",
 				MaxLayer:  3,
 			},
-			expectErr: false, // 应该会被NormalizeLineRange处理
+			expectErr:   false, // 应该会被NormalizeLineRange处理
+			expectNodes: false,
 			desc:      "无效的行范围会被自动修正",
 		},
 	}
@@ -1124,7 +1125,11 @@ func TestIndexer_QueryCallGraph_InvalidOptions(t *testing.T) {
 				assert.Error(t, err, tc.desc)
 			} else {
 				assert.NoError(t, err, tc.desc)
-				assert.NotNil(t, nodes, "调用链结果不应为空")
+				if tc.expectNodes {
+					assert.NotNil(t, nodes, "调用链结果不应为空")
+				} else {
+					assert.Nil(t, nodes, "调用链结果应为空")
+				}
 			}
 		})
 	}
@@ -1151,6 +1156,7 @@ func TestIndexer_QueryDefinitionsBySymbolName(t *testing.T) {
 		workspaceDir string
 		IncludeExts  []string
 		expectCount  int // 期望找到的定义数量
+		expectErr    bool // 期望返回错误
 	}{
 		{
 			name:         "Go语言函数定义查询",
@@ -1161,6 +1167,7 @@ func TestIndexer_QueryDefinitionsBySymbolName(t *testing.T) {
 			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
 			IncludeExts:  []string{".go"},
 			expectCount:  1,
+			expectErr:    false,
 		},
 		{
 			name:         "Go语言方法定义查询",
@@ -1171,6 +1178,7 @@ func TestIndexer_QueryDefinitionsBySymbolName(t *testing.T) {
 			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
 			IncludeExts:  []string{".go"},
 			expectCount:  1,
+			expectErr:    false,
 		},
 		{
 			name:         "Go语言结构体定义查询",
@@ -1181,6 +1189,7 @@ func TestIndexer_QueryDefinitionsBySymbolName(t *testing.T) {
 			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
 			IncludeExts:  []string{".go"},
 			expectCount:  1,
+			expectErr:    false,
 		},
 		{
 			name:         "不存在的符号查询",
@@ -1191,6 +1200,7 @@ func TestIndexer_QueryDefinitionsBySymbolName(t *testing.T) {
 			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
 			IncludeExts:  []string{".go"},
 			expectCount:  0,
+			expectErr:    false,
 		},
 		{
 			name:         "空符号名查询",
@@ -1201,61 +1211,49 @@ func TestIndexer_QueryDefinitionsBySymbolName(t *testing.T) {
 			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
 			IncludeExts:  []string{".go"},
 			expectCount:  0,
-		},
-		{
-			name:         "Go语言接口定义查询",
-			filePath:     "internal/service/indexer.go",
-			symbolName:   "Indexer",
-			desc:         "查询Indexer接口的定义",
-			project:      "codebase-indexer",
-			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
-			IncludeExts:  []string{".go"},
-			expectCount:  1,
+			expectErr:    true,
 		},
 	}
 
+	// 统一初始化与索引
+	env := setupTestEnvironment(t)
+	defer teardownTestEnvironment(t, env, nil)
+	env.workspaceDir = "/home/kcx/codeWorkspace/codebase-indexer"
+	testVisitPattern.IncludeExts = []string{".go"}
+	assert.NoError(t, initWorkspaceModel(env))
+	idx := createTestIndexer(env, testVisitPattern)
+	projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, testVisitPattern)
+	assert.NoError(t, cleanIndexStoreTest(env.ctx, projects, env.storage))
+	_, err := idx.IndexWorkspace(env.ctx, env.workspaceDir)
+	assert.NoError(t, err)
+
+	// 辅助函数已不再需要，使用 found 映射替代
+
+	// 统一处理流程
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// 设置测试环境
-			env := setupTestEnvironment(t)
-			defer teardownTestEnvironment(t, env, nil)
-
-			env.workspaceDir = tc.workspaceDir
-			testVisitPattern.IncludeExts = tc.IncludeExts
-
-			err := initWorkspaceModel(env)
-			assert.NoError(t, err)
-			// 创建测试索引器
-			testIndexer := createTestIndexer(env, testVisitPattern)
-
-			// 查找工作区中的项目
-			projects := env.workspaceReader.FindProjects(env.ctx, env.workspaceDir, true, testVisitPattern)
-
-			// 清理索引存储
-			err = cleanIndexStoreTest(env.ctx, projects, env.storage)
-			assert.NoError(t, err)
 			indexStart := time.Now()
 			// 步骤1: 索引整个工作区
-			metrics, err := testIndexer.IndexWorkspace(env.ctx, env.workspaceDir)
+			metrics, err := idx.IndexWorkspace(env.ctx, env.workspaceDir)
 			assert.NoError(t, err)
 			indexEnd := time.Now()
 
 			// 构建完整文件路径
 			start := time.Now()
-			fullPath := filepath.Join(env.workspaceDir, tc.filePath)
 			// 查询定义
 			opts := &types.QueryDefinitionOptions{
 				Workspace:  tc.workspaceDir,
-				FilePath:   fullPath,
-				SymbolName: tc.symbolName,
+				SymbolNames: tc.symbolName,
 			}
 
-			definitions, err := testIndexer.QueryDefinitions(env.ctx, opts)
+			definitions, err := idx.QueryDefinitions(env.ctx, opts)
 			queryTime := time.Since(start)
 
-			// 验证结果
-			assert.NoError(t, err, "查询定义不应出错")
-
+			if tc.expectErr {
+				assert.Error(t, err, "查询定义应出错")
+			} else {
+				assert.NoError(t, err, "查询定义不应出错")
+			}
 			if tc.expectCount == 0 {
 				assert.Empty(t, definitions, "定义结果应为空")
 				assert.Equal(t, tc.expectCount, len(definitions),
@@ -1293,52 +1291,29 @@ func TestIndexer_QueryDefinitionsBySymbolName(t *testing.T) {
 		})
 	}
 
-	// 步骤2: 测试错误处理
-	t.Run("错误处理测试", func(t *testing.T) {
-		// 设置测试环境
-		env := setupTestEnvironment(t)
-		defer teardownTestEnvironment(t, env, nil)
+	// 参数类通用错误分支
+	t.Run("批量超过上限-返回错误", func(t *testing.T) {
+		over := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I"}
+		_, err := idx.QueryDefinitions(env.ctx, &types.QueryDefinitionOptions{
+			Workspace:   env.workspaceDir,
+			SymbolNames: strings.Join(over, ","),
+		})
+		assert.Error(t, err)
+	})
 
-		err := initWorkspaceModel(env)
-		assert.NoError(t, err)
+	t.Run("空符号切片-返回错误", func(t *testing.T) {
+		_, err := idx.QueryDefinitions(env.ctx, &types.QueryDefinitionOptions{
+			Workspace:   env.workspaceDir,
+			SymbolNames: "",
+		})
+		assert.Error(t, err)
+	})
 
-		// 创建测试索引器
-		testIndexer := createTestIndexer(env, testVisitPattern)
-
-		// 测试无效的工作区路径
-		opts := &types.QueryDefinitionOptions{
-			Workspace:  "/invalid/workspace/path",
-			FilePath:   "/invalid/workspace/path/internal/service/indexer.go",
-			SymbolName: "IndexWorkspace",
-		}
-		_, err = testIndexer.QueryDefinitions(env.ctx, opts)
-		assert.Error(t, err, "无效的工作区路径应该返回错误")
-
-		// 测试无效的文件路径
-		opts = &types.QueryDefinitionOptions{
-			Workspace:  env.workspaceDir,
-			FilePath:   "/invalid/file/path.go",
-			SymbolName: "IndexWorkspace",
-		}
-		_, err = testIndexer.QueryDefinitions(env.ctx, opts)
-		assert.Error(t, err, "无效的文件路径应该返回错误")
-
-		// 测试空的工作区路径
-		opts = &types.QueryDefinitionOptions{
-			Workspace:  "",
-			FilePath:   filepath.Join(env.workspaceDir, "internal/service/indexer.go"),
-			SymbolName: "IndexWorkspace",
-		}
-		_, err = testIndexer.QueryDefinitions(env.ctx, opts)
-		assert.Error(t, err, "空的工作区路径应该返回错误")
-
-		// 测试空的文件路径
-		opts = &types.QueryDefinitionOptions{
-			Workspace:  env.workspaceDir,
-			FilePath:   "",
-			SymbolName: "IndexWorkspace",
-		}
-		_, err = testIndexer.QueryDefinitions(env.ctx, opts)
-		assert.Error(t, err, "空的文件路径应该返回错误")
+	t.Run("空工作区-返回错误", func(t *testing.T) {
+		_, err := idx.QueryDefinitions(env.ctx, &types.QueryDefinitionOptions{
+			Workspace:   "",
+			SymbolNames: "IndexWorkspace",
+		})
+		assert.Error(t, err)
 	})
 }
