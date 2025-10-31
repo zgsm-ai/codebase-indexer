@@ -148,13 +148,13 @@ type ProgressInfo struct {
 }
 
 const (
-	defaultConcurrency             = 1
-	defaultBatchSize               = 50
-	defaultMapBatchSize            = 5
-	defaultMaxFiles                = 10000
-	defaultMaxProjects             = 3
-	defaultCacheCapacity           = 10_0000 // 假定单个文件平均10个元素,1万个文件
-	defaultTopN                    = 10
+	defaultConcurrency   = 1
+	defaultBatchSize     = 50
+	defaultMapBatchSize  = 5
+	defaultMaxFiles      = 10000
+	defaultMaxProjects   = 3
+	defaultCacheCapacity = 10_0000 // 假定单个文件平均10个元素,1万个文件
+	defaultTopN          = 10
 )
 
 // NewCodeIndexer 创建新的代码索引器
@@ -1156,6 +1156,11 @@ func (i *indexer) QueryDefinitions(ctx context.Context, opts *types.QueryDefinit
 		}
 		symbolNames := make([]string, 0)
 		for s := range strings.SplitSeq(opts.SymbolNames, ",") {
+			idx := strings.LastIndex(s, ".")
+			if idx != -1 {
+				// types.QueryCallGraphOptions → QueryCallGraphOptions
+				s = s[idx+1:] // 有点，取最后一个点后面
+			}
 			if t := strings.TrimSpace(s); t != "" {
 				symbolNames = append(symbolNames, t)
 			}
@@ -1387,6 +1392,7 @@ func safeFilePath(workspace, relativeFilePath string) (string, error) {
 	defer root.Close()
 	return filepath.Join(workspace, relativeFilePath), nil
 }
+
 // 获取符号定义代码块里面的调用图
 func (i *indexer) QueryCallGraph(ctx context.Context, opts *types.QueryCallGraphOptions) ([]*types.RelationNode, error) {
 	startTime := time.Now()
