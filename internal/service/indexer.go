@@ -155,7 +155,6 @@ const (
 	defaultMaxProjects             = 3
 	defaultCacheCapacity           = 10_0000 // 假定单个文件平均10个元素,1万个文件
 	defaultTopN                    = 10
-	defaultMaxBatchSymbolDefsLimit = 8
 )
 
 // NewCodeIndexer 创建新的代码索引器
@@ -1161,9 +1160,6 @@ func (i *indexer) QueryDefinitions(ctx context.Context, opts *types.QueryDefinit
 				symbolNames = append(symbolNames, t)
 			}
 		}
-		if len(symbolNames) > defaultMaxBatchSymbolDefsLimit {
-			return nil, fmt.Errorf("the number of symbol definitions in a single batch query cannot exceed %d", defaultMaxBatchSymbolDefsLimit)
-		}
 		if len(symbolNames) > 0 {
 			return i.queryFuncDefinitionsBySymbolNames(ctx, opts.Workspace, symbolNames)
 		}
@@ -1435,7 +1431,6 @@ func (i *indexer) QueryCallGraph(ctx context.Context, opts *types.QueryCallGraph
 		}
 		// 查询组合1：文件路径+行范围
 		startLine, endLine = NormalizeLineRange(startLine, endLine, 1000)
-		fmt.Println(startLine,endLine)
 		results, err = i.queryCallGraphByLineRange(ctx, projectUuid, opts.Workspace, opts.FilePath, startLine, endLine, opts.MaxLayer)
 		return results, err
 	}
