@@ -1440,6 +1440,7 @@ func (i *indexer) QueryCallGraph(ctx context.Context, opts *types.QueryCallGraph
 		results, err = i.queryCallGraphByLineRange(ctx, projectUuid, opts.Workspace, opts.FilePath, startLine, endLine, opts.MaxLayer)
 		return results, err
 	}
+	opts.SymbolName = strings.TrimSpace(opts.SymbolName)
 	// 根据查询类型处理
 	if opts.SymbolName != "" {
 		// 查询组合2：文件路径+符号名(类、函数)
@@ -1675,17 +1676,17 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, wor
 			for idx := range len(realCallers) {
 				// 创建对应的被调用元素
 				calleeInfo := &CalleeInfo{
-					FilePath:   callers[idx].FilePath,
-					SymbolName: callers[idx].SymbolName,
-					ParamCount: callers[idx].ParamCount,
-					Position:   callers[idx].Position,
-					IsVariadic: callers[idx].IsVariadic,
+					FilePath:   realCallers[idx].FilePath,
+					SymbolName: realCallers[idx].SymbolName,
+					ParamCount: realCallers[idx].ParamCount,
+					Position:   realCallers[idx].Position,
+					IsVariadic: realCallers[idx].IsVariadic,
 				}
 				// 创建调用者节点
 				callerNode := &types.RelationNode{
-					FilePath:   callers[idx].FilePath,
-					SymbolName: callers[idx].SymbolName,
-					Position:   &callers[idx].Position,
+					FilePath:   realCallers[idx].FilePath,
+					SymbolName: realCallers[idx].SymbolName,
+					Position:   &realCallers[idx].Position,
 					NodeType:   string(types.NodeTypeReference),
 					Children:   make([]*types.RelationNode, 0),
 				}
