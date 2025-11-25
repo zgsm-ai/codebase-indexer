@@ -468,6 +468,12 @@ func (i *indexer) removeIndexByFilePaths(ctx context.Context, projectUuid string
 		return 0, fmt.Errorf("delete file indexes failed: %w", err)
 	}
 
+	// 4. 删除文件相关的调用关系
+	if err = i.removeCallRelationsForFiles(ctx, projectUuid, deleteFileTables); err != nil {
+		i.logger.Error("remove call relations for files failed: %v", err)
+		// 调用关系删除失败不应该影响索引删除，只记录错误
+	}
+
 	return deleted, nil
 }
 
@@ -1603,12 +1609,7 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, wor
 			})
 		}
 	}
-	// 构建反向索引映射：callee -> []caller
-	err := i.buildCalleeMap(ctx, projectUuid)
-	if err != nil {
-		i.logger.Error("failed to build callee map for write, err: %v", err)
-		return
-	}
+	// 使用 LRU 缓存来缓存查询结果，避免重复从数据库读取
 	calleeMap, err := lru.New[string, []CallerInfo](MaxCalleeMapCacheCapacity / 2)
 	if err != nil {
 		i.logger.Error("failed to create callee map cache, err: %v", err)
@@ -1705,12 +1706,7 @@ func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, wor
 		// 移动到下一层
 		currentLayerNodes = nextLayerNodes
 	}
-	// 清除数据库
-	err = i.storage.DeleteAllWithPrefix(ctx, projectUuid, store.CalleeMapKeySystemPrefix)
-	if err != nil {
-		i.logger.Error("failed to delete callee map for project %s, err: %v", projectUuid, err)
-		return
-	}
+	// 不再清除数据库中的调用关系缓存，保持持久化存储
 }
 
 // CalleeKey 表示被调用的符号信息
@@ -1928,6 +1924,234 @@ func (i *indexer) buildCalleeMap(ctx context.Context, projectUuid string) error 
 
 	// 清空缓存，必须全部写到数据库里面去，保证数据库是最新的
 	calleeMap.Purge()
+	return nil
+}
+
+// renameCallRelationsForFiles 重命名调用关系中的文件路径
+func (i *indexer) renameCallRelationsForFiles(ctx context.Context, projectUuid string, oldPathPrefix, newPathPrefix string) error {
+	// 遍历所有调用关系
+	iter := i.storage.Iter(ctx, projectUuid)
+	defer iter.Close()
+
+	// 收集需要更新的项
+	updatedItems := make([]*codegraphpb.CalleeMapItem, 0)
+
+	for iter.Next() {
+		key := iter.Key()
+		if !store.IsCalleeMapKey(key) {
+			continue
+		}
+
+		var item codegraphpb.CalleeMapItem
+		if err := store.UnmarshalValue(iter.Value(), &item); err != nil {
+			i.logger.Error("failed to unmarshal callee map item, err: %v", err)
+			continue
+		}
+
+		// 检查是否有需要重命名的 caller
+		hasChanges := false
+		updatedCallers := make([]*codegraphpb.CallerInfo, 0, len(item.Callers))
+		for _, caller := range item.Callers {
+			newCaller := &codegraphpb.CallerInfo{
+				SymbolName: caller.SymbolName,
+				FilePath:   caller.FilePath,
+				Position:   caller.Position,
+				ParamCount: caller.ParamCount,
+				IsVariadic: caller.IsVariadic,
+				CalleeKey:  caller.CalleeKey,
+				Score:      caller.Score,
+			}
+
+			// 如果文件路径匹配旧路径前缀，则替换为新路径前缀
+			if strings.HasPrefix(caller.FilePath, oldPathPrefix) {
+				newCaller.FilePath = strings.Replace(caller.FilePath, oldPathPrefix, newPathPrefix, 1)
+				hasChanges = true
+			}
+
+			updatedCallers = append(updatedCallers, newCaller)
+		}
+
+		// 如果有变化，收集需要更新的项
+		if hasChanges {
+			updatedItems = append(updatedItems, &codegraphpb.CalleeMapItem{
+				CalleeName: item.CalleeName,
+				Callers:    updatedCallers,
+			})
+		}
+	}
+
+	// 批量更新（直接覆盖，不合并）
+	if len(updatedItems) > 0 {
+		if err := i.storage.BatchSave(ctx, projectUuid, workspace.CalleeMapItems(updatedItems)); err != nil {
+			return fmt.Errorf("failed to batch save renamed call relations: %w", err)
+		}
+		i.logger.Info("renamed %d call relation items for path change: %s -> %s", len(updatedItems), oldPathPrefix, newPathPrefix)
+	}
+
+	return nil
+}
+
+// removeCallRelationsForFiles 删除文件相关的调用关系
+func (i *indexer) removeCallRelationsForFiles(ctx context.Context, projectUuid string, fileTables []*codegraphpb.FileElementTable) error {
+	if len(fileTables) == 0 {
+		return nil
+	}
+
+	// 收集要删除的文件路径
+	filePathSet := make(map[string]struct{})
+	for _, ft := range fileTables {
+		filePathSet[ft.Path] = struct{}{}
+	}
+
+	// 遍历所有调用关系，删除来自这些文件的 caller
+	iter := i.storage.Iter(ctx, projectUuid)
+	defer iter.Close()
+
+	batcher := NewMapBatcher(i.storage, i.logger, projectUuid, defaultMapBatchSize)
+	defer batcher.Flush()
+
+	for iter.Next() {
+		key := iter.Key()
+		if !store.IsCalleeMapKey(key) {
+			continue
+		}
+
+		var item codegraphpb.CalleeMapItem
+		if err := store.UnmarshalValue(iter.Value(), &item); err != nil {
+			i.logger.Error("failed to unmarshal callee map item, err: %v", err)
+			continue
+		}
+
+		// 过滤掉来自删除文件的 caller
+		filteredCallers := make([]CallerInfo, 0)
+		hasChanges := false
+		for _, caller := range item.Callers {
+			if _, shouldDelete := filePathSet[caller.FilePath]; !shouldDelete {
+				filteredCallers = append(filteredCallers, CallerInfo{
+					SymbolName: caller.SymbolName,
+					FilePath:   caller.FilePath,
+					Position: types.Position{
+						StartLine:   int(caller.Position.StartLine),
+						StartColumn: int(caller.Position.StartColumn),
+						EndLine:     int(caller.Position.EndLine),
+						EndColumn:   int(caller.Position.EndColumn),
+					},
+					ParamCount: int(caller.ParamCount),
+					IsVariadic: caller.IsVariadic,
+					CalleeKey:  CalleeKey{SymbolName: caller.CalleeKey.SymbolName, ParamCount: int(caller.CalleeKey.ParamCount)},
+					Score:      caller.Score,
+				})
+			} else {
+				hasChanges = true
+			}
+		}
+
+		// 如果有变化，更新或删除该调用关系
+		if hasChanges {
+			if len(filteredCallers) > 0 {
+				// 更新
+				batcher.Add(item.CalleeName, filteredCallers, false)
+			} else {
+				// 删除整个调用关系
+				if err := i.storage.Delete(ctx, projectUuid, store.CalleeMapKey{SymbolName: item.CalleeName}); err != nil {
+					i.logger.Error("failed to delete callee map for %s, err: %v", item.CalleeName, err)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// buildCallRelationsForFiles 为批量文件构建调用关系并存储到 leveldb（写穿透）
+func (i *indexer) buildCallRelationsForFiles(ctx context.Context, projectUuid string, fileTables []*codegraphpb.FileElementTable) error {
+	if len(fileTables) == 0 {
+		return nil
+	}
+
+	// 创建 batcher 实例用于批量写入
+	batcher := NewMapBatcher(i.storage, i.logger, projectUuid, defaultMapBatchSize)
+	defer batcher.Flush()
+
+	// 临时存储新的调用关系
+	newCallRelations := make(map[string][]CallerInfo)
+
+	// 遍历所有文件
+	for _, fileTable := range fileTables {
+		// 遍历所有函数/方法定义
+		for _, element := range fileTable.Elements {
+			if !element.IsDefinition ||
+				(element.ElementType != codegraphpb.ElementType_FUNCTION &&
+					element.ElementType != codegraphpb.ElementType_METHOD) {
+				continue
+			}
+
+			// 获取调用者（函数/方法）参数个数
+			callerParams, err := proto.GetParametersFromExtraData(element.ExtraData)
+			if err != nil {
+				i.logger.Debug("parse caller parameters from extra data, err: %v", err)
+				continue
+			}
+			callerParamCount := len(callerParams)
+			isVariadic := false
+			if callerParamCount > 0 {
+				lastParam := callerParams[callerParamCount-1]
+				if strings.Contains(lastParam.Name, varVariadic) {
+					callerParamCount = callerParamCount - 1
+					isVariadic = true
+				}
+			}
+
+			// 查找该函数内部的所有调用
+			calleeKeys := i.extractCalleeSymbols(fileTable, element.Range[0], element.Range[2])
+
+			// 为每个被调用的符号添加调用者信息
+			for _, calleeKey := range calleeKeys {
+				callerInfo := CallerInfo{
+					SymbolName: element.Name,
+					FilePath:   fileTable.Path,
+					Position:   types.ToPosition(element.Range),
+					ParamCount: callerParamCount,
+					IsVariadic: isVariadic,
+					CalleeKey:  calleeKey,
+				}
+
+				// 添加到临时映射
+				newCallRelations[calleeKey.SymbolName] = append(newCallRelations[calleeKey.SymbolName], callerInfo)
+			}
+		}
+	}
+
+	// 对于每个被调用的符号，从数据库读取现有数据，合并后写回
+	for calleeName, newCallers := range newCallRelations {
+		// 读取现有的调用关系
+		existingCallers, err := i.queryCallersFromDB(ctx, projectUuid, calleeName)
+		if err != nil {
+			// 如果不存在则忽略错误，使用空列表
+			existingCallers = nil
+		}
+
+		// 合并调用者列表（去重）
+		callerMap := make(map[string]CallerInfo)
+		for _, caller := range existingCallers {
+			key := fmt.Sprintf("%s::%s::%d:%d", caller.FilePath, caller.SymbolName, caller.Position.StartLine, caller.Position.StartColumn)
+			callerMap[key] = caller
+		}
+		for _, caller := range newCallers {
+			key := fmt.Sprintf("%s::%s::%d:%d", caller.FilePath, caller.SymbolName, caller.Position.StartLine, caller.Position.StartColumn)
+			callerMap[key] = caller
+		}
+
+		// 转换为列表
+		mergedCallers := make([]CallerInfo, 0, len(callerMap))
+		for _, caller := range callerMap {
+			mergedCallers = append(mergedCallers, caller)
+		}
+
+		// 写入数据库（不合并，直接覆盖）
+		batcher.Add(calleeName, mergedCallers, false)
+	}
+
 	return nil
 }
 
@@ -2234,6 +2458,12 @@ func (i *indexer) RenameIndexes(ctx context.Context, workspacePath string, sourc
 
 	}
 
+	// 重命名调用关系中的文件路径
+	if err := i.renameCallRelationsForFiles(ctx, sourceProjectUuid, trimmedSourcePath, trimmedTargetPath); err != nil {
+		i.logger.Error("rename call relations for files failed: %v", err)
+		// 调用关系重命名失败不应该影响索引重命名，只记录错误
+	}
+
 	return nil
 }
 
@@ -2387,6 +2617,16 @@ func (i *indexer) processBatch(ctx context.Context, batchId int, params *BatchPr
 	i.logger.Info("batch-%d [%d:%d]/%d save element_tables end, cost %d ms, batch cost %d ms", batchId,
 		params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(batchSaveStart).Milliseconds(),
 		time.Since(batchStartTime).Milliseconds())
+
+	// 构建并存储文件调用关系到 leveldb
+	callRelationStart := time.Now()
+	if err := i.buildCallRelationsForFiles(ctx, params.ProjectUuid, protoElementTables); err != nil {
+		i.logger.Error("batch-%d build call relations failed: %v", batchId, err)
+		// 调用关系构建失败不应该影响索引构建，只记录错误
+	} else {
+		i.logger.Info("batch-%d [%d:%d]/%d build call relations end, cost %d ms", batchId,
+			params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(callRelationStart).Milliseconds())
+	}
 
 	return metrics, nil
 }
