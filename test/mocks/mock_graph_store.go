@@ -92,6 +92,20 @@ func (mr *MockGraphStorageMockRecorder) DeleteAll(ctx, projectUuid interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteAll", reflect.TypeOf((*MockGraphStorage)(nil).DeleteAll), ctx, projectUuid)
 }
 
+// DeleteAllWithPrefix mocks base method.
+func (m *MockGraphStorage) DeleteAllWithPrefix(ctx context.Context, projectUuid, prefix string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteAllWithPrefix", ctx, projectUuid, prefix)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteAllWithPrefix indicates an expected call of DeleteAllWithPrefix.
+func (mr *MockGraphStorageMockRecorder) DeleteAllWithPrefix(ctx, projectUuid, prefix interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteAllWithPrefix", reflect.TypeOf((*MockGraphStorage)(nil).DeleteAllWithPrefix), ctx, projectUuid, prefix)
+}
+
 // Exists mocks base method.
 func (m *MockGraphStorage) Exists(ctx context.Context, projectUuid string, key store.Key) (bool, error) {
 	m.ctrl.T.Helper()

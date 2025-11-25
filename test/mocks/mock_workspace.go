@@ -60,9 +60,9 @@ func (m *MockWorkspaceReader) FindProjects(ctx context.Context, workspacePath st
 }
 
 // FindProjects indicates an expected call of FindProjects.
-func (mr *MockWorkspaceReaderMockRecorder) FindProjects(ctx, workspace, resolveModule, visitPattern interface{}) *gomock.Call {
+func (mr *MockWorkspaceReaderMockRecorder) FindProjects(ctx, workspacePath, resolveModule, visitPattern interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindProjects", reflect.TypeOf((*MockWorkspaceReader)(nil).FindProjects), ctx, workspace, resolveModule, visitPattern)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindProjects", reflect.TypeOf((*MockWorkspaceReader)(nil).FindProjects), ctx, workspacePath, resolveModule, visitPattern)
 }
 
 // GetProjectByFilePath mocks base method.
@@ -75,9 +75,9 @@ func (m *MockWorkspaceReader) GetProjectByFilePath(ctx context.Context, workspac
 }
 
 // GetProjectByFilePath indicates an expected call of GetProjectByFilePath.
-func (mr *MockWorkspaceReaderMockRecorder) GetProjectByFilePath(ctx, workspace, filePath, resolveModule interface{}) *gomock.Call {
+func (mr *MockWorkspaceReaderMockRecorder) GetProjectByFilePath(ctx, workspacePath, filePath, resolveModule interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProjectByFilePath", reflect.TypeOf((*MockWorkspaceReader)(nil).GetProjectByFilePath), ctx, workspace, filePath, resolveModule)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProjectByFilePath", reflect.TypeOf((*MockWorkspaceReader)(nil).GetProjectByFilePath), ctx, workspacePath, filePath, resolveModule)
 }
 
 // List mocks base method.

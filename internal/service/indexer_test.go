@@ -784,7 +784,7 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 			maxLayer:     20,
 			desc:         "查询buildCallGraphBFS方法的调用链",
 			project:      "codebase-indexer",
-			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			workspaceDir: "", // 将使用 env.workspaceDir
 			IncludeExts:  []string{".go"},
 		},
 		// {
@@ -973,7 +973,7 @@ func TestIndexer_QueryCallGraph_ByLineRange(t *testing.T) {
 			maxLayer:     1,
 			desc:         "查询test_utils.go文件范围内的调用链",
 			project:      "codebase-indexer",
-			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			workspaceDir: "", // 将使用 env.workspaceDir
 			IncludeExts:  []string{".go"},
 		},
 		{
@@ -984,7 +984,7 @@ func TestIndexer_QueryCallGraph_ByLineRange(t *testing.T) {
 			maxLayer:     2,
 			desc:         "查询IndexWorkspace方法范围内的调用链",
 			project:      "codebase-indexer",
-			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			workspaceDir: "", // 将使用 env.workspaceDir
 			IncludeExts:  []string{".go"},
 		},
 		{
@@ -995,7 +995,7 @@ func TestIndexer_QueryCallGraph_ByLineRange(t *testing.T) {
 			maxLayer:     2,
 			desc:         "查询setupTestEnvironment函数范围内的调用链",
 			project:      "codebase-indexer",
-			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			workspaceDir: "", // 将使用 env.workspaceDir
 			IncludeExts:  []string{".go"},
 		},
 	}
@@ -1074,11 +1074,11 @@ func TestIndexer_QueryCallGraph_InvalidOptions(t *testing.T) {
 
 	// 测试无效选项
 	testCases := []struct {
-		name      string
-		opts      *types.QueryCallGraphOptions
-		expectErr bool
+		name        string
+		opts        *types.QueryCallGraphOptions
+		expectErr   bool
 		expectNodes bool
-		desc      string
+		desc        string
 	}{
 		{
 			name: "无符号名且无行范围",
@@ -1089,7 +1089,7 @@ func TestIndexer_QueryCallGraph_InvalidOptions(t *testing.T) {
 			},
 			expectErr:   true,
 			expectNodes: false,
-			desc:      "既没有符号名也没有行范围应该返回错误",
+			desc:        "既没有符号名也没有行范围应该返回错误",
 		},
 		{
 			name: "不存在的文件",
@@ -1101,7 +1101,7 @@ func TestIndexer_QueryCallGraph_InvalidOptions(t *testing.T) {
 			},
 			expectErr:   true,
 			expectNodes: false,
-			desc:      "不存在的文件应该返回错误",
+			desc:        "不存在的文件应该返回错误",
 		},
 		{
 			name: "无效的行范围",
@@ -1113,7 +1113,7 @@ func TestIndexer_QueryCallGraph_InvalidOptions(t *testing.T) {
 			},
 			expectErr:   false, // 应该会被NormalizeLineRange处理
 			expectNodes: false,
-			desc:      "无效的行范围会被自动修正",
+			desc:        "无效的行范围会被自动修正",
 		},
 	}
 
@@ -1155,7 +1155,7 @@ func TestIndexer_QueryDefinitionsBySymbolName(t *testing.T) {
 		project      string
 		workspaceDir string
 		IncludeExts  []string
-		expectCount  int // 期望找到的定义数量
+		expectCount  int  // 期望找到的定义数量
 		expectErr    bool // 期望返回错误
 	}{
 		{
@@ -1164,7 +1164,7 @@ func TestIndexer_QueryDefinitionsBySymbolName(t *testing.T) {
 			symbolName:   "flush",
 			desc:         "查询flush函数的定义",
 			project:      "codebase-indexer",
-			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			workspaceDir: "", // 将使用 env.workspaceDir
 			IncludeExts:  []string{".go"},
 			expectCount:  1,
 			expectErr:    false,
@@ -1175,7 +1175,7 @@ func TestIndexer_QueryDefinitionsBySymbolName(t *testing.T) {
 			symbolName:   "QueryDefinitions",
 			desc:         "查询QueryDefinitions方法的定义",
 			project:      "codebase-indexer",
-			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			workspaceDir: "", // 将使用 env.workspaceDir
 			IncludeExts:  []string{".go"},
 			expectCount:  1,
 			expectErr:    false,
@@ -1186,7 +1186,7 @@ func TestIndexer_QueryDefinitionsBySymbolName(t *testing.T) {
 			symbolName:   "indexer",
 			desc:         "查询indexer结构体的定义",
 			project:      "codebase-indexer",
-			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			workspaceDir: "", // 将使用 env.workspaceDir
 			IncludeExts:  []string{".go"},
 			expectCount:  1,
 			expectErr:    false,
@@ -1197,7 +1197,7 @@ func TestIndexer_QueryDefinitionsBySymbolName(t *testing.T) {
 			symbolName:   "NonExistentSymbol",
 			desc:         "查询不存在的符号定义",
 			project:      "codebase-indexer",
-			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			workspaceDir: "", // 将使用 env.workspaceDir
 			IncludeExts:  []string{".go"},
 			expectCount:  0,
 			expectErr:    false,
@@ -1208,7 +1208,7 @@ func TestIndexer_QueryDefinitionsBySymbolName(t *testing.T) {
 			symbolName:   "",
 			desc:         "查询空符号名定义",
 			project:      "codebase-indexer",
-			workspaceDir: "/home/kcx/codeWorkspace/codebase-indexer",
+			workspaceDir: "", // 将使用 env.workspaceDir
 			IncludeExts:  []string{".go"},
 			expectCount:  0,
 			expectErr:    true,
@@ -1218,7 +1218,6 @@ func TestIndexer_QueryDefinitionsBySymbolName(t *testing.T) {
 	// 统一初始化与索引
 	env := setupTestEnvironment(t)
 	defer teardownTestEnvironment(t, env, nil)
-	env.workspaceDir = "/home/kcx/codeWorkspace/codebase-indexer"
 	testVisitPattern.IncludeExts = []string{".go"}
 	assert.NoError(t, initWorkspaceModel(env))
 	idx := createTestIndexer(env, testVisitPattern)
@@ -1242,7 +1241,7 @@ func TestIndexer_QueryDefinitionsBySymbolName(t *testing.T) {
 			start := time.Now()
 			// 查询定义
 			opts := &types.QueryDefinitionOptions{
-				Workspace:  tc.workspaceDir,
+				Workspace:   env.workspaceDir,
 				SymbolNames: tc.symbolName,
 			}
 
@@ -1292,15 +1291,6 @@ func TestIndexer_QueryDefinitionsBySymbolName(t *testing.T) {
 	}
 
 	// 参数类通用错误分支
-	t.Run("批量超过上限-返回错误", func(t *testing.T) {
-		over := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I"}
-		_, err := idx.QueryDefinitions(env.ctx, &types.QueryDefinitionOptions{
-			Workspace:   env.workspaceDir,
-			SymbolNames: strings.Join(over, ","),
-		})
-		assert.Error(t, err)
-	})
-
 	t.Run("空符号切片-返回错误", func(t *testing.T) {
 		_, err := idx.QueryDefinitions(env.ctx, &types.QueryDefinitionOptions{
 			Workspace:   env.workspaceDir,

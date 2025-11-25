@@ -64,10 +64,12 @@ type CodebaseService interface {
 	DeleteIndex(ctx context.Context, req *dto.DeleteIndexRequest) error
 	ExportIndex(c *gin.Context, d *dto.ExportIndexRequest) error
 	ReadCodeSnippets(c *gin.Context, d *dto.ReadCodeSnippetsRequest) (*dto.CodeSnippetsData, error)
+
+	// GetFileSkeleton 获取文件骨架（FileElementTable）
+	GetFileSkeleton(ctx context.Context, req *dto.GetFileSkeletonRequest) (*dto.FileSkeletonData, error)
 }
 
 const maxReadLine = 5000
-const maxLineLimit = 500
 const definitionFillContentNodeLimit = 20
 const definitionFillContentLineLimit = 200
 const DefaultMaxCodeSnippetLines = 500
@@ -101,7 +103,7 @@ type codebaseService struct {
 	mu                   sync.Mutex
 }
 
-func (s *codebaseService) checkPath(ctx context.Context, workspacePath string, filePaths []string) error {
+func (s *codebaseService) checkPath(_ context.Context, workspacePath string, filePaths []string) error {
 	for _, filePath := range filePaths {
 		if filePath != types.EmptyString && !utils.IsSubdir(workspacePath, filePath) {
 			return fmt.Errorf("cannot access path %s which not in workspace %s", filePath, workspacePath)
@@ -535,9 +537,11 @@ func (l *codebaseService) QueryCallGraph(ctx context.Context, req *dto.SearchCal
 	if err != nil {
 		return nil, err
 	}
-	// 填充content，控制层数和节点数
-	if err = l.fillContent(ctx, nodes, req.MaxLayer, maxLayerNodeLimit, defaultLineLimit); err != nil {
-		l.logger.Error("fill graph query contents err:%v", err)
+	// 填充content，控制层数和节点数（noContent=1时跳过填充）
+	if req.NoContent != 1 {
+		if err = l.fillContent(ctx, nodes, req.MaxLayer, maxLayerNodeLimit, defaultLineLimit); err != nil {
+			l.logger.Error("fill graph query contents err:%v", err)
+		}
 	}
 	return &dto.CallGraphData{
 		List: nodes,
@@ -629,6 +633,58 @@ func (l *codebaseService) DeleteIndex(ctx context.Context, req *dto.DeleteIndexR
 	}
 	l.logger.Info("delete all index successfully for workspace %s", codebasePath)
 	return nil
+}
+
+func (l *codebaseService) GetFileSkeleton(ctx context.Context, req *dto.GetFileSkeletonRequest) (*dto.FileSkeletonData, error) {
+	// 参数校验
+	if req.WorkspacePath == types.EmptyString {
+		return nil, errs.NewMissingParamError("workspacePath")
+	}
+	if req.FilePath == types.EmptyString {
+		return nil, errs.NewMissingParamError("filePath")
+	}
+
+	// 处理相对/绝对路径
+	filePath := req.FilePath
+	if !filepath.IsAbs(filePath) {
+		filePath = filepath.Join(req.WorkspacePath, filePath)
+	}
+
+	// 验证路径是否在 workspace 内
+	if err := l.checkPath(ctx, req.WorkspacePath, []string{filePath}); err != nil {
+		return nil, err
+	}
+
+	// 获取文件元素表
+	fileElementTable, err := l.indexer.GetFileElementTable(ctx, req.WorkspacePath, filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// 根据 filteredBy 参数过滤 Elements
+	if req.FilteredBy != types.EmptyString {
+		filteredElements := make([]*codegraphpb.Element, 0)
+		switch req.FilteredBy {
+		case "definition":
+			for _, elem := range fileElementTable.Elements {
+				if elem.IsDefinition {
+					filteredElements = append(filteredElements, elem)
+				}
+			}
+		case "reference":
+			for _, elem := range fileElementTable.Elements {
+				if !elem.IsDefinition {
+					filteredElements = append(filteredElements, elem)
+				}
+			}
+		default:
+			// 不识别的过滤类型，不进行过滤
+			filteredElements = fileElementTable.Elements
+		}
+		fileElementTable.Elements = filteredElements
+	}
+
+	return fileElementTable, nil
 }
 
 func convertStatus(status int) string {
