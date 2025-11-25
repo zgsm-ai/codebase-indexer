@@ -17,3 +17,4 @@ tmp/codegraph/*.profile
 .costrict
 .coignore
 .documents
+.cospec
