@@ -221,6 +221,7 @@ func (sc *embeddingStatusService) checkWorkspaceBuildingStates(workspacePath str
 		}
 
 		// 添加延迟控制请求频率
+		// TODO 加到远程配置
 		time.Sleep(100 * time.Millisecond)
 	}
 
