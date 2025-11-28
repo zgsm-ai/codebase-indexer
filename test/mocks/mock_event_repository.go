@@ -63,6 +63,20 @@ func (mr *MockEventRepositoryMockRecorder) BatchDeleteEvents(ids interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchDeleteEvents", reflect.TypeOf((*MockEventRepository)(nil).BatchDeleteEvents), ids)
 }
 
+// BatchUpdateEvents mocks base method.
+func (m *MockEventRepository) BatchUpdateEvents(events []*model.Event) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BatchUpdateEvents", events)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BatchUpdateEvents indicates an expected call of BatchUpdateEvents.
+func (mr *MockEventRepositoryMockRecorder) BatchUpdateEvents(events interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchUpdateEvents", reflect.TypeOf((*MockEventRepository)(nil).BatchUpdateEvents), events)
+}
+
 // ClearTable mocks base method.
 func (m *MockEventRepository) ClearTable() error {
 	m.ctrl.T.Helper()
