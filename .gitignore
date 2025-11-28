@@ -18,3 +18,4 @@ tmp/codegraph/*.profile
 .coignore
 .documents
 .cospec
+internal/service/*.profile

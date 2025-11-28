@@ -2,7 +2,6 @@
 package dto
 
 import (
-	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
 	"codebase-indexer/pkg/codegraph/types"
 )
 
@@ -217,8 +216,36 @@ type GetFileSkeletonRequest struct {
 	FilteredBy    string `form:"filteredBy,omitempty"` // 可选: definition | reference
 }
 
-// FileSkeletonData 文件骨架数据（直接使用 FileElementTable）
-type FileSkeletonData = codegraphpb.FileElementTable
+// FileSkeletonData 文件骨架响应数据
+type FileSkeletonData struct {
+	Path      string                 `json:"path"`
+	Language  string                 `json:"language"`
+	Timestamp int64                  `json:"timestamp"`
+	Imports   []*FileSkeletonImport  `json:"imports,omitempty"`
+	Package   *FileSkeletonPackage   `json:"package,omitempty"`
+	Elements  []*FileSkeletonElement `json:"elements"`
+}
+
+// FileSkeletonImport 导入信息（还原后的原始内容）
+type FileSkeletonImport struct {
+	Content string `json:"content"` // 原始导入语句
+	Range   []int  `json:"range"`   // [startLine, startCol, endLine, endCol] - 从1开始
+}
+
+// FileSkeletonPackage 包信息
+type FileSkeletonPackage struct {
+	Name  string `json:"name"`
+	Range []int  `json:"range"` // 从1开始
+}
+
+// FileSkeletonElement 元素信息
+type FileSkeletonElement struct {
+	Name         string `json:"name"`
+	Signature    string `json:"signature"`    // 通过行号读取的签名，限制200字符
+	IsDefinition bool   `json:"isDefinition"` // 默认为 false
+	ElementType  string `json:"elementType"`  // 类型名称字符串（如 "FUNCTION"）
+	Range        []int  `json:"range"`        // [startLine, startCol, endLine, endCol] - 从1开始
+}
 
 const (
 	Embedding = "embedding"

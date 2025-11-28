@@ -778,11 +778,11 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 		// 	IncludeExts:  []string{".go"},
 		// },
 		{
-			name:         "buildCallGraphBFS方法调用链",
+			name:         "setupTestEnvironment方法调用链",
 			filePath:     "internal/service/indexer_test.go",
-			symbolName:   "buildCallGraphBFS",
+			symbolName:   "setupTestEnvironment",
 			maxLayer:     20,
-			desc:         "查询buildCallGraphBFS方法的调用链",
+			desc:         "查询setupTestEnvironment方法的调用链",
 			project:      "codebase-indexer",
 			workspaceDir: "", // 将使用 env.workspaceDir
 			IncludeExts:  []string{".go"},
@@ -895,7 +895,9 @@ func TestIndexer_QueryCallGraph_BySymbolName(t *testing.T) {
 			env := setupTestEnvironment(t)
 			defer teardownTestEnvironment(t, env, nil)
 
-			env.workspaceDir = tc.workspaceDir
+			if tc.workspaceDir != "" {
+				env.workspaceDir = tc.workspaceDir
+			}
 			testVisitPattern.IncludeExts = tc.IncludeExts
 
 			err := initWorkspaceModel(env)
@@ -1006,7 +1008,9 @@ func TestIndexer_QueryCallGraph_ByLineRange(t *testing.T) {
 			env := setupTestEnvironment(t)
 			defer teardownTestEnvironment(t, env, nil)
 
-			env.workspaceDir = tc.workspaceDir
+			if tc.workspaceDir != "" {
+				env.workspaceDir = tc.workspaceDir
+			}
 			testVisitPattern.IncludeExts = tc.IncludeExts
 
 			err := initWorkspaceModel(env)
@@ -1026,12 +1030,13 @@ func TestIndexer_QueryCallGraph_ByLineRange(t *testing.T) {
 			assert.NoError(t, err)
 			indexEnd := time.Now()
 
-			// 构建完整文件路径
 			start := time.Now()
+			// 构建完整文件路径
+			fullPath := filepath.Join(env.workspaceDir, tc.filePath)
 			// 查询调用链
 			opts := &types.QueryCallGraphOptions{
 				Workspace: env.workspaceDir,
-				FilePath:  tc.filePath,
+				FilePath:  fullPath,
 				LineRange: fmt.Sprintf("%d-%d", tc.startLine, tc.endLine),
 				MaxLayer:  tc.maxLayer,
 			}
