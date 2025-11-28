@@ -225,7 +225,7 @@ type FileSkeletonData struct {
 	Elements  []*FileSkeletonElement `json:"elements"`
 }
 
-// FileSkeletonImport 导入信息（还原后的原始内容）
+// FileSkeletonImport 导入信息
 type FileSkeletonImport struct {
 	Content string `json:"content"` // 原始导入语句
 	Range   []int  `json:"range"`   // [startLine, startCol, endLine, endCol] - 从1开始

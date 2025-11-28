@@ -318,3 +318,36 @@ func (h *BackendHandler) ReadCodeSnippets(c *gin.Context) {
 	}
 	response.OkJson(c, list)
 }
+
+// GetFileSkeleton 获取文件骨架信息
+// @Summary 获取文件骨架
+// @Description 获取文件的骨架信息，包括导入、包、元素等
+// @Tags files
+// @Accept json
+// @Produce json
+// @Param clientId query string true "用户机器ID"
+// @Param workspacePath query string true "工作区绝对路径"
+// @Param filePath query string true "文件路径"
+// @Param filteredBy query string false "过滤类型：definition | reference"
+// @Success 200 {object} response.Response{data=dto.FileSkeletonData} "成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /codebase-indexer/api/v1/files/skeleton [get]
+func (h *BackendHandler) GetFileSkeleton(c *gin.Context) {
+	var req dto.GetFileSkeletonRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		h.logger.Error("invalid request format: %v", err)
+		response.Error(c, http.StatusBadRequest, err)
+		return
+	}
+
+	h.logger.Info("get file skeleton request: ClientId=%s, Workspace=%s, FilePath=%s", req.ClientId, req.WorkspacePath, req.FilePath)
+
+	skeleton, err := h.codebaseService.GetFileSkeleton(c, &req)
+	if err != nil {
+		h.logger.Error("get file skeleton err: %v", err)
+		response.Error(c, http.StatusBadRequest, err)
+		return
+	}
+	response.OkJson(c, skeleton)
+}

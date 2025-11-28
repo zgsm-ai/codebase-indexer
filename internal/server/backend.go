@@ -17,6 +17,7 @@ func SetupBackendRoutes(router *gin.Engine, backendHandler *handler.BackendHandl
 		api.GET("/search/reference", AuthMiddleware(logger), BackendRateLimitMiddleware(logger), backendHandler.SearchReference)
 		api.GET("/search/definition", AuthMiddleware(logger), BackendRateLimitMiddleware(logger), backendHandler.SearchDefinition)
 		api.GET("/files/content", AuthMiddleware(logger), BackendRateLimitMiddleware(logger), backendHandler.GetFileContent)
+		api.GET("/files/skeleton", AuthMiddleware(logger), BackendRateLimitMiddleware(logger), backendHandler.GetFileSkeleton)
 		api.POST("/snippets/read", AuthMiddleware(logger), BackendRateLimitMiddleware(logger), backendHandler.ReadCodeSnippets)
 		api.GET("/codebases/directory", AuthMiddleware(logger), BackendRateLimitMiddleware(logger), backendHandler.GetCodebaseDirectory)
 		api.GET("/files/structure", AuthMiddleware(logger), BackendRateLimitMiddleware(logger), backendHandler.GetFileStructure)
