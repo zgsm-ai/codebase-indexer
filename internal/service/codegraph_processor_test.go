@@ -416,6 +416,7 @@ func TestCodegraphProcessor_ProcessDeleteFileEvent(t *testing.T) {
 	mockLogger := &mocks.MockLogger{}
 	mockWorkspaceReader := mocks.NewMockWorkspaceReader(ctrl)
 	mockIndexer := mocks.NewMockIndexer(ctrl)
+	// mockgen -source=internal/repository/event.go -destination=test/mocks/mock_event_repository.go -package=mocks
 	mockEventRepo := mocks.NewMockEventRepository(ctrl)
 
 	// 创建测试实例
