@@ -22,6 +22,15 @@ var jsReplacer = strings.NewReplacer(
 	")", "",
 )
 
+// JavaScript 保留关键字集合
+var jsReservedKeywords = map[string]bool{
+	"if": true, "else": true, "for": true, "while": true, "do": true,
+	"switch": true, "case": true, "default": true,
+	"try": true, "catch": true, "finally": true,
+	"break": true, "continue": true, "return": true,
+	"throw": true, "with": true, "yield": true, "await": true,
+}
+
 type JavaScriptResolver struct {
 }
 
@@ -105,6 +114,17 @@ func (js *JavaScriptResolver) resolveFunction(ctx context.Context, element *Func
 }
 
 func (js *JavaScriptResolver) resolveMethod(ctx context.Context, element *Method, rc *ResolveContext) ([]Element, error) {
+	// 验证：拒绝保留关键字作为方法名
+	for _, capture := range rc.Match.Captures {
+		nodeCaptureName := rc.CaptureNames[capture.Index]
+		if types.ToElementType(nodeCaptureName) == types.ElementTypeMethodName {
+			methodName := capture.Node.Utf8Text(rc.SourceFile.Content)
+			if jsReservedKeywords[methodName] {
+				return []Element{}, nil
+			}
+		}
+	}
+
 	elements := []Element{element}
 	rootCap := rc.Match.Captures[0]
 	for _, capture := range rc.Match.Captures {

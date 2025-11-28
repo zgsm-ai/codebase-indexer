@@ -72,6 +72,7 @@ const definitionFillContentNodeLimit = 20
 const definitionFillContentLineLimit = 200
 const DefaultMaxCodeSnippetLines = 500
 const DefaultMaxCodeSnippets = 200
+const maxSignatureLength = 200
 
 // NewCodebaseService 创建新的代码库服务
 func NewCodebaseService(
@@ -631,6 +632,42 @@ func (l *codebaseService) DeleteIndex(ctx context.Context, req *dto.DeleteIndexR
 	return nil
 }
 
+func (s *codebaseService) GetFileSkeleton(ctx context.Context, req *dto.GetFileSkeletonRequest) (*dto.FileSkeletonData, error) {
+	// 1. 参数校验
+	if req.WorkspacePath == "" || req.FilePath == "" {
+		return nil, errs.NewMissingParamError("workspacePath or filePath")
+	}
+
+	// 2. 路径处理（相对/绝对）
+	filePath := req.FilePath
+	if !filepath.IsAbs(filePath) {
+		filePath = filepath.Join(req.WorkspacePath, filePath)
+	}
+
+	// 验证路径是否在 workspace 内
+	if err := s.checkPath(ctx, req.WorkspacePath, []string{filePath}); err != nil {
+		return nil, err
+	}
+
+	// 3. 获取原始 FileElementTable
+	table, err := s.indexer.GetFileElementTable(ctx, req.WorkspacePath, filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file element table: %w", err)
+	}
+
+	// 4. 读取文件内容（用于提取签名和还原imports）
+	fileContent, err := s.workspaceReader.ReadFile(ctx, filePath, types.ReadOptions{})
+	if err != nil {
+		s.logger.Warn("failed to read file content for %s: %v", filePath, err)
+		fileContent = nil // 继续处理，但签名和imports还原会失败
+	}
+
+	// 5. 转换数据结构
+	result := convertToFileSkeletonData(table, fileContent, req.FilteredBy)
+
+	return result, nil
+}
+
 func convertStatus(status int) string {
 	var indexStatus string
 	switch status {
@@ -644,4 +681,132 @@ func convertStatus(status int) string {
 		indexStatus = "failed"
 	}
 	return indexStatus
+}
+
+// convertToFileSkeletonData 转换 FileElementTable 到 FileSkeletonData
+func convertToFileSkeletonData(
+	table *codegraphpb.FileElementTable,
+	fileContent []byte,
+	filteredBy string,
+) *dto.FileSkeletonData {
+	// 按行分割文件内容（KISS原则）
+	var lines []string
+	if fileContent != nil {
+		lines = strings.Split(string(fileContent), "\n")
+	}
+
+	// 转换 imports
+	imports := make([]*dto.FileSkeletonImport, 0, len(table.Imports))
+	for _, imp := range table.Imports {
+		content := restoreImportContent(lines, imp.Range)
+		imports = append(imports, &dto.FileSkeletonImport{
+			Content: content,
+			Range:   convertRange(imp.Range),
+		})
+	}
+
+	// 转换 package
+	var pkg *dto.FileSkeletonPackage
+	if table.Package != nil {
+		pkg = &dto.FileSkeletonPackage{
+			Name:  table.Package.Name,
+			Range: convertRange(table.Package.Range),
+		}
+	}
+
+	// 转换和过滤 elements
+	elements := make([]*dto.FileSkeletonElement, 0, len(table.Elements))
+	for _, elem := range table.Elements {
+		// 根据 filteredBy 参数过滤
+		if filteredBy == "definition" && !elem.IsDefinition {
+			continue
+		}
+		if filteredBy == "reference" && elem.IsDefinition {
+			continue
+		}
+
+		// 提取签名
+		signature := extractSignature(lines, elem.Range, maxSignatureLength)
+		if signature == "" {
+			signature = elem.Name // 如果为空则使用 name
+		}
+
+		elements = append(elements, &dto.FileSkeletonElement{
+			Name:         elem.Name,
+			Signature:    signature,
+			IsDefinition: elem.IsDefinition,
+			ElementType:  convertElementType(elem.ElementType),
+			Range:        convertRange(elem.Range),
+		})
+	}
+
+	return &dto.FileSkeletonData{
+		Path:      table.Path,
+		Language:  table.Language,
+		Timestamp: table.Timestamp,
+		Imports:   imports,
+		Package:   pkg,
+		Elements:  elements,
+	}
+}
+
+// extractSignature 提取签名（从指定行读取，限制长度）
+func extractSignature(lines []string, ranges []int32, maxLength int) string {
+	if len(ranges) < 1 || lines == nil || len(lines) == 0 {
+		return ""
+	}
+	lineNumber := int(ranges[0]) // 0-based
+	if lineNumber < 0 || lineNumber >= len(lines) {
+		return ""
+	}
+	line := strings.TrimSpace(lines[lineNumber])
+	if len(line) > maxLength {
+		return line[:maxLength]
+	}
+	return line
+}
+
+// restoreImportContent 还原 import 的原始内容
+func restoreImportContent(lines []string, ranges []int32) string {
+	if len(ranges) < 3 || lines == nil {
+		return ""
+	}
+	startLine := int(ranges[0]) // 0-based
+	endLine := int(ranges[2])   // 0-based
+
+	if startLine < 0 || endLine >= len(lines) || startLine > endLine {
+		return ""
+	}
+
+	// 单行import
+	if startLine == endLine {
+		return strings.TrimSpace(lines[startLine])
+	}
+
+	// 多行import（合并为一行）
+	var builder strings.Builder
+	for i := startLine; i <= endLine && i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed != "" {
+			builder.WriteString(trimmed)
+			if i < endLine {
+				builder.WriteString(" ")
+			}
+		}
+	}
+	return builder.String()
+}
+
+// convertElementType 转换 ElementType 枚举到字符串名称
+func convertElementType(et codegraphpb.ElementType) string {
+	return codegraphpb.ElementType_name[int32(et)]
+}
+
+// convertRange 转换 range（+1 转换：0-based -> 1-based）
+func convertRange(protoRange []int32) []int {
+	result := make([]int, len(protoRange))
+	for i, v := range protoRange {
+		result[i] = int(v) + 1
+	}
+	return result
 }
