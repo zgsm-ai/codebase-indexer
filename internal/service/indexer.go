@@ -71,6 +71,9 @@ type Indexer interface {
 
 	// IndexIter 获取索引迭代器
 	IndexIter(ctx context.Context, projectUuid string) store.Iterator
+
+	// GetFileElementTable 获取文件元素表
+	GetFileElementTable(ctx context.Context, workspacePath, filePath string) (*codegraphpb.FileElementTable, error)
 }
 
 // indexer 代码索引器
@@ -851,45 +854,6 @@ func (i *indexer) findProjectForFile(projects []*workspace.Project, filePath str
 	return nil, types.EmptyString, fmt.Errorf("no project found for file path %s", filePath)
 }
 
-// checkElementTables 检查element_tables
-func (i *indexer) checkElementTables(elementTables []*parser.FileElementTable) {
-	start := time.Now()
-	total, filtered := 0, 0
-	for _, ft := range elementTables {
-		newImports := make([]*resolver.Import, 0, len(ft.Imports))
-		newElements := make([]resolver.Element, 0, len(ft.Elements))
-		for _, imp := range ft.Imports {
-			if resolver.IsValidElement(imp) {
-				newImports = append(newImports, imp)
-			} else {
-				i.logger.Debug("invalid language %s file %s import {name:%s type:%s path:%s range:%v}",
-					ft.Language, ft.Path, imp.Name, imp.Type, imp.Path, imp.Range)
-			}
-		}
-		for _, ele := range ft.Elements {
-			total++
-			if resolver.IsValidElement(ele) {
-				// 过滤掉 局部 变量
-				variable, ok := ele.(*resolver.Variable)
-				if ok {
-					if variable.GetScope() == types.ScopeBlock || variable.GetScope() == types.ScopeFunction {
-						continue
-					}
-				}
-				newElements = append(newElements, ele)
-			} else {
-				filtered++
-				i.logger.Debug("invalid language %s file %s element {name:%s type:%s path:%s range:%v}",
-					ft.Language, ft.Path, ele.GetName(), ele.GetType(), ele.GetPath(), ele.GetRange())
-			}
-		}
-
-		ft.Imports = newImports
-		ft.Elements = newElements
-	}
-	i.logger.Debug("element tables %d, elements before total %d, filtered %d, cost %d ms",
-		len(elementTables), total, filtered, time.Since(start).Milliseconds())
-}
 func NormalizeLineRange(start, end, maxLimit int) (int, int) {
 	// 确保最小为 1
 	if start <= 0 {
@@ -1107,7 +1071,7 @@ func (i *indexer) findSymbolReferences(ctx context.Context, projectUuid string, 
 }
 
 // querySymbolsByLines 按位置查询 occurrence
-func (i *indexer) querySymbolsByLines(ctx context.Context, fileTable *codegraphpb.FileElementTable,
+func (i *indexer) querySymbolsByLines(_ context.Context, fileTable *codegraphpb.FileElementTable,
 	opts *types.QueryReferenceOptions) []*codegraphpb.Element {
 	var nodes []*codegraphpb.Element
 	if opts.StartLine <= 0 || opts.EndLine < opts.StartLine {
@@ -1848,85 +1812,6 @@ func (mb *MapBatcher) Flush() {
 
 const varVariadic = "..."
 
-// buildCalleeMap 构建反向索引映射：callee -> []caller
-func (i *indexer) buildCalleeMap(ctx context.Context, projectUuid string) error {
-	// 创建batcher实例
-	batcher := NewMapBatcher(i.storage, i.logger, projectUuid, defaultMapBatchSize)
-	defer batcher.Flush()
-
-	// 用name作为key
-	calleeMap, err := lru.NewWithEvict(MaxCalleeMapCacheCapacity, func(key string, value []CallerInfo) {
-		batcher.Add(key, value, true)
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create variadic map cache, err: %v", err)
-	}
-	iter := i.storage.Iter(ctx, projectUuid)
-	defer iter.Close()
-
-	for iter.Next() {
-		key := iter.Key()
-		if store.IsSymbolNameKey(key) {
-			continue
-		}
-
-		var elementTable codegraphpb.FileElementTable
-		if err := store.UnmarshalValue(iter.Value(), &elementTable); err != nil {
-			i.logger.Error("failed to unmarshal file %s element_table value, err: %v", elementTable.Path, err)
-			continue
-		}
-
-		// 遍历所有函数/方法定义
-		for _, element := range elementTable.Elements {
-			if !element.IsDefinition ||
-				(element.ElementType != codegraphpb.ElementType_FUNCTION &&
-					element.ElementType != codegraphpb.ElementType_METHOD) {
-				continue
-			}
-
-			// 获取调用者（函数/方法）参数个数
-			callerParams, err := proto.GetParametersFromExtraData(element.ExtraData)
-			if err != nil {
-				i.logger.Debug("parse caller parameters from extra data, err: %v", err)
-				continue
-			}
-			callerParamCount := len(callerParams)
-			isVariadic := false
-			if callerParamCount > 0 {
-				lastParam := callerParams[callerParamCount-1]
-				if strings.Contains(lastParam.Name, varVariadic) {
-					callerParamCount = callerParamCount - 1
-					isVariadic = true
-				}
-			}
-			// 查找该函数内部的所有调用
-			calleeKeys := i.extractCalleeSymbols(&elementTable, element.Range[0], element.Range[2])
-
-			// 为每个被调用的符号添加调用者信息
-			for _, calleeKey := range calleeKeys {
-				callerInfo := CallerInfo{
-					SymbolName: element.Name,
-					FilePath:   elementTable.Path,
-					Position:   types.ToPosition(element.Range),
-					ParamCount: callerParamCount,
-					IsVariadic: isVariadic,
-					CalleeKey:  calleeKey,
-				}
-				// 添加到缓存
-				if val, ok := calleeMap.Get(calleeKey.SymbolName); ok {
-					calleeMap.Add(calleeKey.SymbolName, append(val, callerInfo))
-				} else {
-					calleeMap.Add(calleeKey.SymbolName, []CallerInfo{callerInfo})
-				}
-			}
-		}
-	}
-
-	// 清空缓存，必须全部写到数据库里面去，保证数据库是最新的
-	calleeMap.Purge()
-	return nil
-}
-
 // renameCallRelationsForFiles 重命名调用关系中的文件路径
 func (i *indexer) renameCallRelationsForFiles(ctx context.Context, projectUuid string, oldPathPrefix, newPathPrefix string) error {
 	// 遍历所有调用关系
@@ -2248,23 +2133,7 @@ func (i *indexer) searchSymbolNames(ctx context.Context, projectUuid string, lan
 	return found, nil
 }
 
-func (i *indexer) findSymbolInDocByRange(fileElementTable *codegraphpb.FileElementTable, symbolRange []int32) *codegraphpb.Element {
-	//TODO 二分查找
-	for _, s := range fileElementTable.Elements {
-		// 开始行
-		if len(s.Range) < 2 {
-			i.logger.Debug("findSymbolInDocByRange invalid range in doc:%s, less than 2: %v", s.Name, s.Range)
-			continue
-		}
-
-		if s.Range[0] == symbolRange[0] {
-			return s
-		}
-	}
-	return nil
-}
-
-func (i *indexer) findSymbolInDocByLineRange(ctx context.Context,
+func (i *indexer) findSymbolInDocByLineRange(_ context.Context,
 	fileElementTable *codegraphpb.FileElementTable, startLine int32, endLine int32) []*codegraphpb.Element {
 	var res []*codegraphpb.Element
 	for _, s := range fileElementTable.Elements {
@@ -2283,29 +2152,6 @@ func (i *indexer) findSymbolInDocByLineRange(ctx context.Context,
 		}
 	}
 	return res
-}
-
-func (i *indexer) findReferenceSymbolBelonging(f *codegraphpb.FileElementTable,
-	referenceElement *codegraphpb.Element) *codegraphpb.Element {
-	if len(referenceElement.GetRange()) < 3 {
-		i.logger.Debug("find symbol belong %s invalid referenceElement range %s %s %v",
-			f.Path, referenceElement.Name, referenceElement.Range)
-		return nil
-	}
-	for _, e := range f.Elements {
-		if !e.IsDefinition {
-			continue
-		}
-		if len(e.GetRange()) < 3 {
-			i.logger.Debug("find symbol belong invalid range %s %s %v", f.Path, e.Name, e.Range)
-			continue
-		}
-		// 判断行
-		if referenceElement.Range[0] > e.Range[0] && referenceElement.Range[0] < e.Range[2] {
-			return e
-		}
-	}
-	return nil
 }
 
 func (i *indexer) GetSummary(ctx context.Context, workspacePath string) (*types.CodeGraphSummary, error) {
@@ -2550,19 +2396,6 @@ func (i *indexer) parseFiles(ctx context.Context, files []*types.FileWithModTime
 	return fileElementTables, projectTaskMetrics, errors.Join(errs...)
 }
 
-func isInLinesRange(current, start, end int32) bool {
-	return current >= start-1 && current <= end-1
-}
-
-func isSymbolExists(filePath string, ranges []int32, state map[string]bool) bool {
-	key := symbolMapKey(filePath, ranges)
-	_, ok := state[key]
-	return ok
-}
-func symbolMapKey(filePath string, ranges []int32) string {
-	return filePath + "-" + utils.SliceToString(ranges)
-}
-
 // processBatch 处理单个批次的文件
 func (i *indexer) processBatch(ctx context.Context, batchId int, params *BatchProcessParams,
 	symbolCache *cache.LRUCache[*codegraphpb.SymbolOccurrence]) (*types.IndexTaskMetrics, error) {
@@ -2775,7 +2608,7 @@ func (i *indexer) indexFilesInBatches(ctx context.Context, params *BatchProcessi
 }
 
 // updateProgress 更新进度
-func (i *indexer) updateProgress(ctx context.Context, progress *ProgressInfo) error {
+func (i *indexer) updateProgress(_ context.Context, progress *ProgressInfo) error {
 
 	if err := i.workspaceRepository.UpdateCodegraphInfo(progress.WorkspacePath,
 		progress.Processed+progress.PreviousNum, time.Now().Unix()); err != nil {
@@ -2791,7 +2624,7 @@ func (i *indexer) IndexIter(ctx context.Context, projectUuid string) store.Itera
 	return i.storage.Iter(ctx, projectUuid)
 }
 
-func (i *indexer) filterSourceFiles(ctx context.Context, workspacePath string, files []string) []*types.FileWithModTimestamp {
+func (i *indexer) filterSourceFiles(_ context.Context, workspacePath string, files []string) []*types.FileWithModTimestamp {
 	visitPattern := i.config.VisitPattern
 	if visitPattern == nil {
 		visitPattern = workspace.DefaultVisitPattern
@@ -2902,4 +2735,27 @@ func (i *indexer) queryCallersFromDB(ctx context.Context, projectUuid string, ca
 		})
 	}
 	return callers, nil
+}
+
+// GetFileElementTable 获取文件元素表（公开接口）
+func (i *indexer) GetFileElementTable(ctx context.Context, workspacePath, filePath string) (*codegraphpb.FileElementTable, error) {
+	// 处理相对/绝对路径
+	if !filepath.IsAbs(filePath) {
+		filePath = filepath.Join(workspacePath, filePath)
+	}
+
+	// 获取项目信息
+	project, err := i.GetProjectByFilePath(ctx, workspacePath, filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project for file %s: %w", filePath, err)
+	}
+
+	// 推断语言类型
+	language, err := lang.InferLanguage(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("unsupported file type: %w", err)
+	}
+
+	// 获取文件元素表
+	return i.getFileElementTable(ctx, project.Uuid, language, filePath)
 }

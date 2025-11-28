@@ -1,7 +1,10 @@
 // internal/dto/backend.go - 后端API请求和响应数据结构定义
 package dto
 
-import "codebase-indexer/pkg/codegraph/types"
+import (
+	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
+	"codebase-indexer/pkg/codegraph/types"
+)
 
 // SearchReferenceRequest 关系检索请求
 type SearchReferenceRequest struct {
@@ -58,6 +61,7 @@ type SearchCallGraphRequest struct {
 	LineRange    string `form:"lineRange,omitempty"`
 	SymbolName   string `form:"symbolName,omitempty"`
 	MaxLayer     int    `form:"maxLayer,omitempty"`
+	NoContent    int    `form:"noContent,omitempty"` // 0:返回content(默认), 1:不返回content
 }
 
 type ReadCodeSnippetsRequest struct {
@@ -204,6 +208,17 @@ func ToPosition(ranges []int32) Position {
 	}
 
 }
+
+// GetFileSkeletonRequest 获取文件骨架请求
+type GetFileSkeletonRequest struct {
+	ClientId      string `form:"clientId" binding:"required"`
+	WorkspacePath string `form:"workspacePath" binding:"required"`
+	FilePath      string `form:"filePath" binding:"required"`
+	FilteredBy    string `form:"filteredBy,omitempty"` // 可选: definition | reference
+}
+
+// FileSkeletonData 文件骨架数据（直接使用 FileElementTable）
+type FileSkeletonData = codegraphpb.FileElementTable
 
 const (
 	Embedding = "embedding"

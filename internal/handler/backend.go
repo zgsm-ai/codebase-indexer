@@ -114,6 +114,7 @@ func (h *BackendHandler) SearchDefinition(c *gin.Context) {
 // @Param endLine query int false "结束行号，从1开始"
 // @Param symbolName query string false "符号名，比如函数名、类名等"
 // @Param maxLayer query int false "最大层数，默认最大10层"
+// @Param noContent query int false "是否不返回content，0:返回(默认)，1:不返回"
 // @Success 200 {object} response.Response{data=dto.CallGraphData} "成功"
 // @Failure 400 {object} response.Response "请求参数错误"
 // @Failure 500 {object} response.Response "服务器内部错误"
@@ -317,4 +318,38 @@ func (h *BackendHandler) ReadCodeSnippets(c *gin.Context) {
 		return
 	}
 	response.OkJson(c, list)
+}
+
+// GetFileSkeleton 获取文件骨架
+// @Summary 获取文件骨架
+// @Description 根据工作区路径和文件路径返回 FileElementTable 信息，支持过滤
+// @Tags files
+// @Accept json
+// @Produce json
+// @Param clientId query string true "用户机器ID"
+// @Param workspacePath query string true "工作区路径"
+// @Param filePath query string true "文件路径（支持相对/绝对路径）"
+// @Param filteredBy query string false "过滤类型：definition | reference"
+// @Success 200 {object} response.Response{data=dto.FileSkeletonData} "成功"
+// @Failure 400 {object} response.Response "请求参数错误"
+// @Failure 500 {object} response.Response "服务器内部错误"
+// @Router /codebase-indexer/api/v1/files/skeleton [get]
+func (h *BackendHandler) GetFileSkeleton(c *gin.Context) {
+	var req dto.GetFileSkeletonRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		h.logger.Error("invalid request format: %v", err)
+		response.Error(c, http.StatusBadRequest, err)
+		return
+	}
+
+	h.logger.Info("get file skeleton request: ClientId=%s, WorkspacePath=%s, FilePath=%s, FilteredBy=%s",
+		req.ClientId, req.WorkspacePath, req.FilePath, req.FilteredBy)
+
+	skeleton, err := h.codebaseService.GetFileSkeleton(c, &req)
+	if err != nil {
+		h.logger.Error("get file skeleton err: %v", err)
+		response.Error(c, http.StatusBadRequest, err)
+		return
+	}
+	response.OkJson(c, skeleton)
 }
