@@ -86,18 +86,21 @@ type indexer struct {
 	workspaceRepository repository.WorkspaceRepository
 	config              *IndexerConfig
 	logger              logger.Logger
-	mu                  sync.Mutex
+	callGraphSync       sync.RWMutex
+	// 添加项目调用关系是否建立了的一个map作为缓存
+	callGraphBuilt map[string]struct{}
 }
 
 // BatchProcessParams 批处理参数
 type BatchProcessParams struct {
-	ProjectUuid string
-	SourceFiles []*types.FileWithModTimestamp
-	BatchStart  int
-	BatchEnd    int
-	BatchSize   int
-	TotalFiles  int
-	Project     *workspace.Project
+	ProjectUuid       string
+	SourceFiles       []*types.FileWithModTimestamp
+	BatchStart        int
+	BatchEnd          int
+	BatchSize         int
+	TotalFiles        int
+	Project           *workspace.Project
+	SkipCallRelations bool
 }
 
 // BatchProcessResult 批处理结果
@@ -117,6 +120,7 @@ type BatchProcessingParams struct {
 	WorkspacePath        string
 	Concurrency          int
 	BatchSize            int
+	SkipCallRelations    bool
 }
 
 // BatchProcessingResult 批处理阶段结果
@@ -151,13 +155,14 @@ type ProgressInfo struct {
 }
 
 const (
-	defaultConcurrency   = 1
-	defaultBatchSize     = 50
-	defaultMapBatchSize  = 5
-	defaultMaxFiles      = 10000
-	defaultMaxProjects   = 3
-	defaultCacheCapacity = 10_0000 // 假定单个文件平均10个元素,1万个文件
-	defaultTopN          = 10
+	defaultConcurrency    = 1
+	defaultBatchSize      = 50
+	defaultMapBatchSize   = 20
+	defaultMaxCallerCount = 20
+	defaultMaxFiles       = 10000
+	defaultMaxProjects    = 3
+	defaultCacheCapacity  = 10_0000 // 假定单个文件平均10个元素,1万个文件
+	defaultTopN           = 10
 )
 
 // NewCodeIndexer 创建新的代码索引器
@@ -181,6 +186,7 @@ func NewCodeIndexer(
 		workspaceRepository: workspaceRepository,
 		config:              &config,
 		logger:              logger,
+		callGraphBuilt:      make(map[string]struct{}),
 	}
 }
 
@@ -329,6 +335,9 @@ func (i *indexer) indexProject(ctx context.Context, workspacePath string, projec
 		PreviousFileNum:      databasePreviousFileNum + filteredCnt,
 		Concurrency:          i.config.MaxConcurrency,
 		BatchSize:            i.config.MaxBatchSize,
+		// 项目构建的同时不构建调用关系，等项目整体构建完毕后，才构建调用关系
+		// 拉长时间，换来低cpu、内存和磁盘写入
+		SkipCallRelations: true,
 	}
 
 	batchResult, err := i.indexFilesInBatches(ctx, batchParams)
@@ -336,6 +345,21 @@ func (i *indexer) indexProject(ctx context.Context, workspacePath string, projec
 	if err != nil {
 		return &types.IndexTaskMetrics{TotalFiles: 0}, []error{err}
 	}
+
+	// 释放不再需要的引用，让 GC 自然回收
+	needIndexFiles = nil
+
+	// 在这里调用buildCalleeMap，构建调用关系map
+	buildCalleeMapStart := time.Now()
+	if err := i.buildCalleeMap(ctx, projectUuid); err != nil {
+		i.logger.Error("build callee map for project %s failed: %v", project.Path, err)
+	} else {
+		// 标记该项目已构建调用关系
+		i.callGraphSync.Lock()
+		i.callGraphBuilt[projectUuid] = struct{}{}
+		i.callGraphSync.Unlock()
+	}
+	i.logger.Info("build callee map for project %s end, cost %d ms", project.Path, time.Since(buildCalleeMapStart).Milliseconds())
 
 	i.logger.Info("project %s files parse finish. cost %d ms, visit %d files, "+
 		"parsed %d files successfully, failed %d files, total symbols: %d, saved symbols %d, total variables %d, saved variables %d",
@@ -698,6 +722,8 @@ func (i *indexer) IndexFiles(ctx context.Context, workspacePath string, filePath
 				PreviousFileNum:      workspaceModel.FileNum,
 				Concurrency:          i.config.MaxConcurrency,
 				BatchSize:            i.config.MaxBatchSize,
+				// 事件增量更新，需要同步更新调用关系
+				SkipCallRelations: false,
 			}
 
 			batchResult, err := i.indexFilesInBatches(ctx, batchParams)
@@ -1366,7 +1392,6 @@ func safeFilePath(workspace, relativeFilePath string) (string, error) {
 // 获取符号定义代码块里面的调用图
 func (i *indexer) QueryCallGraph(ctx context.Context, opts *types.QueryCallGraphOptions) ([]*types.RelationNode, error) {
 	startTime := time.Now()
-
 	// 参数验证
 	if opts.MaxLayer <= 0 {
 		opts.MaxLayer = defaultMaxLayer // 默认最大层数
@@ -1385,6 +1410,9 @@ func (i *indexer) QueryCallGraph(ctx context.Context, opts *types.QueryCallGraph
 		return nil, err
 	}
 	projectUuid := project.Uuid
+	if !i.isCallGraphBuilt(projectUuid) {
+		return nil, fmt.Errorf("call graph has not been built yet for project %s", projectUuid)
+	}
 	defer func() {
 		i.logger.Info("query callgraph cost %d ms", time.Since(startTime).Milliseconds())
 	}()
@@ -1544,7 +1572,7 @@ func (i *indexer) queryCallGraphByLineRange(ctx context.Context, projectUuid str
 	return definitions, nil
 }
 
-const MaxCalleeMapCacheCapacity = 1600
+const MaxCalleeMapCacheCapacity = 200
 
 // buildCallGraphBFS 使用BFS层次遍历构建调用链
 func (i *indexer) buildCallGraphBFS(ctx context.Context, projectUuid string, workspace string, rootNodes []*types.RelationNode, calleeInfos []*CalleeInfo, maxLayer int, visited map[string]struct{}) {
@@ -1725,17 +1753,19 @@ type MapBatcher struct {
 	logger      logger.Logger
 	projectUuid string
 
-	batchSize int // 批量写入的大小限制
-	calleeMap map[string][]CallerInfo
+	batchSize      int // 批量写入的大小限制
+	maxCallerCount int // 某个key的调用者数量超过这个值，则立即推送
+	calleeMap      map[string][]CallerInfo
 }
 
-func NewMapBatcher(storage store.GraphStorage, logger logger.Logger, projectUuid string, batchSize int) *MapBatcher {
+func NewMapBatcher(storage store.GraphStorage, logger logger.Logger, projectUuid string, batchSize int, maxCallerCount int) *MapBatcher {
 	mb := &MapBatcher{
-		storage:     storage,
-		logger:      logger,
-		projectUuid: projectUuid,
-		batchSize:   batchSize,
-		calleeMap:   make(map[string][]CallerInfo),
+		storage:        storage,
+		logger:         logger,
+		projectUuid:    projectUuid,
+		batchSize:      batchSize,
+		maxCallerCount: maxCallerCount,
+		calleeMap:      make(map[string][]CallerInfo),
 	}
 	return mb
 }
@@ -1747,7 +1777,14 @@ func (mb *MapBatcher) Add(key string, val []CallerInfo, merge bool) {
 	} else {
 		mb.calleeMap[key] = val
 	}
-	// 达到批次立即推送
+
+	// 某个 key 的调用者数量超过 maxCallerCount，则立即写回该 key
+	if len(mb.calleeMap[key]) > mb.maxCallerCount {
+		mb.FlushKey(key)
+		return
+	}
+
+	// 达到批次立即推送所有 key
 	if len(mb.calleeMap) >= mb.batchSize {
 		tempCalleeMap := mb.calleeMap
 		mb.calleeMap = make(map[string][]CallerInfo)
@@ -1808,9 +1845,144 @@ func (mb *MapBatcher) flush(tempCalleeMap map[string][]CallerInfo) {
 // 手动刷盘
 func (mb *MapBatcher) Flush() {
 	mb.flush(mb.calleeMap)
+	mb.calleeMap = make(map[string][]CallerInfo)
+}
+
+// FlushKey 只写回单个 key 的数据到数据库
+func (mb *MapBatcher) FlushKey(key string) {
+	callers, exists := mb.calleeMap[key]
+	if !exists || len(callers) == 0 {
+		return
+	}
+
+	// 构建单个 item
+	item := &codegraphpb.CalleeMapItem{
+		CalleeName: key,
+		Callers:    make([]*codegraphpb.CallerInfo, 0, len(callers)),
+	}
+
+	for _, c := range callers {
+		item.Callers = append(item.Callers, &codegraphpb.CallerInfo{
+			SymbolName: c.SymbolName,
+			FilePath:   c.FilePath,
+			Position: &codegraphpb.Position{
+				StartLine:   int32(c.Position.StartLine),
+				StartColumn: int32(c.Position.StartColumn),
+				EndLine:     int32(c.Position.EndLine),
+				EndColumn:   int32(c.Position.EndColumn),
+			},
+			ParamCount: int32(c.ParamCount),
+			CalleeKey: &codegraphpb.CalleeKey{
+				SymbolName: c.CalleeKey.SymbolName,
+				ParamCount: int32(c.CalleeKey.ParamCount),
+			},
+			IsVariadic: c.IsVariadic,
+			Score:      c.Score,
+		})
+	}
+
+	// 合并旧数据
+	old, _ := mb.storage.Get(context.Background(), mb.projectUuid,
+		store.CalleeMapKey{SymbolName: key})
+	if old != nil {
+		var oldItem codegraphpb.CalleeMapItem
+		if err := store.UnmarshalValue(old, &oldItem); err == nil {
+			item.Callers = append(item.Callers, oldItem.Callers...)
+		}
+	}
+
+	// 写入数据库
+	if err := mb.storage.BatchSave(context.Background(), mb.projectUuid,
+		workspace.CalleeMapItems([]*codegraphpb.CalleeMapItem{item})); err != nil {
+		mb.logger.Error("flush key %s failed: %v", key, err)
+		return
+	}
+
+	// 从内存中删除该 key
+	delete(mb.calleeMap, key)
 }
 
 const varVariadic = "..."
+
+// buildCalleeMap 构建反向索引映射：callee -> []caller
+// 使用 MapBatcher 直接管理内存，通过两个参数控制内存占用：
+// 1. key 的个数限制 (batchSize)
+// 2. 单个 value 长度限制 (maxCallerCount)
+func (i *indexer) buildCalleeMap(ctx context.Context, projectUuid string) error {
+	// 创建batcher实例
+	batcher := NewMapBatcher(i.storage, i.logger, projectUuid, defaultMapBatchSize, defaultMaxCallerCount)
+	defer batcher.Flush()
+
+	// 用name作为key
+	calleeMap, err := lru.NewWithEvict(MaxCalleeMapCacheCapacity, func(key string, value []CallerInfo) {
+		batcher.Add(key, value, true)
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create variadic map cache, err: %v", err)
+	}
+	iter := i.storage.Iter(ctx, projectUuid)
+	defer iter.Close()
+
+	for iter.Next() {
+		key := iter.Key()
+		if !store.IsElementPathKey(key) {
+			continue
+		}
+
+		var elementTable codegraphpb.FileElementTable
+		if err := store.UnmarshalValue(iter.Value(), &elementTable); err != nil {
+			i.logger.Error("failed to unmarshal file %s element_table value, err: %v", elementTable.Path, err)
+			continue
+		}
+
+		// 遍历所有函数/方法定义
+		for _, element := range elementTable.Elements {
+			if !element.IsDefinition ||
+				(element.ElementType != codegraphpb.ElementType_FUNCTION &&
+					element.ElementType != codegraphpb.ElementType_METHOD) {
+				continue
+			}
+
+			// 获取调用者（函数/方法）参数个数
+			callerParams, err := proto.GetParametersFromExtraData(element.ExtraData)
+			if err != nil {
+				i.logger.Debug("parse caller parameters from extra data, err: %v", err)
+				continue
+			}
+			callerParamCount := len(callerParams)
+			isVariadic := false
+			if callerParamCount > 0 {
+				lastParam := callerParams[callerParamCount-1]
+				if strings.Contains(lastParam.Name, varVariadic) {
+					callerParamCount = callerParamCount - 1
+					isVariadic = true
+				}
+			}
+			// 查找该函数内部的所有调用
+			calleeKeys := i.extractCalleeSymbols(&elementTable, element.Range[0], element.Range[2])
+
+			// 为每个被调用的符号添加调用者信息
+			for _, calleeKey := range calleeKeys {
+				callerInfo := CallerInfo{
+					SymbolName: element.Name,
+					FilePath:   elementTable.Path,
+					Position:   types.ToPosition(element.Range),
+					ParamCount: callerParamCount,
+					IsVariadic: isVariadic,
+					CalleeKey:  calleeKey,
+				}
+				// 添加到缓存
+				if val, ok := calleeMap.Get(calleeKey.SymbolName); ok {
+					calleeMap.Add(calleeKey.SymbolName, append(val, callerInfo))
+				} else {
+					calleeMap.Add(calleeKey.SymbolName, []CallerInfo{callerInfo})
+				}
+			}
+		}
+	}
+
+	return nil
+}
 
 // renameCallRelationsForFiles 重命名调用关系中的文件路径
 func (i *indexer) renameCallRelationsForFiles(ctx context.Context, projectUuid string, oldPathPrefix, newPathPrefix string) error {
@@ -1892,8 +2064,9 @@ func (i *indexer) removeCallRelationsForFiles(ctx context.Context, projectUuid s
 	iter := i.storage.Iter(ctx, projectUuid)
 	defer iter.Close()
 
-	batcher := NewMapBatcher(i.storage, i.logger, projectUuid, defaultMapBatchSize)
-	defer batcher.Flush()
+	// 收集需要更新的调用关系
+	itemsToUpdate := make([]*codegraphpb.CalleeMapItem, 0)
+	keysToDelete := make([]store.CalleeMapKey, 0)
 
 	for iter.Next() {
 		key := iter.Key()
@@ -1908,24 +2081,11 @@ func (i *indexer) removeCallRelationsForFiles(ctx context.Context, projectUuid s
 		}
 
 		// 过滤掉来自删除文件的 caller
-		filteredCallers := make([]CallerInfo, 0)
+		filteredCallers := make([]*codegraphpb.CallerInfo, 0)
 		hasChanges := false
 		for _, caller := range item.Callers {
 			if _, shouldDelete := filePathSet[caller.FilePath]; !shouldDelete {
-				filteredCallers = append(filteredCallers, CallerInfo{
-					SymbolName: caller.SymbolName,
-					FilePath:   caller.FilePath,
-					Position: types.Position{
-						StartLine:   int(caller.Position.StartLine),
-						StartColumn: int(caller.Position.StartColumn),
-						EndLine:     int(caller.Position.EndLine),
-						EndColumn:   int(caller.Position.EndColumn),
-					},
-					ParamCount: int(caller.ParamCount),
-					IsVariadic: caller.IsVariadic,
-					CalleeKey:  CalleeKey{SymbolName: caller.CalleeKey.SymbolName, ParamCount: int(caller.CalleeKey.ParamCount)},
-					Score:      caller.Score,
-				})
+				filteredCallers = append(filteredCallers, caller)
 			} else {
 				hasChanges = true
 			}
@@ -1934,32 +2094,54 @@ func (i *indexer) removeCallRelationsForFiles(ctx context.Context, projectUuid s
 		// 如果有变化，更新或删除该调用关系
 		if hasChanges {
 			if len(filteredCallers) > 0 {
-				// 更新
-				batcher.Add(item.CalleeName, filteredCallers, false)
+				// 更新：直接覆盖
+				itemsToUpdate = append(itemsToUpdate, &codegraphpb.CalleeMapItem{
+					CalleeName: item.CalleeName,
+					Callers:    filteredCallers,
+				})
 			} else {
 				// 删除整个调用关系
-				if err := i.storage.Delete(ctx, projectUuid, store.CalleeMapKey{SymbolName: item.CalleeName}); err != nil {
-					i.logger.Error("failed to delete callee map for %s, err: %v", item.CalleeName, err)
-				}
+				keysToDelete = append(keysToDelete, store.CalleeMapKey{SymbolName: item.CalleeName})
 			}
+		}
+	}
+
+	// 批量更新（直接覆盖，不合并）
+	if len(itemsToUpdate) > 0 {
+		if err := i.storage.BatchSave(ctx, projectUuid, workspace.CalleeMapItems(itemsToUpdate)); err != nil {
+			i.logger.Error("failed to batch update callee map, err: %v", err)
+			return err
+		}
+	}
+
+	// 批量删除
+	for _, key := range keysToDelete {
+		if err := i.storage.Delete(ctx, projectUuid, key); err != nil {
+			i.logger.Error("failed to delete callee map for %s, err: %v", key.SymbolName, err)
 		}
 	}
 
 	return nil
 }
 
+// isCallGraphBuilt 检查项目的调用关系图是否已经构建
+func (i *indexer) isCallGraphBuilt(projectUuid string) bool {
+	i.callGraphSync.RLock()
+	defer i.callGraphSync.RUnlock()
+	_, exists := i.callGraphBuilt[projectUuid]
+	return exists
+}
+
 // buildCallRelationsForFiles 为批量文件构建调用关系并存储到 leveldb（写穿透）
+// 使用 MapBatcher 直接管理内存，通过两个参数控制内存占用
 func (i *indexer) buildCallRelationsForFiles(ctx context.Context, projectUuid string, fileTables []*codegraphpb.FileElementTable) error {
 	if len(fileTables) == 0 {
 		return nil
 	}
 
-	// 创建 batcher 实例用于批量写入
-	batcher := NewMapBatcher(i.storage, i.logger, projectUuid, defaultMapBatchSize)
+	// 创建 batcher 实例，内部使用普通 map 管理数据
+	batcher := NewMapBatcher(i.storage, i.logger, projectUuid, defaultMapBatchSize, defaultMaxCallerCount)
 	defer batcher.Flush()
-
-	// 临时存储新的调用关系
-	newCallRelations := make(map[string][]CallerInfo)
 
 	// 遍历所有文件
 	for _, fileTable := range fileTables {
@@ -2000,41 +2182,10 @@ func (i *indexer) buildCallRelationsForFiles(ctx context.Context, projectUuid st
 					IsVariadic: isVariadic,
 					CalleeKey:  calleeKey,
 				}
-
-				// 添加到临时映射
-				newCallRelations[calleeKey.SymbolName] = append(newCallRelations[calleeKey.SymbolName], callerInfo)
+				// 直接通过 batcher 添加，batcher 内部会自动处理内存控制
+				batcher.Add(calleeKey.SymbolName, []CallerInfo{callerInfo}, true)
 			}
 		}
-	}
-
-	// 对于每个被调用的符号，从数据库读取现有数据，合并后写回
-	for calleeName, newCallers := range newCallRelations {
-		// 读取现有的调用关系
-		existingCallers, err := i.queryCallersFromDB(ctx, projectUuid, calleeName)
-		if err != nil {
-			// 如果不存在则忽略错误，使用空列表
-			existingCallers = nil
-		}
-
-		// 合并调用者列表（去重）
-		callerMap := make(map[string]CallerInfo)
-		for _, caller := range existingCallers {
-			key := fmt.Sprintf("%s::%s::%d:%d", caller.FilePath, caller.SymbolName, caller.Position.StartLine, caller.Position.StartColumn)
-			callerMap[key] = caller
-		}
-		for _, caller := range newCallers {
-			key := fmt.Sprintf("%s::%s::%d:%d", caller.FilePath, caller.SymbolName, caller.Position.StartLine, caller.Position.StartColumn)
-			callerMap[key] = caller
-		}
-
-		// 转换为列表
-		mergedCallers := make([]CallerInfo, 0, len(callerMap))
-		for _, caller := range callerMap {
-			mergedCallers = append(mergedCallers, caller)
-		}
-
-		// 写入数据库（不合并，直接覆盖）
-		batcher.Add(calleeName, mergedCallers, false)
 	}
 
 	return nil
@@ -2451,14 +2602,16 @@ func (i *indexer) processBatch(ctx context.Context, batchId int, params *BatchPr
 		params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(batchSaveStart).Milliseconds(),
 		time.Since(batchStartTime).Milliseconds())
 
-	// 构建并存储文件调用关系到 leveldb
-	callRelationStart := time.Now()
-	if err := i.buildCallRelationsForFiles(ctx, params.ProjectUuid, protoElementTables); err != nil {
-		i.logger.Error("batch-%d build call relations failed: %v", batchId, err)
-		// 调用关系构建失败不应该影响索引构建，只记录错误
-	} else {
-		i.logger.Info("batch-%d [%d:%d]/%d build call relations end, cost %d ms", batchId,
-			params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(callRelationStart).Milliseconds())
+	if !params.SkipCallRelations {
+		// 构建并存储文件调用关系到 leveldb
+		callRelationStart := time.Now()
+		if err := i.buildCallRelationsForFiles(ctx, params.ProjectUuid, protoElementTables); err != nil {
+			i.logger.Error("batch-%d build call relations failed: %v", batchId, err)
+			// 调用关系构建失败不应该影响索引构建，只记录错误
+		} else {
+			i.logger.Info("batch-%d [%d:%d]/%d build call relations end, cost %d ms", batchId,
+				params.BatchStart, params.BatchEnd, params.TotalFiles, time.Since(callRelationStart).Milliseconds())
+		}
 	}
 
 	return metrics, nil
@@ -2541,13 +2694,14 @@ func (i *indexer) indexFilesInBatches(ctx context.Context, params *BatchProcessi
 		batchId++
 		// 构建批处理参数
 		batchParams := &BatchProcessParams{
-			ProjectUuid: params.ProjectUuid,
-			SourceFiles: sourceFilesBatch,
-			BatchStart:  batchStart,
-			BatchEnd:    batchEnd,
-			BatchSize:   batch,
-			TotalFiles:  totalNeedIndexFiles,
-			Project:     params.Project,
+			ProjectUuid:       params.ProjectUuid,
+			SourceFiles:       sourceFilesBatch,
+			BatchStart:        batchStart,
+			BatchEnd:          batchEnd,
+			BatchSize:         batch,
+			TotalFiles:        totalNeedIndexFiles,
+			Project:           params.Project,
+			SkipCallRelations: params.SkipCallRelations,
 		}
 
 		// 提交任务

@@ -149,6 +149,17 @@ func (s *codebaseService) ExportIndex(c *gin.Context, d *dto.ExportIndexRequest)
 						_ = downloader.Write([]byte("\n"))
 					}
 				}
+			} else if store.IsCalleeMapKey(key) {
+				var calleeMap codegraphpb.CalleeMapItem
+				if err := store.UnmarshalValue(value, &calleeMap); err != nil {
+					return err
+				} else {
+					bytes, err := json.Marshal(&calleeMap)
+					if err == nil {
+						_ = downloader.Write(bytes)
+						_ = downloader.Write([]byte("\n"))
+					}
+				}
 			}
 		}
 		_ = iter.Close()
@@ -524,9 +535,6 @@ func (l *codebaseService) QueryCallGraph(ctx context.Context, req *dto.SearchCal
 	if req.MaxLayer > defaultMaxLayerLimit {
 		req.MaxLayer = defaultMaxLayerLimit
 	}
-	// 保证同一时间只有一个查询调用，避免内存过高
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	nodes, err := l.indexer.QueryCallGraph(ctx, &types.QueryCallGraphOptions{
 		Workspace:  req.CodebasePath,
 		FilePath:   req.FilePath,
