@@ -320,15 +320,15 @@ func (h *BackendHandler) ReadCodeSnippets(c *gin.Context) {
 	response.OkJson(c, list)
 }
 
-// GetFileSkeleton 获取文件骨架
+// GetFileSkeleton 获取文件骨架信息
 // @Summary 获取文件骨架
-// @Description 根据工作区路径和文件路径返回 FileElementTable 信息，支持过滤
+// @Description 获取文件的骨架信息，包括导入、包、元素等
 // @Tags files
 // @Accept json
 // @Produce json
 // @Param clientId query string true "用户机器ID"
-// @Param workspacePath query string true "工作区路径"
-// @Param filePath query string true "文件路径（支持相对/绝对路径）"
+// @Param workspacePath query string true "工作区绝对路径"
+// @Param filePath query string true "文件路径"
 // @Param filteredBy query string false "过滤类型：definition | reference"
 // @Success 200 {object} response.Response{data=dto.FileSkeletonData} "成功"
 // @Failure 400 {object} response.Response "请求参数错误"
@@ -342,8 +342,7 @@ func (h *BackendHandler) GetFileSkeleton(c *gin.Context) {
 		return
 	}
 
-	h.logger.Info("get file skeleton request: ClientId=%s, WorkspacePath=%s, FilePath=%s, FilteredBy=%s",
-		req.ClientId, req.WorkspacePath, req.FilePath, req.FilteredBy)
+	h.logger.Info("get file skeleton request: ClientId=%s, Workspace=%s, FilePath=%s", req.ClientId, req.WorkspacePath, req.FilePath)
 
 	skeleton, err := h.codebaseService.GetFileSkeleton(c, &req)
 	if err != nil {

@@ -73,7 +73,7 @@ type Indexer interface {
 	IndexIter(ctx context.Context, projectUuid string) store.Iterator
 
 	// GetFileElementTable 获取文件元素表
-	GetFileElementTable(ctx context.Context, workspacePath, filePath string) (*codegraphpb.FileElementTable, error)
+	GetFileElementTable(ctx context.Context, workspacePath string, filePath string) (*codegraphpb.FileElementTable, error)
 }
 
 // indexer 代码索引器
@@ -2716,6 +2716,15 @@ func (i *indexer) RenameIndexes(ctx context.Context, workspacePath string, sourc
 	}
 
 	return nil
+}
+
+// GetFileElementTable 通过工作区路径和文件路径获取FileElementTable（公开方法）
+func (i *indexer) GetFileElementTable(ctx context.Context, workspacePath string, filePath string) (*codegraphpb.FileElementTable, error) {
+	project, err := i.GetProjectByFilePath(ctx, workspacePath, filePath)
+	if err != nil {
+		return nil, err
+	}
+	return i.getFileElementTableByPath(ctx, project.Uuid, filePath)
 }
 
 // getFileElementTableByPath 通过路径获取FileElementTable
