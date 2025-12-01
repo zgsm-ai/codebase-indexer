@@ -70,11 +70,14 @@ func TestCodebaseService_GetFileSkeleton(t *testing.T) {
 					Path:     "/workspace/file.go",
 					Language: "go",
 					Elements: []*codegraphpb.Element{
-						{Name: "TestFunc", IsDefinition: true, ElementType: codegraphpb.ElementType_FUNCTION},
-						{Name: "TestVar", IsDefinition: false, ElementType: codegraphpb.ElementType_REFERENCE},
+						{Name: "TestFunc", IsDefinition: true, ElementType: codegraphpb.ElementType_FUNCTION, Range: []int32{0, 0, 2, 0}},
+						{Name: "TestVar", IsDefinition: false, ElementType: codegraphpb.ElementType_REFERENCE, Range: []int32{5, 0, 5, 10}},
 					},
 				}
 				mockIndexer.EXPECT().GetFileElementTable(gomock.Any(), gomock.Any(), gomock.Any()).Return(fileTable, nil)
+				
+				// Mock 文件读取
+				mockWorkspaceReader.EXPECT().ReadFile(gomock.Any(), gomock.Any(), gomock.Any()).Return([]byte("func TestFunc() {\n}\n\nvar TestVar int"), nil)
 			},
 			expectedError: false,
 			validateData: func(data *dto.FileSkeletonData) {
@@ -82,6 +85,9 @@ func TestCodebaseService_GetFileSkeleton(t *testing.T) {
 				assert.Equal(t, "/workspace/file.go", data.Path)
 				assert.Equal(t, "go", data.Language)
 				assert.Len(t, data.Elements, 2)
+				// 验证 range 已转换为 1-based
+				assert.Equal(t, []int{1, 1, 3, 1}, data.Elements[0].Range)
+				assert.Equal(t, "FUNCTION", data.Elements[0].ElementType)
 			},
 		},
 		{
@@ -105,10 +111,11 @@ func TestCodebaseService_GetFileSkeleton(t *testing.T) {
 					Path:     "/workspace/src/file.go",
 					Language: "go",
 					Elements: []*codegraphpb.Element{
-						{Name: "TestFunc", IsDefinition: true, ElementType: codegraphpb.ElementType_FUNCTION},
+						{Name: "TestFunc", IsDefinition: true, ElementType: codegraphpb.ElementType_FUNCTION, Range: []int32{0, 0, 2, 0}},
 					},
 				}
 				mockIndexer.EXPECT().GetFileElementTable(gomock.Any(), "/workspace", gomock.Any()).Return(fileTable, nil)
+				mockWorkspaceReader.EXPECT().ReadFile(gomock.Any(), gomock.Any(), gomock.Any()).Return([]byte("func TestFunc() {\n}\n"), nil)
 			},
 			expectedError: false,
 			validateData: func(data *dto.FileSkeletonData) {
@@ -137,12 +144,13 @@ func TestCodebaseService_GetFileSkeleton(t *testing.T) {
 					Path:     "/workspace/file.go",
 					Language: "go",
 					Elements: []*codegraphpb.Element{
-						{Name: "TestFunc", IsDefinition: true, ElementType: codegraphpb.ElementType_FUNCTION},
-						{Name: "TestVar", IsDefinition: false, ElementType: codegraphpb.ElementType_REFERENCE},
-						{Name: "TestClass", IsDefinition: true, ElementType: codegraphpb.ElementType_CLASS},
+						{Name: "TestFunc", IsDefinition: true, ElementType: codegraphpb.ElementType_FUNCTION, Range: []int32{0, 0, 2, 0}},
+						{Name: "TestVar", IsDefinition: false, ElementType: codegraphpb.ElementType_REFERENCE, Range: []int32{5, 0, 5, 10}},
+						{Name: "TestClass", IsDefinition: true, ElementType: codegraphpb.ElementType_CLASS, Range: []int32{7, 0, 10, 0}},
 					},
 				}
 				mockIndexer.EXPECT().GetFileElementTable(gomock.Any(), gomock.Any(), gomock.Any()).Return(fileTable, nil)
+				mockWorkspaceReader.EXPECT().ReadFile(gomock.Any(), gomock.Any(), gomock.Any()).Return([]byte("func TestFunc() {}\n\nvar TestVar int\n\ntype TestClass struct {}"), nil)
 			},
 			expectedError: false,
 			validateData: func(data *dto.FileSkeletonData) {
@@ -174,12 +182,13 @@ func TestCodebaseService_GetFileSkeleton(t *testing.T) {
 					Path:     "/workspace/file.go",
 					Language: "go",
 					Elements: []*codegraphpb.Element{
-						{Name: "TestFunc", IsDefinition: true, ElementType: codegraphpb.ElementType_FUNCTION},
-						{Name: "TestVar", IsDefinition: false, ElementType: codegraphpb.ElementType_REFERENCE},
-						{Name: "TestCall", IsDefinition: false, ElementType: codegraphpb.ElementType_CALL},
+						{Name: "TestFunc", IsDefinition: true, ElementType: codegraphpb.ElementType_FUNCTION, Range: []int32{0, 0, 2, 0}},
+						{Name: "TestVar", IsDefinition: false, ElementType: codegraphpb.ElementType_REFERENCE, Range: []int32{5, 0, 5, 10}},
+						{Name: "TestCall", IsDefinition: false, ElementType: codegraphpb.ElementType_CALL, Range: []int32{7, 0, 7, 10}},
 					},
 				}
 				mockIndexer.EXPECT().GetFileElementTable(gomock.Any(), gomock.Any(), gomock.Any()).Return(fileTable, nil)
+				mockWorkspaceReader.EXPECT().ReadFile(gomock.Any(), gomock.Any(), gomock.Any()).Return([]byte("func TestFunc() {}\n\nvar TestVar int\n\nTestCall()"), nil)
 			},
 			expectedError: false,
 			validateData: func(data *dto.FileSkeletonData) {
@@ -265,11 +274,12 @@ func TestCodebaseService_GetFileSkeleton(t *testing.T) {
 					Path:     "/workspace/file.go",
 					Language: "go",
 					Elements: []*codegraphpb.Element{
-						{Name: "TestFunc", IsDefinition: true, ElementType: codegraphpb.ElementType_FUNCTION},
-						{Name: "TestVar", IsDefinition: false, ElementType: codegraphpb.ElementType_REFERENCE},
+						{Name: "TestFunc", IsDefinition: true, ElementType: codegraphpb.ElementType_FUNCTION, Range: []int32{0, 0, 2, 0}},
+						{Name: "TestVar", IsDefinition: false, ElementType: codegraphpb.ElementType_REFERENCE, Range: []int32{5, 0, 5, 10}},
 					},
 				}
 				mockIndexer.EXPECT().GetFileElementTable(gomock.Any(), gomock.Any(), gomock.Any()).Return(fileTable, nil)
+				mockWorkspaceReader.EXPECT().ReadFile(gomock.Any(), gomock.Any(), gomock.Any()).Return([]byte("func TestFunc() {}\n\nvar TestVar int"), nil)
 			},
 			expectedError: false,
 			validateData: func(data *dto.FileSkeletonData) {

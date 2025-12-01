@@ -19,3 +19,4 @@ tmp/codegraph/*.profile
 .documents
 test/testPorjects
 .cospec
+internal/service/*.profile
