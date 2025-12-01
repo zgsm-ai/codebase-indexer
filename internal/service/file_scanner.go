@@ -171,14 +171,14 @@ func (ws *fileScanService) DetectFileChanges(workspacePath string) ([]*model.Eve
 		err := ws.eventRepo.BatchCreateEvents(eventsToCreate)
 		if err != nil {
 			ws.logger.Error("failed to batch create events: %v", err)
-			// 降级处理：逐条创建
-			for _, event := range eventsToCreate {
-				if createErr := ws.eventRepo.CreateEvent(event); createErr != nil {
-					ws.logger.Error("failed to create event for path %s: %v", event.SourceFilePath, createErr)
-					continue
-				}
-				events = append(events, event)
-			}
+			// // 降级处理：逐条创建
+			// for _, event := range eventsToCreate {
+			// 	if createErr := ws.eventRepo.CreateEvent(event); createErr != nil {
+			// 		ws.logger.Error("failed to create event for path %s: %v", event.SourceFilePath, createErr)
+			// 		continue
+			// 	}
+			// 	events = append(events, event)
+			// }
 		} else {
 			events = append(events, eventsToCreate...)
 			ws.logger.Info("batch created %d events for workspace: %s", len(eventsToCreate), workspacePath)
@@ -190,12 +190,12 @@ func (ws *fileScanService) DetectFileChanges(workspacePath string) ([]*model.Eve
 		err := ws.eventRepo.BatchUpdateEvents(eventsToUpdate)
 		if err != nil {
 			ws.logger.Error("failed to batch update events: %v", err)
-			// 降级处理：逐条更新
-			for _, event := range eventsToUpdate {
-				if updateErr := ws.eventRepo.UpdateEvent(event); updateErr != nil {
-					ws.logger.Error("failed to update event for path %s: %v", event.SourceFilePath, updateErr)
-				}
-			}
+			// // 降级处理：逐条更新
+			// for _, event := range eventsToUpdate {
+			// 	if updateErr := ws.eventRepo.UpdateEvent(event); updateErr != nil {
+			// 		ws.logger.Error("failed to update event for path %s: %v", event.SourceFilePath, updateErr)
+			// 	}
+			// }
 		} else {
 			ws.logger.Info("batch updated %d existing events for workspace: %s", len(eventsToUpdate), workspacePath)
 		}
@@ -304,15 +304,15 @@ func (ws *fileScanService) handleEventsWithoutDeduplication(changes []*utils.Fil
 		if err != nil {
 			ws.logger.Error("failed to batch create events: %v", err)
 			// 降级处理：逐条创建
-			var createdEvents []*model.Event
-			for _, event := range events {
-				if createErr := ws.eventRepo.CreateEvent(event); createErr != nil {
-					ws.logger.Error("failed to create event for path %s: %v", event.SourceFilePath, createErr)
-					continue
-				}
-				createdEvents = append(createdEvents, event)
-			}
-			events = createdEvents
+			// var createdEvents []*model.Event
+			// for _, event := range events {
+			// 	if createErr := ws.eventRepo.CreateEvent(event); createErr != nil {
+			// 		ws.logger.Error("failed to create event for path %s: %v", event.SourceFilePath, createErr)
+			// 		continue
+			// 	}
+			// 	createdEvents = append(createdEvents, event)
+			// }
+			// events = createdEvents
 		} else {
 			ws.logger.Info("batch created %d events for workspace: %s", len(events), workspacePath)
 		}

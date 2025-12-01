@@ -150,6 +150,20 @@ func (mr *MockGraphStorageMockRecorder) Iter(ctx, projectUuid interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Iter", reflect.TypeOf((*MockGraphStorage)(nil).Iter), ctx, projectUuid)
 }
 
+// IterPrefix mocks base method.
+func (m *MockGraphStorage) IterPrefix(ctx context.Context, projectUuid string, prefix string) store.Iterator {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IterPrefix", ctx, projectUuid, prefix)
+	ret0, _ := ret[0].(store.Iterator)
+	return ret0
+}
+
+// IterPrefix indicates an expected call of IterPrefix.
+func (mr *MockGraphStorageMockRecorder) IterPrefix(ctx, projectUuid, prefix interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IterPrefix", reflect.TypeOf((*MockGraphStorage)(nil).IterPrefix), ctx, projectUuid, prefix)
+}
+
 // ProjectIndexExists mocks base method.
 func (m *MockGraphStorage) ProjectIndexExists(projectUuid string) (bool, error) {
 	m.ctrl.T.Helper()
