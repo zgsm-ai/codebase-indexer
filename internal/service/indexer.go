@@ -3176,26 +3176,3 @@ func (i *indexer) queryCallersFromDB(ctx context.Context, projectUuid string, ca
 
 	return callers, nil
 }
-
-// GetFileElementTable 获取文件元素表（公开接口）
-func (i *indexer) GetFileElementTable(ctx context.Context, workspacePath, filePath string) (*codegraphpb.FileElementTable, error) {
-	// 处理相对/绝对路径
-	if !filepath.IsAbs(filePath) {
-		filePath = filepath.Join(workspacePath, filePath)
-	}
-
-	// 获取项目信息
-	project, err := i.GetProjectByFilePath(ctx, workspacePath, filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get project for file %s: %w", filePath, err)
-	}
-
-	// 推断语言类型
-	language, err := lang.InferLanguage(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("unsupported file type: %w", err)
-	}
-
-	// 获取文件元素表
-	return i.getFileElementTable(ctx, project.Uuid, language, filePath)
-}
