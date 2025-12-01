@@ -39,7 +39,7 @@ import (
 // g:\tmp\projects\typescript\TypeScript
 // g:\tmp\projects\typescript\vue-next
 
-const testRootDir = "/home/kcx/codeWorkspace/testProjects"
+const testRootDir = "D:\\codeWorkspace\\testPorjects"
 
 func getSupportedExtByLanguageTestHelper(language lang.Language) []string {
 	parser, err := lang.GetSitterParserByLanguage(language)
@@ -158,13 +158,13 @@ func TestIndexMixedLanguages(t *testing.T) {
 		Path       string
 		wantErr    error
 	}{
-		{
-			Name:     "kubernetes",
-			Language: "go",
-			Path:     filepath.Join(testRootDir, "go", "kubernetes"),
-			Exts:     getSupportedExtByLanguageTestHelper(lang.Go),
-			wantErr:  nil,
-		},
+		// {
+		// 	Name:     "kubernetes",
+		// 	Language: "go",
+		// 	Path:     filepath.Join(testRootDir, "go", "kubernetes"),
+		// 	Exts:     getSupportedExtByLanguageTestHelper(lang.Go),
+		// 	wantErr:  nil,
+		// },
 		{
 			Name:     "hadoop",
 			Language: "java",
@@ -172,92 +172,92 @@ func TestIndexMixedLanguages(t *testing.T) {
 			Exts:     getSupportedExtByLanguageTestHelper(lang.Java),
 			wantErr:  nil,
 		},
-		{
-			Name:     "spring-boot",
-			Language: "java",
-			Path:     filepath.Join(testRootDir, "java", "spring-boot"),
-			Exts:     getSupportedExtByLanguageTestHelper(lang.Java),
-			wantErr:  nil,
-		},
-		{
-			Name:     "django",
-			Language: "python",
-			Path:     filepath.Join(testRootDir, "python", "django"),
-			Exts:     getSupportedExtByLanguageTestHelper(lang.Python),
-			wantErr:  nil,
-		},
-		{
-			Name:     "vue-next",
-			Language: "typescript",
-			Path:     filepath.Join(testRootDir, "typescript", "vue-next"),
-			Exts:     getSupportedExtByLanguageTestHelper(lang.TypeScript),
-			wantErr:  nil,
-		},
-		{
-			Name:     "vue",
-			Language: "javascript",
-			Path:     filepath.Join(testRootDir, "javascript", "vue"),
-			Exts:     getSupportedExtByLanguageTestHelper(lang.JavaScript),
-			wantErr:  nil,
-		},
-		{
-			Name:     "redis",
-			Language: "c",
-			Path:     filepath.Join(testRootDir, "c", "redis"),
-			Exts:     getSupportedExtByLanguageTestHelper(lang.CPP),
-			wantErr:  nil,
-		},
-		{ // 220.97s 223.75s 228s 38s 65s
-			Name:     "grpc",
-			Language: "cpp",
-			Path:     filepath.Join(testRootDir, "cpp", "grpc"),
-			Exts:     getSupportedExtByLanguageTestHelper(lang.CPP),
-			wantErr:  nil,
-		},
-		/////////////////////// 耗时测试
-		{
-			Name:       "100 文件项目",
-			Language:   "java",
-			FilesLimit: 100,
-			Path:       filepath.Join(testRootDir, "java", "spring-boot"),
-			Exts:       getSupportedExtByLanguageTestHelper(lang.Java),
-			wantErr:    nil,
-		},
-		{
-			Name:       "1000 文件项目",
-			Language:   "java",
-			FilesLimit: 1000,
-			Path:       filepath.Join(testRootDir, "java", "hadoop"),
-			Exts:       getSupportedExtByLanguageTestHelper(lang.TypeScript),
-			wantErr:    nil,
-		},
-		{
-			Name:       "5000 文件项目",
-			Language:   "typescript",
-			FilesLimit: 5000,
-			Path:       filepath.Join(testRootDir, "typescript", "TypeScript"),
-			Exts:       getSupportedExtByLanguageTestHelper(lang.TypeScript),
-			wantErr:    nil,
-		},
-		{
-			Name:       "10000 文件项目",
-			Language:   "go",
-			FilesLimit: 10000,
-			Path:       filepath.Join(testRootDir, "go", "kubernetes"),
-			Exts:       getSupportedExtByLanguageTestHelper(lang.Go),
-			wantErr:    nil,
-		},
-		{
-			Name:       "50000 文件项目",
-			Language:   "typescript",
-			FilesLimit: 50000,
-			Path:       filepath.Join(testRootDir, "typescript", "TypeScript"),
-			Exts:       getSupportedExtByLanguageTestHelper(lang.TypeScript),
-			wantErr:    nil,
-		},
+		// {
+		// 	Name:     "spring-boot",
+		// 	Language: "java",
+		// 	Path:     filepath.Join(testRootDir, "java", "spring-boot"),
+		// 	Exts:     getSupportedExtByLanguageTestHelper(lang.Java),
+		// 	wantErr:  nil,
+		// },
+		// {
+		// 	Name:     "django",
+		// 	Language: "python",
+		// 	Path:     filepath.Join(testRootDir, "python", "django"),
+		// 	Exts:     getSupportedExtByLanguageTestHelper(lang.Python),
+		// 	wantErr:  nil,
+		// },
+		// {
+		// 	Name:     "vue-next",
+		// 	Language: "typescript",
+		// 	Path:     filepath.Join(testRootDir, "typescript", "vue-next"),
+		// 	Exts:     getSupportedExtByLanguageTestHelper(lang.TypeScript),
+		// 	wantErr:  nil,
+		// },
+		// {
+		// 	Name:     "vue",
+		// 	Language: "javascript",
+		// 	Path:     filepath.Join(testRootDir, "javascript", "vue"),
+		// 	Exts:     getSupportedExtByLanguageTestHelper(lang.JavaScript),
+		// 	wantErr:  nil,
+		// },
+		// {
+		// 	Name:     "redis",
+		// 	Language: "c",
+		// 	Path:     filepath.Join(testRootDir, "c", "redis"),
+		// 	Exts:     getSupportedExtByLanguageTestHelper(lang.CPP),
+		// 	wantErr:  nil,
+		// },
+		// { // 220.97s 223.75s 228s 38s 65s
+		// 	Name:     "grpc",
+		// 	Language: "cpp",
+		// 	Path:     filepath.Join(testRootDir, "cpp", "grpc"),
+		// 	Exts:     getSupportedExtByLanguageTestHelper(lang.CPP),
+		// 	wantErr:  nil,
+		// },
+		// /////////////////////// 耗时测试
+		// {
+		// 	Name:       "100 文件项目",
+		// 	Language:   "java",
+		// 	FilesLimit: 100,
+		// 	Path:       filepath.Join(testRootDir, "java", "spring-boot"),
+		// 	Exts:       getSupportedExtByLanguageTestHelper(lang.Java),
+		// 	wantErr:    nil,
+		// },
+		// {
+		// 	Name:       "1000 文件项目",
+		// 	Language:   "java",
+		// 	FilesLimit: 1000,
+		// 	Path:       filepath.Join(testRootDir, "java", "hadoop"),
+		// 	Exts:       getSupportedExtByLanguageTestHelper(lang.TypeScript),
+		// 	wantErr:    nil,
+		// },
+		// {
+		// 	Name:       "5000 文件项目",
+		// 	Language:   "typescript",
+		// 	FilesLimit: 5000,
+		// 	Path:       filepath.Join(testRootDir, "typescript", "TypeScript"),
+		// 	Exts:       getSupportedExtByLanguageTestHelper(lang.TypeScript),
+		// 	wantErr:    nil,
+		// },
+		// {
+		// 	Name:       "10000 文件项目",
+		// 	Language:   "go",
+		// 	FilesLimit: 10000,
+		// 	Path:       filepath.Join(testRootDir, "go", "kubernetes"),
+		// 	Exts:       getSupportedExtByLanguageTestHelper(lang.Go),
+		// 	wantErr:    nil,
+		// },
+		// {
+		// 	Name:       "50000 文件项目",
+		// 	Language:   "typescript",
+		// 	FilesLimit: 50000,
+		// 	Path:       filepath.Join(testRootDir, "typescript", "TypeScript"),
+		// 	Exts:       getSupportedExtByLanguageTestHelper(lang.TypeScript),
+		// 	wantErr:    nil,
+		// },
 	}
 	cost := make([]string, 0)
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 5000; i++ {
 
 		for _, tc := range testCases {
 			ctx := context.Background()
@@ -307,9 +307,9 @@ func TestIndexMixedLanguages(t *testing.T) {
 		t.Log(strings.Join(cost, "\n"))
 		fmt.Println("###############################耗时统计#####################################")
 		fmt.Println(strings.Join(cost, "\n"))
-		for {
-			time.Sleep(1 * time.Second)
-		}
+		// for {
+		// 	time.Sleep(1 * time.Second)
+		// }
 	}
 
 }

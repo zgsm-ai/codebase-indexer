@@ -125,6 +125,9 @@ func (ws *fileScanService) DetectFileChanges(workspacePath string) ([]*model.Eve
 
 	// 生成事件并进行去重处理
 	var events []*model.Event
+	var eventsToCreate []*model.Event // 需要批量创建的事件（新文件 + building时需创建的）
+	var eventsToUpdate []*model.Event // 需要批量更新的事件
+
 	for _, change := range changes {
 		filePth := change.Path
 		event := &model.Event{
@@ -139,21 +142,62 @@ func (ws *fileScanService) DetectFileChanges(workspacePath string) ([]*model.Eve
 
 		// 检查是否已存在相同路径的事件
 		if existingEvent, exists := eventPathMap[filePth]; exists {
-			// 更新现有事件
-			err := ws.updateExistingEvent(existingEvent, event)
-			if err != nil {
-				ws.logger.Error("failed to update existing event for path %s: %v", filePth, err)
-				continue
+			// 分类处理现有事件
+			action := ws.classifyExistingEventAction(existingEvent, event)
+			switch action {
+			case "skip":
+				// 正在 building 且类型相同，跳过
+				events = append(events, existingEvent)
+			case "create":
+				// 正在 building 但类型不同，需要创建新事件
+				eventsToCreate = append(eventsToCreate, event)
+			case "update":
+				// 更新现有事件的状态
+				existingEvent.EventType = event.EventType
+				existingEvent.TargetFilePath = event.TargetFilePath
+				existingEvent.EmbeddingStatus = model.EmbeddingStatusInit
+				existingEvent.CodegraphStatus = model.CodegraphStatusSuccess
+				eventsToUpdate = append(eventsToUpdate, existingEvent)
+				events = append(events, existingEvent)
 			}
-			events = append(events, existingEvent)
 		} else {
-			// 创建新事件
-			err := ws.eventRepo.CreateEvent(event)
-			if err != nil {
-				ws.logger.Error("failed to create event for path %s: %v", filePth, err)
-				continue
-			}
-			events = append(events, event)
+			// 新文件，收集后批量创建
+			eventsToCreate = append(eventsToCreate, event)
+		}
+	}
+
+	// 批量创建事件（减少 fsync 次数，提升性能）
+	if len(eventsToCreate) > 0 {
+		err := ws.eventRepo.BatchCreateEvents(eventsToCreate)
+		if err != nil {
+			ws.logger.Error("failed to batch create events: %v", err)
+			// // 降级处理：逐条创建
+			// for _, event := range eventsToCreate {
+			// 	if createErr := ws.eventRepo.CreateEvent(event); createErr != nil {
+			// 		ws.logger.Error("failed to create event for path %s: %v", event.SourceFilePath, createErr)
+			// 		continue
+			// 	}
+			// 	events = append(events, event)
+			// }
+		} else {
+			events = append(events, eventsToCreate...)
+			ws.logger.Info("batch created %d events for workspace: %s", len(eventsToCreate), workspacePath)
+		}
+	}
+
+	// 批量更新现有事件
+	if len(eventsToUpdate) > 0 {
+		err := ws.eventRepo.BatchUpdateEvents(eventsToUpdate)
+		if err != nil {
+			ws.logger.Error("failed to batch update events: %v", err)
+			// // 降级处理：逐条更新
+			// for _, event := range eventsToUpdate {
+			// 	if updateErr := ws.eventRepo.UpdateEvent(event); updateErr != nil {
+			// 		ws.logger.Error("failed to update event for path %s: %v", event.SourceFilePath, updateErr)
+			// 	}
+			// }
+		} else {
+			ws.logger.Info("batch updated %d existing events for workspace: %s", len(eventsToUpdate), workspacePath)
 		}
 	}
 
@@ -251,14 +295,27 @@ func (ws *fileScanService) handleEventsWithoutDeduplication(changes []*utils.Fil
 			EmbeddingStatus: model.EmbeddingStatusInit,
 			CodegraphStatus: model.CodegraphStatusSuccess,
 		}
-
-		err := ws.eventRepo.CreateEvent(event)
-		if err != nil {
-			ws.logger.Error("failed to create event for path %s: %v", filePth, err)
-			continue
-		}
-
 		events = append(events, event)
+	}
+
+	// 批量创建事件（减少 fsync 次数，提升性能）
+	if len(events) > 0 {
+		err := ws.eventRepo.BatchCreateEvents(events)
+		if err != nil {
+			ws.logger.Error("failed to batch create events: %v", err)
+			// 降级处理：逐条创建
+			// var createdEvents []*model.Event
+			// for _, event := range events {
+			// 	if createErr := ws.eventRepo.CreateEvent(event); createErr != nil {
+			// 		ws.logger.Error("failed to create event for path %s: %v", event.SourceFilePath, createErr)
+			// 		continue
+			// 	}
+			// 	createdEvents = append(createdEvents, event)
+			// }
+			// events = createdEvents
+		} else {
+			ws.logger.Info("batch created %d events for workspace: %s", len(events), workspacePath)
+		}
 	}
 
 	// 查询 open_workspace 事件并更新状态为完成
@@ -267,7 +324,24 @@ func (ws *fileScanService) handleEventsWithoutDeduplication(changes []*utils.Fil
 	return events, nil
 }
 
-// updateExistingEvent 更新现有事件的信息
+// classifyExistingEventAction 判断现有事件应该执行的操作
+// 返回值: "skip" - 跳过, "create" - 创建新事件, "update" - 更新现有事件
+func (ws *fileScanService) classifyExistingEventAction(existingEvent, newEvent *model.Event) string {
+	if existingEvent.EmbeddingStatus == model.EmbeddingStatusBuilding ||
+		existingEvent.EmbeddingStatus == model.EmbeddingStatusUploading ||
+		existingEvent.CodegraphStatus == model.CodegraphStatusBuilding {
+		if newEvent.EventType == existingEvent.EventType {
+			return "skip"
+		}
+		ws.logger.Debug("building event, will create new event for path: %s, type: %s", existingEvent.SourceFilePath, newEvent.EventType)
+		return "create"
+	}
+
+	ws.logger.Debug("will update existing event for path: %s, type: %s", existingEvent.SourceFilePath, newEvent.EventType)
+	return "update"
+}
+
+// updateExistingEvent 更新现有事件的信息（保留用于降级处理）
 func (ws *fileScanService) updateExistingEvent(existingEvent, newEvent *model.Event) error {
 	if existingEvent.EmbeddingStatus == model.EmbeddingStatusBuilding ||
 		existingEvent.EmbeddingStatus == model.EmbeddingStatusUploading ||

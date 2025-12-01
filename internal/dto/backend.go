@@ -1,7 +1,9 @@
 // internal/dto/backend.go - 后端API请求和响应数据结构定义
 package dto
 
-import "codebase-indexer/pkg/codegraph/types"
+import (
+	"codebase-indexer/pkg/codegraph/types"
+)
 
 // SearchReferenceRequest 关系检索请求
 type SearchReferenceRequest struct {
@@ -58,6 +60,7 @@ type SearchCallGraphRequest struct {
 	LineRange    string `form:"lineRange,omitempty"`
 	SymbolName   string `form:"symbolName,omitempty"`
 	MaxLayer     int    `form:"maxLayer,omitempty"`
+	NoContent    int    `form:"noContent,omitempty"` // 0:返回content(默认), 1:不返回content
 }
 
 type ReadCodeSnippetsRequest struct {
@@ -223,7 +226,7 @@ type FileSkeletonData struct {
 	Elements  []*FileSkeletonElement `json:"elements"`
 }
 
-// FileSkeletonImport 导入信息
+// FileSkeletonImport 导入信息（还原后的原始内容）
 type FileSkeletonImport struct {
 	Content string `json:"content"` // 原始导入语句
 	Range   []int  `json:"range"`   // [startLine, startCol, endLine, endCol] - 从1开始

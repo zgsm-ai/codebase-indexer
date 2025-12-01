@@ -70,7 +70,6 @@ type CodebaseService interface {
 }
 
 const maxReadLine = 5000
-const maxLineLimit = 500
 const definitionFillContentNodeLimit = 20
 const definitionFillContentLineLimit = 200
 const DefaultMaxCodeSnippetLines = 500
@@ -105,7 +104,7 @@ type codebaseService struct {
 	mu                   sync.Mutex
 }
 
-func (s *codebaseService) checkPath(ctx context.Context, workspacePath string, filePaths []string) error {
+func (s *codebaseService) checkPath(_ context.Context, workspacePath string, filePaths []string) error {
 	for _, filePath := range filePaths {
 		if filePath != types.EmptyString && !utils.IsSubdir(workspacePath, filePath) {
 			return fmt.Errorf("cannot access path %s which not in workspace %s", filePath, workspacePath)
@@ -146,6 +145,17 @@ func (s *codebaseService) ExportIndex(c *gin.Context, d *dto.ExportIndexRequest)
 					return err
 				} else {
 					bytes, err := json.Marshal(&sym)
+					if err == nil {
+						_ = downloader.Write(bytes)
+						_ = downloader.Write([]byte("\n"))
+					}
+				}
+			} else if store.IsCalleeMapKey(key) {
+				var calleeMap codegraphpb.CalleeMapItem
+				if err := store.UnmarshalValue(value, &calleeMap); err != nil {
+					return err
+				} else {
+					bytes, err := json.Marshal(&calleeMap)
 					if err == nil {
 						_ = downloader.Write(bytes)
 						_ = downloader.Write([]byte("\n"))
@@ -526,9 +536,6 @@ func (l *codebaseService) QueryCallGraph(ctx context.Context, req *dto.SearchCal
 	if req.MaxLayer > defaultMaxLayerLimit {
 		req.MaxLayer = defaultMaxLayerLimit
 	}
-	// 保证同一时间只有一个查询调用，避免内存过高
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	nodes, err := l.indexer.QueryCallGraph(ctx, &types.QueryCallGraphOptions{
 		Workspace:  req.CodebasePath,
 		FilePath:   req.FilePath,
@@ -539,9 +546,11 @@ func (l *codebaseService) QueryCallGraph(ctx context.Context, req *dto.SearchCal
 	if err != nil {
 		return nil, err
 	}
-	// 填充content，控制层数和节点数
-	if err = l.fillContent(ctx, nodes, req.MaxLayer, maxLayerNodeLimit, defaultLineLimit); err != nil {
-		l.logger.Error("fill graph query contents err:%v", err)
+	// 填充content，控制层数和节点数（noContent=1时跳过填充）
+	if req.NoContent != 1 {
+		if err = l.fillContent(ctx, nodes, req.MaxLayer, maxLayerNodeLimit, defaultLineLimit); err != nil {
+			l.logger.Error("fill graph query contents err:%v", err)
+		}
 	}
 	return &dto.CallGraphData{
 		List: nodes,
@@ -633,6 +642,42 @@ func (l *codebaseService) DeleteIndex(ctx context.Context, req *dto.DeleteIndexR
 	}
 	l.logger.Info("delete all index successfully for workspace %s", codebasePath)
 	return nil
+}
+
+func (s *codebaseService) GetFileSkeleton(ctx context.Context, req *dto.GetFileSkeletonRequest) (*dto.FileSkeletonData, error) {
+	// 1. 参数校验
+	if req.WorkspacePath == "" || req.FilePath == "" {
+		return nil, errs.NewMissingParamError("workspacePath or filePath")
+	}
+
+	// 2. 路径处理（相对/绝对）
+	filePath := req.FilePath
+	if !filepath.IsAbs(filePath) {
+		filePath = filepath.Join(req.WorkspacePath, filePath)
+	}
+
+	// 验证路径是否在 workspace 内
+	if err := s.checkPath(ctx, req.WorkspacePath, []string{filePath}); err != nil {
+		return nil, err
+	}
+
+	// 3. 获取原始 FileElementTable
+	table, err := s.indexer.GetFileElementTable(ctx, req.WorkspacePath, filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file element table: %w", err)
+	}
+
+	// 4. 读取文件内容（用于提取签名和还原imports）
+	fileContent, err := s.workspaceReader.ReadFile(ctx, filePath, types.ReadOptions{})
+	if err != nil {
+		s.logger.Warn("failed to read file content for %s: %v", filePath, err)
+		fileContent = nil // 继续处理，但签名和imports还原会失败
+	}
+
+	// 5. 转换数据结构
+	result := convertToFileSkeletonData(table, fileContent, req.FilteredBy)
+
+	return result, nil
 }
 
 func convertStatus(status int) string {

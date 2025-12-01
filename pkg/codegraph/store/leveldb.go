@@ -6,12 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/syndtr/goleveldb/leveldb/util"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/syndtr/goleveldb/leveldb/util"
 
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 	"github.com/syndtr/goleveldb/leveldb/opt"
@@ -321,7 +322,7 @@ func (s *LevelDBStorage) DeleteAll(ctx context.Context, projectUuid string) erro
 	err = db.CompactRange(util.Range{})
 	s.logger.Info("delete all for project %s end, after size: %d", projectUuid,
 		s.Size(ctx, projectUuid, types.EmptyString))
-	return err	
+	return err
 }
 func (s *LevelDBStorage) DeleteAllWithPrefix(ctx context.Context, projectUuid string, keyPrefix string) error {
 	db, err := s.getDB(projectUuid)
@@ -358,6 +359,24 @@ func (s *LevelDBStorage) Iter(ctx context.Context, projectUuid string) Iterator 
 		ctx:         ctx,
 		db:          db,
 		iter:        db.NewIterator(nil, nil),
+	}
+}
+
+// IterPrefix creates iterator with prefix filter using LevelDB's efficient range scan
+func (s *LevelDBStorage) IterPrefix(ctx context.Context, projectUuid string, prefix string) Iterator {
+	db, err := s.getDB(projectUuid)
+	if err != nil {
+		s.logger.Debug("iter_prefix: failed to get database. project %s, error: %v", projectUuid, err)
+		return nil
+	}
+	// 使用 util.BytesPrefix 创建前缀范围，这是 LevelDB 的高效前缀查询方式
+	prefixRange := util.BytesPrefix([]byte(prefix))
+	return &leveldbIterator{
+		storage:     s,
+		projectUuid: projectUuid,
+		ctx:         ctx,
+		db:          db,
+		iter:        db.NewIterator(prefixRange, nil),
 	}
 }
 

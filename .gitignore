@@ -17,4 +17,7 @@ tmp/codegraph/*.profile
 .costrict
 .coignore
 .documents
+test/testPorjects
+.cospec
+internal/service/*.profile
 .cospec

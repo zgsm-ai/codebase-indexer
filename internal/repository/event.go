@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"runtime"
 	"strings"
 	"time"
 
@@ -10,6 +11,28 @@ import (
 	"codebase-indexer/internal/model"
 	"codebase-indexer/pkg/logger"
 )
+
+// getCallerInfo 获取调用者信息（跳过指定层数的调用栈）
+func getCallerInfo(skip int) string {
+	pc, file, line, ok := runtime.Caller(skip)
+	if !ok {
+		return "unknown"
+	}
+	fn := runtime.FuncForPC(pc)
+	funcName := "unknown"
+	if fn != nil {
+		funcName = fn.Name()
+		// 只保留函数名，去掉包路径
+		if idx := strings.LastIndex(funcName, "/"); idx != -1 {
+			funcName = funcName[idx+1:]
+		}
+	}
+	// 只保留文件名，去掉路径
+	if idx := strings.LastIndex(file, "/"); idx != -1 {
+		file = file[idx+1:]
+	}
+	return fmt.Sprintf("%s:%d %s", file, line, funcName)
+}
 
 // EventRepository 事件数据访问层
 type EventRepository interface {
@@ -49,6 +72,8 @@ type EventRepository interface {
 	BatchCreateEvents(events []*model.Event) error
 	// BatchDeleteEvents 批量删除事件
 	BatchDeleteEvents(ids []int64) error
+	// BatchUpdateEvents 批量更新事件（用于文件变更检测时的批量状态更新）
+	BatchUpdateEvents(events []*model.Event) error
 	// UpdateEvents 批量更新事件嵌入信息
 	UpdateEventsEmbedding(events []*model.Event) error
 	// UpdateEventsEmbeddingStatus 批量更新事件嵌入状态
@@ -83,6 +108,11 @@ func (r *eventRepository) CreateEvent(event *model.Event) error {
 	`
 
 	nowTime := time.Now()
+
+	// 写数据库前打印调用者信息
+	caller := getCallerInfo(2)
+	r.logger.Info("[DB] CreateEvent called by: %s, path: %s", caller, event.SourceFilePath)
+
 	result, err := r.db.GetDB().Exec(query,
 		event.WorkspacePath,
 		event.EventType,
@@ -847,6 +877,10 @@ func (r *eventRepository) UpdateEvent(event *model.Event) error {
 	query := fmt.Sprintf("UPDATE events SET %s WHERE id = ?", strings.Join(setClauses, ", "))
 	args = append(args, event.ID)
 
+	// 写数据库前打印调用者信息
+	caller := getCallerInfo(2)
+	r.logger.Info("[DB] UpdateEvent called by: %s, eventID: %d", caller, event.ID)
+
 	result, err := r.db.GetDB().Exec(query, args...)
 	if err != nil {
 		return fmt.Errorf("[DB] failed to update event: %w", err)
@@ -1227,6 +1261,9 @@ func (r *eventRepository) BatchCreateEvents(events []*model.Event) error {
 		return nil
 	}
 
+	// 获取调用者信息
+	caller := getCallerInfo(2)
+
 	const batchSize = 1000
 	nowTime := time.Now()
 	totalCreated := int64(0)
@@ -1259,6 +1296,9 @@ func (r *eventRepository) BatchCreateEvents(events []*model.Event) error {
 
 		query := fmt.Sprintf("INSERT INTO events (workspace_path, event_type, source_file_path, target_file_path, embedding_status, codegraph_status, created_at, updated_at) VALUES %s",
 			strings.Join(valueStrings, ","))
+
+		// 写数据库前打印调用者信息
+		r.logger.Info("[DB] BatchCreateEvents called by: %s, batch: %d-%d, count: %d", caller, i+1, end, len(batch))
 
 		result, err := r.db.GetDB().Exec(query, valueArgs...)
 		if err != nil {
@@ -1296,6 +1336,9 @@ func (r *eventRepository) BatchDeleteEvents(ids []int64) error {
 		return nil
 	}
 
+	// 获取调用者信息
+	caller := getCallerInfo(2)
+
 	const batchSize = 1000
 	totalDeleted := int64(0)
 
@@ -1319,6 +1362,9 @@ func (r *eventRepository) BatchDeleteEvents(ids []int64) error {
 			args[j] = id
 		}
 
+		// 写数据库前打印调用者信息
+		r.logger.Info("[DB] BatchDeleteEvents called by: %s, batch: %d-%d, count: %d", caller, i+1, end, len(batch))
+
 		result, err := r.db.GetDB().Exec(query, args...)
 		if err != nil {
 			return fmt.Errorf("[DB] failed to batch delete events (batch %d-%d): %w", i+1, end, err)
@@ -1337,11 +1383,88 @@ func (r *eventRepository) BatchDeleteEvents(ids []int64) error {
 	return nil
 }
 
+// BatchUpdateEvents 批量更新事件（用于文件变更检测时的批量状态更新）
+func (r *eventRepository) BatchUpdateEvents(events []*model.Event) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	// 获取调用者信息
+	caller := getCallerInfo(2)
+
+	const batchSize = 1000
+	nowTime := time.Now()
+	totalUpdated := int64(0)
+
+	query := `
+		UPDATE events
+		SET event_type = ?, target_file_path = ?, embedding_status = ?, codegraph_status = ?, updated_at = ?
+		WHERE id = ?
+	`
+
+	// 分批处理
+	for i := 0; i < len(events); i += batchSize {
+		end := i + batchSize
+		if end > len(events) {
+			end = len(events)
+		}
+		batch := events[i:end]
+
+		// 写数据库前打印调用者信息
+		r.logger.Info("[DB] BatchUpdateEvents called by: %s, batch: %d-%d, count: %d", caller, i+1, end, len(batch))
+
+		// 每个批次一个事务
+		tx, err := r.db.GetDB().Begin()
+		if err != nil {
+			return fmt.Errorf("[DB] failed to begin transaction (batch %d-%d): %w", i+1, end, err)
+		}
+
+		stmt, err := tx.Prepare(query)
+		if err != nil {
+			tx.Rollback()
+			return fmt.Errorf("[DB] failed to prepare statement (batch %d-%d): %w", i+1, end, err)
+		}
+
+		for _, event := range batch {
+			_, err = stmt.Exec(
+				event.EventType,
+				event.TargetFilePath,
+				event.EmbeddingStatus,
+				event.CodegraphStatus,
+				nowTime,
+				event.ID,
+			)
+			if err != nil {
+				stmt.Close()
+				tx.Rollback()
+				return fmt.Errorf("[DB] failed to update event %d: %w", event.ID, err)
+			}
+		}
+		stmt.Close()
+
+		if err = tx.Commit(); err != nil {
+			return fmt.Errorf("[DB] failed to commit transaction (batch %d-%d): %w", i+1, end, err)
+		}
+
+		totalUpdated += int64(len(batch))
+		r.logger.Info("[DB] Successfully updated batch %d-%d: %d events", i+1, end, len(batch))
+	}
+
+	r.logger.Info("[DB] Successfully batch updated total %d events", totalUpdated)
+	return nil
+}
+
 // UpdateEvents 批量更新事件嵌入信息
 func (r *eventRepository) UpdateEventsEmbedding(events []*model.Event) error {
 	if len(events) == 0 {
 		return nil
 	}
+
+	// 获取调用者信息
+	caller := getCallerInfo(2)
+
+	// 写数据库前打印调用者信息
+	r.logger.Info("[DB] UpdateEventsEmbedding called by: %s, count: %d", caller, len(events))
 
 	tx, err := r.db.GetDB().Begin()
 	if err != nil {
@@ -1392,6 +1515,12 @@ func (r *eventRepository) UpdateEventsEmbeddingStatus(eventIDs []int64, status i
 	if len(eventIDs) == 0 {
 		return nil
 	}
+
+	// 获取调用者信息
+	caller := getCallerInfo(2)
+
+	// 写数据库前打印调用者信息
+	r.logger.Info("[DB] UpdateEventsEmbeddingStatus called by: %s, count: %d, status: %d", caller, len(eventIDs), status)
 
 	tx, err := r.db.GetDB().Begin()
 	if err != nil {

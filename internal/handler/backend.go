@@ -114,6 +114,7 @@ func (h *BackendHandler) SearchDefinition(c *gin.Context) {
 // @Param endLine query int false "结束行号，从1开始"
 // @Param symbolName query string false "符号名，比如函数名、类名等"
 // @Param maxLayer query int false "最大层数，默认最大10层"
+// @Param noContent query int false "是否不返回content，0:返回(默认)，1:不返回"
 // @Success 200 {object} response.Response{data=dto.CallGraphData} "成功"
 // @Failure 400 {object} response.Response "请求参数错误"
 // @Failure 500 {object} response.Response "服务器内部错误"

@@ -975,38 +975,3 @@ func (us *uploadService) isRetryableError(err error) bool {
 
 	return false
 }
-
-// retryWithExponentialBackoff 重试机制实现
-func (us *uploadService) retryWithExponentialBackoff(
-	operation func() error,
-	maxRetries int,
-	baseDelay time.Duration,
-) error {
-	var lastErr error
-
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		err := operation()
-		if err == nil {
-			return nil
-		}
-
-		lastErr = err
-
-		// 检查是否可重试
-		if !us.isRetryableError(err) {
-			return fmt.Errorf("non-retryable error: %w", err)
-		}
-
-		// 最后一次尝试不再等待
-		if attempt == maxRetries {
-			break
-		}
-
-		// 指数退避
-		delay := baseDelay * time.Duration(math.Pow(2, float64(attempt-1)))
-		us.logger.Info("waiting %v before retry (attempt %d/%d)", delay, attempt, maxRetries)
-		time.Sleep(delay)
-	}
-
-	return fmt.Errorf("failed after %d attempts, last error: %w", maxRetries, lastErr)
-}

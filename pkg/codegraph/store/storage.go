@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"google.golang.org/protobuf/proto"
@@ -23,6 +24,8 @@ type GraphStorage interface {
 	DeleteAll(ctx context.Context, projectUuid string) error
 	DeleteAllWithPrefix(ctx context.Context, projectUuid string, prefix string) error
 	Iter(ctx context.Context, projectUuid string) Iterator
+	// IterPrefix 创建一个只遍历指定前缀的迭代器
+	IterPrefix(ctx context.Context, projectUuid string, prefix string) Iterator
 	Size(ctx context.Context, projectUuid string, keyPrefix string) int
 	Close() error
 	ProjectIndexExists(projectUuid string) (bool, error)
@@ -50,6 +53,7 @@ const (
 	PathKeySystemPrefix      = "@path"
 	SymKeySystemPrefix       = "@sym"
 	CalleeMapKeySystemPrefix = "@callee"
+	ProjectMetaKeyPrefix     = "@meta"
 	dataDir                  = "data"
 )
 
@@ -89,10 +93,30 @@ func (s SymbolNameKey) Get() (string, error) {
 
 type CalleeMapKey struct {
 	SymbolName string
+	Timestamp  int64 // 版本时间戳（纳秒），0表示查询所有版本（第二位）
+	ValueCount int   // 该版本包含的value数量，0表示查询所有版本（第三位）
 }
 
 func (c CalleeMapKey) Get() (string, error) {
-	return fmt.Sprintf("%s:%s", CalleeMapKeySystemPrefix, c.SymbolName), nil
+	// 如果 Timestamp 和 ValueCount 都为 0，返回基础key（用于前缀扫描）
+	if c.Timestamp == 0 && c.ValueCount == 0 {
+		return fmt.Sprintf("%s:%s", CalleeMapKeySystemPrefix, c.SymbolName), nil
+	}
+	// 返回完整的版本化key: @callee:symbolName:timestamp:valueCount
+	// 时间戳在前，便于 LevelDB 按时间排序，查找最新版本更高效
+	return fmt.Sprintf("%s:%s:%d:%d", CalleeMapKeySystemPrefix, c.SymbolName, c.Timestamp, c.ValueCount), nil
+}
+
+// ProjectMetaKey 项目元数据的key
+type ProjectMetaKey struct {
+	MetaType string // 元数据类型，如 "callgraph_built"
+}
+
+func (p ProjectMetaKey) Get() (string, error) {
+	if p.MetaType == types.EmptyString {
+		return types.EmptyString, fmt.Errorf("ProjectMetaKey field MetaType must not be empty")
+	}
+	return fmt.Sprintf("%s:%s", ProjectMetaKeyPrefix, p.MetaType), nil
 }
 
 func IsSymbolNameKey(key string) bool {
@@ -103,6 +127,44 @@ func IsCalleeMapKey(key string) bool {
 }
 func IsElementPathKey(key string) bool {
 	return strings.HasPrefix(key, PathKeySystemPrefix)
+}
+func IsProjectMetaKey(key string) bool {
+	return strings.HasPrefix(key, ProjectMetaKeyPrefix)
+}
+
+// ParseCalleeMapKey 解析版本化的CalleeMapKey
+// 格式：@callee:symbolName:timestamp:valueCount
+func ParseCalleeMapKey(key string) (CalleeMapKey, error) {
+	if !strings.HasPrefix(key, CalleeMapKeySystemPrefix) {
+		return CalleeMapKey{}, fmt.Errorf("invalid callee map key: %s", key)
+	}
+
+	parts := strings.Split(key, types.Colon)
+	if len(parts) != 4 {
+		return CalleeMapKey{}, fmt.Errorf("invalid callee map key format, expected 4 parts: %s", key)
+	}
+
+	// 解析版本信息（格式：@callee:symbolName:timestamp:valueCount）
+	timestamp, err := strconv.ParseInt(parts[2], 10, 64)
+	if err != nil {
+		return CalleeMapKey{}, fmt.Errorf("invalid timestamp in key %s: %w", key, err)
+	}
+
+	valueCount, err := strconv.Atoi(parts[3])
+	if err != nil {
+		return CalleeMapKey{}, fmt.Errorf("invalid value_count in key %s: %w", key, err)
+	}
+
+	return CalleeMapKey{
+		SymbolName: parts[1],
+		Timestamp:  timestamp,
+		ValueCount: valueCount,
+	}, nil
+}
+
+// GetCalleeMapKeyPrefix 获取用于前缀扫描的基础key
+func GetCalleeMapKeyPrefix(symbolName string) string {
+	return fmt.Sprintf("%s:%s:", CalleeMapKeySystemPrefix, symbolName)
 }
 
 func ToSymbolNameKey(key string) (SymbolNameKey, error) {
