@@ -331,6 +331,9 @@ func TestCodegraphProcessor_ProcessModifyFileEvent(t *testing.T) {
 				}
 				mockWorkspaceReader.EXPECT().Stat("/workspace/file.go").Return(fileInfo, nil)
 
+				// 删除旧索引
+				mockIndexer.EXPECT().RemoveIndexes(gomock.Any(), "/workspace", []string{"/workspace/file.go"}).Return(nil)
+
 				// 重新索引文件成功
 				mockIndexer.EXPECT().IndexFiles(gomock.Any(), "/workspace", []string{"/workspace/file.go"}).Return(nil)
 
@@ -1046,8 +1049,8 @@ func TestCodegraphProcessor_convertFilePathToAbs(t *testing.T) {
 				SourceFilePath: "file.go",
 				TargetFilePath: "new.go",
 			},
-			expectedSource: filepath.Join("/workspace", "file.go"), // 修正：应该是 "/workspace/file.go"
-			expectedTarget: filepath.Join("/workspace", "new.go"),  // 修正：应该是 "/workspace/new.go"
+			expectedSource: filepath.ToSlash(filepath.Join("/workspace", "file.go")),
+			expectedTarget: filepath.ToSlash(filepath.Join("/workspace", "new.go")),
 		},
 		{
 			name: "源路径是绝对路径，目标路径不是",
@@ -1057,7 +1060,7 @@ func TestCodegraphProcessor_convertFilePathToAbs(t *testing.T) {
 				TargetFilePath: "new.go",
 			},
 			expectedSource: "/workspace/file.go",
-			expectedTarget: filepath.Join("/workspace", "new.go"), // 修正：应该是 "/workspace/new.go"
+			expectedTarget: filepath.ToSlash(filepath.Join("/workspace", "new.go")),
 		},
 		{
 			name: "源路径不是绝对路径，目标路径是",
@@ -1066,7 +1069,7 @@ func TestCodegraphProcessor_convertFilePathToAbs(t *testing.T) {
 				SourceFilePath: "file.go",
 				TargetFilePath: "/workspace/new.go",
 			},
-			expectedSource: filepath.Join("/workspace", "file.go"), // 修正：应该是 "/workspace/file.go"
+			expectedSource: filepath.ToSlash(filepath.Join("/workspace", "file.go")),
 			expectedTarget: "/workspace/new.go",
 		},
 		{
@@ -1076,8 +1079,8 @@ func TestCodegraphProcessor_convertFilePathToAbs(t *testing.T) {
 				SourceFilePath: "",
 				TargetFilePath: "",
 			},
-			expectedSource: "/workspace",
-			expectedTarget: "/workspace",
+			expectedSource: filepath.ToSlash("/workspace"),
+			expectedTarget: filepath.ToSlash("/workspace"),
 		},
 	}
 
@@ -1087,8 +1090,9 @@ func TestCodegraphProcessor_convertFilePathToAbs(t *testing.T) {
 			eventCopy := *tt.event
 			processor.convertWorkspaceFilePathToAbs(&eventCopy)
 
-			assert.Equal(t, tt.expectedSource, eventCopy.SourceFilePath)
-			assert.Equal(t, tt.expectedTarget, eventCopy.TargetFilePath)
+			// 使用 ToSlash 统一路径分隔符以支持跨平台测试
+			assert.Equal(t, tt.expectedSource, filepath.ToSlash(eventCopy.SourceFilePath))
+			assert.Equal(t, tt.expectedTarget, filepath.ToSlash(eventCopy.TargetFilePath))
 		})
 	}
 }
