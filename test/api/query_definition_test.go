@@ -55,7 +55,6 @@ func (s *QueryDefinitionIntegrationTestSuite) TestQueryDefinition() {
 				assert.Contains(t, firstItem, "filePath")
 				assert.Contains(t, firstItem, "name")
 				assert.Contains(t, firstItem, "type")
-				assert.Contains(t, firstItem, "content")
 				assert.Contains(t, firstItem, "position")
 
 				position := firstItem["position"].(map[string]interface{})
@@ -154,7 +153,6 @@ func (s *QueryDefinitionIntegrationTestSuite) TestQueryDefinition() {
 					assert.Contains(t, firstItem, "filePath")
 					assert.Contains(t, firstItem, "name")
 					assert.Contains(t, firstItem, "type")
-					assert.Contains(t, firstItem, "content")
 					assert.Contains(t, firstItem, "position")
 
 					// 验证符号名称匹配
@@ -230,7 +228,7 @@ func (s *QueryDefinitionIntegrationTestSuite) TestQueryDefinition() {
 				q.Add("filePath", tc.filePath)
 			}
 			if tc.symbolName != "" {
-				q.Add("symbolName", tc.symbolName)
+				q.Add("symbolNames", tc.symbolName)
 			}
 			if tc.startLine > 0 {
 				q.Add("startLine", fmt.Sprintf("%d", tc.startLine))

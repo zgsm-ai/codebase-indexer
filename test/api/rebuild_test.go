@@ -67,7 +67,7 @@ func (s *IndexIntegrationTestSuite) TestIndex() {
 			indexType: "codegraph",
 
 			expectedStatus: http.StatusBadRequest,
-			expectedCode:   "400", // 假设错误码为1
+			expectedCode:   "codebase-indexer.bad_request",
 			validateResp: func(t *testing.T, response map[string]interface{}) {
 				assert.False(t, response["success"].(bool))
 				assert.NotEmpty(t, response["message"])
@@ -78,7 +78,7 @@ func (s *IndexIntegrationTestSuite) TestIndex() {
 			workspace: s.workspacePath,
 
 			expectedStatus: http.StatusBadRequest,
-			expectedCode:   "400",
+			expectedCode:   "codebase-indexer.bad_request",
 			validateResp: func(t *testing.T, response map[string]interface{}) {
 				assert.False(t, response["success"].(bool))
 			},
@@ -89,7 +89,7 @@ func (s *IndexIntegrationTestSuite) TestIndex() {
 			indexType: "invalid-type", // 无效的索引类型
 
 			expectedStatus: http.StatusBadRequest,
-			expectedCode:   "400", // 假设无效类型错误码为2
+			expectedCode:   "codebase-indexer.bad_request", // 假设无效类型错误码为2
 		},
 		{
 			name:      "无效的JSON请求体",
@@ -97,7 +97,7 @@ func (s *IndexIntegrationTestSuite) TestIndex() {
 			indexType: "codegraph",
 
 			expectedStatus: http.StatusBadRequest,
-			expectedCode:   "400",
+			expectedCode:   "codebase-indexer.bad_request",
 			isInvalidJSON:  true,
 		},
 	}

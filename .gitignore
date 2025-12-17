@@ -18,4 +18,5 @@ tmp/codegraph/*.profile
 .coignore
 .documents
 .cospec
+.claude
 internal/service/*.profile

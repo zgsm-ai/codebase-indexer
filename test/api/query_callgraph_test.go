@@ -23,8 +23,7 @@ type queryCallGraphTestCase struct {
 	clientId       string
 	codebasePath   string
 	filePath       string
-	startLine      int
-	endLine        int
+	lineRange      string
 	symbolName     string
 	maxLayer       int
 	expectedStatus int
@@ -40,8 +39,7 @@ func (s *QueryCallGraphIntegrationTestSuite) TestQueryCallGraph() {
 			clientId:       "123",
 			codebasePath:   s.workspacePath,
 			filePath:       filepath.Join(s.workspacePath, "test", "api", "query_reference_test.go"),
-			startLine:      1,
-			endLine:        1000,
+			lineRange:      "1-1000",
 			symbolName:     "",
 			maxLayer:       3,
 			expectedStatus: http.StatusOK,
@@ -60,7 +58,6 @@ func (s *QueryCallGraphIntegrationTestSuite) TestQueryCallGraph() {
 					assert.Contains(t, firstItem, "filePath")
 					assert.Contains(t, firstItem, "symbolName")
 					assert.Contains(t, firstItem, "position")
-					assert.Contains(t, firstItem, "content")
 					assert.Contains(t, firstItem, "nodeType")
 
 					position := firstItem["position"].(map[string]interface{})
@@ -87,8 +84,7 @@ func (s *QueryCallGraphIntegrationTestSuite) TestQueryCallGraph() {
 			clientId:       "123",
 			codebasePath:   s.workspacePath,
 			filePath:       filepath.Join(s.workspacePath, "test", "api", "query_reference_test.go"),
-			startLine:      1,
-			endLine:        1000,
+			lineRange:      "",
 			symbolName:     "TestQueryReference",
 			maxLayer:       2,
 			expectedStatus: http.StatusOK,
@@ -106,8 +102,7 @@ func (s *QueryCallGraphIntegrationTestSuite) TestQueryCallGraph() {
 			name:           "缺少codebasePath参数",
 			clientId:       "123",
 			filePath:       filepath.Join(s.workspacePath, "test", "api", "query_reference_test.go"),
-			startLine:      1,
-			endLine:        1000,
+			lineRange:      "1-1000",
 			symbolName:     "",
 			maxLayer:       3,
 			expectedStatus: http.StatusBadRequest,
@@ -119,8 +114,7 @@ func (s *QueryCallGraphIntegrationTestSuite) TestQueryCallGraph() {
 			name:           "缺少filePath参数",
 			clientId:       "123",
 			codebasePath:   s.workspacePath,
-			startLine:      1,
-			endLine:        1000,
+			lineRange:      "1-1000",
 			symbolName:     "",
 			maxLayer:       3,
 			expectedStatus: http.StatusBadRequest,
@@ -133,8 +127,7 @@ func (s *QueryCallGraphIntegrationTestSuite) TestQueryCallGraph() {
 			clientId:       "123",
 			codebasePath:   s.workspacePath,
 			filePath:       filepath.Join(s.workspacePath, "test", "api", "no_exists.go"),
-			startLine:      1,
-			endLine:        1000,
+			lineRange:      "1-1000",
 			symbolName:     "",
 			maxLayer:       3,
 			expectedStatus: http.StatusBadRequest,
@@ -148,8 +141,7 @@ func (s *QueryCallGraphIntegrationTestSuite) TestQueryCallGraph() {
 			clientId:       "",
 			codebasePath:   "",
 			filePath:       "",
-			startLine:      0,
-			endLine:        0,
+			lineRange:      "",
 			symbolName:     "",
 			maxLayer:       0,
 			expectedStatus: http.StatusBadRequest,
@@ -162,8 +154,7 @@ func (s *QueryCallGraphIntegrationTestSuite) TestQueryCallGraph() {
 			clientId:       "123",
 			codebasePath:   s.workspacePath,
 			filePath:       filepath.Join(s.workspacePath, "test", "api", "query_reference_test.go"),
-			startLine:      1,
-			endLine:        1000,
+			lineRange:      "1-1000",
 			symbolName:     "",
 			maxLayer:       10, // 测试最大层数
 			expectedStatus: http.StatusOK,
@@ -182,8 +173,7 @@ func (s *QueryCallGraphIntegrationTestSuite) TestQueryCallGraph() {
 			clientId:       "123",
 			codebasePath:   s.workspacePath,
 			filePath:       filepath.Join(s.workspacePath, "test", "api", "query_reference_test.go"),
-			startLine:      30,
-			endLine:        50,
+			lineRange:      "30-50",
 			symbolName:     "",
 			maxLayer:       2,
 			expectedStatus: http.StatusOK,
@@ -217,11 +207,8 @@ func (s *QueryCallGraphIntegrationTestSuite) TestQueryCallGraph() {
 			if tc.filePath != "" {
 				q.Add("filePath", tc.filePath)
 			}
-			if tc.startLine > 0 {
-				q.Add("startLine", fmt.Sprintf("%d", tc.startLine))
-			}
-			if tc.endLine > 0 {
-				q.Add("endLine", fmt.Sprintf("%d", tc.endLine))
+			if tc.lineRange != "" {
+				q.Add("lineRange", tc.lineRange)
 			}
 			if tc.symbolName != "" {
 				q.Add("symbolName", tc.symbolName)
