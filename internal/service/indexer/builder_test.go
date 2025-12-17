@@ -164,3 +164,4 @@ func TestBatchCalculation(t *testing.T) {
 		})
 	}
 }
+

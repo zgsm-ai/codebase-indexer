@@ -387,3 +387,4 @@ func TestFindSymbolInDocByLineRange(t *testing.T) {
 		})
 	}
 }
+

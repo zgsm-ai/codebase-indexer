@@ -134,3 +134,4 @@ func TestConstants(t *testing.T) {
 	assert.Greater(t, config.MaxConcurrency, 0)
 	assert.Greater(t, config.MaxBatchSize, 0)
 }
+

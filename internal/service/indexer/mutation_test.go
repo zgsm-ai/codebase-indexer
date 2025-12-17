@@ -111,3 +111,4 @@ func TestGroupFilesByProject_ForDeletion(t *testing.T) {
 	// 这部分逻辑已在 helper_test.go 中测试
 	assert.NotNil(t, idx)
 }
+

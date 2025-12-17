@@ -146,3 +146,4 @@ func TestProgressInfo_Calculation(t *testing.T) {
 	assert.Equal(t, 80, totalProcessed)
 	assert.Equal(t, 60.0, percentage)
 }
+
