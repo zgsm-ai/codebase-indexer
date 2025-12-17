@@ -17,7 +17,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const PythonProjectRootDir = "/tmp/projects/python/fastapi"
+const PythonProjectRootDir = "/tmp/projects/python"
 
 func TestParsePythonProjectFiles(t *testing.T) {
 	env, err := setupTestEnvironment()
@@ -30,7 +30,7 @@ func TestParsePythonProjectFiles(t *testing.T) {
 	}{
 		{
 			Name:    "fastapi",
-			Path:    filepath.Join(PythonProjectRootDir),
+			Path:    filepath.Join(PythonProjectRootDir, "fastapi"),
 			wantErr: nil,
 		},
 	}
@@ -81,7 +81,7 @@ func TestQueryPython(t *testing.T) {
 	defer teardownTestEnvironment(t, env)
 
 	// 使用codebase-indexer-main项目作为测试数据
-	workspacePath := "e:\\tmp\\projects\\python\\fastapi"
+	workspacePath := filepath.Join(PythonProjectRootDir, "fastapi")
 
 	if err = initWorkspaceModel(env, workspacePath); err != nil {
 		t.Logf("initWorkspaceModel error: %v", err)
@@ -126,7 +126,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询get_websocket_app函数调用",
 			ElementName:   "get_websocket_app",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\fastapi\\routing.py",
+			FilePath:      filepath.Join(workspacePath, "fastapi", "routing.py"),
 			StartLine:     415,
 			EndLine:       419,
 			ElementType:   "call.function",
@@ -139,7 +139,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询get_authorization_scheme_param函数调用",
 			ElementName:   "get_authorization_scheme_param",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\fastapi\\security\\oauth2.py",
+			FilePath:      filepath.Join(workspacePath, "fastapi", "security", "oauth2.py"),
 			StartLine:     490,
 			EndLine:       490,
 			ElementType:   "call.function",
@@ -152,7 +152,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询_get_flat_fields_from_params函数调用",
 			ElementName:   "_get_flat_fields_from_params",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\fastapi\\openapi\\utils.py",
+			FilePath:      filepath.Join(workspacePath, "fastapi", "openapi", "utils.py"),
 			StartLine:     107,
 			EndLine:       107,
 			ElementType:   "call.function",
@@ -165,7 +165,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询add_task函数调用",
 			ElementName:   "add_task",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\fastapi\\background.py",
+			FilePath:      filepath.Join(workspacePath, "fastapi", "background.py"),
 			StartLine:     59,
 			EndLine:       59,
 			ElementType:   "call.function",
@@ -178,7 +178,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询get_lang_paths函数调用",
 			ElementName:   "get_lang_paths",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\scripts\\docs.py",
+			FilePath:      filepath.Join(workspacePath, "scripts", "docs.py"),
 			StartLine:     71,
 			EndLine:       71,
 			ElementType:   "call.function",
@@ -191,7 +191,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询get_graphql_translation_discussions函数调用",
 			ElementName:   "get_graphql_translation_discussions",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\scripts\\notify_translations.py",
+			FilePath:      filepath.Join(workspacePath, "scripts", "notify_translations.py"),
 			StartLine:     350,
 			EndLine:       350,
 			ElementType:   "call.function",
@@ -204,7 +204,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询include_router方法调用",
 			ElementName:   "include_router",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\docs_src\\bigger_applications\\app\\main.py",
+			FilePath:      filepath.Join(workspacePath, "docs_src", "bigger_applications", "app", "main.py"),
 			StartLine:     12,
 			EndLine:       18,
 			ElementType:   "call.function",
@@ -217,7 +217,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询Cookie方法调用",
 			ElementName:   "Cookie",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\docs_src\\websockets\\tutorial002_an.py",
+			FilePath:      filepath.Join(workspacePath, "docs_src", "websockets", "tutorial002_an.py"),
 			StartLine:     69,
 			EndLine:       69,
 			ElementType:   "call.function",
@@ -230,7 +230,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询startswith方法调用",
 			ElementName:   "startswith",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\scripts\\notify_translations.py",
+			FilePath:      filepath.Join(workspacePath, "scripts", "notify_translations.py"),
 			StartLine:     342,
 			EndLine:       342,
 			ElementType:   "call.function",
@@ -240,7 +240,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询mkdir方法调用",
 			ElementName:   "mkdir",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\scripts\\translate.py",
+			FilePath:      filepath.Join(workspacePath, "scripts", "translate.py"),
 			StartLine:     105,
 			EndLine:       105,
 			ElementType:   "call.function",
@@ -250,7 +250,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询Item引用",
 			ElementName:   "Item",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\docs_src\\body_multiple_params\\tutorial001_an_py310.py",
+			FilePath:      filepath.Join(workspacePath, "docs_src", "body_multiple_params", "tutorial001_an_py310.py"),
 			StartLine:     105,
 			EndLine:       105,
 			ElementType:   "reference",
@@ -260,7 +260,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询Settings引用",
 			ElementName:   "Settings",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\docs_src\\conditional_openapi\\tutorial001.py",
+			FilePath:      filepath.Join(workspacePath, "docs_src", "conditional_openapi", "tutorial001.py"),
 			StartLine:     9,
 			EndLine:       9,
 			ElementType:   "reference",
@@ -273,7 +273,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询GzipRequest引用",
 			ElementName:   "GzipRequest",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\docs_src\\custom_request_and_route\\tutorial001.py",
+			FilePath:      filepath.Join(workspacePath, "docs_src", "custom_request_and_route", "tutorial001.py"),
 			StartLine:     23,
 			EndLine:       23,
 			ElementType:   "reference",
@@ -286,7 +286,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询Annotated引用",
 			ElementName:   "Annotated",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\docs_src\\body_multiple_params\\tutorial004_an_py39.py",
+			FilePath:      filepath.Join(workspacePath, "docs_src", "body_multiple_params", "tutorial004_an_py39.py"),
 			StartLine:     26,
 			EndLine:       26,
 			ElementType:   "reference",
@@ -296,7 +296,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询SecurityRequirement引用",
 			ElementName:   "SecurityRequirement",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\fastapi\\dependencies\\utils.py",
+			FilePath:      filepath.Join(workspacePath, "fastapi", "dependencies", "utils.py"),
 			StartLine:     159,
 			EndLine:       161,
 			ElementType:   "reference",
@@ -309,7 +309,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询LinkData引用",
 			ElementName:   "LinkData",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\scripts\\deploy_docs_status.py",
+			FilePath:      filepath.Join(workspacePath, "scripts", "deploy_docs_status.py"),
 			StartLine:     93,
 			EndLine:       93,
 			ElementType:   "reference",
@@ -322,7 +322,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询FastAPI引用",
 			ElementName:   "FastAPI",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\docs_src\\websockets\\tutorial002_an_py39.py",
+			FilePath:      filepath.Join(workspacePath, "docs_src", "websockets", "tutorial002_an_py39.py"),
 			StartLine:     14,
 			EndLine:       14,
 			ElementType:   "reference",
@@ -335,7 +335,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询TypeVar引用",
 			ElementName:   "TypeVar",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\fastapi\\concurrency.py",
+			FilePath:      filepath.Join(workspacePath, "fastapi", "concurrency.py"),
 			StartLine:     12,
 			EndLine:       12,
 			ElementType:   "reference",
@@ -345,7 +345,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询Author引用",
 			ElementName:   "Author",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\scripts\\contributors.py",
+			FilePath:      filepath.Join(workspacePath, "scripts", "contributors.py"),
 			StartLine:     74,
 			EndLine:       74,
 			ElementType:   "reference",
@@ -358,7 +358,7 @@ func TestQueryPython(t *testing.T) {
 		{
 			Name:          "查询APIRouter引用",
 			ElementName:   "APIRouter",
-			FilePath:      "e:\\tmp\\projects\\python\\fastapi\\tests\\test_custom_middleware_exception.py",
+			FilePath:      filepath.Join(workspacePath, "tests", "test_custom_middleware_exception.py"),
 			StartLine:     10,
 			EndLine:       10,
 			ElementType:   "reference",
@@ -654,7 +654,7 @@ func TestIterPythonProjectKeys(t *testing.T) {
 	defer teardownTestEnvironment(t, env)
 
 	// 使用fastapi项目作为测试数据
-	workspacePath := "/tmp/projects/python/fastapi"
+	workspacePath := filepath.Join(PythonProjectRootDir, "fastapi")
 
 	// 初始化工作空间数据库记录
 	err = initWorkspaceModel(env, workspacePath)
@@ -721,7 +721,7 @@ func TestIterPythonProjectKeys(t *testing.T) {
 						// 尝试获取这个路径的数据
 						if data, err := env.storage.Get(context.Background(), project.Uuid, store.ElementPathKey{
 							Language: "python",
-							Path:     "/tmp/projects/python/fastapi/fastapi/routing.py",
+							Path:     filepath.Join(workspacePath, "fastapi", "routing.py"),
 						}); err == nil {
 							fmt.Printf("         文件数据大小: %d 字节\n", len(data))
 
@@ -759,7 +759,7 @@ func TestIterPythonProjectKeys(t *testing.T) {
 		fmt.Printf("\n使用主项目进行查询测试: %s (UUID: %s)\n", mainProject.Name, mainProject.Uuid)
 
 		// 测试一个简单的查询
-		testFilePath := "/tmp/projects/python/fastapi/fastapi/routing.py"
+		testFilePath := filepath.Join(workspacePath, "fastapi", "routing.py")
 
 		// 验证文件是否存在并且在项目范围内
 		if strings.HasPrefix(testFilePath, mainProject.Path) {

@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const CPPProjectRootDir = "/tmp/projects/cpp/grpc"
+const CppProjectRootDir = "/tmp/projects/cpp"
 
 func TestParseCPPProjectFiles(t *testing.T) {
 	env, err := setupTestEnvironment()
@@ -26,7 +26,7 @@ func TestParseCPPProjectFiles(t *testing.T) {
 	}{
 		{
 			Name:    "grpc",
-			Path:    filepath.Join(CPPProjectRootDir, ""),
+			Path:    filepath.Join(CppProjectRootDir, "grpc"),
 			wantErr: nil,
 		},
 	}
@@ -586,7 +586,7 @@ func TestFindDefinitionsForAllElementsCPP(t *testing.T) {
 	defer teardownTestEnvironment(t, env)
 
 	// 使用项目自身的代码作为测试数据
-	workspacePath, err := filepath.Abs(CPPProjectRootDir) // 指向项目根目录
+	workspacePath, err := filepath.Abs(CppProjectRootDir) // 指向项目根目录
 	assert.NoError(t, err)
 
 	// 初始化工作空间数据库记录

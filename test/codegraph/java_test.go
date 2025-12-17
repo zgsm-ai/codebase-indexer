@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const JavaProjectRootDir = "/tmp/projects/java/mall"
+const JavaProjectRootDir = "/tmp/projects/java"
 
 // 添加性能分析辅助函数
 func setupProfiling() (func(), error) {
@@ -106,7 +106,7 @@ func TestParseJavaProjectFiles(t *testing.T) {
 	}{
 		{
 			Name:    "mall",
-			Path:    filepath.Join(JavaProjectRootDir),
+			Path:    filepath.Join(JavaProjectRootDir, "mall"),
 			wantErr: nil,
 		},
 	}
@@ -177,7 +177,7 @@ func TestQueryJava(t *testing.T) {
 	}
 	defer teardownTestEnvironment(t, env)
 
-	workspacePath := "e:\\tmp\\projects\\java\\mall"
+	workspacePath := filepath.Join(JavaProjectRootDir, "mall")
 	// 初始化工作空间数据库记录
 	if err = initWorkspaceModel(env, workspacePath); err != nil {
 		t.Logf("initWorkspaceModel error: %v", err)
@@ -221,7 +221,7 @@ func TestQueryJava(t *testing.T) {
 		{
 			Name:          "查询success方法调用",
 			ElementName:   "success",
-			FilePath:      "e:\\tmp\\projects\\java\\mall\\mall-admin\\src\\main\\java\\com\\macro\\mall\\controller\\SmsHomeNewProductController.java",
+			FilePath:      filepath.Join(workspacePath, "mall-admin", "src", "main", "java", "com", "macro", "mall", "controller", "SmsHomeNewProductController.java"),
 			StartLine:     34,
 			EndLine:       34,
 			ElementType:   "call.method",
@@ -234,7 +234,7 @@ func TestQueryJava(t *testing.T) {
 		{
 			Name:          "查询createBrand方法调用",
 			ElementName:   "createBrand",
-			FilePath:      "e:\\tmp\\projects\\java\\mall\\mall-demo\\src\\main\\java\\com\\macro\\mall\\demo\\controller\\DemoController.java",
+			FilePath:      filepath.Join(workspacePath, "mall-demo", "src", "main", "java", "com", "macro", "mall", "demo", "controller", "DemoController.java"),
 			StartLine:     45,
 			EndLine:       45,
 			ElementType:   "call.method",
@@ -247,7 +247,7 @@ func TestQueryJava(t *testing.T) {
 		{
 			Name:          "查询deleteBrand方法调用",
 			ElementName:   "deleteBrand",
-			FilePath:      "e:\\tmp\\projects\\java\\mall\\mall-demo\\src\\main\\java\\com\\macro\\mall\\demo\\controller\\DemoController.java",
+			FilePath:      filepath.Join(workspacePath, "mall-demo", "src", "main", "java", "com", "macro", "mall", "demo", "controller", "DemoController.java"),
 			StartLine:     76,
 			EndLine:       76,
 			ElementType:   "call.method",
@@ -260,7 +260,7 @@ func TestQueryJava(t *testing.T) {
 		{
 			Name:          "查询ApiException方法调用",
 			ElementName:   "ApiException",
-			FilePath:      "e:\\tmp\\projects\\java\\mall\\mall-common\\src\\main\\java\\com\\macro\\mall\\common\\exception\\Asserts.java",
+			FilePath:      filepath.Join(workspacePath, "mall-common", "src", "main", "java", "com", "macro", "mall", "common", "exception", "Asserts.java"),
 			StartLine:     15,
 			EndLine:       15,
 			ElementType:   "call.method",
@@ -273,7 +273,7 @@ func TestQueryJava(t *testing.T) {
 		{
 			Name:          "查询validateFailed方法调用",
 			ElementName:   "validateFailed",
-			FilePath:      "e:\\tmp\\projects\\java\\mall\\mall-common\\src\\main\\java\\com\\macro\\mall\\common\\exception\\GlobalExceptionHandler.java",
+			FilePath:      filepath.Join(workspacePath, "mall-common", "src", "main", "java", "com", "macro", "mall", "common", "exception", "GlobalExceptionHandler.java"),
 			StartLine:     56,
 			EndLine:       56,
 			ElementType:   "call.method",
@@ -286,7 +286,7 @@ func TestQueryJava(t *testing.T) {
 		{
 			Name:          "查询cancelOrder方法调用",
 			ElementName:   "cancelOrder",
-			FilePath:      "e:\\tmp\\projects\\java\\mall\\mall-portal\\src\\main\\java\\com\\macro\\mall\\portal\\component\\CancelOrderReceiver.java",
+			FilePath:      filepath.Join(workspacePath, "mall-portal", "src", "main", "java", "com", "macro", "mall", "portal", "component", "CancelOrderReceiver.java"),
 			StartLine:     23,
 			EndLine:       23,
 			ElementType:   "call.method",
@@ -299,7 +299,7 @@ func TestQueryJava(t *testing.T) {
 		{
 			Name:          "查询getUserNameFromToken方法调用",
 			ElementName:   "getUserNameFromToken",
-			FilePath:      "e:\\tmp\\projects\\java\\mall\\mall-security\\src\\main\\java\\com\\macro\\mall\\security\\component\\JwtAuthenticationTokenFilter.java",
+			FilePath:      filepath.Join(workspacePath, "mall-security", "src", "main", "java", "com", "macro", "mall", "security", "component", "JwtAuthenticationTokenFilter.java"),
 			StartLine:     43,
 			EndLine:       43,
 			ElementType:   "call.method",
@@ -312,7 +312,7 @@ func TestQueryJava(t *testing.T) {
 		{
 			Name:          "查询getCode方法调用",
 			ElementName:   "getCode",
-			FilePath:      "e:\\tmp\\projects\\java\\mall\\mall-common\\src\\main\\java\\com\\macro\\mall\\common\\api\\CommonResult.java",
+			FilePath:      filepath.Join(workspacePath, "mall-common", "src", "main", "java", "com", "macro", "mall", "common", "api", "CommonResult.java"),
 			StartLine:     36,
 			EndLine:       36,
 			ElementType:   "call.method",
@@ -325,7 +325,7 @@ func TestQueryJava(t *testing.T) {
 		{
 			Name:          "查询list方法调用",
 			ElementName:   "list",
-			FilePath:      "e:\\tmp\\projects\\java\\mall\\mall-admin\\src\\main\\java\\com\\macro\\mall\\controller\\UmsAdminController.java",
+			FilePath:      filepath.Join(workspacePath, "mall-admin", "src", "main", "java", "com", "macro", "mall", "controller", "UmsAdminController.java"),
 			StartLine:     122,
 			EndLine:       122,
 			ElementType:   "call.method",
@@ -338,7 +338,7 @@ func TestQueryJava(t *testing.T) {
 		{
 			Name:          "查询getLogger方法调用", //调用系统包
 			ElementName:   "getLogger",
-			FilePath:      "e:\\tmp\\projects\\java\\mall\\mall-portal\\src\\main\\java\\com\\macro\\mall\\portal\\component\\CancelOrderReceiver.java",
+			FilePath:      filepath.Join(workspacePath, "mall-portal", "src", "main", "java", "com", "macro", "mall", "portal", "component", "CancelOrderReceiver.java"),
 			StartLine:     18,
 			EndLine:       18,
 			ElementType:   "call.method",
@@ -348,7 +348,7 @@ func TestQueryJava(t *testing.T) {
 		{
 			Name:          "查询UmsMemberLevelService引用",
 			ElementName:   "UmsMemberLevelService",
-			FilePath:      "e:\\tmp\\projects\\java\\mall\\mall-admin\\src\\main\\java\\com\\macro\\mall\\controller\\UmsMemberLevelController.java",
+			FilePath:      filepath.Join(workspacePath, "mall-admin", "src", "main", "java", "com", "macro", "mall", "controller", "UmsMemberLevelController.java"),
 			StartLine:     28,
 			EndLine:       28,
 			ElementType:   "reference",
@@ -361,7 +361,7 @@ func TestQueryJava(t *testing.T) {
 		{
 			Name:          "查询WebLog引用",
 			ElementName:   "WebLog",
-			FilePath:      "e:\\tmp\\projects\\java\\mall\\mall-common\\src\\main\\java\\com\\macro\\mall\\common\\log\\WebLogAspect.java",
+			FilePath:      filepath.Join(workspacePath, "mall-common", "src", "main", "java", "com", "macro", "mall", "common", "log", "WebLogAspect.java"),
 			StartLine:     61,
 			EndLine:       61,
 			ElementType:   "reference",
@@ -374,7 +374,7 @@ func TestQueryJava(t *testing.T) {
 		{
 			Name:          "查询Criteria引用",
 			ElementName:   "Criteria",
-			FilePath:      "e:\\tmp\\projects\\java\\mall\\mall-mbg\\src\\main\\java\\com\\macro\\mall\\model\\CmsPrefrenceAreaExample.java",
+			FilePath:      filepath.Join(workspacePath, "mall-mbg", "src", "main", "java", "com", "macro", "mall", "model", "CmsPrefrenceAreaExample.java"),
 			StartLine:     56,
 			EndLine:       56,
 			ElementType:   "reference",
@@ -387,7 +387,7 @@ func TestQueryJava(t *testing.T) {
 		{
 			Name:          "查询PmsPortalBrandService引用",
 			ElementName:   "PmsPortalBrandService",
-			FilePath:      "e:\\tmp\\projects\\java\\mall\\mall-portal\\src\\main\\java\\com\\macro\\mall\\portal\\controller\\PmsPortalBrandController.java",
+			FilePath:      filepath.Join(workspacePath, "mall-portal", "src", "main", "java", "com", "macro", "mall", "portal", "controller", "PmsPortalBrandController.java"),
 			StartLine:     28,
 			EndLine:       28,
 			ElementType:   "reference",
@@ -400,7 +400,7 @@ func TestQueryJava(t *testing.T) {
 		{
 			Name:          "查询AlipayConfig引用",
 			ElementName:   "AlipayConfig",
-			FilePath:      "e:\\tmp\\projects\\java\\mall\\mall-portal\\src\\main\\java\\com\\macro\\mall\\portal\\service\\impl\\AlipayServiceImpl.java",
+			FilePath:      filepath.Join(workspacePath, "mall-portal", "src", "main", "java", "com", "macro", "mall", "portal", "service", "impl", "AlipayServiceImpl.java"),
 			StartLine:     33,
 			EndLine:       33,
 			ElementType:   "reference",
@@ -413,7 +413,7 @@ func TestQueryJava(t *testing.T) {
 		{
 			Name:          "查询JSONObject引用", //调用系统包
 			ElementName:   "JSONObject",
-			FilePath:      "e:\\tmp\\projects\\java\\mall\\mall-portal\\src\\main\\java\\com\\macro\\mall\\portal\\service\\impl\\AlipayServiceImpl.java",
+			FilePath:      filepath.Join(workspacePath, "mall-portal", "src", "main", "java", "com", "macro", "mall", "portal", "service", "impl", "AlipayServiceImpl.java"),
 			StartLine:     52,
 			EndLine:       52,
 			ElementType:   "reference",
@@ -423,7 +423,7 @@ func TestQueryJava(t *testing.T) {
 		{
 			Name:          "查询MethodSignature引用", //调用系统包
 			ElementName:   "MethodSignature",
-			FilePath:      "e:\\tmp\\projects\\java\\mall\\mall-security\\src\\main\\java\\com\\macro\\mall\\security\\aspect\\RedisCacheAspect.java",
+			FilePath:      filepath.Join(workspacePath, "mall-security", "src", "main", "java", "com", "macro", "mall", "security", "aspect", "RedisCacheAspect.java"),
 			StartLine:     34,
 			EndLine:       34,
 			ElementType:   "reference",

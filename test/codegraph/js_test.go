@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const JsProjectRootDir = "/tmp/projects/javascript/bootstrap-main"
+const JsProjectRootDir = "/tmp/projects/javascript"
 
 func TestParseJsProjectFiles(t *testing.T) {
 	env, err := setupTestEnvironment()
@@ -55,7 +55,7 @@ func TestQueryJavaScript(t *testing.T) {
 	assert.NoError(t, err)
 	defer teardownTestEnvironment(t, env)
 
-	workspacePath := "e:\\tmp\\projects\\java\\mall"
+	workspacePath := filepath.Join(JsProjectRootDir, "bootstrap-main")
 	// 初始化工作空间数据库记录
 	err = initWorkspaceModel(env, workspacePath)
 	assert.NoError(t, err)
@@ -91,7 +91,7 @@ func TestQueryJavaScript(t *testing.T) {
 		{
 			Name:          "查询success方法调用",
 			ElementName:   "success",
-			FilePath:      "e:\\tmp\\projects\\java\\mall\\mall-admin\\src\\main\\java\\com\\macro\\mall\\controller\\SmsHomeNewProductController.java",
+			FilePath:      filepath.Join(workspacePath, "src", "main.js"),  // 修改为合适的JS文件路径
 			StartLine:     34,
 			EndLine:       34,
 			ElementType:   "call.method",

@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const CProjectRootDir = "/tmp/projects/c/zstd-dev"
+const CProjectRootDir = "/tmp/projects/c"
 
 func TestParseCProjectFiles(t *testing.T) {
 	env, err := setupTestEnvironment()
@@ -26,7 +26,7 @@ func TestParseCProjectFiles(t *testing.T) {
 	}{
 		{
 			Name:    "zstd-dev",
-			Path:    filepath.Join(CProjectRootDir, ""),
+			Path:    filepath.Join(CProjectRootDir, "redis"),
 			wantErr: nil,
 		},
 	}
@@ -72,7 +72,7 @@ func TestQueryC(t *testing.T) {
 	}
 	defer teardownTestEnvironment(t, env)
 
-	workspacePath := "e:\\tmp\\projects\\c\\zstd-dev"
+	workspacePath := filepath.Join(CProjectRootDir, "zstd-dev")
 	// 初始化工作空间数据库记录
 	if err = initWorkspaceModel(env, workspacePath); err != nil {
 		t.Logf("initWorkspaceModel error: %v", err)
@@ -116,7 +116,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询checkLibVersion函数调用",
 			ElementName:   "checkLibVersion",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\programs\\zstdcli.c",
+			FilePath:      filepath.Join(workspacePath, "programs", "zstdcli.c"),
 			StartLine:     927,
 			EndLine:       927,
 			ElementType:   "call.function",
@@ -129,7 +129,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询lastNameFromPath函数调用",
 			ElementName:   "lastNameFromPath",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\programs\\zstdcli.c",
+			FilePath:      filepath.Join(workspacePath, "programs", "zstdcli.c"),
 			StartLine:     932,
 			EndLine:       932,
 			ElementType:   "call.function",
@@ -142,7 +142,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询exeNameMatch函数调用",
 			ElementName:   "exeNameMatch",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\programs\\zstdcli.c",
+			FilePath:      filepath.Join(workspacePath, "programs", "zstdcli.c"),
 			StartLine:     935,
 			EndLine:       935,
 			ElementType:   "call.function",
@@ -155,7 +155,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询defaultCoverParams函数调用",
 			ElementName:   "defaultCoverParams",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\programs\\zstdcli.c",
+			FilePath:      filepath.Join(workspacePath, "programs", "zstdcli.c"),
 			StartLine:     917,
 			EndLine:       917,
 			ElementType:   "call.function",
@@ -168,7 +168,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询defaultFastCoverParams函数调用",
 			ElementName:   "defaultFastCoverParams",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\programs\\zstdcli.c",
+			FilePath:      filepath.Join(workspacePath, "programs", "zstdcli.c"),
 			StartLine:     918,
 			EndLine:       918,
 			ElementType:   "call.function",
@@ -181,7 +181,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询FIO_checkFilenameCollisions函数调用",
 			ElementName:   "FIO_checkFilenameCollisions",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\programs\\fileio.c",
+			FilePath:      filepath.Join(workspacePath, "programs", "fileio.c"),
 			StartLine:     3142,
 			EndLine:       3142,
 			ElementType:   "call.function",
@@ -194,7 +194,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询extractFilename函数调用",
 			ElementName:   "extractFilename",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\programs\\fileio.c",
+			FilePath:      filepath.Join(workspacePath, "programs", "fileio.c"),
 			StartLine:     938,
 			EndLine:       938,
 			ElementType:   "call.function",
@@ -207,7 +207,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询BMK_benchCLevels函数调用",
 			ElementName:   "BMK_benchCLevels",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\programs\\benchzstd.c",
+			FilePath:      filepath.Join(workspacePath, "programs", "benchzstd.c"),
 			StartLine:     1015,
 			EndLine:       1015,
 			ElementType:   "call.function",
@@ -220,7 +220,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询UTIL_allocateFileNamesTable函数调用",
 			ElementName:   "UTIL_allocateFileNamesTable",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\programs\\zstdcli.c",
+			FilePath:      filepath.Join(workspacePath, "programs", "zstdcli.c"),
 			StartLine:     900,
 			EndLine:       900,
 			ElementType:   "call.function",
@@ -233,7 +233,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询UTIL_prepareFileList函数调用",
 			ElementName:   "UTIL_prepareFileList",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\programs\\util.c",
+			FilePath:      filepath.Join(workspacePath, "programs", "util.c"),
 			StartLine:     950,
 			EndLine:       950,
 			ElementType:   "call.function",
@@ -246,7 +246,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询ZSTD_localDict结构体调用",
 			ElementName:   "ZSTD_localDict",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\lib\\compress\\zstd_compress_internal.c",
+			FilePath:      filepath.Join(workspacePath, "lib", "compress", "zstd_compress_internal.c"),
 			StartLine:     1270,
 			EndLine:       1270,
 			ElementType:   "reference",
@@ -259,7 +259,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询cdict_collection_t结构体调用",
 			ElementName:   "cdict_collection_t",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\contrib\\comprlargeNbDictsss\\largeNbDicts.c",
+			FilePath:      filepath.Join(workspacePath, "contrib", "comprlargeNbDictsss", "largeNbDicts.c"),
 			StartLine:     441,
 			EndLine:       441,
 			ElementType:   "reference",
@@ -272,7 +272,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询ZSTD_eDist_match结构体调用",
 			ElementName:   "ZSTD_eDist_match",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\contrib\\match_finders\\zstd_edist.c",
+			FilePath:      filepath.Join(workspacePath, "contrib", "match_finders", "zstd_edist.c"),
 			StartLine:     64,
 			EndLine:       64,
 			ElementType:   "reference",
@@ -285,7 +285,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询job结构体调用",
 			ElementName:   "job",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\contrib\\seekable_format\\examples\\parallel_compression.c",
+			FilePath:      filepath.Join(workspacePath, "contrib", "seekable_format", "examples", "parallel_compression.c"),
 			StartLine:     88,
 			EndLine:       88,
 			ElementType:   "reference",
@@ -298,7 +298,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询ZSTDv05_parameters结构体调用",
 			ElementName:   "ZSTDv05_parameters",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\lib\\legacy\\zstd_v05.c",
+			FilePath:      filepath.Join(workspacePath, "lib", "legacy", "zstd_v05.c"),
 			StartLine:     2603,
 			EndLine:       2603,
 			ElementType:   "reference",
@@ -311,7 +311,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询BMK_benchParams_t结构体调用",
 			ElementName:   "BMK_benchParams_t",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\tests\\paramgrill.c",
+			FilePath:      filepath.Join(workspacePath, "tests", "paramgrill.c"),
 			StartLine:     1591,
 			EndLine:       1591,
 			ElementType:   "reference",
@@ -324,7 +324,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询ZWRAP_DCtx结构体调用",
 			ElementName:   "ZWRAP_DCtx",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\zlibWrapper\\zstd_zlibwrapper.c",
+			FilePath:      filepath.Join(workspacePath, "zlibWrapper", "zstd_zlibwrapper.c"),
 			StartLine:     636,
 			EndLine:       636,
 			ElementType:   "reference",
@@ -337,7 +337,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询data_type_t结构体调用",
 			ElementName:   "data_type_t",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\tests\\regression\\data.h",
+			FilePath:      filepath.Join(workspacePath, "tests", "regression", "data.h"),
 			StartLine:     31,
 			EndLine:       31,
 			ElementType:   "reference",
@@ -350,7 +350,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询data_type_t结构体调用",
 			ElementName:   "data_type_t",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\tests\\regression\\data.h",
+			FilePath:      filepath.Join(workspacePath, "tests", "regression", "data.h"),
 			StartLine:     31,
 			EndLine:       31,
 			ElementType:   "reference",
@@ -363,7 +363,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询ZSTDv07_customMem结构体调用",
 			ElementName:   "ZSTDv07_customMem",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\lib\\legacy\\zstd_v07.c",
+			FilePath:      filepath.Join(workspacePath, "lib", "legacy", "zstd_v07.c"),
 			StartLine:     2795,
 			EndLine:       2795,
 			ElementType:   "reference",
@@ -376,7 +376,7 @@ func TestQueryC(t *testing.T) {
 		{
 			Name:          "查询config_t结构体调用",
 			ElementName:   "config_t",
-			FilePath:      "e:\\tmp\\projects\\c\\zstd-dev\\tests\\regression\\config.c",
+			FilePath:      filepath.Join(workspacePath, "tests", "regression", "config.c"),
 			StartLine:     170,
 			EndLine:       170,
 			ElementType:   "reference",

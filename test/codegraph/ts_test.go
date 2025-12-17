@@ -183,7 +183,7 @@ func TestQueryTypeScript(t *testing.T) {
 	}
 	defer teardownTestEnvironment(t, env)
 
-	workspacePath := "e:\\tmp\\projects\\typescript\\vue-next"
+	workspacePath := filepath.Join(TsProjectRootDir, "vue-next")
 	// 初始化工作空间数据库记录
 	if err = initWorkspaceModel(env, workspacePath); err != nil {
 		t.Logf("initWorkspaceModel error: %v", err)
@@ -228,7 +228,7 @@ func TestQueryTypeScript(t *testing.T) {
 		{
 			Name:          "查询compileCode函数调用",
 			ElementName:   "compileCode",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages-private\\template-explorer\\src\\index.ts",
+			FilePath:      filepath.Join(workspacePath, "packages-private", "template-explorer", "src", "index.ts"),
 			StartLine:     142,
 			EndLine:       142,
 			ElementType:   "call.function",
@@ -241,7 +241,7 @@ func TestQueryTypeScript(t *testing.T) {
 		{
 			Name:          "查询directive函数调用",
 			ElementName:   "directive",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages-private\\dts-test\\appDirective.test-d.ts",
+			FilePath:      filepath.Join(workspacePath, "packages-private", "dts-test", "appDirective.test-d.ts"),
 			StartLine:     6,
 			EndLine:       19,
 			ElementType:   "call.method",
@@ -254,7 +254,7 @@ func TestQueryTypeScript(t *testing.T) {
 		{
 			Name:          "查询ssrCodegenTransform函数调用",
 			ElementName:   "ssrCodegenTransform",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\compiler-ssr\\src\\index.ts",
+			FilePath:      filepath.Join(workspacePath, "packages", "compiler-ssr", "src", "index.ts"),
 			StartLine:     89,
 			EndLine:       89,
 			ElementType:   "call.function",
@@ -267,7 +267,7 @@ func TestQueryTypeScript(t *testing.T) {
 		{
 			Name:          "查询onError函数调用",
 			ElementName:   "onError",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\compiler-core\\src\\validateExpression.ts",
+			FilePath:      filepath.Join(workspacePath, "packages", "compiler-core", "src", "validateExpression.ts"),
 			StartLine:     56,
 			EndLine:       63,
 			ElementType:   "call.function",
@@ -280,7 +280,7 @@ func TestQueryTypeScript(t *testing.T) {
 		{
 			Name:          "查询processExpression函数调用",
 			ElementName:   "processExpression",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\compiler-ssr\\src\\ssrCodegenTransform.ts",
+			FilePath:      filepath.Join(workspacePath, "packages", "compiler-ssr", "src", "ssrCodegenTransform.ts"),
 			StartLine:     49,
 			EndLine:       49,
 			ElementType:   "call.function",
@@ -293,7 +293,7 @@ func TestQueryTypeScript(t *testing.T) {
 		{
 			Name:          "查询createSimpleExpression函数",
 			ElementName:   "createSimpleExpression",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\compiler-core\\src\\transforms\\vOn.ts",
+			FilePath:      filepath.Join(workspacePath, "packages", "compiler-core", "src", "transforms", "vOn.ts"),
 			StartLine:     59,
 			EndLine:       59,
 			ElementType:   "call.function",
@@ -306,7 +306,7 @@ func TestQueryTypeScript(t *testing.T) {
 		{
 			Name:          "查询isSimpleIdentifier函数",
 			ElementName:   "isSimpleIdentifier",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\compiler-core\\src\\parser.ts",
+			FilePath:      filepath.Join(workspacePath, "packages", "compiler-core", "src", "parser.ts"),
 			StartLine:     994,
 			EndLine:       994,
 			ElementType:   "call.function",
@@ -319,7 +319,7 @@ func TestQueryTypeScript(t *testing.T) {
 		{
 			Name:        "查询isFnExpression函数",
 			ElementName: "isFnExpression",
-			FilePath:    "e:\\tmp\\projects\\typescript\\vue-next\\packages\\compiler-core\\src\\transforms\\vOn.ts",
+			FilePath:    filepath.Join(workspacePath, "packages", "compiler-core", "src", "transforms", "vOn.ts"),
 			StartLine:   85,
 			EndLine:     85,
 			ElementType: "call.function",
@@ -333,7 +333,7 @@ func TestQueryTypeScript(t *testing.T) {
 		{
 			Name:          "查询DebuggerEvent引用",
 			ElementName:   "DebuggerEvent",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\runtime-core\\__tests__\\apiLifecycle.spec.ts",
+			FilePath:      filepath.Join(workspacePath, "packages", "runtime-core", "__tests__", "apiLifecycle.spec.ts"),
 			StartLine:     341,
 			EndLine:       341,
 			ElementType:   "reference",
@@ -346,7 +346,7 @@ func TestQueryTypeScript(t *testing.T) {
 		{
 			Name:          "查询SFCTemplateBlock引用",
 			ElementName:   "SFCTemplateBlock",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\compiler-sfc\\src\\parse.ts",
+			FilePath:      filepath.Join(workspacePath, "packages", "compiler-sfc", "src", "parse.ts"),
 			StartLine:     75,
 			EndLine:       75,
 			ElementType:   "reference",
@@ -359,7 +359,7 @@ func TestQueryTypeScript(t *testing.T) {
 		{
 			Name:          "查询CompilerOptions引用",
 			ElementName:   "CompilerOptions",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\runtime-core\\src\\parse.ts",
+			FilePath:      filepath.Join(workspacePath, "packages", "runtime-core", "src", "parse.ts"),
 			StartLine:     1020,
 			EndLine:       1020,
 			ElementType:   "reference",
@@ -372,7 +372,7 @@ func TestQueryTypeScript(t *testing.T) {
 		{
 			Name:          "查询ReactiveEffect引用",
 			ElementName:   "ReactiveEffect",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\reactivity\\src\\effectScope.ts",
+			FilePath:      filepath.Join(workspacePath, "packages", "reactivity", "src", "effectScope.ts"),
 			StartLine:     18,
 			EndLine:       18,
 			ElementType:   "reference",
@@ -385,7 +385,7 @@ func TestQueryTypeScript(t *testing.T) {
 		{
 			Name:          "查询SIMPLE_EXPRESSION引用",
 			ElementName:   "SIMPLE_EXPRESSION",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\compiler-core\\src\\transforms\\vModel.ts",
+			FilePath:      filepath.Join(workspacePath, "packages", "compiler-core", "src", "transforms", "vModel.ts"),
 			StartLine:     36,
 			EndLine:       36,
 			ElementType:   "reference",
@@ -398,7 +398,7 @@ func TestQueryTypeScript(t *testing.T) {
 		{
 			Name:          "查询CodegenResult引用",
 			ElementName:   "CodegenResult",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\compiler-core\\src\\compile.ts",
+			FilePath:      filepath.Join(workspacePath, "packages", "compiler-core", "src", "compile.ts"),
 			StartLine:     68,
 			EndLine:       68,
 			ElementType:   "reference",
@@ -411,7 +411,7 @@ func TestQueryTypeScript(t *testing.T) {
 		{
 			Name:          "查询MockInstance引用",
 			ElementName:   "MockInstance",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\scripts\\setup-vitest.ts",
+			FilePath:      filepath.Join(workspacePath, "scripts", "setup-vitest.ts"),
 			StartLine:     81,
 			EndLine:       81,
 			ElementType:   "reference",
@@ -421,7 +421,7 @@ func TestQueryTypeScript(t *testing.T) {
 		{
 			Name:          "查询RootHydrateFunction引用",
 			ElementName:   "RootHydrateFunction",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\runtime-core\\src\\hydration.ts",
+			FilePath:      filepath.Join(workspacePath, "packages", "runtime-core", "src", "hydration.ts"),
 			StartLine:     119,
 			EndLine:       119,
 			ElementType:   "reference",
@@ -434,7 +434,7 @@ func TestQueryTypeScript(t *testing.T) {
 		{
 			Name:          "查询Dep引用",
 			ElementName:   "Dep",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\reactivity\\src\\ref.ts",
+			FilePath:      filepath.Join(workspacePath, "packages", "reactivity", "src", "ref.ts"),
 			StartLine:     291,
 			EndLine:       291,
 			ElementType:   "reference",
@@ -447,7 +447,7 @@ func TestQueryTypeScript(t *testing.T) {
 		{
 			Name:          "查询DevtoolsHook引用",
 			ElementName:   "DevtoolsHook",
-			FilePath:      "e:\\tmp\\projects\\typescript\\vue-next\\packages\\runtime-core\\src\\devtools.ts",
+			FilePath:      filepath.Join(workspacePath, "packages", "runtime-core", "src", "devtools.ts"),
 			StartLine:     38,
 			EndLine:       38,
 			ElementType:   "reference",
