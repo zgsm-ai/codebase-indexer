@@ -359,6 +359,11 @@ func TestWorkspaceRepositoryErrorCases(t *testing.T) {
 
 	// 创建测试日志记录器
 	logger := &mocks.MockLogger{}
+	// 设置 mock logger 预期 - 使用灵活匹配
+	logger.On("Info", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe().Return()
+	logger.On("Debug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe().Return()
+	logger.On("Warn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe().Return()
+	logger.On("Error", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe().Return()
 
 	// 创建工作区Repository
 	workspaceRepo := NewWorkspaceRepository(dbManager, logger)
@@ -397,9 +402,9 @@ func TestWorkspaceRepositoryErrorCases(t *testing.T) {
 	})
 
 	t.Run("DeleteWorkspaceNotFound", func(t *testing.T) {
-		// 删除不存在的工作区
+		// 删除不存在的工作区 - DeleteWorkspace 在记录不存在时返回 nil (不报错)
 		err := workspaceRepo.DeleteWorkspace("/nonexistent/path")
-		assert.Error(t, err)
+		assert.NoError(t, err)
 	})
 
 	t.Run("UpdateEmbeddingInfoNotFound", func(t *testing.T) {

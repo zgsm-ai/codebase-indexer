@@ -34,6 +34,9 @@ func TestPerformSync(t *testing.T) {
 		mockFileScanner = &mocks.MockScanner{}
 	)
 	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
+	mockLogger.On("Debug", mock.Anything, mock.Anything).Return()
+	mockLogger.On("Warn", mock.Anything, mock.Anything).Return()
+	mockLogger.On("Error", mock.Anything, mock.Anything).Return()
 
 	s := &Scheduler{
 		httpSync:        mockHttpSync,
@@ -63,7 +66,8 @@ func TestPerformSync(t *testing.T) {
 		mockStorage.On("GetCodebaseConfigs").Return(codebaseConfigs)
 		mockStorage.On("SaveCodebaseConfig", mock.Anything).Return(nil)
 		mockStorage.On("DeleteCodebaseConfig", mock.Anything).Return(nil)
-		mockFileScanner.On("ScanCodebase", mock.Anything).Return(make(map[string]string), nil)
+		mockFileScanner.On("LoadIgnoreConfig", mock.Anything).Return(nil)
+		mockFileScanner.On("ScanCodebase", mock.Anything, mock.Anything).Return(make(map[string]string), nil)
 		mockFileScanner.On("CalculateFileChanges", mock.Anything, mock.Anything).Return([]*utils.FileStatus{})
 		mockHttpSync.On("FetchServerHashTree", mock.Anything).Return(make(map[string]string), nil)
 
@@ -98,7 +102,8 @@ func TestPerformSyncForCodebase(t *testing.T) {
 			CodebasePath: "/test/path",
 		}
 
-		mockFileScanner.On("ScanCodebase", config.CodebasePath).
+		mockFileScanner.On("LoadIgnoreConfig", config.CodebasePath).Return(nil).Once()
+		mockFileScanner.On("ScanCodebase", mock.Anything, config.CodebasePath).
 			Return(nil, errors.New("scan error")).
 			Once()
 		mockFileScanner.On("CalculateFileChanges", mock.Anything, mock.Anything).Return([]*utils.FileStatus{})
@@ -253,7 +258,9 @@ func TestUploadChangesZip(t *testing.T) {
 		mockFileScanner = &mocks.MockScanner{}
 	)
 	mockLogger.On("Info", mock.Anything, mock.Anything).Return()
+	mockLogger.On("Debug", mock.Anything, mock.Anything).Return()
 	mockLogger.On("Warn", mock.Anything, mock.Anything).Return()
+	mockLogger.On("Error", mock.Anything, mock.Anything).Return()
 
 	s := &Scheduler{
 		httpSync:        mockHttpSync,

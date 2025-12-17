@@ -22,8 +22,12 @@ proto:
 .PHONY:test
 test:
 	go test ./internal/... -count=1
+
+.PHONY:e2e-test
+e2e-test:
 	go test ./test/codegraph/... -count=1
 
+.PHONY:api-test
 api-test:
 	@echo "Running API tests, make sure the server is started on port 11380"
 	go test ./test/api/... -count=1
