@@ -59,7 +59,13 @@ func (m *SQLiteManager) Initialize() error {
 
 	// 打开数据库连接
 	// db, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=on&_journal_mode=WAL")
-	db, err := sql.Open("sqlite", dbPath+"?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000&_synchronous=NORMAL")
+	db, err := sql.Open("sqlite", dbPath+
+		"?_foreign_keys=on"+
+		"&_journal_mode=WAL"+
+		"&_busy_timeout=10000"+      // 增加到10秒，给足够等待时间
+		"&_synchronous=NORMAL"+
+		"&cache_size=-8000"+         // 8MB缓存，轻量级
+		"&_wal_autocheckpoint=100")  // 每100页checkpoint，减小WAL文件
 	if err != nil {
 		return err
 	}

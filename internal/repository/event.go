@@ -92,6 +92,11 @@ type eventRepository struct {
 	logger logger.Logger
 }
 
+// 批量插入事件时每个事件需要的字段数量
+// (workspace_path, event_type, source_file_path, target_file_path,
+//  embedding_status, codegraph_status, created_at, updated_at)
+const eventInsertFieldCount = 8
+
 // NewEventRepository 创建事件Repository
 func NewEventRepository(db database.DatabaseManager, logger logger.Logger) EventRepository {
 	return &eventRepository{
@@ -1261,73 +1266,72 @@ func (r *eventRepository) BatchCreateEvents(events []*model.Event) error {
 		return nil
 	}
 
-	// 获取调用者信息
 	caller := getCallerInfo(2)
-
 	const batchSize = 1000
 	nowTime := time.Now()
-	totalCreated := int64(0)
 
-	// 分批处理
-	for i := 0; i < len(events); i += batchSize {
-		end := i + batchSize
-		if end > len(events) {
-			end = len(events)
+	return database.ExecuteInTransaction(r.db, func(tx *sql.Tx) error {
+		totalCreated := int64(0)
+
+		// 分批处理
+		for i := 0; i < len(events); i += batchSize {
+			end := i + batchSize
+			if end > len(events) {
+				end = len(events)
+			}
+			batch := events[i:end]
+
+			// 构建批量插入的SQL语句
+			valueStrings := make([]string, 0, len(batch))
+			valueArgs := make([]interface{}, 0, len(batch)*eventInsertFieldCount)
+
+			for _, event := range batch {
+				valueStrings = append(valueStrings, "(?, ?, ?, ?, ?, ?, ?, ?)")
+				valueArgs = append(valueArgs,
+					event.WorkspacePath,
+					event.EventType,
+					event.SourceFilePath,
+					event.TargetFilePath,
+					event.EmbeddingStatus,
+					event.CodegraphStatus,
+					nowTime,
+					nowTime,
+				)
+			}
+
+			query := fmt.Sprintf("INSERT INTO events (workspace_path, event_type, source_file_path, target_file_path, embedding_status, codegraph_status, created_at, updated_at) VALUES %s",
+				strings.Join(valueStrings, ","))
+
+			r.logger.Info("[DB] BatchCreateEvents called by: %s, batch: %d-%d, count: %d", caller, i+1, end, len(batch))
+
+			result, err := tx.Exec(query, valueArgs...)
+			if err != nil {
+				return fmt.Errorf("[DB] failed to batch create events (batch %d-%d): %w", i+1, end, err)
+			}
+
+			lastInsertID, err := result.LastInsertId()
+			if err != nil {
+				return fmt.Errorf("[DB] failed to get last insert ID (batch %d-%d): %w", i+1, end, err)
+			}
+
+			rowsAffected, err := result.RowsAffected()
+			if err != nil {
+				return fmt.Errorf("[DB] failed to get rows affected (batch %d-%d): %w", i+1, end, err)
+			}
+
+			totalCreated += rowsAffected
+
+			// 设置每个事件的ID
+			for j, event := range batch {
+				event.ID = lastInsertID - int64(len(batch)-1-j)
+			}
+
+			r.logger.Info("[DB] Successfully created batch %d-%d: %d events", i+1, end, rowsAffected)
 		}
-		batch := events[i:end]
 
-		// 构建批量插入的SQL语句
-		valueStrings := make([]string, 0, len(batch))
-		valueArgs := make([]interface{}, 0, len(batch)*6)
-
-		for _, event := range batch {
-			valueStrings = append(valueStrings, "(?, ?, ?, ?, ?, ?, ?, ?)")
-			valueArgs = append(valueArgs,
-				event.WorkspacePath,
-				event.EventType,
-				event.SourceFilePath,
-				event.TargetFilePath,
-				event.EmbeddingStatus,
-				event.CodegraphStatus,
-				nowTime,
-				nowTime,
-			)
-		}
-
-		query := fmt.Sprintf("INSERT INTO events (workspace_path, event_type, source_file_path, target_file_path, embedding_status, codegraph_status, created_at, updated_at) VALUES %s",
-			strings.Join(valueStrings, ","))
-
-		// 写数据库前打印调用者信息
-		r.logger.Info("[DB] BatchCreateEvents called by: %s, batch: %d-%d, count: %d", caller, i+1, end, len(batch))
-
-		result, err := r.db.GetDB().Exec(query, valueArgs...)
-		if err != nil {
-			return fmt.Errorf("[DB] failed to batch create events (batch %d-%d): %w", i+1, end, err)
-		}
-
-		// 获取最后插入的ID，用于设置事件的ID
-		lastInsertID, err := result.LastInsertId()
-		if err != nil {
-			return fmt.Errorf("[DB] failed to get last insert ID (batch %d-%d): %w", i+1, end, err)
-		}
-
-		rowsAffected, err := result.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("[DB] failed to get rows affected (batch %d-%d): %w", i+1, end, err)
-		}
-
-		totalCreated += rowsAffected
-
-		// 设置每个事件的ID
-		for j, event := range batch {
-			event.ID = lastInsertID - int64(len(batch)-1-j)
-		}
-
-		r.logger.Info("[DB] Successfully created batch %d-%d: %d events", i+1, end, rowsAffected)
-	}
-
-	r.logger.Info("[DB] Successfully created total %d events", totalCreated)
-	return nil
+		r.logger.Info("[DB] Successfully created total %d events", totalCreated)
+		return nil
+	})
 }
 
 // BatchDeleteEvents 批量删除事件
@@ -1389,43 +1393,25 @@ func (r *eventRepository) BatchUpdateEvents(events []*model.Event) error {
 		return nil
 	}
 
-	// 获取调用者信息
 	caller := getCallerInfo(2)
-
-	const batchSize = 1000
 	nowTime := time.Now()
-	totalUpdated := int64(0)
 
-	query := `
-		UPDATE events
-		SET event_type = ?, target_file_path = ?, embedding_status = ?, codegraph_status = ?, updated_at = ?
-		WHERE id = ?
-	`
+	r.logger.Info("[DB] BatchUpdateEvents called by: %s, count: %d", caller, len(events))
 
-	// 分批处理
-	for i := 0; i < len(events); i += batchSize {
-		end := i + batchSize
-		if end > len(events) {
-			end = len(events)
-		}
-		batch := events[i:end]
-
-		// 写数据库前打印调用者信息
-		r.logger.Info("[DB] BatchUpdateEvents called by: %s, batch: %d-%d, count: %d", caller, i+1, end, len(batch))
-
-		// 每个批次一个事务
-		tx, err := r.db.GetDB().Begin()
-		if err != nil {
-			return fmt.Errorf("[DB] failed to begin transaction (batch %d-%d): %w", i+1, end, err)
-		}
+	return database.ExecuteInTransaction(r.db, func(tx *sql.Tx) error {
+		query := `
+			UPDATE events
+			SET event_type = ?, target_file_path = ?, embedding_status = ?, codegraph_status = ?, updated_at = ?
+			WHERE id = ?
+		`
 
 		stmt, err := tx.Prepare(query)
 		if err != nil {
-			tx.Rollback()
-			return fmt.Errorf("[DB] failed to prepare statement (batch %d-%d): %w", i+1, end, err)
+			return fmt.Errorf("[DB] failed to prepare statement: %w", err)
 		}
+		defer stmt.Close()
 
-		for _, event := range batch {
+		for _, event := range events {
 			_, err = stmt.Exec(
 				event.EventType,
 				event.TargetFilePath,
@@ -1435,23 +1421,13 @@ func (r *eventRepository) BatchUpdateEvents(events []*model.Event) error {
 				event.ID,
 			)
 			if err != nil {
-				stmt.Close()
-				tx.Rollback()
 				return fmt.Errorf("[DB] failed to update event %d: %w", event.ID, err)
 			}
 		}
-		stmt.Close()
 
-		if err = tx.Commit(); err != nil {
-			return fmt.Errorf("[DB] failed to commit transaction (batch %d-%d): %w", i+1, end, err)
-		}
-
-		totalUpdated += int64(len(batch))
-		r.logger.Info("[DB] Successfully updated batch %d-%d: %d events", i+1, end, len(batch))
-	}
-
-	r.logger.Info("[DB] Successfully batch updated total %d events", totalUpdated)
-	return nil
+		r.logger.Info("[DB] Successfully batch updated total %d events", len(events))
+		return nil
+	})
 }
 
 // UpdateEvents 批量更新事件嵌入信息
@@ -1460,54 +1436,40 @@ func (r *eventRepository) UpdateEventsEmbedding(events []*model.Event) error {
 		return nil
 	}
 
-	// 获取调用者信息
 	caller := getCallerInfo(2)
+	nowTime := time.Now()
 
-	// 写数据库前打印调用者信息
 	r.logger.Info("[DB] UpdateEventsEmbedding called by: %s, count: %d", caller, len(events))
 
-	tx, err := r.db.GetDB().Begin()
-	if err != nil {
-		return fmt.Errorf("[DB] failed to begin transaction: %w", err)
-	}
-	defer func() {
+	return database.ExecuteInTransaction(r.db, func(tx *sql.Tx) error {
+		query := `
+			UPDATE events
+			SET embedding_status = ?, sync_id = ?, file_hash = ?, updated_at = ?
+			WHERE id = ?
+		`
+
+		stmt, err := tx.Prepare(query)
 		if err != nil {
-			tx.Rollback()
+			return fmt.Errorf("[DB] failed to prepare statement: %w", err)
 		}
-	}()
+		defer stmt.Close()
 
-	query := `
-		UPDATE events
-		SET embedding_status = ?, sync_id = ?, file_hash = ?, updated_at = ?
-		WHERE id = ?
-	`
-
-	nowTime := time.Now()
-	stmt, err := tx.Prepare(query)
-	if err != nil {
-		return fmt.Errorf("[DB] failed to prepare statement: %w", err)
-	}
-	defer stmt.Close()
-
-	for _, event := range events {
-		_, err = stmt.Exec(
-			event.EmbeddingStatus,
-			event.SyncId,
-			event.FileHash,
-			nowTime,
-			event.ID,
-		)
-		if err != nil {
-			return fmt.Errorf("[DB] failed to update event %d: %w", event.ID, err)
+		for _, event := range events {
+			_, err = stmt.Exec(
+				event.EmbeddingStatus,
+				event.SyncId,
+				event.FileHash,
+				nowTime,
+				event.ID,
+			)
+			if err != nil {
+				return fmt.Errorf("[DB] failed to update event %d: %w", event.ID, err)
+			}
 		}
-	}
 
-	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("[DB] failed to commit transaction: %w", err)
-	}
-
-	r.logger.Info("[DB] Successfully updated %d events", len(events))
-	return nil
+		r.logger.Info("[DB] Successfully updated %d events", len(events))
+		return nil
+	})
 }
 
 // UpdateEventsEmbeddingStatus 批量更新事件嵌入状态
@@ -1516,48 +1478,34 @@ func (r *eventRepository) UpdateEventsEmbeddingStatus(eventIDs []int64, status i
 		return nil
 	}
 
-	// 获取调用者信息
 	caller := getCallerInfo(2)
+	nowTime := time.Now()
 
-	// 写数据库前打印调用者信息
 	r.logger.Info("[DB] UpdateEventsEmbeddingStatus called by: %s, count: %d, status: %d", caller, len(eventIDs), status)
 
-	tx, err := r.db.GetDB().Begin()
-	if err != nil {
-		return fmt.Errorf("[DB] failed to begin transaction: %w", err)
-	}
-	defer func() {
+	return database.ExecuteInTransaction(r.db, func(tx *sql.Tx) error {
+		query := `
+			UPDATE events
+			SET embedding_status = ?, updated_at = ?
+			WHERE id = ?
+		`
+
+		stmt, err := tx.Prepare(query)
 		if err != nil {
-			tx.Rollback()
+			return fmt.Errorf("[DB] failed to prepare statement: %w", err)
 		}
-	}()
+		defer stmt.Close()
 
-	query := `
-		UPDATE events
-		SET embedding_status = ?, updated_at = ?
-		WHERE id = ?
-	`
-
-	nowTime := time.Now()
-	stmt, err := tx.Prepare(query)
-	if err != nil {
-		return fmt.Errorf("[DB] failed to prepare statement: %w", err)
-	}
-	defer stmt.Close()
-
-	for _, id := range eventIDs {
-		_, err = stmt.Exec(status, nowTime, id)
-		if err != nil {
-			return fmt.Errorf("[DB] failed to update event status for ID %d: %w", id, err)
+		for _, id := range eventIDs {
+			_, err = stmt.Exec(status, nowTime, id)
+			if err != nil {
+				return fmt.Errorf("[DB] failed to update event status for ID %d: %w", id, err)
+			}
 		}
-	}
 
-	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("[DB] failed to commit transaction: %w", err)
-	}
-
-	r.logger.Info("[DB] Successfully updated status for %d events", len(eventIDs))
-	return nil
+		r.logger.Info("[DB] Successfully updated status for %d events", len(eventIDs))
+		return nil
+	})
 }
 
 // GetExpiredEventIDs 获取过期事件的ID列表

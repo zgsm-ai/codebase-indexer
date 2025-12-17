@@ -25,10 +25,10 @@ func DefaultDatabaseConfig() *DatabaseConfig {
 	return &DatabaseConfig{
 		DataDir:           utils.DbDir,
 		DatabaseName:      "codebase_indexer.db",
-		MaxOpenConns:      5,
-		MaxIdleConns:      3,
-		ConnMaxLifetime:   15 * time.Minute,
-		ConnMaxIdleTime:   3 * time.Minute, // 连接空闲超过3分钟则关闭
+		MaxOpenConns:      1, // SQLite单写设计，强制单连接避免SQLITE_BUSY
+		MaxIdleConns:      1,
+		ConnMaxLifetime:   0, // 不限制，避免频繁重建连接
+		ConnMaxIdleTime:   0, // 不关闭空闲连接
 		EnableWAL:         true,
 		EnableForeignKeys: true,
 		BatchDeleteSize:   1000,                 // 默认每批删除1000条记录

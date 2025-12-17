@@ -219,9 +219,9 @@ func TestSQLiteManagerConcurrency(t *testing.T) {
 	dbConfig := &config.DatabaseConfig{
 		DataDir:         tempDir,
 		DatabaseName:    "test-concurrency.db",
-		MaxOpenConns:    10,
-		MaxIdleConns:    5,
-		ConnMaxLifetime: 30 * time.Minute,
+		MaxOpenConns:    1, // 使用单连接，符合生产环境配置
+		MaxIdleConns:    1,
+		ConnMaxLifetime: 0,
 	}
 
 	// 创建数据库管理器
@@ -257,9 +257,8 @@ func TestSQLiteManagerConcurrency(t *testing.T) {
 
 	t.Run("ConcurrentTransactions", func(t *testing.T) {
 		// 测试并发事务
-		// 注意：SQLite即使在WAL模式下，也只能有一个写事务同时提交
-		// 这个测试使用较少的并发数和更长的重试来验证重试机制
-		concurrentCount := 3 // 减少并发数从5到3
+		// 使用单连接模式（MaxOpenConns=1），事务会自动串行执行，不会出现SQLITE_BUSY
+		concurrentCount := 3
 		done := make(chan error, concurrentCount)
 
 		for i := 0; i < concurrentCount; i++ {
@@ -270,14 +269,14 @@ func TestSQLiteManagerConcurrency(t *testing.T) {
 					}
 				}()
 
-				// 添加重试逻辑处理SQLITE_BUSY错误
-				maxRetries := 50 // 增加重试次数
+				// 单连接模式下，事务会排队执行，增加重试次数和延迟以应对排队等待
+				maxRetries := 100 // 增加重试次数以应对排队
 				var lastErr error
 				for retry := 0; retry < maxRetries; retry++ {
 					tx, err := dbManager.BeginTransaction()
 					if err != nil {
 						lastErr = err
-						time.Sleep(time.Millisecond * 100) // 增加延迟
+						time.Sleep(time.Millisecond * 200) // 增加延迟以给其他事务完成的时间
 						continue
 					}
 
@@ -287,7 +286,7 @@ func TestSQLiteManagerConcurrency(t *testing.T) {
 					if err != nil {
 						tx.Rollback()
 						lastErr = err
-						time.Sleep(time.Millisecond * 100)
+						time.Sleep(time.Millisecond * 200)
 						continue
 					}
 
@@ -297,7 +296,7 @@ func TestSQLiteManagerConcurrency(t *testing.T) {
 						return
 					}
 					lastErr = err
-					time.Sleep(time.Millisecond * 100)
+					time.Sleep(time.Millisecond * 200)
 				}
 				done <- fmt.Errorf("failed after %d retries: %v", maxRetries, lastErr)
 			}(i)
