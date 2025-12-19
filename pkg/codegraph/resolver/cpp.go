@@ -30,6 +30,7 @@ func (c *CppResolver) resolveImport(ctx context.Context, element *Import, rc *Re
 		case types.ElementTypeImportName:
 			// 容错处理，出现空格，语法会报错，但也应该能解析
 			element.BaseElement.Name = StripSpaces(content)
+			element.Source = StripSpaces(content) // Set Source for import path resolution
 		}
 	}
 	element.BaseElement.Scope = types.ScopeProject

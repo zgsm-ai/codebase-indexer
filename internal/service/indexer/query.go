@@ -2,7 +2,6 @@ package indexer
 
 import (
 	"codebase-indexer/internal/errs"
-	"codebase-indexer/pkg/codegraph/analyzer"
 	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/proto"
 	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
@@ -548,7 +547,11 @@ func (idx *Indexer) searchSymbolNames(ctx context.Context, projectUuid string, l
 			filtered := make([]*codegraphpb.Occurrence, 0, len(v))
 			for _, occ := range v {
 				for _, imp := range imports {
-					if analyzer.IsFilePathInImportPackage(occ.Path, imp) {
+					// 简化的路径匹配
+					occPath := strings.ReplaceAll(occ.Path, types.WindowsSeparator, types.Dot)
+					occPath = strings.ReplaceAll(occPath, types.UnixSeparator, types.Dot)
+
+					if strings.Contains(occPath, imp.Name) || strings.Contains(occPath, imp.Source) {
 						filtered = append(filtered, occ)
 						break
 					}

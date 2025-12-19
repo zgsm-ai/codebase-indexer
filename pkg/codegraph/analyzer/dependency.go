@@ -3,6 +3,7 @@ package analyzer
 import (
 	packageclassifier "codebase-indexer/pkg/codegraph/analyzer/package_classifier"
 	"codebase-indexer/pkg/codegraph/cache"
+	"codebase-indexer/pkg/codegraph/lang"
 	"codebase-indexer/pkg/codegraph/parser"
 	"codebase-indexer/pkg/codegraph/proto"
 	"codebase-indexer/pkg/codegraph/proto/codegraphpb"
@@ -30,6 +31,7 @@ type DependencyAnalyzer struct {
 	store                 store.GraphStorage
 	loadThreshold         int
 	skipVariableThreshold int
+	importResolver        *ImportResolver // 新增：导入解析器
 }
 
 func NewDependencyAnalyzer(logger logger.Logger,
@@ -45,6 +47,27 @@ func NewDependencyAnalyzer(logger logger.Logger,
 		loadThreshold:         getLoadThresholdFromEnv(),
 		skipVariableThreshold: getSkipVariableThresholdFromEnv(),
 	}
+}
+
+// SetProjectPath 设置项目路径并初始化导入解析器
+func (da *DependencyAnalyzer) SetProjectPath(projectPath string) {
+	if da.importResolver == nil {
+		da.importResolver = NewImportResolver(da.logger, da.PackageClassifier, projectPath)
+	}
+}
+
+// PreprocessImports 预处理导入（兼容旧API）
+func (da *DependencyAnalyzer) PreprocessImports(
+	ctx context.Context,
+	language lang.Language,
+	project *workspace.Project,
+	imports []*resolver.Import,
+) ([]*resolver.Import, error) {
+	// 确保importResolver已初始化
+	if da.importResolver == nil {
+		da.SetProjectPath(project.Path)
+	}
+	return da.importResolver.PreprocessImports(ctx, language, project, imports)
 }
 
 const defaultLoadFromStoreThreshold = 9000 // 不存在则load，缓存key、value。
@@ -209,8 +232,13 @@ func (da *DependencyAnalyzer) FilterByImports(filePath string, imports []*codegr
 		}
 
 		// 3、根据import判断，def的文件路径是否在imp的范围内
+		// 使用简化的模糊匹配（原逻辑保留）
 		for _, imp := range imports {
-			if IsFilePathInImportPackage(def.Path, imp) {
+			// 转换为.分隔格式
+			defPath := strings.ReplaceAll(def.Path, types.WindowsSeparator, types.Dot)
+			defPath = strings.ReplaceAll(defPath, types.UnixSeparator, types.Dot)
+
+			if strings.Contains(defPath, imp.Name) || strings.Contains(defPath, imp.Source) {
 				found = append(found, def)
 				break
 			}
@@ -232,7 +260,11 @@ func (da *DependencyAnalyzer) CalculateSymbolMatchScore(workspace string, caller
 
 	// 3、根据import判断，def的文件路径是否在imp的范围内
 	for _, imp := range callerImports {
-		if IsFilePathInImportPackage(calleeFilePath, imp) {
+		// 简化的路径匹配
+		defPath := strings.ReplaceAll(calleeFilePath, types.WindowsSeparator, types.Dot)
+		defPath = strings.ReplaceAll(defPath, types.UnixSeparator, types.Dot)
+
+		if strings.Contains(defPath, imp.Name) || strings.Contains(defPath, imp.Source) {
 			return 50
 		}
 	}

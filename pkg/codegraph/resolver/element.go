@@ -101,8 +101,10 @@ func (e *BaseElement) GetScope() types.Scope {
 // Import 表示导入语句
 type Import struct {
 	*BaseElement
-	Source string // from (xxx)
-	Alias  string // as (xxx)
+	Source        string   // from (xxx)
+	Alias         string   // as (xxx)
+	ResolvedPaths []string // 解析后的文件路径列表（相对项目根目录）
+	IsResolved    bool     // 是否已解析
 }
 
 // Package 表示代码包

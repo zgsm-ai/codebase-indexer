@@ -135,3 +135,4 @@ func TestConstants(t *testing.T) {
 	assert.Greater(t, config.MaxBatchSize, 0)
 }
 
+

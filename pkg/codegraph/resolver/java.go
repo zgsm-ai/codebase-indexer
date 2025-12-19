@@ -31,6 +31,7 @@ func (j *JavaResolver) resolveImport(ctx context.Context, element *Import, rc *R
 		switch types.ToElementType(captureName) {
 		case types.ElementTypeImportName:
 			element.BaseElement.Name = StripSpaces(content)
+			element.Source = StripSpaces(content) // Set Source for import path resolution
 		}
 	}
 	// 处理类导入

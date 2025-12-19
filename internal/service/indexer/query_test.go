@@ -257,3 +257,4 @@ func TestQueryDefinitions(t *testing.T) {
 	t.Skip("需要完整的依赖注入环境")
 }
 
+
