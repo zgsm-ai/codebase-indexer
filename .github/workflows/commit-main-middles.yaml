@@ -1,0 +1,56 @@
+name: Commit Middles to Main Repository
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  commit-middles-to-main:
+    name: Commit Middles to Main Repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source repository (current repository)
+        uses: actions/checkout@v3
+        with:
+          path: source-repo
+
+      - name: Get tag version
+        id: version
+        run: |
+          cd source-repo
+          VERSION="${GITHUB_REF#refs/tags/}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Checkout target repository (costrict-backend)
+        uses: actions/checkout@v3
+        with:
+          repository: zgsm-ai/costrict-backend
+          token: ${{ secrets.PAT_TOKEN }}
+          path: target-repo
+
+      - name: Determine target directory
+        id: target_dir
+        run: |
+          cd target-repo
+          if [ -n "${{ secrets.MAIN_DIRECTORY }}" ]; then
+            TARGET_DIR="${{ secrets.MAIN_DIRECTORY }}"
+          else
+            TARGET_DIR="middles/${{ github.event.repository.name }}"
+          fi
+          echo "target_dir=$TARGET_DIR" >> $GITHUB_OUTPUT
+
+      - name: Copy source repository content to target directory
+        run: |
+          rsync -av --exclude='.git' source-repo/ "target-repo/${{ steps.target_dir.outputs.target_dir }}/"
+
+      - name: Commit and push changes
+        run: |
+          cd target-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A "${{ steps.target_dir.outputs.target_dir }}"
+          git diff --staged --quiet || git commit -m "chore: update ${{ github.event.repository.name }} to ${{ steps.version.outputs.version }}"
+          git push origin main
+
+
