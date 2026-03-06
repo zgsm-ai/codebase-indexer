@@ -22,10 +22,10 @@ jobs:
           VERSION="${GITHUB_REF#refs/tags/}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Checkout target repository (costrict-backend)
+      - name: Checkout target repository (costrict-enterprise)
         uses: actions/checkout@v3
         with:
-          repository: zgsm-ai/costrict-backend
+          repository: zgsm-ai/costrict-enterprise
           token: ${{ secrets.PAT_TOKEN }}
           path: target-repo
 
@@ -52,5 +52,6 @@ jobs:
           git add -A "${{ steps.target_dir.outputs.target_dir }}"
           git diff --staged --quiet || git commit -m "chore: update ${{ github.event.repository.name }} to ${{ steps.version.outputs.version }}"
           git push origin main
+
 
 
